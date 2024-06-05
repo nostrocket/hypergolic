@@ -1,5 +1,12 @@
 <script>
-	import Sidebar from "../layouts/Sidebar.svelte";
+	import Sidebar from "../components/Menu.svelte";
+	import SidePanel from "../layouts/SidePanel.svelte";
+
 
 </script>
-<Sidebar />
+
+<SidePanel>
+	<div slot="menu">
+		<Sidebar />
+	</div>
+</SidePanel>
