@@ -5,8 +5,5 @@
 
 </script>
 <SidePanel>
-	<div slot="menu">
-		<Menu />
-	</div>
-	<div slot="content"></div>
+
 </SidePanel>
