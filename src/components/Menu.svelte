@@ -7,12 +7,9 @@
     let iconClass = "h-5 w-5 md:h-4 md:w-4"
 
     let getClass = (menuItem:string) => {
-        console.log(7, menuItem, $page.url.pathname)
         if ($page.url.pathname.includes(menuItem)) {
-            console.log(9)
             return "flex items-center gap-3 rounded-lg bg-muted px-3 py-2 text-primary transition-all hover:text-primary"
         } else {
-            console.log(12)
             return "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary"
         }
         
