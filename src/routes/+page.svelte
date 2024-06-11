@@ -1,9 +1,9 @@
 <script>
-	import Menu from "../components/Menu.svelte";
-	import SidePanel from "../layouts/SidePanel.svelte";
+	import SidePanelLayout from "../layouts/SidePanelLayout.svelte";
+	import N00b from "../views/n00b/N00b.svelte";
 
 
 </script>
-<SidePanel>
-
-</SidePanel>
+<SidePanelLayout>
+<N00b slot="content" />
+</SidePanelLayout>

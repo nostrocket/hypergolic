@@ -1,11 +1,9 @@
 <script>
-	import Menu from '../../components/Menu.svelte';
-    import * as Card from "$lib/components/ui/card";
-
-	import SidePanel from '../../layouts/SidePanel.svelte';
+	
+	import SidePanelLayout from '../../layouts/SidePanelLayout.svelte';
 </script>
 
-<SidePanel>
+<SidePanelLayout>
 	<div slot="content">
 		<h1 class="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl">
 			Rockets
@@ -54,4 +52,4 @@
 			</div>
 		</div>
 	</div>
-</SidePanel>
+</SidePanelLayout>
