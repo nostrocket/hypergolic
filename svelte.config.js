@@ -18,7 +18,7 @@ const config = {
 			crawl: true,
 		  },
 		  paths: {
-			base: "",
+			base: dev ? '' : '/hypergolic',
 		  },
 		alias: {
 			"@/*": "./src/lib/*",
