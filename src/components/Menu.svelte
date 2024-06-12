@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { base } from '$app/paths';
 	import { page } from '$app/stores';
 	import { Badge } from '@/components/ui/badge';
 	import Separator from '@/components/ui/separator/separator.svelte';
@@ -19,7 +20,7 @@
 </script>
 
 <a
-	href="/rockets"
+	href="{base}/rockets"
 	class={getClass("rockets")}
 >
 	<Rocket class={iconClass} />

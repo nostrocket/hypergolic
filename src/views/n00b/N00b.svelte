@@ -4,6 +4,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Switch } from '$lib/components/ui/switch/index.js';
+	import { base } from '$app/paths';
 
 	const notifications = [
 		{
@@ -29,7 +30,7 @@
 					<Card.Title>Proof of Work</Card.Title>
 					<Card.Description>I have skills, and I want sats.</Card.Description>
 				</Card.Header>
-        <img src="/a.png" />
+        <img src="{base}/a.png" />
 				<Card.Content class="grid gap-4">
 					<div>
 						<ul class="ml-6 list-disc [&>li]:mt-2">
@@ -51,7 +52,7 @@
 					<Card.Description>I have Sats, and I want a slice of a Rocket's satflow.</Card.Description
 					>
 				</Card.Header>
-        <img src="/scrooge.png" width="100%" />
+        <img src="{base}/scrooge.png" width="100%" />
 				<Card.Content class="grid gap-4">
 					<div>
 						<ul class="ml-6 list-disc [&>li]:mt-2">
@@ -76,7 +77,7 @@
 						>I have an open source project or product and I want other people to work on it with me.</Card.Description
 					>
 				</Card.Header>
-        <img src="/rocket.jpg" width="100%" />
+        <img src="{base}/rocket.jpg" width="100%" />
 				<Card.Content class="grid gap-4">
 					<div>
             <ul class="ml-6 list-disc [&>li]:mt-2">
