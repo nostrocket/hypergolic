@@ -28,7 +28,7 @@
 			<Card.Root class="max-w-80">
 				<Card.Header>
 					<Card.Title>Proof of Work</Card.Title>
-					<Card.Description>I have skills, and I want sats.</Card.Description>
+					<Card.Description>I have skills and I'm ready to work for sats.</Card.Description>
 				</Card.Header>
         <img src="{base}/a.png" />
 				<Card.Content class="grid gap-4">
@@ -36,7 +36,7 @@
 						<ul class="ml-6 list-disc [&>li]:mt-2">
 							<li>Solve problems for fun and profit</li>
 							<li>Get paid in Sats for every pull request</li>
-							<li>No KYC, you only need an npub!</li>
+							<li>No KYC. You only need an npub!</li>
 						</ul>
 					</div>
 				</Card.Content>
@@ -74,14 +74,14 @@
 				<Card.Header>
 					<Card.Title>Launch a new Rocket</Card.Title>
 					<Card.Description
-						>I have an open source project or product and I want other people to work on it with me.</Card.Description
+						>I'm working on my own project and I want other people to join me.</Card.Description
 					>
 				</Card.Header>
         <img src="{base}/rocket.jpg" width="100%" />
 				<Card.Content class="grid gap-4">
 					<div>
             <ul class="ml-6 list-disc [&>li]:mt-2">
-							<li>Hire people to work on your project, despite your lack of funding</li>
+							<li>Hire people to help build your project, despite your lack of funding</li>
 							<li>
 								Make your project resistant to parasites and grifters
 							</li>
