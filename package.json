@@ -36,6 +36,7 @@
 	"type": "module",
 	"dependencies": {
 		"@internationalized/date": "^3.5.4",
+		"@nostr-dev-kit/ndk": "^2.8.2",
 		"@sveltejs/adapter-static": "^3.0.1",
 		"bits-ui": "^0.21.10",
 		"clsx": "^2.1.1",
