@@ -37,13 +37,13 @@
 							<li>Solve problems for fun and profit</li>
 							<li>No meetings, no scrum, no task assignment, no schedules</li>
 							<li>Work only on what inspires you</li>
-							<li>No interview process or CV's required, apply by sending a pull request that solves a small problem</li>
+							<li>No interview process or CV's required, apply by sending a pull request to solve a small problem</li>
 							<li>Get paid in Sats for every pull request</li>
 						</ul>
 					</div>
 				</Card.Content>
 				<Card.Footer>
-					<Button class="w-full">Let's Fucken Go!</Button>
+					<Button class="w-full">Apply Now</Button>
 				</Card.Footer>
 			</Card.Root>
 		</div>
@@ -68,7 +68,7 @@
 					</div>
 				</Card.Content>
 				<Card.Footer>
-					<Button class="w-full">Read more</Button>
+					<Button class="w-full">Read More</Button>
 				</Card.Footer>
 			</Card.Root>
 		</div>
@@ -93,7 +93,7 @@
 					</div>
 				</Card.Content>
 				<Card.Footer>
-					<Button class="w-full">Read more</Button>
+					<Button class="w-full">Create a Rocket Now</Button>
 				</Card.Footer>
 			</Card.Root>
 		</div>
