@@ -8,6 +8,7 @@
     let iconClass = "h-5 w-5 md:h-4 md:w-4"
 
     let getClass = (menuItem:string) => {
+		//todo: make this re-run any time our path changes
         if ($page.url.pathname.includes(menuItem)) {
             return "flex items-center gap-3 rounded-lg bg-muted px-3 py-2 text-primary transition-all hover:text-primary"
         } else {
