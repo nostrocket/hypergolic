@@ -70,7 +70,7 @@
 					>Alert</span
 				>
 				<span class="mr-2 flex-auto text-left font-semibold"
-					>Nostrocket is sooooo not ready yet, don't expect everything to work</span
+					>Nostrocket is sooooo not ready yet but whatever</span
 				>
 			</div>
 
