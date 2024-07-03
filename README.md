@@ -4,6 +4,8 @@ A nostrocket client
 ## Pull Requests
 Please only solve ONE problem at a time. 
 
+Indicate to others that you are working to solve a particular problem by claiming it on nostrocket or commenting on the github issue so that others do not duplicate your work.
+
 Pull request should contain only ONE commit that solves exactly ONE problem. The probelm SHOULD be from the github or nostrocket issue tracker (but doesn't have to be).
 
 The commit message MUST be a short summary of the problem being solved, usually this should be the same as title of the problem from the github or nostrocket issue tracker.
