@@ -1,22 +1,22 @@
-# create-svelte
+# Hypergolic
+A nostrocket client
 
-Everything you need to build a Svelte project, powered by [`create-svelte`](https://github.com/sveltejs/kit/tree/main/packages/create-svelte).
+## Pull Requests
+Please only solve ONE problem at a time. 
 
-## Creating a project
+Pull request should contain only ONE commit that solves exactly ONE problem. The probelm SHOULD be from the github or nostrocket issue tracker (but doesn't have to be).
 
-If you're seeing this, you've probably already done this step. Congrats!
+The commit message MUST be a short summary of the problem being solved, usually this should be the same as title of the problem from the github or nostrocket issue tracker.
 
-```bash
-# create a new project in the current directory
-npm create svelte@latest
+## Style Guide
+Avoid uneccessary whitespace changes. Whitespace changes make it difficult to see what code was really changed.
 
-# create a new project in my-app
-npm create svelte@latest my-app
-```
+## Getting Paid
+If you want to get paid for working on this project, demonstrate your capability by solving some problems and adhering to the instructions in this readme. After you have 2-3 PR's merged, DM gsovereignty on nostr to have a conversation about paid work.
 
 ## Developing
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+`npm install`
 
 ```bash
 npm run dev
@@ -34,5 +34,3 @@ npm run build
 ```
 
 You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://kit.svelte.dev/docs/adapters) for your target environment.
