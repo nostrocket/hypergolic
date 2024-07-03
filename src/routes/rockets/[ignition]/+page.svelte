@@ -5,6 +5,7 @@
 	import type { ExtendedBaseType, NDKEventStore } from '@nostr-dev-kit/ndk-svelte';
 	import { onDestroy } from 'svelte';
 	import { derived, type Readable } from 'svelte/store';
+	import Heading from '../../../components/Heading.svelte';
 	//flow if we only have a d-tag: fetch all 31108's with this d-tag, sort by WoT, put Nostrocket Name Service one at the top. Dedupe same rocket (same state, shadows) from multiple users, just show them all as everyone agreeing.
 	//second pass: fetch ignition event for each, rebuild current state and validate all proofs, compute votepower and display only the states with > 50%.
 
@@ -37,10 +38,10 @@
 		if (events) {
 			latest = derived(events, ($events) => {
 				if (events) {
-                    let sorted = $events.toSorted((a,b) => {
-                        return a.created_at - b.created_at
-                    })
-                    return sorted[0]
+					let sorted = $events.toSorted((a, b) => {
+						return a.created_at - b.created_at;
+					});
+					return sorted[0];
 				}
 				return undefined;
 			});
@@ -51,8 +52,10 @@
 </script>
 
 {#if latest && $latest}
+<Heading title={$latest.getMatchingTags("d")[0][1]} />
 	<p>{$latest.id}</p>
+{:else}
+	IGNITION: {rIgnitionOrActual} <br />
+	NAME: {rName} <br />
+	PUBKEY: {rPubkey} <br />
 {/if}
-IGNITION: {rIgnitionOrActual} <br />
-NAME: {rName} <br />
-PUBKEY: {rPubkey} <br />
