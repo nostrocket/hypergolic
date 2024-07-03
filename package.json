@@ -37,6 +37,8 @@
 	"dependencies": {
 		"@internationalized/date": "^3.5.4",
 		"@nostr-dev-kit/ndk": "^2.8.2",
+		"@nostr-dev-kit/ndk-cache-dexie": "^2.4.2",
+		"@nostr-dev-kit/ndk-svelte": "^2.2.15",
 		"@sveltejs/adapter-static": "^3.0.1",
 		"bits-ui": "^0.21.10",
 		"clsx": "^2.1.1",

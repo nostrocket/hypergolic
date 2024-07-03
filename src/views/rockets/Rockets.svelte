@@ -1,9 +1,25 @@
-<script>
+<script lang="ts">
+	import type { NDKEventStore } from '@nostr-dev-kit/ndk-svelte';
 	import Heading from '../../components/Heading.svelte';
-	import SidePanelLayout from '../../layouts/SidePanelLayout.svelte';
+	import type { NDKEvent } from '@nostr-dev-kit/ndk';
+	import { onDestroy } from 'svelte';
+	import { ndk } from '@/ndk';
+	//flow: fetch all 31108's. For now, just validate that the author is the same as the ignition author. If naming conflicts, look for namerocket listing.
+
+	let entries: NDKEventStore<NDKEvent> | undefined;
+	onDestroy(() => {
+		entries?.unsubscribe();
+	});
+
+	entries = $ndk.storeSubscribe([{ kinds: [31108 as number] }], { subId: 'rockets' });
+
+
 </script>
 
 <Heading title="Rockets" />
+{#if entries && $entries} 
+{#each $entries as e} <div on:click={()=>{console.log(e.rawEvent())}}>{e.tags}</div> <br /> {/each}
+{/if}
 <div
 	class="max-w-sm rounded-lg border border-gray-200 bg-white shadow dark:border-gray-700 dark:bg-gray-800"
 >
