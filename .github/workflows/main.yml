@@ -2,7 +2,7 @@ name: Build and Deploy to Pages
 
 on:
   push:
-    branches: ["master"]
+    branches: ["MASTER"]
 
   workflow_dispatch:
 
