@@ -6,6 +6,7 @@
 	import { onDestroy } from 'svelte';
 	import { derived, type Readable } from 'svelte/store';
 	import Heading from '../../../components/Heading.svelte';
+	import Todo from '../../../components/Todo.svelte';
 	//flow if we only have a d-tag: fetch all 31108's with this d-tag, sort by WoT, put Nostrocket Name Service one at the top. Dedupe same rocket (same state, shadows) from multiple users, just show them all as everyone agreeing.
 	//second pass: fetch ignition event for each, rebuild current state and validate all proofs, compute votepower and display only the states with > 50%.
 
@@ -53,6 +54,7 @@
 
 {#if latest && $latest}
 <Heading title={$latest.getMatchingTags("d")[0][1]} />
+<Todo text={["delete rocket (if current user is rocket creator)", "modify relevant data and republish event according to https://github.com/nostrocket/NIPS/blob/main/31108.md and https://github.com/nostrocket/NIPS/blob/main/MSBR334000.md ", ]} />
 	<p>{$latest.id}</p>
 {:else}
 	IGNITION: {rIgnitionOrActual} <br />

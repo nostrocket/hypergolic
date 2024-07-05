@@ -19,7 +19,7 @@
 
 <Heading title="Rockets" />
 {#if entries && $entries}
-	<Todo text={["render these in a nicer way, maybe a grid or something", "make this scroll"]} />
+	<Todo text={["render these in a nicer way, maybe a grid or something"]} />
 	
 	{#each $entries as rocketEvent}
 	<RocketCard {rocketEvent} />
