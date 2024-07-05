@@ -13,6 +13,9 @@ The commit message MUST be a short summary of the problem being solved, usually 
 ## Style Guide
 Avoid uneccessary whitespace changes. Whitespace changes make it difficult to see what code was really changed.
 
+## UX Library
+https://www.shadcn-svelte.com/docs
+
 ## Getting Paid
 If you want to get paid for working on this project, demonstrate your capability by solving some problems and adhering to the instructions in this readme. After you have 2-3 PR's merged, DM gsovereignty on nostr to have a conversation about paid work.
 

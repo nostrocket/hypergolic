@@ -12,6 +12,7 @@
 	import NewMenu from '../components/Menu.svelte';
 	import RocketPillCard from '../components/RocketPillCard.svelte';
 	import { base } from '$app/paths';
+	import Login from '../components/Login.svelte';
 
 	export let title = '';
 </script>
@@ -86,6 +87,7 @@
 					</div>
 				</form>
 			</div>
+			<Login />
 			<DropdownMenu.Root>
 				<DropdownMenu.Trigger asChild let:builder>
 					<Button builders={[builder]} variant="secondary" size="icon" class="rounded-full">

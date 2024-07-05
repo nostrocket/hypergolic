@@ -9,7 +9,7 @@ const _ndk = new NDKSvelte({
 		'wss://purplepag.es',
 		'wss://relay.nostr.band',
 		'wss://nos.lol',
-		'wss://relay.nostrocket.org'
+		//'wss://relay.nostrocket.org'
 	],
 	enableOutboxModel: false,
 	clientName: 'nostrocket'

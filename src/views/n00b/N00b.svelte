@@ -5,6 +5,7 @@
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Switch } from '$lib/components/ui/switch/index.js';
 	import { base } from '$app/paths';
+	import CreateNewRocket from '../../components/CreateNewRocket.svelte';
 
 	const notifications = [
 		{
@@ -93,7 +94,7 @@
 					</div>
 				</Card.Content>
 				<Card.Footer>
-					<Button class="w-full">Create a Rocket Now</Button>
+					<CreateNewRocket />
 				</Card.Footer>
 			</Card.Root>
 		</div>

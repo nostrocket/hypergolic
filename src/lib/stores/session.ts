@@ -6,6 +6,7 @@ export const currentUser = writable<NDKUser | undefined>(undefined);
 
 export async function prepareUserSession(ndk: NDKSvelte, user: NDKUser): Promise<void> {
 	return new Promise((resolve) => {
+		
         //implement any session set up stuff here
 	});
 }
