@@ -36,7 +36,7 @@
 	<Badge class="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-full">6</Badge>
 </a>
 <a
-	href="##"
+	href="{base}/products"
 	class={getClass("products")}
 >
 	<Package class={iconClass} />
