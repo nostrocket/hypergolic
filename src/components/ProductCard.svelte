@@ -7,8 +7,9 @@
 	import { getMission, getRocketURL } from '@/helpers';
 	import type { NDKEvent } from '@nostr-dev-kit/ndk';
 	import { ChevronRight } from 'lucide-svelte';
+	import PayNow from './PayNow.svelte';
 
-	export let event: NDKEvent;
+	export let product: NDKEvent;
 	export let rocket:NDKEvent;
 	//$page.url.searchParams.get("tab")
 
@@ -37,18 +38,32 @@
 		}
 		return test == 3;
 	}
+
+	function includedInRocket():boolean {
+		let included = false
+		for (let p of rocket.getMatchingTags("product")) {
+			if (p[1].split(":")[0] == product.id) {
+				included = true
+			}
+		}
+		return included
+	}
 </script>
 
-{#if validate(event)}
+{#if validate(product)}
 	<Card.Root class="w-[350px] m-2">
 		<Card.Header>
-			<Card.Title>{event.getMatchingTags('name')[0][1]}</Card.Title>
-			<Card.Description>{event.getMatchingTags('description')[0][1]}</Card.Description>
+			<Card.Title>{product.getMatchingTags('name')[0][1]}</Card.Title>
+			<Card.Description>{product.getMatchingTags('description')[0][1]}</Card.Description>
 		</Card.Header>
-		<img src={event.getMatchingTags('cover')[0][1]} />
+		<img src={product.getMatchingTags('cover')[0][1]} />
 		<Card.Content></Card.Content>
 		<Card.Footer class="flex justify-between">
-			<AddProductToRocket product={event} {rocket} />
+			{#if !includedInRocket()}
+			<AddProductToRocket product={product} {rocket} />
+			{:else}
+			<PayNow {product} {rocket} />
+			{/if}
 		</Card.Footer>
 	</Card.Root>
 {/if}
