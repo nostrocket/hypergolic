@@ -59,6 +59,11 @@
             if ($latestRocketEvent) {
                 candidateProducts = derived(rocketEvents, ($events) =>{
                     return $events.filter(e=>{
+						for (let p of $latestRocketEvent.getMatchingTags("product")) {
+							if (p[1].includes(e.id)) {
+								return false
+							}
+						}
                         return e.kind == 1908;
                     })
                 })
@@ -81,7 +86,7 @@
     {#if candidateProducts && $candidateProducts}
     <Subheading title="Product Candidates" />
     <CreateNewProduct rocketEvent={$latestRocketEvent} />
-    {#each $candidateProducts as r}<ProductCard event={r} />{/each}
+    {#each $candidateProducts as r}<ProductCard rocket={$latestRocketEvent} event={r} />{/each}
     {/if}
 	
 {:else}

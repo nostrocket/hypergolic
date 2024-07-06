@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AddProductToRocket from './AddProductToRocket.svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -8,6 +9,7 @@
 	import { ChevronRight } from 'lucide-svelte';
 
 	export let event: NDKEvent;
+	export let rocket:NDKEvent;
 	//$page.url.searchParams.get("tab")
 
 	function validate(event: NDKEvent): boolean {
@@ -46,11 +48,7 @@
 		<img src={event.getMatchingTags('cover')[0][1]} />
 		<Card.Content></Card.Content>
 		<Card.Footer class="flex justify-between">
-			<Button
-				on:click={() => {
-					goto(`${base}/rockets/${getRocketURL(event)}`);
-				}}>Make Available to Purchase<ChevronRight class="h-4 w-4" /></Button
-			>
+			<AddProductToRocket product={event} {rocket} />
 		</Card.Footer>
 	</Card.Root>
 {/if}
