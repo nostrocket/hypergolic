@@ -79,7 +79,7 @@
 		]}
 	/>
     {#if candidateProducts && $candidateProducts}
-    <Subheading title="Products" />
+    <Subheading title="Product Candidates" />
     <CreateNewProduct rocketEvent={$latestRocketEvent} />
     {#each $candidateProducts as r}<ProductCard event={r} />{/each}
     {/if}

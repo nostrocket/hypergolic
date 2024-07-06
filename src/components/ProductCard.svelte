@@ -8,18 +8,49 @@
 	import { ChevronRight } from 'lucide-svelte';
 
 	export let event: NDKEvent;
-    //$page.url.searchParams.get("tab")
+	//$page.url.searchParams.get("tab")
 
+	function validate(event: NDKEvent): boolean {
+		let test = 0;
+		if (
+			event.getMatchingTags('name') &&
+			event.getMatchingTags('name')[0] &&
+			event.getMatchingTags('name')[0][1]
+		) {
+			test++;
+		}
+		if (
+			event.getMatchingTags('description') &&
+			event.getMatchingTags('description')[0] &&
+			event.getMatchingTags('description')[0][1]
+		) {
+			test++;
+		}
+		if (
+			event.getMatchingTags('cover') &&
+			event.getMatchingTags('cover')[0] &&
+			event.getMatchingTags('cover')[0][1]
+		) {
+			test++;
+		}
+		return test == 3;
+	}
 </script>
 
-<Card.Root class="w-[350px]">
-	<Card.Header>
-		<Card.Title>{event.getMatchingTags('name')[0][1]}</Card.Title>
-		<Card.Description>{getMission(event)}</Card.Description>
-	</Card.Header>
-	<Card.Content></Card.Content>
-	<Card.Footer class="flex justify-between">
-        <Button on:click={()=>{console.log(event.rawEvent())}} variant="outline">Print to Console</Button>
-		<Button on:click={()=>{goto(`${base}/rockets/${getRocketURL(event)}`)}}>View Full Rocket<ChevronRight class="h-4 w-4" /></Button>
-	</Card.Footer>
-</Card.Root>
+{#if validate(event)}
+	<Card.Root class="w-[350px] m-2">
+		<Card.Header>
+			<Card.Title>{event.getMatchingTags('name')[0][1]}</Card.Title>
+			<Card.Description>{event.getMatchingTags('description')[0][1]}</Card.Description>
+		</Card.Header>
+		<img src={event.getMatchingTags('cover')[0][1]} />
+		<Card.Content></Card.Content>
+		<Card.Footer class="flex justify-between">
+			<Button
+				on:click={() => {
+					goto(`${base}/rockets/${getRocketURL(event)}`);
+				}}>Make Available to Purchase<ChevronRight class="h-4 w-4" /></Button
+			>
+		</Card.Footer>
+	</Card.Root>
+{/if}
