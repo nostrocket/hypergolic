@@ -32,7 +32,7 @@
 		//warn user that this information is probably out of date and let them reroute to get the latest
 	}
 
-	if (rIgnitionOrActual.length == 64 && rName && rPubkey) {
+	if (rName && rPubkey) {
 		//the user wants the latest valid state of this rocket
 		rocketEvents = $ndk.storeSubscribe(
 			[{ '#d': [rName], authors: [rPubkey], kinds: [31108 as number] },

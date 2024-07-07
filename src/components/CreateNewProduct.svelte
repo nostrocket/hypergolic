@@ -42,7 +42,7 @@
 		console.log(e.rawEvent())
 		e.publish().then((x) => {
 			console.log(x);
-			//goto(`${base}/rockets/${getRocketURL(e)}`);
+			goto(`${base}/rockets/${getRocketURL(e)}`);
 		});
 	}
 </script>

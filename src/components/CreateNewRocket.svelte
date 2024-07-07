@@ -31,6 +31,8 @@
         //todo validate d tag
         e.tags.push(["d", name])
         e.tags.push(["ruleset", "334000"])
+		e.tags.push(["ignition", "this"])
+		e.tags.push(["parent", "this"])
         e.publish().then((x)=>{
             console.log(x)
             goto(`${base}/rockets/${getRocketURL(e)}`)
