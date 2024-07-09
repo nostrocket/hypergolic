@@ -18,11 +18,6 @@
     import { Separator } from "$lib/components/ui/separator/index.js";
     import * as Table from "$lib/components/ui/table/index.js";
     import * as Tabs from "$lib/components/ui/tabs/index.js";
-	import type { NDKEvent } from "@nostr-dev-kit/ndk";
-	import Pie from "./Pie.svelte";
-
-    export let rocket:NDKEvent;
-
   </script>
   
 
@@ -35,17 +30,19 @@
         <Breadcrumb.Root class="hidden md:flex">
           <Breadcrumb.List>
             <Breadcrumb.Item>
-              <Breadcrumb.Link href="##">{rocket.getMatchingTags('d')[0][1]}</Breadcrumb.Link>
+              <Breadcrumb.Link href="##">Rocket Name</Breadcrumb.Link>
             </Breadcrumb.Item>
             <Breadcrumb.Separator />
             <Breadcrumb.Item>
-              <Breadcrumb.Page>Dashboard</Breadcrumb.Page>
+              <Breadcrumb.Link href="##">Dashboard</Breadcrumb.Link>
             </Breadcrumb.Item>
-
+            <Breadcrumb.Separator />
+            <Breadcrumb.Item>
+              <Breadcrumb.Page>Recent Orders</Breadcrumb.Page>
+            </Breadcrumb.Item>
           </Breadcrumb.List>
         </Breadcrumb.Root>
       </header>
-      <Pie />
       <main
         class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8 lg:grid-cols-3 xl:grid-cols-3"
       >

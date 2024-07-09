@@ -1,15 +1,18 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { ndk } from '@/ndk';
-	import { NDKEvent, type NDKTag } from '@nostr-dev-kit/ndk';
+	import { NDKEvent } from '@nostr-dev-kit/ndk';
 	import type { ExtendedBaseType, NDKEventStore } from '@nostr-dev-kit/ndk-svelte';
 	import { onDestroy } from 'svelte';
 	import { derived, type Readable } from 'svelte/store';
 	import CreateNewProduct from '../../../components/CreateNewProduct.svelte';
 	import Heading from '../../../components/Heading.svelte';
 	import ProductCard from '../../../components/ProductCard.svelte';
+	import ProductsForRocket from '../../../components/ProductsForRocket.svelte';
 	import Subheading from '../../../components/Subheading.svelte';
 	import Todo from '../../../components/Todo.svelte';
+	import EmptyList from '../../../components/EmptyList.svelte';
+	import RocketDashboard from '../../../components/RocketDashboard.svelte';
 	//flow if we only have a d-tag: fetch all 31108's with this d-tag, sort by WoT, put Nostrocket Name Service one at the top. Dedupe same rocket (same state, shadows) from multiple users, just show them all as everyone agreeing.
 	//second pass: fetch ignition event for each, rebuild current state and validate all proofs, compute votepower and display only the states with > 50%.
 
@@ -19,7 +22,6 @@
 
 	let rocketEvents: NDKEventStore<NDKEvent> | undefined;
 	let latestRocketEvent: Readable<ExtendedBaseType<NDKEvent> | undefined>;
-	let zaps: Readable<ExtendedBaseType<NDKEvent>[]>;
 
 	let candidateProducts: Readable<ExtendedBaseType<NDKEvent>[]>;
 	onDestroy(() => {
@@ -70,63 +72,16 @@
 						return e.kind == 1908;
 					});
 				});
-
-				zaps = derived(rocketEvents, ($events) => {
-					return $events.filter((e) => {
-						return e.kind == 9735;
-					});
-				});
-
-				let existingProducts = derived(latestRocketEvent, ($latestRocketEvent)=>{
-					let m = new Map<string, any>()
-					if ($latestRocketEvent) {
-						let products = getMapOfProducts($latestRocketEvent)
-
-					}
-				})
 			}
 		}
 	}
 
-	class RocketProduct {
-		ID: string;
-		Price: number;
-		ValidAfter: number; //unix time
-		MaxPurchases: number;
-		Purchases: Map<string, ProductPayment>;
-		constructor(tag:NDKTag) {
-			this.Purchases = new Map()
-			this.ID = tag[1].split(':')[0]
-			this.Price = parseInt(tag[1].split(':')[1], 10)
-			this.ValidAfter = parseInt(tag[1].split(':')[2], 10)
-			this.MaxPurchases = parseInt(tag[1].split(':')[3], 10)
-			let purchases = JSON.parse(tag[3])
-			for (let p of purchases) {
-				let payment = new ProductPayment(p)
-				this.Purchases.set(payment.ZapID, payment)
-			}
-		}
-	}
-
-	class ProductPayment {
-		ZapID: string;
-		BuyerPubkey: string;
-		WitnessedAt: number;
-		constructor(purchase:string) {
-			this.ZapID = purchase.split(":")[0]
-			this.BuyerPubkey = purchase.split(":")[1]
-			this.WitnessedAt = parseInt(purchase.split(":")[2], 10)
-		}
-	}
-
-	function getMapOfProducts(rocket: NDKEvent): Map<string, RocketProduct> {
-		let productIDs = new Map<string, RocketProduct>();
-		for (let product of rocket.getMatchingTags('product')) {
-			if (product.length > 1 && product[1].split(':') && product[1].split(':').length > 0) {
-				productIDs.set(product[1].split(':')[0], new RocketProduct(product));
-			}
-		}
-		return productIDs;
+	class ZapPurchase {
+		Amount: number;
+		ProductID: string;
+		Buyer: string;
+		ZapReceiptID: string;
+		constructor(zapReceipt: NDKEvent) {}
 	}
 
 	//todo: check that this zap is not already included in the payment JSON for the product
@@ -134,65 +89,13 @@
 	//todo: make the page flash or something and show each time someone buys the product.
 	//todo: split this out so that we can consume it for the payment page too (so that we know if there are really products left or they're all sold)
 	//todo: make store of all purchases (in rocket and zaps), sort by timestamp and render with profile of buyer
-	function getZapData(zap: NDKEvent) {
-		let productPrice = 0;
-		let zapAmount = 0;
-		let productID: string | undefined = undefined;
-		let buyerPubkey: string | undefined = undefined;
-		let zapRequest: NDKEvent | undefined = undefined;
-
-		let desc = zap.getMatchingTags('description');
-		if (desc && desc.length == 1 && $latestRocketEvent) {
-			zapRequest = new NDKEvent($ndk, JSON.parse(desc[0][1]));
-			let zapRequestETags = zapRequest.getMatchingTags('e');
-
-			if (zapRequestETags && zapRequestETags.length > 0) {
-				for (let productIDfromZapRequest of zapRequestETags) {
-					if (productIDfromZapRequest.length > 1) {
-						let productsInRocket = getMapOfProducts($latestRocketEvent);
-						if (productsInRocket.size > 0) {
-							productID = productIDfromZapRequest[1];
-							if (productID.length == 64) {
-								let productDataFromRocket = productsInRocket.get(productID);
-								if (productDataFromRocket) {
-									productPrice = productDataFromRocket.Price
-								}
-							} else {
-							}
-						}
-					}
-				}
-			}
-			let amount = zapRequest.getMatchingTags('amount');
-			if (amount && amount.length == 1) {
-				if (amount[0].length == 2) {
-					zapAmount = parseInt(amount[0][1], 10);
-				}
-			}
-			buyerPubkey = zapRequest.author.pubkey;
-		}
-		let success = false;
-		if (zapRequest && productID && buyerPubkey && productPrice && zapAmount) {
-			if (zapAmount >= productPrice && productID.length == 64 && buyerPubkey.length == 64) {
-				success = true;
-				return {
-					productPrice: productPrice,
-					zapAmount: zapAmount,
-					productID: productID,
-					buyerPubkey: buyerPubkey,
-					zapReceipt: zap.id
-				};
-			}
-		}
-		if (!success) {
-			console.log('invalid product payment zap found:', zapRequest?.rawEvent());
-		}
-	}
 
 	//todo: handle shadow events (fetch the shadowed event and render it instead)
 </script>
-
 {#if latestRocketEvent && $latestRocketEvent}
+<RocketDashboard rocket={$latestRocketEvent} />
+{/if}
+{#if latestRocketEvent && $latestRocketEvent && false}
 	<Heading title={$latestRocketEvent.getMatchingTags('d')[0][1]} />
 
 	<Todo
@@ -201,27 +104,28 @@
 			'modify relevant data and republish event according to https://github.com/nostrocket/NIPS/blob/main/31108.md and https://github.com/nostrocket/NIPS/blob/main/MSBR334000.md '
 		]}
 	/>
-	{#if candidateProducts && $candidateProducts}
-		<Subheading title="Product Candidates" />
-		<CreateNewProduct rocketEvent={$latestRocketEvent} />
-		{#each $candidateProducts as r}<ProductCard rocket={$latestRocketEvent} product={r} />{/each}
-	{/if}
+	<div class="flex flex-col gap-1 text-left">
+		<h3 class="text-xl font-bold tracking-tight">
+			{$latestRocketEvent.getMatchingTags('d')[0][1].toLocaleUpperCase()} Products
+		</h3>
+		<p class="text-sm text-muted-foreground">
+			If there are products available for purchase they will be listed here
+		</p>
+	</div>
+	<ProductsForRocket rocketEvent={$latestRocketEvent} />
 
-	{#if zaps && $zaps}
-		{#each $zaps as z}
-		{#if getZapData(z)}{getZapData(z)?.buyerPubkey}{/if}
-		<p
-				on:click={() => {
-					let zapdata = getZapData(z);
-					if (zapdata) {
-						console.log(zapdata);
-					}
-				}}
-			>
-				{z.id}
-			</p>{/each}
-	{/if}
+	<div class="flex flex-col gap-1 text-left pt-4">
+		<h3 class="text-xl font-bold tracking-tight">
+			{$latestRocketEvent.getMatchingTags('d')[0][1].toLocaleUpperCase()} Product Proposals
+		</h3>
+		<p class="text-sm text-muted-foreground">
+			If particpants of {$latestRocketEvent.getMatchingTags('d')[0][1]} have proposed any new products that are not yet included for sale, they will be listed here.
+		</p>
+	</div>
+	{#each $candidateProducts as r}<ProductCard rocket={$latestRocketEvent} product={r} />{/each}
+	<CreateNewProduct rocketEvent={$latestRocketEvent} />
 {:else}
+	<Heading title="Fetching events for the requested rocket" />
 	IGNITION: {rIgnitionOrActual} <br />
 	NAME: {rName} <br />
 	PUBKEY: {rPubkey} <br />
