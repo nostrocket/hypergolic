@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { ndk } from "$lib/ndk";
 	import { Button } from "@/components/ui/button";
+    import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
+    import { Avatar } from "@nostr-dev-kit/ndk-svelte-components";
 	import { NDKNip07Signer } from "@nostr-dev-kit/ndk";
 	import { onMount } from "svelte";
 
@@ -9,6 +11,7 @@
             nip07();
         }
     })
+  $: pubkey = ""
 
     async function nip07() {
         document.body.appendChild(document.createElement('script')).src = 'https://unpkg.com/window.nostr.js/dist/window.nostr.js';
@@ -19,6 +22,7 @@
             const user = await signer.blockUntilReady();
             
             if (user) {
+                pubkey = user.pubkey
                 $ndk.signer = signer;
                 $ndk = $ndk
                 localStorage.setItem("signed-in", "true");
@@ -32,4 +36,21 @@
 <Button on:click={nip07}>
     <span class="hidden sm:block">Sign in</span>
 </Button>
+{:else}
+<DropdownMenu.Root>
+<DropdownMenu.Trigger asChild let:builder>
+    <Button builders={[builder]} variant="secondary" size="icon" class="rounded-full">
+        <Avatar ndk={$ndk} {pubkey} class="w-10 h-10 object-cover rounded-full flex-none" />
+        <span class="sr-only">Toggle user menu</span>
+    </Button>
+</DropdownMenu.Trigger>
+<DropdownMenu.Content align="end">
+    <DropdownMenu.Label>My Account</DropdownMenu.Label>
+    <DropdownMenu.Separator />
+    <DropdownMenu.Item>Settings</DropdownMenu.Item>
+    <DropdownMenu.Item>Support</DropdownMenu.Item>
+    <DropdownMenu.Separator />
+    <DropdownMenu.Item>Logout</DropdownMenu.Item>
+</DropdownMenu.Content>
+</DropdownMenu.Root>
 {/if}
