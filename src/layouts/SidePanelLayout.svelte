@@ -5,7 +5,6 @@
 	import Search from 'lucide-svelte/icons/search';
 
 	import { Button } from '$lib/components/ui/button/index.js';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Sheet from '$lib/components/ui/sheet/index.js';
 	import { Rocket } from 'lucide-svelte';
@@ -88,22 +87,6 @@
 				</form>
 			</div>
 			<Login />
-			<DropdownMenu.Root>
-				<DropdownMenu.Trigger asChild let:builder>
-					<Button builders={[builder]} variant="secondary" size="icon" class="rounded-full">
-						<CircleUser class="h-5 w-5" />
-						<span class="sr-only">Toggle user menu</span>
-					</Button>
-				</DropdownMenu.Trigger>
-				<DropdownMenu.Content align="end">
-					<DropdownMenu.Label>My Account</DropdownMenu.Label>
-					<DropdownMenu.Separator />
-					<DropdownMenu.Item>Settings</DropdownMenu.Item>
-					<DropdownMenu.Item>Support</DropdownMenu.Item>
-					<DropdownMenu.Separator />
-					<DropdownMenu.Item>Logout</DropdownMenu.Item>
-				</DropdownMenu.Content>
-			</DropdownMenu.Root>
 		</header>
 		<div class="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6 overflow-auto">
 			<slot name="content"></slot>
