@@ -48,7 +48,7 @@
 					<nav class="grid gap-2 text-lg font-medium">
 						<a href="##" class="flex items-center gap-2 text-lg font-semibold">
 							<Rocket class="h-6 w-6" />
-							<span>Nostrocket LFG</span>
+							<span><img src={`${base}/logo.png`} /></span>
 						</a>
 						<NewMenu />
 					</nav>

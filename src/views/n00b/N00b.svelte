@@ -1,10 +1,7 @@
 <script lang="ts">
-	import BellRing from 'lucide-svelte/icons/bell-ring';
-	import Check from 'lucide-svelte/icons/check';
+	import { base } from '$app/paths';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
-	import { Switch } from '$lib/components/ui/switch/index.js';
-	import { base } from '$app/paths';
 	import CreateNewRocket from '../../components/CreateNewRocket.svelte';
 
 	const notifications = [
@@ -31,7 +28,7 @@
 					<Card.Title>Proof of Work</Card.Title>
 					<Card.Description>I have skills and I'm ready to work for sats.</Card.Description>
 				</Card.Header>
-        <img src="{base}/a.png" />
+        <img src="{base}/_work.png" />
 				<Card.Content class="grid gap-4">
 					<div>
 						<ul class="ml-6 list-disc [&>li]:mt-2">
@@ -55,7 +52,7 @@
 					<Card.Description>I have Sats, and I want a slice of a Rocket's satflow.</Card.Description
 					>
 				</Card.Header>
-        <img src="{base}/scrooge.png" width="100%" />
+        <img src="{base}/_sats.png" width="100%" />
 				<Card.Content class="grid gap-4">
 					<div>
 						<ul class="ml-6 list-disc [&>li]:mt-2">
@@ -81,7 +78,7 @@
 						>I'm working on my own project and I want other people to join me.</Card.Description
 					>
 				</Card.Header>
-        <img src="{base}/rocket.jpg" width="100%" />
+        <img src="{base}/_rocket.png" width="100%" />
 				<Card.Content class="grid gap-4">
 					<div>
             <ul class="ml-6 list-disc [&>li]:mt-2">
