@@ -3,7 +3,7 @@
   
     const options = {
       series: [35.1, 23.5, 2.4, 5.4],
-      colors: ['#1C64F2', '#16BDCA', '#FDBA8C', '#E74694'],
+      colors: ['#9b1c1c', '#16BDCA', '#FDBA8C', '#E74694'],
       chart: {
         height: 320,
         width: '100%',
@@ -84,21 +84,23 @@
         }
       }
     };
+
+//     <Card>
+//     <div class="flex justify-between items-start w-full">
+//       <div class="flex-col items-center">
+//         <div class="flex items-center mb-1">
+//           <h5 class="text-xl font-bold leading-none text-gray-900 dark:text-white me-1">Merit Distribution</h5>
+          
+          
+//         </div>
+//       </div>
+
+//     </div>
+// </Card>
   </script>
   
-  <Card>
-    <div class="flex justify-between items-start w-full">
-      <div class="flex-col items-center">
-        <div class="flex items-center mb-1">
-          <h5 class="text-xl font-bold leading-none text-gray-900 dark:text-white me-1">Merit Distribution</h5>
-          
-          
-        </div>
-      </div>
 
-    </div>
-  
     <Chart {options} class="py-6" />
   
 
-  </Card>
+  

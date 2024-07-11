@@ -9,10 +9,8 @@
 	import Heading from '../../../components/Heading.svelte';
 	import ProductCard from '../../../components/ProductCard.svelte';
 	import ProductsForRocket from '../../../components/ProductsForRocket.svelte';
-	import Subheading from '../../../components/Subheading.svelte';
-	import Todo from '../../../components/Todo.svelte';
-	import EmptyList from '../../../components/EmptyList.svelte';
 	import RocketDashboard from '../../../components/RocketDashboard.svelte';
+	import Todo from '../../../components/Todo.svelte';
 	//flow if we only have a d-tag: fetch all 31108's with this d-tag, sort by WoT, put Nostrocket Name Service one at the top. Dedupe same rocket (same state, shadows) from multiple users, just show them all as everyone agreeing.
 	//second pass: fetch ignition event for each, rebuild current state and validate all proofs, compute votepower and display only the states with > 50%.
 

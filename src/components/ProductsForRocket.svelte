@@ -1,12 +1,9 @@
 <script lang="ts">
 	import type { NDKEvent } from '@nostr-dev-kit/ndk';
 
-	import Todo from './Todo.svelte';
-	import { writable, type Readable } from 'svelte/store';
-	import { getMapOfProductsFromRocket, type RocketProduct } from '@/event_helpers/rockets';
+	import { getMapOfProductsFromRocket } from '@/event_helpers/rockets';
+	import ProductCardFromID from './ProductCardFromID.svelte';
 	import ProductPurchases from './ProductPurchases.svelte';
-	import ProductCard from './ProductCard.svelte';
-	import ProductCardFromEvent from './ProductCardFromEvent.svelte';
 
 
 	export let rocketEvent: NDKEvent;
@@ -16,7 +13,7 @@
 
 {#if rocketEvent && rocketProducts.size > 0}
 	{#each rocketProducts as [id, product]}
-    <ProductCardFromEvent rocket={rocketEvent} productID={product.ID} />
+    <ProductCardFromID rocket={rocketEvent} productID={product.ID} />
 		<ProductPurchases rocket={rocketEvent} {product} />{/each}
 {/if}
 

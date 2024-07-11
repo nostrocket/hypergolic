@@ -1,12 +1,7 @@
 <script lang="ts">
-	import AddProductToRocket from './AddProductToRocket.svelte';
-	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
-	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
-	import { getMission, getRocketURL } from '@/helpers';
 	import type { NDKEvent } from '@nostr-dev-kit/ndk';
-	import { ChevronRight } from 'lucide-svelte';
+	import AddProductToRocket from './AddProductToRocket.svelte';
 	import PayNow from './PayNow.svelte';
 
 	export let product: NDKEvent;
