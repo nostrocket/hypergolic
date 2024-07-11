@@ -22,7 +22,7 @@
 			<div class="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
 				<a href="{base}/" class="flex items-center gap-2 font-semibold">
 					<Rocket class="h-6 w-6" />
-					<span class=""><img src="/logo.png" /></span>
+					<span class=""><img src={`${base}/logo.png`} /></span>
 				</a>
 			</div>
 			<div class="flex-1">
