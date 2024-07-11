@@ -21,8 +21,7 @@
 		<div class="flex h-full max-h-screen flex-col gap-2">
 			<div class="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
 				<a href="{base}/" class="flex items-center gap-2 font-semibold">
-					<Rocket class="h-6 w-6" />
-					<span class=""><img src={`${base}/logo.png`} /></span>
+					<span class=""><img src={`${base}/_logo.png`} /></span>
 				</a>
 			</div>
 			<div class="flex-1">
@@ -47,8 +46,7 @@
 				<Sheet.Content side="left" class="flex flex-col">
 					<nav class="grid gap-2 text-lg font-medium">
 						<a href="##" class="flex items-center gap-2 text-lg font-semibold">
-							<Rocket class="h-6 w-6" />
-							<span><img src={`${base}/logo.png`} /></span>
+							<span><img src={`${base}/_logo.png`} /></span>
 						</a>
 						<NewMenu />
 					</nav>
