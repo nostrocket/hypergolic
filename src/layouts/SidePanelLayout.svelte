@@ -22,12 +22,8 @@
 			<div class="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
 				<a href="{base}/" class="flex items-center gap-2 font-semibold">
 					<Rocket class="h-6 w-6" />
-					<span class="">Nostrocket LFG</span>
+					<span class=""><img src="/logo.png" /></span>
 				</a>
-				<Button variant="outline" size="icon" class="ml-auto h-8 w-8">
-					<Bell class="h-4 w-4" />
-					<span class="sr-only">Toggle notifications</span>
-				</Button>
 			</div>
 			<div class="flex-1">
 				<nav class="grid items-start px-2 text-sm font-medium lg:px-4">
