@@ -1,57 +1,60 @@
 <script lang="ts">
-      
-    import * as Breadcrumb from "$lib/components/ui/breadcrumb/index.js";
-    import { RocketProduct } from "@/event_helpers/rockets";
-    import type { NDKEvent } from "@nostr-dev-kit/ndk";
-    import { writable, type Writable } from "svelte/store";
-    import MeritsAndSatflow from "./MeritsAndSatflow.svelte";
-    import ProductFomo from "./ProductFomo.svelte";
+	import * as Breadcrumb from '$lib/components/ui/breadcrumb/index.js';
+	import { RocketProduct } from '@/event_helpers/rockets';
+	import type { NDKEvent } from '@nostr-dev-kit/ndk';
+	import { writable, type Readable, type Writable } from 'svelte/store';
+	import MeritsAndSatflow from './MeritsAndSatflow.svelte';
+	import ProductFomo from './ProductFomo.svelte';
+	import Todo from './Todo.svelte';
+	import ProductCard from './ProductCard.svelte';
+	import CreateNewProduct from './CreateNewProduct.svelte';
+	import type { ExtendedBaseType } from '@nostr-dev-kit/ndk-svelte';
+	import ProposedProducts from './ProposedProducts.svelte';
+	import * as Card from '@/components/ui/card';
 
-    export let rocket:NDKEvent;
+	export let rocket: NDKEvent;
+</script>
 
-    
-    let products: Writable<RocketProduct[]> = writable([])
+<div class="flex flex-col sm:gap-4">
+	<header
+		class="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6"
+	>
+		<Breadcrumb.Root class="hidden md:flex">
+			<Breadcrumb.List>
+				<Breadcrumb.Item>
+					<Breadcrumb.Link href="##">{rocket.getMatchingTags('d')[0][1]}</Breadcrumb.Link>
+				</Breadcrumb.Item>
+				<Breadcrumb.Separator />
+				<Breadcrumb.Item>
+					<Breadcrumb.Page>Dashboard</Breadcrumb.Page>
+				</Breadcrumb.Item>
+			</Breadcrumb.List>
+		</Breadcrumb.Root>
+	</header>
+	<main
+		class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-2 lg:grid-cols-3 xl:grid-cols-3"
+	>
+		<MeritsAndSatflow {rocket} />
 
-    $: {
-      //fetch products from rocket and populate a store of them
-      let _products:RocketProduct[] = []
-      for (let p of rocket.getMatchingTags("product")) {
-        _products.push(new RocketProduct(p))
-      }
-      products.set(_products)
-    }
+		<ProductFomo {rocket} />
 
-    
-    
+		<ProposedProducts {rocket} />
 
-  </script>
-    <div class="flex flex-col sm:gap-4">
-      <header
-        class="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6"
-      >
-        
-        <Breadcrumb.Root class="hidden md:flex">
-          <Breadcrumb.List>
-            <Breadcrumb.Item>
-              <Breadcrumb.Link href="##">{rocket.getMatchingTags('d')[0][1]}</Breadcrumb.Link>
-            </Breadcrumb.Item>
-            <Breadcrumb.Separator />
-            <Breadcrumb.Item>
-              <Breadcrumb.Page>Dashboard</Breadcrumb.Page>
-            </Breadcrumb.Item>
+		<Card.Root class="sm:col-span-3">
+			<Card.Header class="pb-3">
+				<Card.Title>Actions</Card.Title>
+				<Card.Description class="grid grid-cols-6">
+					<CreateNewProduct rocketEvent={rocket} />
+				</Card.Description>
+			</Card.Header>
+			<Card.Footer></Card.Footer>
+		</Card.Root>
 
-          </Breadcrumb.List>
-        </Breadcrumb.Root>
-      </header>
-      <main
-      class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8 lg:grid-cols-3 xl:grid-cols-3"
-    >
-      <MeritsAndSatflow {rocket} />
-
-      {#each $products as product} 
-      <ProductFomo {rocket} {product} />
-      {/each}
-      </main>
-    </div>
-
-  
+		<Todo
+			text={[
+				'delete rocket (if current user is rocket creator)',
+				'modify relevant data and republish event according to https://github.com/nostrocket/NIPS/blob/main/31108.md and https://github.com/nostrocket/NIPS/blob/main/MSBR334000.md '
+			]}
+		/>
+	</main>
+</div>

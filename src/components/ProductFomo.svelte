@@ -1,30 +1,40 @@
 <script lang="ts">
-      
-    import * as Card from "$lib/components/ui/card/index.js";
-    import * as Table from "$lib/components/ui/table/index.js";
-    import type { RocketProduct } from "@/event_helpers/rockets";
-    import type { NDKEvent } from "@nostr-dev-kit/ndk";
-    import ProductCardFromId from "./ProductCardFromID.svelte";
-	import ProductPurchases from "./ProductPurchases.svelte";
+	import * as Card from '$lib/components/ui/card/index.js';
+	import * as Table from '$lib/components/ui/table/index.js';
+	import { RocketProduct } from '@/event_helpers/rockets';
+	import type { NDKEvent } from '@nostr-dev-kit/ndk';
+	import ProductCardFromId from './ProductCardFromID.svelte';
+	import ProductPurchases from './ProductPurchases.svelte';
+	import { writable, type Writable } from 'svelte/store';
 
-    export let product:RocketProduct;
-    export let rocket:NDKEvent;
-    
+	//export let product:RocketProduct;
+	export let rocket: NDKEvent;
 
-  </script>
+	let products: Writable<RocketProduct[]> = writable([]);
+
+	$: {
+		//fetch products from rocket and populate a store of them
+		let _products: RocketProduct[] = [];
+		for (let p of rocket.getMatchingTags('product')) {
+			_products.push(new RocketProduct(p));
+		}
+		products.set(_products);
+	}
+</script>
 
 <Card.Root class="sm:col-span-3">
-    <Card.Header class="pb-3">
-      <Card.Title>Products and Purchases</Card.Title>
-      <Card.Description class="grid grid-cols-2">
-        <div class=" grid-cols-1">
-          <ProductCardFromId {rocket} productID={product.ID} />
-      </div>
-      <div class="grid-cols-1">
-        <ProductPurchases {rocket} {product} />
-      </div>
-      </Card.Description>
-    </Card.Header>
-    <Card.Footer>
-    </Card.Footer>
-  </Card.Root>
+	<Card.Header class="pb-3">
+		<Card.Title>Products and Purchases</Card.Title>
+		<Card.Description class="grid grid-cols-2">
+            {#each $products as product}
+			<div class=" grid-cols-1">
+				<ProductCardFromId {rocket} productID={product.ID} />
+			</div>
+			<div class="grid-cols-1">
+				<ProductPurchases {rocket} {product} />
+			</div>
+            {/each}
+		</Card.Description>
+	</Card.Header>
+	<Card.Footer></Card.Footer>
+</Card.Root>

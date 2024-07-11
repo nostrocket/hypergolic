@@ -92,16 +92,16 @@
 </script>
 {#if latestRocketEvent && $latestRocketEvent}
 <RocketDashboard rocket={$latestRocketEvent} />
+{:else}
+	<Heading title="Fetching events for the requested rocket" />
+	IGNITION: {rIgnitionOrActual} <br />
+	NAME: {rName} <br />
+	PUBKEY: {rPubkey} <br />
 {/if}
 {#if latestRocketEvent && $latestRocketEvent && false}
 	<Heading title={$latestRocketEvent.getMatchingTags('d')[0][1]} />
 
-	<Todo
-		text={[
-			'delete rocket (if current user is rocket creator)',
-			'modify relevant data and republish event according to https://github.com/nostrocket/NIPS/blob/main/31108.md and https://github.com/nostrocket/NIPS/blob/main/MSBR334000.md '
-		]}
-	/>
+
 	<div class="flex flex-col gap-1 text-left">
 		<h3 class="text-xl font-bold tracking-tight">
 			{$latestRocketEvent.getMatchingTags('d')[0][1].toLocaleUpperCase()} Products
@@ -122,9 +122,4 @@
 	</div>
 	{#each $candidateProducts as r}<ProductCard rocket={$latestRocketEvent} product={r} />{/each}
 	<CreateNewProduct rocketEvent={$latestRocketEvent} />
-{:else}
-	<Heading title="Fetching events for the requested rocket" />
-	IGNITION: {rIgnitionOrActual} <br />
-	NAME: {rName} <br />
-	PUBKEY: {rPubkey} <br />
 {/if}

@@ -48,7 +48,7 @@
 </script>
 
 <Dialog.Root>
-	<Dialog.Trigger class={buttonVariants({ variant: 'default' })}>Create a Product</Dialog.Trigger>
+	<Dialog.Trigger class={buttonVariants({ variant: 'default' })}>Propose a New Product</Dialog.Trigger>
 	<Dialog.Content class="sm:max-w-[425px]">
 		<Todo text={["validate sane field entries", "name.length > 5 < 20", "description length > 20", "image url resolves and is image"]} />
 		{#if !currentUser}

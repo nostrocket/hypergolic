@@ -79,15 +79,6 @@
 	//todo: validate zaps against product, publish store of all successful payments including those already in rocket. Publish another store with successful payments that are not yet included in rocket state so we can update the state and republish.
 </script>
 
-{#each $zaps as z}<a
-		href="#"
-		on:click={() => {
-			console.log(z.rawEvent());
-		}}>{z.id}</a
-	><br />{/each}
-
-{#each $newZaps as [id, zapReceipt]}{/each}
-
 <Card.Root>
 	<Card.Header class="px-7">
 		<Card.Title>Purchases</Card.Title>
@@ -106,7 +97,7 @@
 			</Table.Header>
 			<Table.Body>
 				{#each $newZaps as [id, zapReceipt]}
-					<Table.Row class=" bg-red-800">
+					<Table.Row on:click={()=>{console.log(getZapRequest(zapReceipt)?.rawEvent())}} class=" bg-red-800">
 						<Table.Cell>
 							<div class="flex flex-nowrap">
 								<Avatar
