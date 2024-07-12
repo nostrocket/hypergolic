@@ -20,6 +20,7 @@
                     webln.sendPayment(invoice).then((response)=>{
                         if (response && response.preimage) {
                             console.log(response.preimage)
+							open = false;
                         }
                     })
                 });
@@ -27,10 +28,10 @@
         })
     }
 
-
+let open:boolean;
 </script>
 
-<Dialog.Root>
+<Dialog.Root bind:open={open}>
 	<Dialog.Trigger class={buttonVariants({ variant: 'default' })}>Buy Now</Dialog.Trigger>
 	<Dialog.Content class="sm:max-w-[425px]">
 		<Dialog.Header>
