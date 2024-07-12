@@ -12,6 +12,7 @@
 	import RocketPillCard from '../components/RocketPillCard.svelte';
 	import { base } from '$app/paths';
 	import Login from '../components/Login.svelte';
+	import { page } from '$app/stores';
 
 	export let title = '';
 </script>
