@@ -11,15 +11,16 @@
 	import type { ExtendedBaseType } from '@nostr-dev-kit/ndk-svelte';
 	import ProposedProducts from './ProposedProducts.svelte';
 	import * as Card from '@/components/ui/card';
+	import CreateMeritRequest from './CreateMeritRequest.svelte';
 
 	export let rocket: NDKEvent;
 </script>
 
 <div class="flex flex-col sm:gap-4">
 	<header
-		class="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6"
+		class="flex items-center "
 	>
-		<Breadcrumb.Root class="hidden md:flex">
+		<Breadcrumb.Root class="flex">
 			<Breadcrumb.List>
 				<Breadcrumb.Item>
 					<Breadcrumb.Link href="##">{rocket.getMatchingTags('d')[0][1]}</Breadcrumb.Link>
@@ -43,8 +44,9 @@
 		<Card.Root class="sm:col-span-3">
 			<Card.Header class="pb-3">
 				<Card.Title>Actions</Card.Title>
-				<Card.Description class="grid grid-cols-6">
+				<Card.Description class="flex space-x-4">
 					<CreateNewProduct rocketEvent={rocket} />
+					<CreateMeritRequest rocketEvent={rocket} />
 				</Card.Description>
 			</Card.Header>
 			<Card.Footer></Card.Footer>
