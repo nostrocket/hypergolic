@@ -66,6 +66,15 @@
 		return zapRequestEvent;
 	}
 
+    function getPayerPubkey(zapReceipt:NDKEvent):string|undefined {
+        let pubkey = undefined
+        let zreq = getZapRequest(zapReceipt)
+        if (zreq && zreq.author.pubkey.length == 64) {
+            pubkey = zreq.author.pubkey
+        }
+        return pubkey
+    }
+
 	function getZapAmount(zapRequest?: NDKEvent): number {
 		let amount = 0;
 		let amountTag = zapRequest?.getMatchingTags('amount');
@@ -96,20 +105,23 @@
 				</Table.Row>
 			</Table.Header>
 			<Table.Body>
-				{#each $newZaps as [id, zapReceipt]}
-					<Table.Row on:click={()=>{console.log(getZapRequest(zapReceipt)?.rawEvent())}} class=" bg-red-800">
+				{#each $newZaps as [id, zapReceipt], _ (id)}
+					<Table.Row on:click={()=>{console.log(getZapRequest(zapReceipt)?.rawEvent())}} class="bg-accent">
 						<Table.Cell>
 							<div class="flex flex-nowrap">
+                                <div class=" hidden">{getZapRequest(zapReceipt)?.author.pubkey}</div>
+
 								<Avatar
 									ndk={$ndk}
-									pubkey={getZapRequest(zapReceipt)?.author.pubkey}
+									pubkey={getPayerPubkey(zapReceipt)}
 									class="h-10 w-10 flex-none rounded-full object-cover"
 								/>
 								<Name
 									ndk={$ndk}
 									pubkey={getZapRequest(zapReceipt)?.author.pubkey}
-									class="inline-block truncate p-2"
+									class="inline-block truncate p-2 max-w-32"
 								/>
+                                
 							</div>
 						</Table.Cell>
 						<Table.Cell class="hidden md:table-cell"
