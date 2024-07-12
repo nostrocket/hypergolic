@@ -74,13 +74,7 @@
 		}
 	}
 
-	class ZapPurchase {
-		Amount: number;
-		ProductID: string;
-		Buyer: string;
-		ZapReceiptID: string;
-		constructor(zapReceipt: NDKEvent) {}
-	}
+
 
 	//todo: check that this zap is not already included in the payment JSON for the product
 	//todo: list purchases on the rocket page (from product tags, as well as zap receipts that aren't yet included). Deduct total products available if not 0.

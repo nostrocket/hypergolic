@@ -1,7 +1,7 @@
 <script lang="ts">
 	import * as Card from '@/components/ui/card';
 	import * as Table from '@/components/ui/table';
-	import type { RocketProduct } from '@/event_helpers/rockets';
+	import { ZapPurchase, type RocketProduct } from '@/event_helpers/rockets';
 	import { unixToRelativeTime } from '@/helpers';
 	import { ndk } from '@/ndk';
 	import { NDKEvent } from '@nostr-dev-kit/ndk';
@@ -33,59 +33,18 @@
 		});
 	});
 
-	let newZaps = derived(zaps, ($zaps) => {
-		let zapMap = new Map<string, NDKEvent>();
+	let purchases = derived(zaps, ($zaps) => {
+		let zapMap = new Map<string, ZapPurchase>();
 		for (let z of $zaps) {
-			if (!product.Purchases.get(z.id)) {
-				let zapRequestEvent = getZapRequest(z);
-				if (zapRequestEvent) {
-					for (let zapEtag of zapRequestEvent.getMatchingTags('e')) {
-						if (zapEtag && zapEtag.length > 1 && zapEtag[1].length == 64) {
-							if (product.ID == zapEtag[1]) {
-								//todo: validate zapper pubkey is from a LSP specified in rocket
-								//todo: validate amount is same as product amount in rocket
-								zapMap.set(z.id, z);
-							}
-						}
-					}
-				}
+			let zapPurchase = new ZapPurchase(z);
+			if (zapPurchase.Valid(rocket)) {
+				zapMap.set(zapPurchase.ZapReceipt.id, zapPurchase);
 			}
 		}
 		return zapMap;
 	});
 
-	function getZapRequest(zapReceipt: NDKEvent): NDKEvent | undefined {
-		let zapRequestEvent: NDKEvent | undefined = undefined;
-		let zapRequest = zapReceipt.getMatchingTags('description');
-		if (zapRequest.length == 1) {
-			let zapRequestJSON = JSON.parse(zapRequest[0][1]);
-			if (zapRequestJSON) {
-				zapRequestEvent = new NDKEvent($ndk, zapRequestJSON);
-			}
-		}
-		return zapRequestEvent;
-	}
-
-    function getPayerPubkey(zapReceipt:NDKEvent):string|undefined {
-        let pubkey = undefined
-        let zreq = getZapRequest(zapReceipt)
-        if (zreq && zreq.author.pubkey.length == 64) {
-            pubkey = zreq.author.pubkey
-        }
-        return pubkey
-    }
-
-	function getZapAmount(zapRequest?: NDKEvent): number {
-		let amount = 0;
-		let amountTag = zapRequest?.getMatchingTags('amount');
-		if (amountTag?.length == 1) {
-			amount = parseInt(amountTag[0][1], 10);
-		}
-		return amount;
-	}
-
-	//fetch payments from rocket::product and live zaps and make a store Map<productID, []payments>
-	//todo: validate zaps against product, publish store of all successful payments including those already in rocket. Publish another store with successful payments that are not yet included in rocket state so we can update the state and republish.
+	//todo: update rocket event with confirmed zaps if we have votepower
 </script>
 
 <Card.Root>
@@ -105,29 +64,31 @@
 				</Table.Row>
 			</Table.Header>
 			<Table.Body>
-				{#each $newZaps as [id, zapReceipt], _ (id)}
-					<Table.Row on:click={()=>{console.log(getZapRequest(zapReceipt)?.rawEvent())}} class="bg-accent">
+				{#each $purchases as [id, purchase], _ (id)}
+					<Table.Row
+						on:click={() => {
+							console.log(purchase.ZapReceipt.rawEvent());
+						}}
+						class="bg-accent"
+					>
 						<Table.Cell>
 							<div class="flex flex-nowrap">
-                                <div class=" hidden">{getZapRequest(zapReceipt)?.author.pubkey}</div>
-
 								<Avatar
 									ndk={$ndk}
-									pubkey={getPayerPubkey(zapReceipt)}
+									pubkey={purchase.BuyerPubkey}
 									class="h-10 w-10 flex-none rounded-full object-cover"
 								/>
 								<Name
 									ndk={$ndk}
-									pubkey={getZapRequest(zapReceipt)?.author.pubkey}
-									class="inline-block truncate p-2 max-w-32"
+									pubkey={purchase.BuyerPubkey}
+									class="inline-block max-w-32 truncate p-2"
 								/>
-                                
 							</div>
 						</Table.Cell>
-						<Table.Cell class="hidden md:table-cell"
-							>{getZapAmount(getZapRequest(zapReceipt)) / 1000}</Table.Cell
+						<Table.Cell class="hidden md:table-cell">{purchase.Amount / 1000}</Table.Cell>
+						<Table.Cell class="text-right"
+							>{unixToRelativeTime(purchase.ZapReceipt.created_at * 1000)}</Table.Cell
 						>
-						<Table.Cell class="text-right">{unixToRelativeTime(zapReceipt.created_at*1000)}</Table.Cell>
 					</Table.Row>
 				{/each}
 			</Table.Body>

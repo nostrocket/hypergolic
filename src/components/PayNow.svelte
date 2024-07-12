@@ -14,7 +14,7 @@
 
     function zap() {
         let z = new NDKZap({ndk:$ndk, zappedEvent:rocket, zappedUser: rocket.author})
-        z.createZapRequest(1000, `Purchase of ${product.getMatchingTags("name")[0][1]} from ${rocket.dTag}`, [["e", product.id]]).then(invoice=>{
+        z.createZapRequest(1000, `Purchase of ${product.getMatchingTags("name")[0][1]} from ${rocket.dTag}`, [["product", product.id]]).then(invoice=>{
             if (invoice) {
                 requestProvider().then((webln)=>{
                     webln.sendPayment(invoice).then((response)=>{
