@@ -120,10 +120,18 @@ function getZapRequest(zapReceipt: NDKEvent): NDKEvent | undefined {
 }
 
 function getZapAmount(zapRequest?: NDKEvent): number {
-	let amount = 0;
-	let amountTag = zapRequest?.getMatchingTags('amount');
-	if (amountTag?.length == 1) {
-		amount = parseInt(amountTag[0][1], 10);
+	return getNumberFromTag("amount", zapRequest)
+}
+
+export function getNumberFromTag(tag:string, event?: NDKEvent): number {
+	let amountTag = event?.getMatchingTags(tag);
+	if (amountTag && amountTag[0] && amountTag[0][1]) {
+		try {
+			let amount = parseInt(amountTag[0][1], 10);
+			return amount
+		} catch {
+			console.log("ERROR: could not find number in tag: ", tag, event)
+		}
 	}
-	return amount;
+	return 0
 }

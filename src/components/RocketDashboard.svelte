@@ -1,17 +1,14 @@
 <script lang="ts">
 	import * as Breadcrumb from '$lib/components/ui/breadcrumb/index.js';
-	import { RocketProduct } from '@/event_helpers/rockets';
+	import * as Card from '@/components/ui/card';
 	import type { NDKEvent } from '@nostr-dev-kit/ndk';
-	import { writable, type Readable, type Writable } from 'svelte/store';
+	import CreateMeritRequest from './CreateMeritRequest.svelte';
+	import CreateNewProduct from './CreateNewProduct.svelte';
 	import MeritsAndSatflow from './MeritsAndSatflow.svelte';
 	import ProductFomo from './ProductFomo.svelte';
-	import Todo from './Todo.svelte';
-	import ProductCard from './ProductCard.svelte';
-	import CreateNewProduct from './CreateNewProduct.svelte';
-	import type { ExtendedBaseType } from '@nostr-dev-kit/ndk-svelte';
 	import ProposedProducts from './ProposedProducts.svelte';
-	import * as Card from '@/components/ui/card';
-	import CreateMeritRequest from './CreateMeritRequest.svelte';
+	import Todo from './Todo.svelte';
+	import MeritRequests from './MeritRequests.svelte';
 
 	export let rocket: NDKEvent;
 </script>
@@ -41,6 +38,8 @@
 
 		<ProposedProducts {rocket} />
 
+		
+		<MeritRequests {rocket} />
 		<Card.Root class="sm:col-span-3">
 			<Card.Header class="pb-3">
 				<Card.Title>Actions</Card.Title>
