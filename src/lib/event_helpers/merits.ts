@@ -1,5 +1,5 @@
 import type { NDKEvent, NDKFilter } from '@nostr-dev-kit/ndk';
-import { getNumberFromTag } from './rockets';
+import { getNumberFromTag, isValidUrl } from './rockets';
 
 export class MeritRequest {
 	ID: string;
@@ -19,6 +19,17 @@ export class MeritRequest {
 		}
 		return _problem;
 	}
+    Solution(): URL|undefined {
+		let _solution:URL|undefined = undefined;
+		for (let solution of this.Request.getMatchingTags('solution')) {
+			if (solution && solution.length > 2 && solution[1] == "url") {
+				if (isValidUrl(solution[2])) {
+                    _solution = new URL(solution[2])
+                }
+			}
+		}
+		return _solution;
+	}
 	IncludedInRocketState(rocket: NDKEvent): boolean {
 		return true;
 	}
@@ -30,11 +41,14 @@ export class MeritRequest {
         }
 		return valid;
 	}
-    RocketFilter():NDKFilter {
+    REQFilter(kind?:number):NDKFilter {
         if (!this.BasicValidation()) {
             return {}
         }
-        return { '#d': [this.RocketTag?.split(":")[2]!], authors: [this.RocketTag?.split(":")[1]!], kinds: [31108 as number] }
+        if (!kind) {
+            kind = 31108
+        }
+        return { '#d': [this.RocketTag?.split(":")[2]!], authors: [this.RocketTag?.split(":")[1]!], kinds: [kind as number] }
     }
 	constructor(request: NDKEvent) {
 		this.Request = request;

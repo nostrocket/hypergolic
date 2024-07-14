@@ -4,7 +4,7 @@
 	import type { MeritRequest } from '@/event_helpers/merits';
 	import { getRocketURL } from '@/helpers';
 	import type { NDKEvent } from '@nostr-dev-kit/ndk';
-	import MeritCard from './MeritCard.svelte';
+	import MeritSummaryCard from './MeritSummaryCard.svelte';
 
 	export let rocket: NDKEvent;
 	export let merit: MeritRequest;
@@ -25,7 +25,7 @@
 				</Breadcrumb.Item>
 				<Breadcrumb.Separator />
 				<Breadcrumb.Item>
-					<Breadcrumb.Page>{merit.Problem()}</Breadcrumb.Page>
+					<Breadcrumb.Page>{merit.Problem().substring(0,16)}{#if merit.Problem().length > 16}...{/if}</Breadcrumb.Page>
 				</Breadcrumb.Item>
 			</Breadcrumb.List>
 		</Breadcrumb.Root>
@@ -33,6 +33,6 @@
 	<main
 		class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-2 lg:grid-cols-3 xl:grid-cols-3"
 	>
-	<MeritCard {rocket} {merit} />
+	<MeritSummaryCard {rocket} {merit} />
 </main>
 </div>

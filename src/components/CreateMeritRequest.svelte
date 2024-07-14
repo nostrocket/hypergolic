@@ -12,6 +12,7 @@
 	import type NDKSvelte from '@nostr-dev-kit/ndk-svelte';
 	import { Terminal } from 'lucide-svelte';
 	import Todo from './Todo.svelte';
+	import { isValidUrl } from '@/event_helpers/rockets';
 
 	export let rocketEvent: NDKEvent;
 
@@ -46,14 +47,7 @@
 		}
 	}
 
-	function isValidUrl(string:string):boolean {
-		try {
-			new URL(string);
-			return true;
-		} catch (err) {
-			return false;
-		}
-	}
+
 
 	function validateSolution(solution:string) {
 		if (solution.length > 0) {

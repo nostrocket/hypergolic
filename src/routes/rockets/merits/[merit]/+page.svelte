@@ -35,7 +35,7 @@
 		//the user wants the latest valid state of this rocket
 		rocketEvents = $ndk.storeSubscribe(
 			[
-				meritRequest.RocketFilter()
+				meritRequest.REQFilter()
 			],
 			{ subId: meritRequest.RocketTag!.split(":")[2] }
 		);

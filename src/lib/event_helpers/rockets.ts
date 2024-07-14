@@ -135,3 +135,12 @@ export function getNumberFromTag(tag:string, event?: NDKEvent): number {
 	}
 	return 0
 }
+
+export function isValidUrl(string:string):boolean {
+	try {
+		new URL(string);
+		return true;
+	} catch (err) {
+		return false;
+	}
+}
