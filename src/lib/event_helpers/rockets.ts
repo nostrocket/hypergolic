@@ -1,4 +1,4 @@
-import { NDKEvent, type NDKTag } from '@nostr-dev-kit/ndk';
+import { NDKEvent, type NDKFilter, type NDKTag } from '@nostr-dev-kit/ndk';
 
 export class RocketProduct {
 	ID: string;
@@ -143,4 +143,8 @@ export function isValidUrl(string:string):boolean {
 	} catch (err) {
 		return false;
 	}
+}
+
+export function RocketATagFilter(rocket:NDKEvent):string {
+	return `31108:${rocket.pubkey}:${rocket.dTag}`
 }
