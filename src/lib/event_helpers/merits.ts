@@ -112,6 +112,9 @@ export class Vote {
         }
         return valid
     }
+    ValidateAgainstMeritRequest(merit:MeritRequest):boolean {
+        return this.Request == merit.ID
+    }
 	RocketTag(): NDKTag | undefined {
 		let tag: NDKTag | undefined = undefined;
 		if (this.BasicValidation()) {

@@ -4,7 +4,7 @@
 	import { ndk } from '@/ndk';
 	import type { NDKEvent, NDKKind } from '@nostr-dev-kit/ndk';
 	import { Avatar, Name } from '@nostr-dev-kit/ndk-svelte-components';
-	import { ExternalLink } from 'lucide-svelte';
+	import { ExternalLink, Info } from 'lucide-svelte';
 	import { onDestroy } from 'svelte';
 	import VoteOnMeritRequest from './VoteOnMeritRequest.svelte';
 
@@ -16,41 +16,46 @@
 	import { unixToRelativeTime } from '@/helpers';
 	import { derived } from 'svelte/store';
 
-	import { Button } from "$lib/components/ui/button/index.js";
-	import { Label } from "$lib/components/ui/label/index.js";
-	import { Textarea } from "$lib/components/ui/textarea/index.js";
-	import CornerDownLeft from "lucide-svelte/icons/corner-down-left";
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { Label } from '$lib/components/ui/label/index.js';
+	import { Textarea } from '$lib/components/ui/textarea/index.js';
+	import CornerDownLeft from 'lucide-svelte/icons/corner-down-left';
+	import Alert from '@/components/ui/alert/alert.svelte';
 
 	export let merit: MeritRequest;
 	export let rocket: NDKEvent;
 
 	let _votes = $ndk.storeSubscribe(
-		{ '#a': [RocketATagFilter(rocket)], kinds: [1410 as NDKKind] },
+		{ '#a': [RocketATagFilter(rocket)], '#e': [merit.ID], kinds: [1410 as NDKKind] },
 		{
-			subId: merit.RocketTag!.split(':')[2] + '_votes'
+			subId: merit.ID
 		}
 	);
+
+	onDestroy(() => {
+		_votes.unsubscribe();
+	});
 
 	let votes = derived(_votes, ($_votes) => {
 		let vMap = new Map<string, Vote>();
 		for (let v of $_votes) {
 			let vote = new Vote(v);
-			if (vote.BasicValidation() && vote.ValidateAgainstRocket(new Rocket(rocket))) {
+			if (
+				vote.BasicValidation() &&
+				vote.ValidateAgainstRocket(new Rocket(rocket)) &&
+				vote.ValidateAgainstMeritRequest(merit)
+			) {
 				vMap.set(vote.ID, vote); //only show the latest vote from each pubkey
 			}
 		}
-		let pMap = new Map<string, Vote>()
+		let pMap = new Map<string, Vote>();
 		for (let [_, v] of vMap) {
-			let existing = pMap.get(v.Pubkey)
-			if (!existing || existing && existing.TimeStamp < v.TimeStamp) {
-				pMap.set(v.Pubkey, v)
+			let existing = pMap.get(v.Pubkey);
+			if (!existing || (existing && existing.TimeStamp < v.TimeStamp)) {
+				pMap.set(v.Pubkey, v);
 			}
 		}
 		return pMap;
-	});
-
-	onDestroy(() => {
-		_votes.unsubscribe();
 	});
 </script>
 
@@ -68,7 +73,7 @@
 				pubkey={merit.Pubkey}
 				class="h-10 w-10 flex-none rounded-full object-cover"
 			/>
-			<Name ndk={$ndk} pubkey={merit.Pubkey} class="max-w-32 truncate p-2 inline-block" />
+			<Name ndk={$ndk} pubkey={merit.Pubkey} class="inline-block max-w-32 truncate p-2" />
 		</div>
 		<Card.Description class="max-w-lg text-balance leading-relaxed">
 			{#if merit.Problem().length > 20}{merit.Problem()}{/if}
@@ -111,6 +116,7 @@
 				</div>
 				<Separator class="my-4" />
 				<div class="font-semibold">Votes</div>
+				{#if $votes.size == 0}<Alert><Info />Waiting for existing <span class="italic">{new Rocket(rocket).Name()}</span> Merit holders to vote</Alert> {/if}
 				<Table.Root>
 					<Table.Body>
 						{#each $votes as [id, vote], _ (id)}
@@ -119,7 +125,11 @@
 									console.log(vote.Event.rawEvent());
 									goto(`${base}/rockets/merits/${vote.ID}`);
 								}}
-								class="cursor-pointer {vote.VoteDirection == "ratify"?"bg-lime-600":"bg-red-700"} {vote.VoteDirection == "ratify"?"hover:bg-lime-700":"hover:bg-red-800"}"
+								class="cursor-pointer {vote.VoteDirection == 'ratify'
+									? 'bg-lime-600'
+									: 'bg-red-700'} {vote.VoteDirection == 'ratify'
+									? 'hover:bg-lime-700'
+									: 'hover:bg-red-800'}"
 							>
 								<Table.Cell>
 									<div class="flex flex-nowrap">
@@ -131,12 +141,12 @@
 										<Name
 											ndk={$ndk}
 											pubkey={vote.Pubkey}
-											class="max-w-32 truncate p-2 inline-block"
+											class="inline-block max-w-32 truncate p-2"
 										/>
 									</div>
 								</Table.Cell>
 								<Table.Cell class="hidden text-left md:table-cell">{vote.VoteDirection}</Table.Cell>
-								<Table.Cell class="text-right table-cell"
+								<Table.Cell class="table-cell text-right"
 									>{unixToRelativeTime(vote.TimeStamp * 1000)}</Table.Cell
 								>
 							</Table.Row>
@@ -151,10 +161,11 @@
 	</Card.Footer>
 </Card.Root>
 
-
 <Card.Root class="sm:col-span-1">
 	<Card.Header class="pb-3"><Card.Title>Discussion</Card.Title></Card.Header>
-	<form class="relative overflow-hidden rounded-lg border bg-background focus-within:ring-1 focus-within:ring-ring">
+	<form
+		class="relative overflow-hidden rounded-lg border bg-background focus-within:ring-1 focus-within:ring-ring"
+	>
 		<Label for="message" class="sr-only">Message</Label>
 		<Textarea
 			id="message"
@@ -162,7 +173,6 @@
 			class="min-h-12 resize-none border-0 p-3 shadow-none"
 		/>
 		<div class="flex items-center p-3 pt-0">
-	
 			<Button type="submit" size="sm" class="ml-auto gap-1.5">
 				Publish
 				<CornerDownLeft class="size-3.5" />
@@ -170,4 +180,3 @@
 		</div>
 	</form>
 </Card.Root>
-
