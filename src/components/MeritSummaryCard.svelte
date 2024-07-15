@@ -8,14 +8,18 @@
 	import { onDestroy } from 'svelte';
 	import VoteOnMeritRequest from './VoteOnMeritRequest.svelte';
 
+	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import * as Table from '@/components/ui/table';
 	import { Rocket, RocketATagFilter } from '@/event_helpers/rockets';
-	import { derived } from 'svelte/store';
-	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
 	import { unixToRelativeTime } from '@/helpers';
-	import RocketCard from './RocketCard.svelte';
+	import { derived } from 'svelte/store';
+
+	import { Button } from "$lib/components/ui/button/index.js";
+	import { Label } from "$lib/components/ui/label/index.js";
+	import { Textarea } from "$lib/components/ui/textarea/index.js";
+	import CornerDownLeft from "lucide-svelte/icons/corner-down-left";
 
 	export let merit: MeritRequest;
 	export let rocket: NDKEvent;
@@ -32,10 +36,17 @@
 		for (let v of $_votes) {
 			let vote = new Vote(v);
 			if (vote.BasicValidation() && vote.ValidateAgainstRocket(new Rocket(rocket))) {
-				vMap.set(vote.ID, vote);
+				vMap.set(vote.ID, vote); //only show the latest vote from each pubkey
 			}
 		}
-		return vMap;
+		let pMap = new Map<string, Vote>()
+		for (let [_, v] of vMap) {
+			let existing = pMap.get(v.Pubkey)
+			if (!existing || existing && existing.TimeStamp < v.TimeStamp) {
+				pMap.set(v.Pubkey, v)
+			}
+		}
+		return pMap;
 	});
 
 	onDestroy(() => {
@@ -139,3 +150,24 @@
 		<VoteOnMeritRequest {merit} rocket={new Rocket(rocket)} />
 	</Card.Footer>
 </Card.Root>
+
+
+<Card.Root class="sm:col-span-1">
+	<Card.Header class="pb-3"><Card.Title>Discussion</Card.Title></Card.Header>
+	<form class="relative overflow-hidden rounded-lg border bg-background focus-within:ring-1 focus-within:ring-ring">
+		<Label for="message" class="sr-only">Message</Label>
+		<Textarea
+			id="message"
+			placeholder="Type your comment here..."
+			class="min-h-12 resize-none border-0 p-3 shadow-none"
+		/>
+		<div class="flex items-center p-3 pt-0">
+	
+			<Button type="submit" size="sm" class="ml-auto gap-1.5">
+				Publish
+				<CornerDownLeft class="size-3.5" />
+			</Button>
+		</div>
+	</form>
+</Card.Root>
+
