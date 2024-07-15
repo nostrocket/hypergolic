@@ -1,5 +1,5 @@
 import type { NDKEvent, NDKFilter, NDKTag } from '@nostr-dev-kit/ndk';
-import { getNumberFromTag, isValidUrl } from './rockets';
+import { Rocket, getNumberFromTag, isValidUrl } from './rockets';
 
 export class MeritRequest {
 	ID: string;
@@ -30,7 +30,7 @@ export class MeritRequest {
 		}
 		return _solution;
 	}
-	IncludedInRocketState(rocket: NDKEvent): boolean {
+	IncludedInRocketState(rocket: Rocket): boolean {
 		return true;
 	}
 	BasicValidation(): boolean {
@@ -105,6 +105,13 @@ export class Vote {
 		}
 		return valid;
 	}
+    ValidateAgainstRocket(rocket:Rocket):boolean {
+        let valid = true;
+        if (!(rocket.VotePowerForPubkey(this.Pubkey) > 0)) {
+            valid = false
+        }
+        return valid
+    }
 	RocketTag(): NDKTag | undefined {
 		let tag: NDKTag | undefined = undefined;
 		if (this.BasicValidation()) {

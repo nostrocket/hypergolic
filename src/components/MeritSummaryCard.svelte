@@ -10,11 +10,12 @@
 
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import * as Table from '@/components/ui/table';
-	import { RocketATagFilter } from '@/event_helpers/rockets';
+	import { Rocket, RocketATagFilter } from '@/event_helpers/rockets';
 	import { derived } from 'svelte/store';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { unixToRelativeTime } from '@/helpers';
+	import RocketCard from './RocketCard.svelte';
 
 	export let merit: MeritRequest;
 	export let rocket: NDKEvent;
@@ -30,7 +31,7 @@
 		let vMap = new Map<string, Vote>();
 		for (let v of $_votes) {
 			let vote = new Vote(v);
-			if (vote.BasicValidation()) {
+			if (vote.BasicValidation() && vote.ValidateAgainstRocket(new Rocket(rocket))) {
 				vMap.set(vote.ID, vote);
 			}
 		}
@@ -107,7 +108,7 @@
 									console.log(vote.Event.rawEvent());
 									goto(`${base}/rockets/merits/${vote.ID}`);
 								}}
-								class="cursor-pointer {vote.VoteDirection == "ratify"?"bg-lime-600":"bg-red-700"} "
+								class="cursor-pointer {vote.VoteDirection == "ratify"?"bg-lime-600":"bg-red-700"} {vote.VoteDirection == "ratify"?"hover:bg-lime-700":"hover:bg-red-800"}"
 							>
 								<Table.Cell>
 									<div class="flex flex-nowrap">
@@ -135,6 +136,6 @@
 		>
 	</Card.Header>
 	<Card.Footer class="flex flex-row items-center border-t px-6 py-3">
-		<VoteOnMeritRequest {merit} {rocket} />
+		<VoteOnMeritRequest {merit} rocket={new Rocket(rocket)} />
 	</Card.Footer>
 </Card.Root>

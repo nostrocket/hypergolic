@@ -1,14 +1,16 @@
 <script lang="ts">
 	import { Button } from '@/components/ui/button';
 	import { MeritRequest } from '@/event_helpers/merits';
+	import type { Rocket } from '@/event_helpers/rockets';
+	import { ndk } from '@/ndk';
 	import { currentUser } from '@/stores/session';
 	import { NDKEvent } from '@nostr-dev-kit/ndk';
 	import type NDKSvelte from '@nostr-dev-kit/ndk-svelte';
+	import { Name } from '@nostr-dev-kit/ndk-svelte-components';
 	import Login from './Login.svelte';
-	import { ndk } from '@/ndk';
 
 	export let merit: MeritRequest;
-	export let rocket: NDKEvent;
+	export let rocket: Rocket;
 
 	function publish(ndk: NDKSvelte, direction: string) {
 		if (!ndk.signer) {
@@ -22,7 +24,7 @@
 		e.author = author;
 		e.kind = 1410;
 		e.created_at = Math.floor(new Date().getTime() / 1000);
-		e.tags.push(['a', `31108:${rocket.pubkey}:${rocket.dTag}`]);
+		e.tags.push(['a', `31108:${rocket.Event.pubkey}:${rocket.Event.dTag}`]);
 		e.tags.push(['request', merit.ID]);
 		e.tags.push(['e', merit.ID]);
 		e.tags.push(['p', merit.Pubkey]);
@@ -32,6 +34,16 @@
 			console.log(x);
 		});
 	}
+
+	$:currentUserHasVotepower = false;
+
+	$:{
+		if (currentUser && $currentUser) {
+			currentUserHasVotepower = (rocket.VotePowerForPubkey($currentUser.pubkey) > 0)
+		}
+	}
+
+	
 </script>
 
 {#if $currentUser}
@@ -39,14 +51,23 @@
 		variant="default"
 		class="m-2"
 		on:click={() => {
-			publish($ndk, 'ratify');
+			if (currentUserHasVotepower) {
+				publish($ndk, 'ratify');
+			} else {
+				alert(`Your pubkey does not have votepower in ${rocket.Name()}`)
+			}
+			
 		}}>Vote to Approve</Button
 	>
 	<Button
 		variant="destructive"
 		class="m-2"
 		on:click={() => {
-			publish($ndk, 'ratify');
+						if (currentUserHasVotepower) {
+				publish($ndk, 'blackball');
+			} else {
+				alert(`Your pubkey does not have votepower in ${rocket.Name()}`)
+			}
 		}}>Vote to Reject</Button
 	>
 {:else}

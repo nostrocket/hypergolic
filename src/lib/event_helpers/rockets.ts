@@ -1,4 +1,22 @@
-import { NDKEvent, type NDKFilter, type NDKTag } from '@nostr-dev-kit/ndk';
+import { NDKEvent, type NDKTag } from '@nostr-dev-kit/ndk';
+
+export class Rocket {
+	Event: NDKEvent;
+	Name():string {
+		return this.Event.dTag!
+	}
+	VotePowerForPubkey(pubkey:string):number {
+		let votepower = 0
+		if (this.Event.pubkey == pubkey) {
+			//todo: calculate votepower for pubkey based on approved merit requests
+			votepower++
+		}
+		return votepower
+	}
+	constructor(event:NDKEvent) {
+		this.Event = event;
+	}
+}
 
 export class RocketProduct {
 	ID: string;
