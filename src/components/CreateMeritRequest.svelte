@@ -47,13 +47,11 @@
 		}
 	}
 
-
-
-	function validateSolution(solution:string) {
+	function validateSolution(solution: string) {
 		if (solution.length > 0) {
-			return isValidUrl(solution)
+			return isValidUrl(solution);
 		}
-		return true
+		return true;
 	}
 
 	function publish(ndk: NDKSvelte) {
@@ -78,7 +76,7 @@
 		console.log(e.rawEvent());
 		e.publish().then((x) => {
 			console.log(x);
-			open = false
+			open = false;
 			//goto(`${base}/rockets/${getRocketURL(e)}`);
 		});
 	}
@@ -88,7 +86,7 @@
 	<Dialog.Trigger class={buttonVariants({ variant: 'default' })}
 		>Create a Merit Request</Dialog.Trigger
 	>
-	<Dialog.Content class="sm:max-w-[625px]">
+	<Dialog.Content class="h-[80%] sm:max-w-[625px]">
 		{#if !currentUser}
 			<Alert.Root>
 				<Terminal class="h-4 w-4" />
@@ -100,7 +98,7 @@
 			<Dialog.Title>Request Merits</Dialog.Title>
 			<Dialog.Description>Request Merits for your work</Dialog.Description>
 		</Dialog.Header>
-		<div class="grid gap-4 py-4">
+		<div class="grid gap-4 overflow-auto py-4">
 			<div class="grid grid-cols-4 items-center gap-4">
 				<Label for="name" class="text-right">Problem</Label>
 				<Textarea
@@ -116,12 +114,17 @@
 					bind:value={solution}
 					id="desc"
 					placeholder="Link to your solution (e.g. a merged PR or some other evidence)"
-					class="col-span-3 {validateSolution(solution)? 'border-green-700':'border-red-600'}"
+					class="col-span-3 {validateSolution(solution) ? 'border-green-700' : 'border-red-600'}"
 				/>
 			</div>
 			<div class="grid grid-cols-4 items-center gap-4">
 				<Label for="sats" class="text-right">Value of your work (Sats)</Label>
-				<Input bind:value={sats} id="price" placeholder="Sats" class="col-span-1 {parseInt(sats, 10) > 0?'border-green-700':'border-red-600'}" />
+				<Input
+					bind:value={sats}
+					id="price"
+					placeholder="Sats"
+					class="col-span-1 {parseInt(sats, 10) > 0 ? 'border-green-700' : 'border-red-600'}"
+				/>
 				{#if parseInt(sats, 10) > 0}<Label class="text-left">({merits.toString()} Merits)</Label>
 				{/if}
 			</div>
