@@ -1,4 +1,5 @@
 import { NDKEvent, type NDKTag } from '@nostr-dev-kit/ndk';
+import { MapOfVotes, MeritRequest, Vote, Votes } from './merits';
 
 export class Rocket {
 	Event: NDKEvent;
@@ -27,23 +28,80 @@ export class Rocket {
 		}
 		return amr;
 	}
-	AppendAMR(amrProof: NDKEvent): NDKEvent | undefined {
-		//todo
-		let request: NDKEvent | undefined = undefined;
-		let votes: NDKEvent[] = [];
-		let _request = amrProof.getMatchingTags('request');
-		if (_request.length == 1) {
-			try {
-				request = JSON.parse(_request[0][1]);
-			} catch {}
+	ValidateAMRProof(amrProof: NDKEvent): boolean {
+		let result = false;
+		if (this.VotePowerForPubkey(amrProof.pubkey) > 0 && amrProof.verifySignature(true)) {
+			let request: NDKEvent | undefined = undefined;
+			let votes: NDKEvent[] = [];
+			let _request = amrProof.getMatchingTags('request');
+			if (_request.length == 1) {
+				try {
+					let __request = new NDKEvent(undefined, JSON.parse(_request[0][1]));
+					if (__request.verifySignature(true)) {
+						request = __request;
+					}
+				} catch {}
+			}
+			for (let v of amrProof.getMatchingTags('vote')) {
+				try {
+					let vEv = new NDKEvent(undefined, JSON.parse(v[1]));
+					if (vEv.verifySignature(true)) votes.push(vEv);
+				} catch {}
+			}
+			if (request && votes.length > 0) {
+				let parsedRequest = new MeritRequest(request);
+				let mapOfVotes = new MapOfVotes(votes, this, parsedRequest).Votes;
+				let parsedVotes = new Votes(Array.from(mapOfVotes, ([_, v]) => v));
+				let voteDirection = parsedVotes.Results().Result(this);
+				if (
+					voteDirection &&
+					voteDirection == 'ratify' &&
+					!parsedRequest.IncludedInRocketState(this)
+				) {
+					//note: if it is included in the rocket state, we might be validating this against a previous state
+					result = true;
+				}
+			}
 		}
-		for (let v of amrProof.getMatchingTags('vote')) {
-			try {
-				votes.push(JSON.parse(v[1]));
-			} catch {}
+		return result;
+	}
+
+	CreateUnsignedAMRProof(request: MeritRequest, votes: Votes): NDKEvent | undefined {
+		let proof: NDKEvent | undefined = undefined;
+		let hasInvalidSig = false;
+		if (request && request.Event && request.Event.sig && votes.Votes.length > 0) {
+			if (!request.Event.verifySignature(true)) {
+				hasInvalidSig = true
+			}
+			for (let v of votes.Votes) {
+				if (!(v.Event.sig && v.Event.verifySignature(true))) {
+					hasInvalidSig = true;
+				}
+			}
+			let result = votes.Results().Result(this);
+			if (result && result == 'ratify' && !request.IncludedInRocketState(this) && !hasInvalidSig) {
+				let e = new NDKEvent();
+				e.kind = 1411;
+				e.tags.push(['request', JSON.stringify(request.Event.rawEvent())]);
+				for (let v of votes.Votes) {
+					e.tags.push(['vote', JSON.stringify(v.Event.rawEvent())]);
+				}
+				proof = e;
+			}
 		}
-		return;
+		return proof;
 		//add the AMR to the rocket event, and also add a proof
+	}
+	UpsertAMR(request: MeritRequest, signedProof: NDKEvent): NDKEvent | undefined {
+		let event: NDKEvent | undefined = undefined;
+		if (this.ValidateAMRProof(signedProof)) {
+			event = new NDKEvent(this.Event.ndk, this.Event.rawEvent());
+			event.created_at = Math.floor(new Date().getTime() / 1000);
+			event.tags.push(['merit', `${request.Pubkey}:${request.ID}:0:0:${request.Merits}`]);
+			event.tags.push(['proof_full', JSON.stringify(signedProof)]);
+			updateIgnitionAndParentTag(event);
+		}
+		return event;
 	}
 	UpsertProduct(id: string, price: number, maxSales?: number): NDKEvent {
 		let event = new NDKEvent(this.Event.ndk, this.Event.rawEvent());

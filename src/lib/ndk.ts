@@ -7,12 +7,14 @@ import { browser } from '$app/environment';
 const _ndk = new NDKSvelte({
 	explicitRelayUrls: [
 		'wss://purplepag.es',
+		'wss://relay.higlighter.com',
 		'wss://relay.nostr.band',
-		'wss://nos.lol'
-		//'wss://relay.nostrocket.org'
+		'wss://nos.lol',
+		'wss://relay.nostrocket.org',
+		'wss://nostr.mutinywallet.com',
+		'wss://relay.damus.io'
 	],
 	enableOutboxModel: false,
-	clientName: 'nostrocket'
 	//clientNip89: "31990:fa984bd7dbb282f07e16e7ae87b26a2a7b9b90b7246a44771f0cf5ae58018f52:1716498133442",
 });
 

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import * as Card from '$lib/components/ui/card/index.js';
-	import { Vote, Votes, type MeritRequest } from '@/event_helpers/merits';
+	import { MapOfVotes, Vote, Votes, type MeritRequest } from '@/event_helpers/merits';
 	import { ndk } from '@/ndk';
 	import { NDKEvent, type NDKKind } from '@nostr-dev-kit/ndk';
 	import { Avatar, Name } from '@nostr-dev-kit/ndk-svelte-components';
@@ -11,7 +11,7 @@
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import * as Table from '@/components/ui/table';
 	import { Rocket, RocketATagFilter } from '@/event_helpers/rockets';
-	import { unixToRelativeTime } from '@/helpers';
+	import { getRocketURL, unixToRelativeTime } from '@/helpers';
 	import { derived } from 'svelte/store';
 
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -20,6 +20,8 @@
 	import Alert from '@/components/ui/alert/alert.svelte';
 	import { currentUser } from '@/stores/session';
 	import CornerDownLeft from 'lucide-svelte/icons/corner-down-left';
+	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 
 	export let merit: MeritRequest;
 	export let rocket: NDKEvent;
@@ -38,30 +40,7 @@
 	});
 
 	let votes = derived(_votes, ($_votes) => {
-		let vMap = new Map<string, Vote>();
-		for (let v of $_votes) {
-			let vote = new Vote(v);
-			if (
-				vote.BasicValidation() &&
-				vote.ValidateAgainstRocket(new Rocket(rocket)) &&
-				vote.ValidateAgainstMeritRequest(merit)
-			) {
-				vMap.set(vote.ID, vote); //only show the latest vote from each pubkey
-			}
-		}
-		let pMap = new Map<string, Vote>();
-		for (let [_, v] of vMap) {
-			let existing = pMap.get(v.Pubkey);
-			if (!existing || (existing && existing.TimeStamp < v.TimeStamp)) {
-				//todo: check if this merit request has already been included in the rocket. If not, and if we have enough votes to approve it, update the rocket.
-				pMap.set(v.Pubkey, v);
-			}
-		}
-		vMap = new Map<string, Vote>();
-		for (let [_, v] of pMap) {
-			vMap.set(v.ID, v);
-		}
-		return vMap;
+		return new MapOfVotes($_votes, parsedRocket, merit).Votes;
 	});
 
 	let rocketUpdates = derived([votes, currentUser], ([$votes, $currentUser]) => {
@@ -69,13 +48,24 @@
 		if ($currentUser && parsedRocket && parsedRocket.VotePowerForPubkey($currentUser.pubkey) > 0) {
 			let votes = new Votes(Array.from($votes, ([_, v]) => v));
 			let result = votes.Results().Result(parsedRocket);
-			if (
-				result &&
-				result == 'ratify' &&
-				!parsedRocket.ApprovedMeritRequests().get(votes.Request)
-			) {
-				//todo: parsedRocket.AppendAMR(votes.ConstructProof())
-				//
+			if (result && result == 'ratify' && !merit.IncludedInRocketState(parsedRocket)) {
+				let e = parsedRocket.CreateUnsignedAMRProof(merit, votes);
+				if (e) {
+					e.ndk = $ndk;
+					e.sign().then(() => {
+						if (parsedRocket.ValidateAMRProof(e)) {
+							let updatedRocket = parsedRocket.UpsertAMR(merit, e);
+							if (updatedRocket) {
+								updatedRocket.ndk = $ndk;
+								updatedRocket.sign().then(() => {
+									updatedRocket.publish().then(() => {
+										goto(`${base}/rockets/${getRocketURL(rocket)}`);
+									});
+								});
+							}
+						}
+					});
+				}
 			}
 		}
 		return events;

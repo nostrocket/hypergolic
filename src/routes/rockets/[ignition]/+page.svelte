@@ -5,10 +5,7 @@
 	import type { ExtendedBaseType, NDKEventStore } from '@nostr-dev-kit/ndk-svelte';
 	import { onDestroy } from 'svelte';
 	import { derived, type Readable } from 'svelte/store';
-	import CreateNewProduct from '../../../components/CreateNewProduct.svelte';
 	import Heading from '../../../components/Heading.svelte';
-	import ProductCard from '../../../components/ProductCard.svelte';
-	import ProductsForRocket from '../../../components/ProductsForRocket.svelte';
 	import RocketDashboard from '../../../components/RocketDashboard.svelte';
 	//flow if we only have a d-tag: fetch all 31108's with this d-tag, sort by WoT, put Nostrocket Name Service one at the top. Dedupe same rocket (same state, shadows) from multiple users, just show them all as everyone agreeing.
 	//second pass: fetch ignition event for each, rebuild current state and validate all proofs, compute votepower and display only the states with > 50%.
@@ -44,21 +41,18 @@
 	}
 
 	$: {
-		if (rocketEvents) {
+		if (rocketEvents && !latestRocketEvent) {
 			latestRocketEvent = derived(rocketEvents, ($events) => {
-				if (rocketEvents) {
-					let sorted = $events.filter((e) => {
-						return e.kind == 31108;
-					});
-					sorted = sorted.toSorted((a, b) => {
-						return a.created_at - b.created_at;
-					});
-					return sorted[0];
-				}
-				return undefined;
+				let sorted = $events.filter((e) => {
+					return e.kind == 31108;
+				});
+				sorted = sorted.toSorted((a, b) => {
+					return a.created_at - b.created_at;
+				});
+				return sorted[0];
 			});
 
-			if ($latestRocketEvent) {
+			if ($latestRocketEvent && !candidateProducts) {
 				candidateProducts = derived(rocketEvents, ($events) => {
 					return $events.filter((e) => {
 						for (let p of $latestRocketEvent.getMatchingTags('product')) {
@@ -89,29 +83,4 @@
 	IGNITION: {rIgnitionOrActual} <br />
 	NAME: {rName} <br />
 	PUBKEY: {rPubkey} <br />
-{/if}
-{#if latestRocketEvent && $latestRocketEvent && false}
-	<Heading title={$latestRocketEvent.getMatchingTags('d')[0][1]} />
-
-	<div class="flex flex-col gap-1 text-left">
-		<h3 class="text-xl font-bold tracking-tight">
-			{$latestRocketEvent.getMatchingTags('d')[0][1].toLocaleUpperCase()} Products
-		</h3>
-		<p class="text-sm text-muted-foreground">
-			If there are products available for purchase they will be listed here
-		</p>
-	</div>
-	<ProductsForRocket rocketEvent={$latestRocketEvent} />
-
-	<div class="flex flex-col gap-1 pt-4 text-left">
-		<h3 class="text-xl font-bold tracking-tight">
-			{$latestRocketEvent.getMatchingTags('d')[0][1].toLocaleUpperCase()} Product Proposals
-		</h3>
-		<p class="text-sm text-muted-foreground">
-			If particpants of {$latestRocketEvent.getMatchingTags('d')[0][1]} have proposed any new products
-			that are not yet included for sale, they will be listed here.
-		</p>
-	</div>
-	{#each $candidateProducts as r}<ProductCard rocket={$latestRocketEvent} product={r} />{/each}
-	<CreateNewProduct rocketEvent={$latestRocketEvent} />
 {/if}

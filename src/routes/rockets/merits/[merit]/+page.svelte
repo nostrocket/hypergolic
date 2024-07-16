@@ -32,7 +32,6 @@
 
 	$: {
 		if (meritRequest && meritRequest.BasicValidation()) {
-			//the user wants the latest valid state of this rocket
 			rocketEvents = $ndk.storeSubscribe([meritRequest.REQFilter()], {
 				subId: meritRequest.RocketTag!.split(':')[2]
 			});
@@ -40,32 +39,18 @@
 	}
 
 	$: {
-		if (rocketEvents) {
+		if (rocketEvents && !latestRocketEvent) {
 			latestRocketEvent = derived(rocketEvents, ($events) => {
-				if (rocketEvents) {
-					let sorted = $events.filter((e) => {
-						return e.kind == 31108;
-					});
-					sorted = sorted.toSorted((a, b) => {
-						return a.created_at - b.created_at;
-					});
-					return sorted[0];
-				}
-				return undefined;
+				let sorted = $events.filter((e) => {
+					return e.kind == 31108;
+				});
+				sorted = sorted.toSorted((a, b) => {
+					return a.created_at - b.created_at;
+				});
+				return sorted[0];
 			});
-
-			if ($latestRocketEvent) {
-			}
 		}
 	}
-
-	//todo: check that this zap is not already included in the payment JSON for the product
-	//todo: list purchases on the rocket page (from product tags, as well as zap receipts that aren't yet included). Deduct total products available if not 0.
-	//todo: make the page flash or something and show each time someone buys the product.
-	//todo: split this out so that we can consume it for the payment page too (so that we know if there are really products left or they're all sold)
-	//todo: make store of all purchases (in rocket and zaps), sort by timestamp and render with profile of buyer
-
-	//todo: handle shadow events (fetch the shadowed event and render it instead)
 </script>
 
 {#if latestRocketEvent && $latestRocketEvent && meritRequest}

@@ -29,6 +29,11 @@
 		for (let z of $merits) {
 			let meritRequest = new MeritRequest(z);
 			if (meritRequest.BasicValidation()) {
+				if (meritRequest.Event.sig) {
+					//broadcast the events to our relays
+					//meritRequest.Event.ndk = $ndk
+					//meritRequest.Event.publish().then(r=>{ console.log(meritRequest.Event.pubkey,r)}).catch(e=>{})
+				}
 				map.set(meritRequest.ID, meritRequest);
 			}
 		}

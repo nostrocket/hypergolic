@@ -262,3 +262,33 @@ export class VoteTally {
 		}
 	}
 }
+
+export class MapOfVotes {
+	Votes: Map<string, Vote>;
+	constructor(votes:NDKEvent[], rocket:Rocket, merit:MeritRequest) {
+		this.Votes = new Map<string, Vote>();
+		for (let v of votes) {
+			let vote = new Vote(v);
+			if (
+				vote.BasicValidation() &&
+				vote.ValidateAgainstRocket(rocket) &&
+				vote.ValidateAgainstMeritRequest(merit) &&
+				!merit.IncludedInRocketState(rocket)
+			) {
+				this.Votes.set(vote.ID, vote); //only show the latest vote from each pubkey
+			}
+		}
+		let pMap = new Map<string, Vote>();
+		for (let [_, v] of this.Votes) {
+			let existing = pMap.get(v.Pubkey);
+			if (!existing || (existing && existing.TimeStamp < v.TimeStamp)) {
+				//todo: check if this merit request has already been included in the rocket. If not, and if we have enough votes to approve it, update the rocket.
+				pMap.set(v.Pubkey, v);
+			}
+		}
+		this.Votes = new Map<string, Vote>();
+		for (let [_, v] of pMap) {
+			this.Votes.set(v.ID, v);
+		}
+	}
+}
