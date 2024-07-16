@@ -35,7 +35,7 @@
 			</div>
 		</div>
 	</div>
-	<div class="flex flex-col h-dvh">
+	<div class="flex h-dvh flex-col">
 		<header class="flex h-14 items-center gap-4 border-b bg-muted/40 px-4 lg:h-[60px] lg:px-6">
 			<Sheet.Root>
 				<Sheet.Trigger asChild let:builder>
@@ -83,8 +83,8 @@
 			</div>
 			<Login />
 		</header>
-		<div class="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6 overflow-auto">
+		<div class="flex flex-1 flex-col gap-4 overflow-auto p-4 lg:gap-6 lg:p-6">
 			<slot name="content"></slot>
-    </div>
+		</div>
 	</div>
 </div>

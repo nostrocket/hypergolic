@@ -26,14 +26,14 @@
 	<Card.Header class="pb-3">
 		<Card.Title>Products and Purchases</Card.Title>
 		<Card.Description class="grid grid-cols-2">
-            {#each $products as product}
-			<div class=" grid-cols-1">
-				<ProductCardFromId {rocket} productID={product.ID} />
-			</div>
-			<div class="grid-cols-1">
-				<ProductPurchases {rocket} {product} />
-			</div>
-            {/each}
+			{#each $products as product}
+				<div class=" grid-cols-1">
+					<ProductCardFromId {rocket} productID={product.ID} />
+				</div>
+				<div class="grid-cols-1">
+					<ProductPurchases {rocket} {product} />
+				</div>
+			{/each}
 		</Card.Description>
 	</Card.Header>
 	<Card.Footer></Card.Footer>

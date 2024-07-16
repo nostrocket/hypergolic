@@ -46,6 +46,8 @@
 {#if productsToRender && $productsToRender}
 	{#each $productsToRender as [r, p]}
 		<Heading title={r.dTag} />
-		{#each p as product} <ProductCard product={product} rocket={r} /> {/each}
+		{#each p as product}
+			<ProductCard {product} rocket={r} />
+		{/each}
 	{/each}
 {/if}

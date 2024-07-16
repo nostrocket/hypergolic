@@ -66,14 +66,14 @@
 
 	let rocketUpdates = derived([votes, currentUser], ([$votes, $currentUser]) => {
 		let events: NDKEvent[] = [];
-		if (
-			$currentUser &&
-			parsedRocket &&
-			parsedRocket.VotePowerForPubkey($currentUser.pubkey) > 0
-		) {
-			let votes = new Votes(Array.from($votes, ([_, v])=>(v)))
-			let result = votes.Results().Result(parsedRocket)
-			if (result && result == "ratify" && !parsedRocket.ApprovedMeritRequests().get(votes.Request)) {
+		if ($currentUser && parsedRocket && parsedRocket.VotePowerForPubkey($currentUser.pubkey) > 0) {
+			let votes = new Votes(Array.from($votes, ([_, v]) => v));
+			let result = votes.Results().Result(parsedRocket);
+			if (
+				result &&
+				result == 'ratify' &&
+				!parsedRocket.ApprovedMeritRequests().get(votes.Request)
+			) {
 				//todo: parsedRocket.AppendAMR(votes.ConstructProof())
 				//
 			}
@@ -81,8 +81,11 @@
 		return events;
 	});
 
-	rocketUpdates.subscribe((c)=>{if (c.length > 0){console.log(c)}})
-
+	rocketUpdates.subscribe((c) => {
+		if (c.length > 0) {
+			console.log(c);
+		}
+	});
 </script>
 
 <Card.Root class="sm:col-span-2">

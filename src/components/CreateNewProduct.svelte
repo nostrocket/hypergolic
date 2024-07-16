@@ -15,7 +15,7 @@
 	import { getRocketURL } from '@/helpers';
 	import Textarea from '@/components/ui/textarea/textarea.svelte';
 
-	export let rocketEvent:NDKEvent;
+	export let rocketEvent: NDKEvent;
 
 	let name: string;
 	let desc: string;
@@ -36,10 +36,10 @@
 		//todo validate d tag
 		e.tags.push(['name', name]);
 		e.tags.push(['description', desc]);
-		e.tags.push(['cover', image])
-		e.tags.push(['a', `31108:${rocketEvent.pubkey}:${rocketEvent.dTag}`])
+		e.tags.push(['cover', image]);
+		e.tags.push(['a', `31108:${rocketEvent.pubkey}:${rocketEvent.dTag}`]);
 		e.tags.push(['ruleset', '334000']);
-		console.log(e.rawEvent())
+		console.log(e.rawEvent());
 		e.publish().then((x) => {
 			console.log(x);
 			goto(`${base}/rockets/${getRocketURL(e)}`);
@@ -48,9 +48,18 @@
 </script>
 
 <Dialog.Root>
-	<Dialog.Trigger class={buttonVariants({ variant: 'default' })}>Propose a New Product</Dialog.Trigger>
+	<Dialog.Trigger class={buttonVariants({ variant: 'default' })}
+		>Propose a New Product</Dialog.Trigger
+	>
 	<Dialog.Content class="sm:max-w-[425px]">
-		<Todo text={["validate sane field entries", "name.length > 5 < 20", "description length > 20", "image url resolves and is image"]} />
+		<Todo
+			text={[
+				'validate sane field entries',
+				'name.length > 5 < 20',
+				'description length > 20',
+				'image url resolves and is image'
+			]}
+		/>
 		{#if !currentUser}
 			<Alert.Root>
 				<Terminal class="h-4 w-4" />

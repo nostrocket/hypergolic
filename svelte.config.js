@@ -13,26 +13,26 @@ const config = {
 		// If your environment is not supported, or you settled on a specific environment, switch out the adapter.
 		// See https://kit.svelte.dev/docs/adapters for more information about adapters.
 		adapter: adapter({
-			fallback: "404.html",
-		  }),
-		  prerender: {
-			crawl: true,
-		  },
-		  paths: {
-			base: dev ? '' : '/hypergolic',
-		  },
+			fallback: '404.html'
+		}),
+		prerender: {
+			crawl: true
+		},
+		paths: {
+			base: dev ? '' : '/hypergolic'
+		},
 		alias: {
-			"@/*": "./src/lib/*",
-			"@components/*": "./src/lib/components/*",
-			$stores: 'src/lib/stores',
-		  },
+			'@/*': './src/lib/*',
+			'@components/*': './src/lib/components/*',
+			$stores: 'src/lib/stores'
+		}
 	},
 	vitePlugin: {
 		inspector: {
-		  holdMode: true,
-		  toggleKeyCombo: "meta-shift",
-		},
-	  },
+			holdMode: true,
+			toggleKeyCombo: 'meta-shift'
+		}
+	}
 };
 
 export default config;

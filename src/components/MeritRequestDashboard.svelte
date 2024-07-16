@@ -21,11 +21,17 @@
 				</Breadcrumb.Item>
 				<Breadcrumb.Separator />
 				<Breadcrumb.Item>
-					<Breadcrumb.Link href={`${base}/rockets/${getRocketURL(rocket)}`}>Merit Requests</Breadcrumb.Link>
+					<Breadcrumb.Link href={`${base}/rockets/${getRocketURL(rocket)}`}
+						>Merit Requests</Breadcrumb.Link
+					>
 				</Breadcrumb.Item>
 				<Breadcrumb.Separator />
 				<Breadcrumb.Item>
-					<Breadcrumb.Page>{merit.Problem().substring(0,16)}{#if merit.Problem().length > 16}...{/if}</Breadcrumb.Page>
+					<Breadcrumb.Page
+						>{merit
+							.Problem()
+							.substring(0, 16)}{#if merit.Problem().length > 16}...{/if}</Breadcrumb.Page
+					>
 				</Breadcrumb.Item>
 			</Breadcrumb.List>
 		</Breadcrumb.Root>
@@ -33,6 +39,6 @@
 	<main
 		class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-2 lg:grid-cols-3 xl:grid-cols-3"
 	>
-	<MeritSummaryCard {rocket} {merit} />
-</main>
+		<MeritSummaryCard {rocket} {merit} />
+	</main>
 </div>

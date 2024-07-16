@@ -23,6 +23,7 @@
 		console.log(new RocketState(e));
 	}
 </script>
+
 <Heading title="Create a New Rocket" />
 <div class="flex w-full max-w-sm flex-col gap-1.5">
 	<Input type="email" id="email-2" placeholder="Name" bind:value={rocketName} />

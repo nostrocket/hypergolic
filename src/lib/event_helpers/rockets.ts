@@ -42,7 +42,7 @@ export class Rocket {
 				votes.push(JSON.parse(v[1]));
 			} catch {}
 		}
-		return 
+		return;
 		//add the AMR to the rocket event, and also add a proof
 	}
 	UpsertProduct(id: string, price: number, maxSales?: number): NDKEvent {

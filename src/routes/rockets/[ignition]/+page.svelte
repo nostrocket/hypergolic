@@ -73,8 +73,6 @@
 		}
 	}
 
-
-
 	//todo: check that this zap is not already included in the payment JSON for the product
 	//todo: list purchases on the rocket page (from product tags, as well as zap receipts that aren't yet included). Deduct total products available if not 0.
 	//todo: make the page flash or something and show each time someone buys the product.
@@ -83,8 +81,9 @@
 
 	//todo: handle shadow events (fetch the shadowed event and render it instead)
 </script>
+
 {#if latestRocketEvent && $latestRocketEvent}
-<RocketDashboard rocket={$latestRocketEvent} />
+	<RocketDashboard rocket={$latestRocketEvent} />
 {:else}
 	<Heading title="Fetching events for the requested rocket" />
 	IGNITION: {rIgnitionOrActual} <br />
@@ -93,7 +92,6 @@
 {/if}
 {#if latestRocketEvent && $latestRocketEvent && false}
 	<Heading title={$latestRocketEvent.getMatchingTags('d')[0][1]} />
-
 
 	<div class="flex flex-col gap-1 text-left">
 		<h3 class="text-xl font-bold tracking-tight">
@@ -105,12 +103,13 @@
 	</div>
 	<ProductsForRocket rocketEvent={$latestRocketEvent} />
 
-	<div class="flex flex-col gap-1 text-left pt-4">
+	<div class="flex flex-col gap-1 pt-4 text-left">
 		<h3 class="text-xl font-bold tracking-tight">
 			{$latestRocketEvent.getMatchingTags('d')[0][1].toLocaleUpperCase()} Product Proposals
 		</h3>
 		<p class="text-sm text-muted-foreground">
-			If particpants of {$latestRocketEvent.getMatchingTags('d')[0][1]} have proposed any new products that are not yet included for sale, they will be listed here.
+			If particpants of {$latestRocketEvent.getMatchingTags('d')[0][1]} have proposed any new products
+			that are not yet included for sale, they will be listed here.
 		</p>
 	</div>
 	{#each $candidateProducts as r}<ProductCard rocket={$latestRocketEvent} product={r} />{/each}

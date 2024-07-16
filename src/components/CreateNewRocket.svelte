@@ -14,7 +14,7 @@
 	import { base } from '$app/paths';
 	import { getRocketURL } from '@/helpers';
 
-    let name:string;
+	let name: string;
 
 	function publish(ndk: NDKSvelte, name: string) {
 		if (!ndk.signer) {
@@ -25,18 +25,18 @@
 		if (!author) {
 			throw new Error('no current user');
 		}
-        e.author = author;
-        e.kind = 31108;
-        e.created_at = Math.floor(new Date().getTime() / 1000);
-        //todo validate d tag
-        e.tags.push(["d", name])
-        e.tags.push(["ruleset", "334000"])
-		e.tags.push(["ignition", "this"])
-		e.tags.push(["parent", "this"])
-        e.publish().then((x)=>{
-            console.log(x)
-            goto(`${base}/rockets/${getRocketURL(e)}`)
-        })
+		e.author = author;
+		e.kind = 31108;
+		e.created_at = Math.floor(new Date().getTime() / 1000);
+		//todo validate d tag
+		e.tags.push(['d', name]);
+		e.tags.push(['ruleset', '334000']);
+		e.tags.push(['ignition', 'this']);
+		e.tags.push(['parent', 'this']);
+		e.publish().then((x) => {
+			console.log(x);
+			goto(`${base}/rockets/${getRocketURL(e)}`);
+		});
 	}
 </script>
 
@@ -64,7 +64,12 @@
 		</div>
 		<Todo text={['validate input is a valid d tag (NIP01)']} />
 		<Dialog.Footer>
-			<Button on:click={()=>{publish($ndk, name)}} type="submit">Publish</Button>
+			<Button
+				on:click={() => {
+					publish($ndk, name);
+				}}
+				type="submit">Publish</Button
+			>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>

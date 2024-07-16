@@ -35,15 +35,13 @@
 		});
 	}
 
-	$:currentUserHasVotepower = false;
+	$: currentUserHasVotepower = false;
 
-	$:{
+	$: {
 		if (currentUser && $currentUser) {
-			currentUserHasVotepower = (rocket.VotePowerForPubkey($currentUser.pubkey) > 0)
+			currentUserHasVotepower = rocket.VotePowerForPubkey($currentUser.pubkey) > 0;
 		}
 	}
-
-	
 </script>
 
 {#if $currentUser}
@@ -54,19 +52,18 @@
 			if (currentUserHasVotepower) {
 				publish($ndk, 'ratify');
 			} else {
-				alert(`Your pubkey does not have votepower in ${rocket.Name()}`)
+				alert(`Your pubkey does not have votepower in ${rocket.Name()}`);
 			}
-			
 		}}>Vote to Approve</Button
 	>
 	<Button
 		variant="destructive"
 		class="m-2"
 		on:click={() => {
-						if (currentUserHasVotepower) {
+			if (currentUserHasVotepower) {
 				publish($ndk, 'blackball');
 			} else {
-				alert(`Your pubkey does not have votepower in ${rocket.Name()}`)
+				alert(`Your pubkey does not have votepower in ${rocket.Name()}`);
 			}
 		}}>Vote to Reject</Button
 	>

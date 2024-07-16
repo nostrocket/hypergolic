@@ -166,15 +166,15 @@ export type VoteDirection = 'blackball' | 'ratify';
 
 export class Votes {
 	Votes: Vote[];
-	Request:string;
+	Request: string;
 	Results(): VoteResults {
 		let ratifiers = new Map<string, Vote>();
 		let blackballers = new Map<string, Vote>();
 		for (let v of this.Votes) {
-			if ((v.VoteDirection == 'blackball')) {
+			if (v.VoteDirection == 'blackball') {
 				blackballers.set(v.ID, v);
 			}
-			if ((v.VoteDirection == 'ratify')) {
+			if (v.VoteDirection == 'ratify') {
 				ratifiers.set(v.ID, v);
 			}
 		}
@@ -184,17 +184,17 @@ export class Votes {
 		);
 		return results;
 	}
-	constructor(votes: Vote[], request?:string) {
-		this.Votes = []
+	constructor(votes: Vote[], request?: string) {
+		this.Votes = [];
 		for (let v of votes) {
 			if (!request) {
 				request = v.Request;
 			}
 			if (!this.Request) {
-				this.Request = request
+				this.Request = request;
 			}
 			if (v.Request == this.Request) {
-				this.Votes.push(v)
+				this.Votes.push(v);
 			}
 		}
 	}

@@ -14,9 +14,7 @@
 </script>
 
 <div class="flex flex-col sm:gap-4">
-	<header
-		class="flex items-center "
-	>
+	<header class="flex items-center">
 		<Breadcrumb.Root class="flex">
 			<Breadcrumb.List>
 				<Breadcrumb.Item>
@@ -38,7 +36,6 @@
 
 		<ProposedProducts {rocket} />
 
-		
 		<MeritRequests {rocket} />
 		<Card.Root class="sm:col-span-3">
 			<Card.Header class="pb-3">

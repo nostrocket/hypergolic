@@ -8,18 +8,18 @@
 	import { derived, type Readable } from 'svelte/store';
 	import Heading from '../../../../components/Heading.svelte';
 	import MeritRequestDashboard from '../../../../components/MeritRequestDashboard.svelte';
-	
+
 	let meritRequestID = $page.params.merit;
 
-	let meritRequest:MeritRequest | undefined = undefined;
+	let meritRequest: MeritRequest | undefined = undefined;
 
 	$: {
 		if (meritRequestID.length == 64 && !meritRequest) {
-			$ndk.fetchEvent(meritRequestID).then(e=>{
+			$ndk.fetchEvent(meritRequestID).then((e) => {
 				if (e) {
-					meritRequest = new MeritRequest(e)
+					meritRequest = new MeritRequest(e);
 				}
-			})
+			});
 		}
 	}
 
@@ -32,16 +32,12 @@
 
 	$: {
 		if (meritRequest && meritRequest.BasicValidation()) {
-		//the user wants the latest valid state of this rocket
-		rocketEvents = $ndk.storeSubscribe(
-			[
-				meritRequest.REQFilter()
-			],
-			{ subId: meritRequest.RocketTag!.split(":")[2] }
-		);
+			//the user wants the latest valid state of this rocket
+			rocketEvents = $ndk.storeSubscribe([meritRequest.REQFilter()], {
+				subId: meritRequest.RocketTag!.split(':')[2]
+			});
+		}
 	}
-	}
-
 
 	$: {
 		if (rocketEvents) {
@@ -59,12 +55,9 @@
 			});
 
 			if ($latestRocketEvent) {
-
 			}
 		}
 	}
-
-
 
 	//todo: check that this zap is not already included in the payment JSON for the product
 	//todo: list purchases on the rocket page (from product tags, as well as zap receipts that aren't yet included). Deduct total products available if not 0.
@@ -74,8 +67,9 @@
 
 	//todo: handle shadow events (fetch the shadowed event and render it instead)
 </script>
+
 {#if latestRocketEvent && $latestRocketEvent && meritRequest}
-<MeritRequestDashboard rocket={$latestRocketEvent} merit={meritRequest} />
+	<MeritRequestDashboard rocket={$latestRocketEvent} merit={meritRequest} />
 {:else}
 	<Heading title="Fetching events for this Merit Request" />
 	Merit Request ID: {$page.params.merit} <br />

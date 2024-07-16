@@ -1,7 +1,5 @@
 <script lang="ts">
-	import N00b from "../../views/n00b/N00b.svelte";
+	import N00b from '../../views/n00b/N00b.svelte';
+</script>
 
-       
-
-  </script>
-   <N00b />
+<N00b />

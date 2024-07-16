@@ -9,29 +9,33 @@
 	import Todo from './Todo.svelte';
 	import { requestProvider } from 'webln';
 
-    export let product:NDKEvent;
-    export let rocket:NDKEvent;
+	export let product: NDKEvent;
+	export let rocket: NDKEvent;
 
-    function zap() {
-        let z = new NDKZap({ndk:$ndk, zappedEvent:rocket, zappedUser: rocket.author})
-        z.createZapRequest(1000, `Purchase of ${product.getMatchingTags("name")[0][1]} from ${rocket.dTag}`, [["product", product.id]]).then(invoice=>{
-            if (invoice) {
-                requestProvider().then((webln)=>{
-                    webln.sendPayment(invoice).then((response)=>{
-                        if (response && response.preimage) {
-                            console.log(response.preimage)
+	function zap() {
+		let z = new NDKZap({ ndk: $ndk, zappedEvent: rocket, zappedUser: rocket.author });
+		z.createZapRequest(
+			1000,
+			`Purchase of ${product.getMatchingTags('name')[0][1]} from ${rocket.dTag}`,
+			[['product', product.id]]
+		).then((invoice) => {
+			if (invoice) {
+				requestProvider().then((webln) => {
+					webln.sendPayment(invoice).then((response) => {
+						if (response && response.preimage) {
+							console.log(response.preimage);
 							open = false;
-                        }
-                    })
-                });
-            }
-        })
-    }
+						}
+					});
+				});
+			}
+		});
+	}
 
-let open:boolean;
+	let open: boolean;
 </script>
 
-<Dialog.Root bind:open={open}>
+<Dialog.Root bind:open>
 	<Dialog.Trigger class={buttonVariants({ variant: 'default' })}>Buy Now</Dialog.Trigger>
 	<Dialog.Content class="sm:max-w-[425px]">
 		<Dialog.Header>

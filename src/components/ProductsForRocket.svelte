@@ -5,7 +5,6 @@
 	import ProductCardFromID from './ProductCardFromID.svelte';
 	import ProductPurchases from './ProductPurchases.svelte';
 
-
 	export let rocketEvent: NDKEvent;
 
 	$: rocketProducts = getMapOfProductsFromRocket(rocketEvent);
@@ -13,8 +12,6 @@
 
 {#if rocketEvent && rocketProducts.size > 0}
 	{#each rocketProducts as [id, product]}
-    <ProductCardFromID rocket={rocketEvent} productID={product.ID} />
+		<ProductCardFromID rocket={rocketEvent} productID={product.ID} />
 		<ProductPurchases rocket={rocketEvent} {product} />{/each}
 {/if}
-
-

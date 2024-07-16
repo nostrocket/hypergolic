@@ -8,7 +8,7 @@ const _ndk = new NDKSvelte({
 	explicitRelayUrls: [
 		'wss://purplepag.es',
 		'wss://relay.nostr.band',
-		'wss://nos.lol',
+		'wss://nos.lol'
 		//'wss://relay.nostrocket.org'
 	],
 	enableOutboxModel: false,

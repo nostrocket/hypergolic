@@ -5,7 +5,7 @@
 	import PayNow from './PayNow.svelte';
 
 	export let product: NDKEvent;
-	export let rocket:NDKEvent;
+	export let rocket: NDKEvent;
 	//$page.url.searchParams.get("tab")
 
 	function validate(event: NDKEvent): boolean {
@@ -34,19 +34,19 @@
 		return test == 3;
 	}
 
-	function includedInRocket():boolean {
-		let included = false
-		for (let p of rocket.getMatchingTags("product")) {
-			if (p[1].split(":")[0] == product.id) {
-				included = true
+	function includedInRocket(): boolean {
+		let included = false;
+		for (let p of rocket.getMatchingTags('product')) {
+			if (p[1].split(':')[0] == product.id) {
+				included = true;
 			}
 		}
-		return included
+		return included;
 	}
 </script>
 
 {#if validate(product)}
-	<Card.Root class="w-[350px] m-2">
+	<Card.Root class="m-2 w-[350px]">
 		<Card.Header>
 			<Card.Title>{product.getMatchingTags('name')[0][1]}</Card.Title>
 			<Card.Description>{product.getMatchingTags('description')[0][1]}</Card.Description>
@@ -55,9 +55,9 @@
 		<Card.Content></Card.Content>
 		<Card.Footer class="flex justify-between">
 			{#if !includedInRocket()}
-			<AddProductToRocket product={product} {rocket} />
+				<AddProductToRocket {product} {rocket} />
 			{:else}
-			<PayNow {product} {rocket} />
+				<PayNow {product} {rocket} />
 			{/if}
 		</Card.Footer>
 	</Card.Root>
