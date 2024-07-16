@@ -31,7 +31,7 @@ export class MeritRequest {
 		return _solution;
 	}
 	IncludedInRocketState(rocket: Rocket): boolean {
-		return true;
+		return false;
 	}
 	BasicValidation(): boolean {
 		//todo: make a ValidateAgainstRocket and check that pubkey is in WoT
@@ -85,36 +85,31 @@ export class MeritRequest {
 }
 
 export class Vote {
-    ID: string;
-    Request: string;
-    VoteDirection: VoteDirection | undefined;
-    Pubkey: string;
-    TimeStamp: number;
+	ID: string;
+	Request: string;
+	VoteDirection: VoteDirection | undefined;
+	Pubkey: string;
+	TimeStamp: number;
 	Event: NDKEvent;
 	BasicValidation(): boolean {
-        let valid = true;
+		let valid = true;
 		if (
-			!(
-				this.ID.length == 64 &&
-                this.Request.length == 64 &&
-                this.VoteDirection &&
-                this.TimeStamp
-			)
+			!(this.ID.length == 64 && this.Request.length == 64 && this.VoteDirection && this.TimeStamp)
 		) {
 			valid = false;
 		}
 		return valid;
 	}
-    ValidateAgainstRocket(rocket:Rocket):boolean {
-        let valid = true;
-        if (!(rocket.VotePowerForPubkey(this.Pubkey) > 0)) {
-            valid = false
-        }
-        return valid
-    }
-    ValidateAgainstMeritRequest(merit:MeritRequest):boolean {
-        return this.Request == merit.ID
-    }
+	ValidateAgainstRocket(rocket: Rocket): boolean {
+		let valid = true;
+		if (!(rocket.VotePowerForPubkey(this.Pubkey) > 0)) {
+			valid = false;
+		}
+		return valid;
+	}
+	ValidateAgainstMeritRequest(merit: MeritRequest): boolean {
+		return this.Request == merit.ID;
+	}
 	RocketTag(): NDKTag | undefined {
 		let tag: NDKTag | undefined = undefined;
 		if (this.BasicValidation()) {
@@ -146,22 +141,124 @@ export class Vote {
 	}
 	constructor(event: NDKEvent) {
 		this.Event = event;
-        this.ID = event.id;
-        this.Pubkey = event.pubkey;
-        if (this.Event.created_at) {
+		this.ID = event.id;
+		this.Pubkey = event.pubkey;
+		if (this.Event.created_at) {
 			this.TimeStamp = this.Event.created_at;
 		}
-        for (let t of this.Event.getMatchingTags("vote")) {
-            if (t && t.length == 2 && (t[1] == "blackball" || t[1] == "ratify")) {
-                this.VoteDirection = t[1]
-            }
-        }
-        for (let t of this.Event.getMatchingTags("request")) {
-            if (t && t.length == 2 && t[1].length == 64) {
-                this.Request = t[1]
-            }
-        }
+		for (let t of this.Event.getMatchingTags('vote')) {
+			if (t && t.length == 2 && (t[1] == 'blackball' || t[1] == 'ratify')) {
+				this.VoteDirection = t[1];
+			}
+		}
+		for (let t of this.Event.getMatchingTags('request')) {
+			if (t && t.length == 2 && t[1].length == 64) {
+				this.Request = t[1];
+			}
+		}
+		if (!this.BasicValidation()) {
+			throw new Error('failed to create vote');
+		}
 	}
 }
 
-export type VoteDirection = "blackball" | "ratify"
+export type VoteDirection = 'blackball' | 'ratify';
+
+export class Votes {
+	Votes: Vote[];
+	Request:string;
+	Results(): VoteResults {
+		let ratifiers = new Map<string, Vote>();
+		let blackballers = new Map<string, Vote>();
+		for (let v of this.Votes) {
+			if ((v.VoteDirection == 'blackball')) {
+				blackballers.set(v.ID, v);
+			}
+			if ((v.VoteDirection == 'ratify')) {
+				ratifiers.set(v.ID, v);
+			}
+		}
+		let results: VoteResults = new VoteResults(
+			new VoteTally(blackballers),
+			new VoteTally(ratifiers)
+		);
+		return results;
+	}
+	constructor(votes: Vote[], request?:string) {
+		this.Votes = []
+		for (let v of votes) {
+			if (!request) {
+				request = v.Request;
+			}
+			if (!this.Request) {
+				this.Request = request
+			}
+			if (v.Request == this.Request) {
+				this.Votes.push(v)
+			}
+		}
+	}
+}
+
+export class VoteResults {
+	blackballers: VoteTally;
+	ratifiers: VoteTally;
+	Result(rocket: Rocket): VoteDirection | undefined {
+		let result: VoteDirection | undefined = undefined;
+		if (this.blackballers.TotalPercent(rocket) < 0.1 && this.ratifiers.TotalPercent(rocket) > 0.5) {
+			result = 'ratify';
+		}
+		if (this.blackballers.TotalPercent(rocket) >= 0.1) {
+			result = 'blackball';
+		}
+		return result;
+	}
+	constructor(blackballers: VoteTally, ratifiers: VoteTally) {
+		this.blackballers = blackballers;
+		this.ratifiers = ratifiers;
+	}
+}
+
+export class VoteTally {
+	Votes: Map<string, Vote>;
+	Direction: VoteDirection | undefined;
+	MeritRequest: string | undefined;
+	BasicValidation(): boolean {
+		let valid = true;
+		for (let [_, v] of this.Votes) {
+			if (!this.Direction) {
+				this.Direction = v.VoteDirection;
+			}
+			if (!this.MeritRequest) {
+				this.MeritRequest = v.Request;
+			}
+			if (v.VoteDirection != this.Direction || v.Request != this.MeritRequest) {
+				valid = false;
+			}
+		}
+		return valid;
+	}
+	Total(rocket: Rocket): number {
+		let total = 0;
+		if (this.BasicValidation()) {
+			for (let [_, v] of this.Votes) {
+				total += rocket.VotePowerForPubkey(v.Pubkey);
+			}
+		}
+
+		return total;
+	}
+	TotalPercent(rocket: Rocket): number {
+		let result = undefined;
+		let total = this.Total(rocket);
+		return total / rocket.TotalVotePower();
+	}
+	constructor(votes: Map<string, Vote>) {
+		this.Votes = votes;
+		this.Direction = undefined;
+		this.MeritRequest = undefined;
+		if (!this.BasicValidation()) {
+			throw new Error('invalid votes detected');
+		}
+	}
+}

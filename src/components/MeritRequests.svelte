@@ -58,7 +58,6 @@
 				{#each $merits as [id, merit], _ (id)}
 					<Table.Row
 						on:click={() => {
-							console.log(merit.Event.rawEvent());
 							goto(`${base}/rockets/merits/${merit.ID}`);
 						}}
 						class="cursor-pointer bg-accent"

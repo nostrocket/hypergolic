@@ -2,19 +2,128 @@ import { NDKEvent, type NDKTag } from '@nostr-dev-kit/ndk';
 
 export class Rocket {
 	Event: NDKEvent;
-	Name():string {
-		return this.Event.dTag!
+	Name(): string {
+		return this.Event.dTag!;
 	}
-	VotePowerForPubkey(pubkey:string):number {
-		let votepower = 0
+	VotePowerForPubkey(pubkey: string): number {
+		let votepower = 0;
 		if (this.Event.pubkey == pubkey) {
 			//todo: calculate votepower for pubkey based on approved merit requests
-			votepower++
+			votepower++;
 		}
-		return votepower
+		return votepower;
 	}
-	constructor(event:NDKEvent) {
+	TotalVotePower(): number {
+		//todo: calculate votepower for pubkey based on approved merit requests
+		return 1;
+	}
+	ApprovedMeritRequests(): Map<string, RocketAMR> {
+		let amr = new Map<string, RocketAMR>();
+		for (let m of this.Event.getMatchingTags('merit')) {
+			if (m && m.length == 2) {
+				let _amr = new RocketAMR(m[1]);
+				amr.set(_amr.ID, _amr);
+			}
+		}
+		return amr;
+	}
+	AppendAMR(amrProof: NDKEvent): NDKEvent | undefined {
+		//todo
+		let request: NDKEvent | undefined = undefined;
+		let votes: NDKEvent[] = [];
+		let _request = amrProof.getMatchingTags('request');
+		if (_request.length == 1) {
+			try {
+				request = JSON.parse(_request[0][1]);
+			} catch {}
+		}
+		for (let v of amrProof.getMatchingTags('vote')) {
+			try {
+				votes.push(JSON.parse(v[1]));
+			} catch {}
+		}
+		return 
+		//add the AMR to the rocket event, and also add a proof
+	}
+	UpsertProduct(id: string, price: number, maxSales?: number): NDKEvent {
+		let event = new NDKEvent(this.Event.ndk, this.Event.rawEvent());
+		event.created_at = Math.floor(new Date().getTime() / 1000);
+		let existingProducts = this.CurrentProducts();
+		let purchases = JSON.stringify([]);
+		let existingProduct = existingProducts.get(id);
+		if (existingProduct) {
+			purchases = existingProduct.PurchasesJSON();
+		}
+		event.tags.push([
+			'product',
+			`${id}:${price}:${event.created_at}:${maxSales}`,
+			'wss://relay.nostrocket.org',
+			purchases
+		]);
+		updateIgnitionAndParentTag(event);
+		return event;
+	}
+	CurrentProducts(): Map<string, RocketProduct> {
+		return getMapOfProductsFromRocket(this.Event);
+	}
+
+	constructor(event: NDKEvent) {
 		this.Event = event;
+	}
+}
+
+function updateIgnitionAndParentTag(event: NDKEvent) {
+	let existingIgnition = event.getMatchingTags('ignition');
+	//let existingParent = rocket.getMatchingTags("parent")
+	let existing = [];
+	for (let t of event.tags) {
+		existing.push(t);
+	}
+	event.tags = [];
+	for (let t of existing) {
+		if (t[0] !== 'ignition' && t[0] !== 'parent') {
+			event.tags.push(t);
+		}
+	}
+	if (existingIgnition.length > 1) {
+		throw new Error('too many ignition tags!');
+	}
+	if (existingIgnition.length == 0) {
+		event.tags.push(['ignition', event.id]);
+	}
+	if (existingIgnition.length == 1) {
+		if (existingIgnition[0][1].length == 64) {
+			event.tags.push(existingIgnition[0]);
+		}
+		if (existingIgnition[0][1] == 'this') {
+			event.tags.push(['ignition', event.id]);
+		}
+	}
+	event.tags.push(['parent', event.id]);
+}
+
+export class RocketAMR {
+	ID: string;
+	Pubkey: string;
+	LeadTime: number;
+	LeadTimeUpdate: number;
+	Merits: number;
+	Valid(): boolean {
+		let valid = true;
+		if (!(this.ID.length == 64 && this.Pubkey.length == 64 && this.Merits)) {
+			valid = false;
+		}
+		return valid;
+	}
+	constructor(meritString: string) {
+		let split = meritString.split(':');
+		if (split.length == 5) {
+			this.Pubkey = split[0];
+			this.ID = split[1];
+			this.LeadTime = parseInt(split[2], 10);
+			this.LeadTimeUpdate = parseInt(split[3], 10);
+			this.Merits = parseInt(split[4], 10);
+		}
 	}
 }
 
@@ -24,7 +133,13 @@ export class RocketProduct {
 	ValidAfter: number; //unix time
 	MaxPurchases: number;
 	Purchases: Map<string, ProductPayment>;
-
+	PurchasesJSON(): string {
+		let purchases = [];
+		for (let [_, p] of this.Purchases) {
+			purchases.push(`${p.ZapID}:${p.BuyerPubkey}:${p.WitnessedAt}`);
+		}
+		return JSON.stringify(purchases);
+	}
 	constructor(tag: NDKTag) {
 		this.Purchases = new Map();
 		this.ID = tag[1].split(':')[0];
@@ -138,23 +253,23 @@ function getZapRequest(zapReceipt: NDKEvent): NDKEvent | undefined {
 }
 
 function getZapAmount(zapRequest?: NDKEvent): number {
-	return getNumberFromTag("amount", zapRequest)
+	return getNumberFromTag('amount', zapRequest);
 }
 
-export function getNumberFromTag(tag:string, event?: NDKEvent): number {
+export function getNumberFromTag(tag: string, event?: NDKEvent): number {
 	let amountTag = event?.getMatchingTags(tag);
 	if (amountTag && amountTag[0] && amountTag[0][1]) {
 		try {
 			let amount = parseInt(amountTag[0][1], 10);
-			return amount
+			return amount;
 		} catch {
-			console.log("ERROR: could not find number in tag: ", tag, event)
+			console.log('ERROR: could not find number in tag: ', tag, event);
 		}
 	}
-	return 0
+	return 0;
 }
 
-export function isValidUrl(string:string):boolean {
+export function isValidUrl(string: string): boolean {
 	try {
 		new URL(string);
 		return true;
@@ -163,6 +278,6 @@ export function isValidUrl(string:string):boolean {
 	}
 }
 
-export function RocketATagFilter(rocket:NDKEvent):string {
-	return `31108:${rocket.pubkey}:${rocket.dTag}`
+export function RocketATagFilter(rocket: NDKEvent): string {
+	return `31108:${rocket.pubkey}:${rocket.dTag}`;
 }

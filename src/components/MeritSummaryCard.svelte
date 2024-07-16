@@ -1,15 +1,13 @@
 <script lang="ts">
 	import * as Card from '$lib/components/ui/card/index.js';
-	import { Vote, type MeritRequest } from '@/event_helpers/merits';
+	import { Vote, Votes, type MeritRequest } from '@/event_helpers/merits';
 	import { ndk } from '@/ndk';
-	import type { NDKEvent, NDKKind } from '@nostr-dev-kit/ndk';
+	import { NDKEvent, type NDKKind } from '@nostr-dev-kit/ndk';
 	import { Avatar, Name } from '@nostr-dev-kit/ndk-svelte-components';
 	import { ExternalLink, Info } from 'lucide-svelte';
 	import { onDestroy } from 'svelte';
 	import VoteOnMeritRequest from './VoteOnMeritRequest.svelte';
 
-	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import * as Table from '@/components/ui/table';
 	import { Rocket, RocketATagFilter } from '@/event_helpers/rockets';
@@ -19,11 +17,14 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
-	import CornerDownLeft from 'lucide-svelte/icons/corner-down-left';
 	import Alert from '@/components/ui/alert/alert.svelte';
+	import { currentUser } from '@/stores/session';
+	import CornerDownLeft from 'lucide-svelte/icons/corner-down-left';
 
 	export let merit: MeritRequest;
 	export let rocket: NDKEvent;
+
+	let parsedRocket = new Rocket(rocket);
 
 	let _votes = $ndk.storeSubscribe(
 		{ '#a': [RocketATagFilter(rocket)], '#e': [merit.ID], kinds: [1410 as NDKKind] },
@@ -52,11 +53,36 @@
 		for (let [_, v] of vMap) {
 			let existing = pMap.get(v.Pubkey);
 			if (!existing || (existing && existing.TimeStamp < v.TimeStamp)) {
+				//todo: check if this merit request has already been included in the rocket. If not, and if we have enough votes to approve it, update the rocket.
 				pMap.set(v.Pubkey, v);
 			}
 		}
-		return pMap;
+		vMap = new Map<string, Vote>();
+		for (let [_, v] of pMap) {
+			vMap.set(v.ID, v);
+		}
+		return vMap;
 	});
+
+	let rocketUpdates = derived([votes, currentUser], ([$votes, $currentUser]) => {
+		let events: NDKEvent[] = [];
+		if (
+			$currentUser &&
+			parsedRocket &&
+			parsedRocket.VotePowerForPubkey($currentUser.pubkey) > 0
+		) {
+			let votes = new Votes(Array.from($votes, ([_, v])=>(v)))
+			let result = votes.Results().Result(parsedRocket)
+			if (result && result == "ratify" && !parsedRocket.ApprovedMeritRequests().get(votes.Request)) {
+				//todo: parsedRocket.AppendAMR(votes.ConstructProof())
+				//
+			}
+		}
+		return events;
+	});
+
+	rocketUpdates.subscribe((c)=>{if (c.length > 0){console.log(c)}})
+
 </script>
 
 <Card.Root class="sm:col-span-2">
@@ -116,14 +142,17 @@
 				</div>
 				<Separator class="my-4" />
 				<div class="font-semibold">Votes</div>
-				{#if $votes.size == 0}<Alert><Info />Waiting for existing <span class="italic">{new Rocket(rocket).Name()}</span> Merit holders to vote</Alert> {/if}
+				{#if $votes.size == 0}<Alert
+						><Info />Waiting for existing <span class="italic">{new Rocket(rocket).Name()}</span> Merit
+						holders to vote</Alert
+					>
+				{/if}
 				<Table.Root>
 					<Table.Body>
 						{#each $votes as [id, vote], _ (id)}
 							<Table.Row
 								on:click={() => {
 									console.log(vote.Event.rawEvent());
-									goto(`${base}/rockets/merits/${vote.ID}`);
 								}}
 								class="cursor-pointer {vote.VoteDirection == 'ratify'
 									? 'bg-lime-600'

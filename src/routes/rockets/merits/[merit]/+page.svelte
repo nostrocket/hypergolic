@@ -11,7 +11,7 @@
 	
 	let meritRequestID = $page.params.merit;
 
-	let meritRequest:MeritRequest | undefined;
+	let meritRequest:MeritRequest | undefined = undefined;
 
 	$: {
 		if (meritRequestID.length == 64 && !meritRequest) {

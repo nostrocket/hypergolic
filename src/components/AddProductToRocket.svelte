@@ -6,53 +6,20 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Alert from '@/components/ui/alert';
-	import { getRocketURL } from '@/helpers';
 	import { ndk } from '@/ndk';
 	import { currentUser } from '@/stores/session';
 	import { NDKEvent } from '@nostr-dev-kit/ndk';
 	import { Terminal } from 'lucide-svelte';
 	import Todo from './Todo.svelte';
+	import { Rocket } from '@/event_helpers/rockets';
 
 	export let product: NDKEvent;
 	export let rocket: NDKEvent;
 
+	let parsedRocket: Rocket = new Rocket(rocket);
+
 	let price: number = 0;
 	let max: number = 0;
-
-	function updateIgnitionAndParentTag(rocket: NDKEvent) {
-		let existingIgnition = rocket.getMatchingTags('ignition');
-		//let existingParent = rocket.getMatchingTags("parent")
-		removeIgnitionAndParentTag(rocket);
-		if (existingIgnition.length > 1) {
-			throw new Error('too many ignition tags!');
-		}
-		if (existingIgnition.length == 0) {
-			rocket.tags.push(['ignition', rocket.id]);
-		}
-		if (existingIgnition.length == 1) {
-			if (existingIgnition[0][1].length == 64) {
-				rocket.tags.push(existingIgnition[0]);
-			}
-			if (existingIgnition[0][1] == 'this') {
-				rocket.tags.push(['ignition', rocket.id]);
-			}
-		}
-		rocket.tags.push(['parent', rocket.id]);
-
-	}
-
-	function removeIgnitionAndParentTag(rocket: NDKEvent) {
-		let existing = [];
-		for (let t of rocket.tags) {
-			existing.push(t);
-		}
-		rocket.tags = [];
-		for (let t of existing) {
-			if (t[0] !== 'ignition' && t[0] !== 'parent') {
-				rocket.tags.push(t);
-			}
-		}
-	}
 
 	function publish() {
 		if (!$ndk.signer) {
@@ -67,16 +34,8 @@
 			console.log(rocket.author, author);
 			throw new Error('you are not the creator of this rocket');
 		}
-		rocket.created_at = Math.floor(new Date().getTime() / 1000);
-		//todo validate d tag
-		rocket.tags.push([
-			'product',
-			`${product.id}:${price}:${rocket.created_at}:${max}`,
-			'wss://relay.nostrocket.org',
-			JSON.stringify([])
-		]);
-		updateIgnitionAndParentTag(rocket)
-		rocket.publish().then((x) => {
+		let event = parsedRocket.UpsertProduct(product.id, price, max);
+		event.publish().then((x) => {
 			console.log(x);
 			goto(`${base}/products`);
 		});
