@@ -56,3 +56,16 @@ export function unixToRelativeTime(timestamp: number): string {
 		return formattedDate;
 	}
 }
+
+export async function getCuckPrice(): Promise<number | Error> {
+	try {
+		var url = 'https://api.coindesk.com/v1/bpi/currentprice.json';
+		var symbol = 'USD';
+		const data = await fetch(url);
+		const json = await data.json();
+		const cuckPrice = parseFloat(json.bpi[symbol].rate.replace(/,/g, ''));
+		return cuckPrice;
+	} catch (e) {
+		return e as Error;
+	}
+}

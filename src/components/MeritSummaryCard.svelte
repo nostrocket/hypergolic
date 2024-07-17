@@ -11,7 +11,7 @@
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import * as Table from '@/components/ui/table';
 	import { Rocket, RocketATagFilter } from '@/event_helpers/rockets';
-	import { getRocketURL, unixToRelativeTime } from '@/helpers';
+	import { getCuckPrice, getRocketURL, unixToRelativeTime } from '@/helpers';
 	import { derived } from 'svelte/store';
 
 	import { goto } from '$app/navigation';
@@ -25,6 +25,7 @@
 
 	export let merit: MeritRequest;
 	export let rocket: NDKEvent;
+	let cuckPrice: number | undefined = undefined;
 
 	let result: VoteDirection | undefined;
 
@@ -40,6 +41,18 @@
 	onDestroy(() => {
 		_votes.unsubscribe();
 	});
+
+	$: {
+		if (!cuckPrice) {
+			getCuckPrice().then((data) => {
+				if (data instanceof Error) {
+					console.error(data);
+				} else {
+					cuckPrice = data;
+				}
+			});
+		}
+	}
 
 	let votes = derived(_votes, ($_votes) => {
 		return new MapOfVotes($_votes, parsedRocket, merit).Votes;
@@ -136,7 +149,8 @@
 						<span class="text-muted-foreground">
 							Approximate value of {merit.Sats.toLocaleString()} sats in CuckLoserBucks
 						</span>
-						<span>${merit.Sats.toLocaleString()}</span>
+						<span>${cuckPrice ? ((merit.Sats / 100000000) * cuckPrice).toFixed(2) : 'Loading'}</span
+						>
 					</li>
 				</ul>
 				<Separator class="my-4" />
