@@ -26,10 +26,7 @@
 		<Card.Title>Products and Purchases</Card.Title>
 		<Card.Description></Card.Description>
 	</Card.Header>
-	<Card.Content
-		class="grid gap-2"
-		style="grid-template-columns: repeat(auto-fit, minmax(min(100% - 2rem, 400px), 1fr));"
-	>
+	<Card.Content class="grid grid-cols-1 gap-2">
 		{#each $products as product}
 			<div>
 				<ProductCardFromId {rocket} productID={product.ID}>

@@ -54,11 +54,11 @@
 
 		{#if $$slots.default}
 			<Card.Content>
-				<div class="flex flex-col items-center justify-center gap-2 sm:flex-row">
+				<div class="flex flex-col items-center justify-center gap-2 md:flex-row">
 					<img
 						src={product.getMatchingTags('cover')[0][1]}
 						alt="cover"
-						class="aspect-square w-[200px] object-cover"
+						class="aspect-square w-[300px] object-cover"
 					/>
 					<slot />
 				</div>
@@ -70,7 +70,7 @@
 				class="aspect-square object-cover"
 			/>
 		{/if}
-		<Card.Footer class="flex justify-between pt-2">
+		<Card.Footer class="flex justify-center pt-2">
 			{#if !includedInRocket()}
 				<AddProductToRocket {product} {rocket} />
 			{:else}
