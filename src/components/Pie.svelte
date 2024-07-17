@@ -1,9 +1,13 @@
 <script lang="ts">
-	import { Card, Chart } from 'flowbite-svelte';
+	import { ndk } from '@/ndk.js';
+	import { Chart } from 'flowbite-svelte';
+	import { writable } from 'svelte/store';
+	export let data:{pubkey: string; merits: number; sats: number}[]
 
-	const options = {
-		series: [35.1, 23.5, 2.4, 5.4],
-		colors: ['#9b1c1c', '#16BDCA', '#FDBA8C', '#E74694'],
+	let pubkeys = Array.from(data,(x)=>x.pubkey)
+	let options = {
+		series: Array.from(data,(x)=>x.merits),
+		colors: ['#9d174d', '#991b1b', '#6b21a8', '#1e40af'],
 		chart: {
 			height: 320,
 			width: '100%',
@@ -32,7 +36,7 @@
 								const sum = w.globals.seriesTotals.reduce((a, b) => {
 									return a + b;
 								}, 0);
-								return `${sum}k`;
+								return `${sum}`;
 							}
 						},
 						value: {
@@ -40,7 +44,7 @@
 							fontFamily: 'Inter, sans-serif',
 							offsetY: -20,
 							formatter: function (value) {
-								return value + 'k';
+								return value + '';
 							}
 						}
 					},
@@ -84,6 +88,24 @@
 		}
 	};
 
+	let o = writable(options)
+
+	$: {
+		let usernames:string[] = []
+		for (let pk of pubkeys) {
+			let user = $ndk.getUser({pubkey:pk})
+			if (user && user.profile && user.profile.name) {
+				usernames.push(user.profile.name)
+			} else {
+				usernames.push(user.npub.substring(0, 10))
+			}
+		}
+		o.update(existing=>{
+			existing.labels = usernames
+			return existing
+		})
+	}
+
 	//     <Card>
 	//     <div class="flex justify-between items-start w-full">
 	//       <div class="flex-col items-center">
@@ -97,4 +119,4 @@
 	// </Card>
 </script>
 
-<Chart {options} class="py-6" />
+<Chart options={$o} class="py-6" />

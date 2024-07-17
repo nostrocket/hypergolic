@@ -207,11 +207,18 @@ function updateIgnitionAndParentTag(event: NDKEvent) {
 }
 
 export class RocketAMR {
+	//todo: also add a query for sats tags to find payments for this AMR
 	ID: string;
 	Pubkey: string;
 	LeadTime: number;
 	LeadTimeUpdate: number;
 	Merits: number;
+	SatsOwed():number {
+		return 0
+	}
+	SatsPaid():number {
+		return 0
+	}
 	Valid(): boolean {
 		let valid = true;
 		if (!(this.ID.length == 64 && this.Pubkey.length == 64 && this.Merits)) {
