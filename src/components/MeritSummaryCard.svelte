@@ -1,6 +1,6 @@
 <script lang="ts">
 	import * as Card from '$lib/components/ui/card/index.js';
-	import { MapOfVotes, Vote, Votes, type MeritRequest } from '@/event_helpers/merits';
+	import { MapOfVotes, Votes, type MeritRequest, type VoteDirection } from '@/event_helpers/merits';
 	import { ndk } from '@/ndk';
 	import { NDKEvent, type NDKKind } from '@nostr-dev-kit/ndk';
 	import { Avatar, Name } from '@nostr-dev-kit/ndk-svelte-components';
@@ -14,17 +14,19 @@
 	import { getRocketURL, unixToRelativeTime } from '@/helpers';
 	import { derived } from 'svelte/store';
 
+	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
-	import Alert from '@/components/ui/alert/alert.svelte';
 	import { currentUser } from '@/stores/session';
 	import CornerDownLeft from 'lucide-svelte/icons/corner-down-left';
-	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
+	import Alert from './Alert.svelte';
 
 	export let merit: MeritRequest;
 	export let rocket: NDKEvent;
+
+	let result: VoteDirection | undefined;
 
 	let parsedRocket = new Rocket(rocket);
 
@@ -45,10 +47,15 @@
 
 	let rocketUpdates = derived([votes, currentUser], ([$votes, $currentUser]) => {
 		let events: NDKEvent[] = [];
-		if ($currentUser && parsedRocket && parsedRocket.VotePowerForPubkey($currentUser.pubkey) > 0) {
-			let votes = new Votes(Array.from($votes, ([_, v]) => v));
-			let result = votes.Results().Result(parsedRocket);
-			if (result && result == 'ratify' && !merit.IncludedInRocketState(parsedRocket)) {
+
+		let votes = new Votes(Array.from($votes, ([_, v]) => v));
+		result = votes.Results().Result(parsedRocket);
+		if (result && result == 'ratify' && !merit.IncludedInRocketState(parsedRocket)) {
+			if (
+				$currentUser &&
+				parsedRocket &&
+				parsedRocket.VotePowerForPubkey($currentUser.pubkey) > 0
+			) {
 				let e = parsedRocket.CreateUnsignedAMRProof(merit, votes);
 				if (e) {
 					e.ndk = $ndk;
@@ -68,6 +75,7 @@
 				}
 			}
 		}
+
 		return events;
 	});
 
@@ -76,9 +84,22 @@
 			console.log(c);
 		}
 	});
+
+	let border = '';
+	let background = '';
+	$: {
+		if (result == 'blackball' && !merit.IncludedInRocketState(parsedRocket)) {
+			border = 'border-red-600';
+			background = 'bg-red-600';
+		}
+		if (merit.IncludedInRocketState(parsedRocket)) {
+			border = 'border-lime-600';
+			background = 'bg-lime-600';
+		}
+	}
 </script>
 
-<Card.Root class="sm:col-span-2">
+<Card.Root class="sm:col-span-2 {border}">
 	<Card.Header class="pb-3">
 		<div class="flex flex-nowrap justify-between">
 			<Card.Title>Problem: {merit.Problem().substring(0, 20)}</Card.Title>{#if merit.Solution()}<a
@@ -178,8 +199,15 @@
 			</div></Card.Content
 		>
 	</Card.Header>
-	<Card.Footer class="flex flex-row items-center border-t px-6 py-3">
-		<VoteOnMeritRequest {merit} rocket={new Rocket(rocket)} />
+	<Card.Footer class="flex flex-row justify-center border-t px-6 py-3 text-center {background}">
+		{#if merit.IncludedInRocketState(parsedRocket)}
+			<span class="scroll-m-20 text-lg font-semibold tracking-tight md:text-xl">APPROVED</span>
+			<!-- <Alert><div slot="title">Approved</div>This Merit Request has been approved!</Alert> -->
+		{:else if result == 'blackball'}
+			<span class="scroll-m-20 text-lg font-semibold tracking-tight md:text-xl">REJECTED</span>
+		{:else if !result}
+			<VoteOnMeritRequest {merit} rocket={new Rocket(rocket)} />
+		{/if}
 	</Card.Footer>
 </Card.Root>
 

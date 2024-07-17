@@ -9,6 +9,7 @@
 	import ProposedProducts from './ProposedProducts.svelte';
 	import Todo from './Todo.svelte';
 	import MeritRequests from './MeritRequests.svelte';
+	import Button from '@/components/ui/button/button.svelte';
 
 	export let rocket: NDKEvent;
 </script>
@@ -43,6 +44,7 @@
 				<Card.Description class="flex space-x-4">
 					<CreateNewProduct rocketEvent={rocket} />
 					<CreateMeritRequest rocketEvent={rocket} />
+					<Button on:click={()=>{console.log(rocket.rawEvent())}}>Print to Console</Button>
 				</Card.Description>
 			</Card.Header>
 			<Card.Footer></Card.Footer>

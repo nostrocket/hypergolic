@@ -103,6 +103,11 @@ export class Rocket {
 		}
 		return event;
 	}
+	// ApprovedMeritRequests():Map<string, MeritRequest> {
+	// 	let amr = new Map<string, MeritRequest>()
+
+	// 	return amr
+	// }
 	UpsertProduct(id: string, price: number, maxSales?: number): NDKEvent {
 		let event = new NDKEvent(this.Event.ndk, this.Event.rawEvent());
 		event.created_at = Math.floor(new Date().getTime() / 1000);

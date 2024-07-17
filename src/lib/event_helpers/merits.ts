@@ -9,6 +9,8 @@ export class MeritRequest {
 	Pubkey: string;
 	TimeStamp: number;
 	RocketTag: string | undefined; //31108:<pubkey>:<dtag>
+	LeadTime: number;
+	LastLTUpdate: number;
 	Problem(): string {
 		let _problem = '';
 		//todo: handle 1971 problem tracker event tags somehow
@@ -31,7 +33,8 @@ export class MeritRequest {
 		return _solution;
 	}
 	IncludedInRocketState(rocket: Rocket): boolean {
-		return false;
+		let included = rocket.ApprovedMeritRequests()
+		return Boolean(included.get(this.ID))
 	}
 	BasicValidation(): boolean {
 		//todo: make a ValidateAgainstRocket and check that pubkey is in WoT
@@ -62,25 +65,32 @@ export class MeritRequest {
 			kinds: [kind as number]
 		};
 	}
-	constructor(request: NDKEvent) {
-		this.Event = request;
-		this.ID = request.id;
-		this.Pubkey = request.pubkey;
-		if (this.Event.created_at) {
-			this.TimeStamp = this.Event.created_at;
-		}
-		for (let tag of this.Event.getMatchingTags('a')) {
-			if (tag && tag.length > 1) {
-				if (tag[1].split(':') && tag[1].split(':').length == 3) {
-					if ((tag[1].split(':')[0] = '31108')) {
-						this.RocketTag = tag[1];
+	constructor(request: NDKEvent | string) {
+		if (typeof request == 'string') {
+			console.log(69)
+		} else {
+			console.log(71)
+			this.LeadTime = 0;
+			this.LastLTUpdate = 0;
+			this.Event = request;
+			this.ID = request.id;
+			this.Pubkey = request.pubkey;
+			if (this.Event.created_at) {
+				this.TimeStamp = this.Event.created_at;
+			}
+			for (let tag of this.Event.getMatchingTags('a')) {
+				if (tag && tag.length > 1) {
+					if (tag[1].split(':') && tag[1].split(':').length == 3) {
+						if ((tag[1].split(':')[0] = '31108')) {
+							this.RocketTag = tag[1];
+						}
 					}
 				}
 			}
-		}
 
-		this.Sats = getNumberFromTag('sats', request);
-		this.Merits = getNumberFromTag('merits', request);
+			this.Sats = getNumberFromTag('sats', request);
+			this.Merits = getNumberFromTag('merits', request);
+		}
 	}
 }
 
@@ -265,15 +275,14 @@ export class VoteTally {
 
 export class MapOfVotes {
 	Votes: Map<string, Vote>;
-	constructor(votes:NDKEvent[], rocket:Rocket, merit:MeritRequest) {
+	constructor(votes: NDKEvent[], rocket: Rocket, merit: MeritRequest) {
 		this.Votes = new Map<string, Vote>();
 		for (let v of votes) {
 			let vote = new Vote(v);
 			if (
 				vote.BasicValidation() &&
 				vote.ValidateAgainstRocket(rocket) &&
-				vote.ValidateAgainstMeritRequest(merit) &&
-				!merit.IncludedInRocketState(rocket)
+				vote.ValidateAgainstMeritRequest(merit)
 			) {
 				this.Votes.set(vote.ID, vote); //only show the latest vote from each pubkey
 			}
