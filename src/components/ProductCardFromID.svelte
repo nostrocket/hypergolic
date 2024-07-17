@@ -17,5 +17,7 @@
 </script>
 
 {#if productEvent}
-	<ProductCard {rocket} product={productEvent} />
+	<ProductCard {rocket} product={productEvent}>
+		<slot />
+	</ProductCard>
 {/if}

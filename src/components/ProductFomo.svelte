@@ -1,6 +1,5 @@
 <script lang="ts">
 	import * as Card from '$lib/components/ui/card/index.js';
-	import * as Table from '$lib/components/ui/table/index.js';
 	import { RocketProduct } from '@/event_helpers/rockets';
 	import type { NDKEvent } from '@nostr-dev-kit/ndk';
 	import ProductCardFromId from './ProductCardFromID.svelte';
@@ -27,11 +26,10 @@
 		<Card.Title>Products and Purchases</Card.Title>
 		<Card.Description class="grid grid-cols-2">
 			{#each $products as product}
-				<div class=" grid-cols-1">
-					<ProductCardFromId {rocket} productID={product.ID} />
-				</div>
 				<div class="grid-cols-1">
-					<ProductPurchases {rocket} {product} />
+					<ProductCardFromId {rocket} productID={product.ID}>
+						<ProductPurchases {rocket} {product} />
+					</ProductCardFromId>
 				</div>
 			{/each}
 		</Card.Description>

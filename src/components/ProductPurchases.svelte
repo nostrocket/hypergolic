@@ -1,5 +1,4 @@
 <script lang="ts">
-	import * as Card from '@/components/ui/card';
 	import * as Table from '@/components/ui/table';
 	import { ZapPurchase, type RocketProduct } from '@/event_helpers/rockets';
 	import { unixToRelativeTime } from '@/helpers';
@@ -47,51 +46,44 @@
 	//todo: update rocket event with confirmed zaps if we have votepower
 </script>
 
-<Card.Root>
-	<Card.Header class="px-7">
-		<Card.Title>Purchases</Card.Title>
-		<Card.Description
-			>Purchase history for {productEvent?.getMatchingTags('name')[0][1]}</Card.Description
-		>
-	</Card.Header>
-	<Card.Content>
-		<Table.Root>
-			<Table.Header>
-				<Table.Row>
-					<Table.Head>Buyer</Table.Head>
-					<Table.Head class="hidden md:table-cell">Sats Paid</Table.Head>
-					<Table.Head class="text-right"></Table.Head>
-				</Table.Row>
-			</Table.Header>
-			<Table.Body>
-				{#each $purchases as [id, purchase], _ (id)}
-					<Table.Row
-						on:click={() => {
-							console.log(purchase.ZapReceipt.rawEvent());
-						}}
-						class="bg-accent"
+{#if $purchases.size > 0}
+	<div class="pt-2 text-lg font-semibold">Purchases</div>
+	<Table.Root>
+		<Table.Header>
+			<Table.Row>
+				<Table.Head>Buyer</Table.Head>
+				<Table.Head class="hidden md:table-cell">Sats Paid</Table.Head>
+				<Table.Head class="text-right"></Table.Head>
+			</Table.Row>
+		</Table.Header>
+		<Table.Body>
+			{#each $purchases as [id, purchase], _ (id)}
+				<Table.Row
+					on:click={() => {
+						console.log(purchase.ZapReceipt.rawEvent());
+					}}
+					class="bg-accent"
+				>
+					<Table.Cell>
+						<div class="flex flex-nowrap">
+							<Avatar
+								ndk={$ndk}
+								pubkey={purchase.BuyerPubkey}
+								class="h-10 w-10 flex-none rounded-full object-cover"
+							/>
+							<Name
+								ndk={$ndk}
+								pubkey={purchase.BuyerPubkey}
+								class="inline-block max-w-32 truncate p-2"
+							/>
+						</div>
+					</Table.Cell>
+					<Table.Cell class="hidden md:table-cell">{purchase.Amount / 1000}</Table.Cell>
+					<Table.Cell class="text-right"
+						>{unixToRelativeTime(purchase.ZapReceipt.created_at * 1000)}</Table.Cell
 					>
-						<Table.Cell>
-							<div class="flex flex-nowrap">
-								<Avatar
-									ndk={$ndk}
-									pubkey={purchase.BuyerPubkey}
-									class="h-10 w-10 flex-none rounded-full object-cover"
-								/>
-								<Name
-									ndk={$ndk}
-									pubkey={purchase.BuyerPubkey}
-									class="inline-block max-w-32 truncate p-2"
-								/>
-							</div>
-						</Table.Cell>
-						<Table.Cell class="hidden md:table-cell">{purchase.Amount / 1000}</Table.Cell>
-						<Table.Cell class="text-right"
-							>{unixToRelativeTime(purchase.ZapReceipt.created_at * 1000)}</Table.Cell
-						>
-					</Table.Row>
-				{/each}
-			</Table.Body>
-		</Table.Root>
-	</Card.Content>
-</Card.Root>
+				</Table.Row>
+			{/each}
+		</Table.Body>
+	</Table.Root>
+{/if}
