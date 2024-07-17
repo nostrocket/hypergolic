@@ -19,9 +19,9 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
+	import { Alert } from '@/components/ui/alert';
 	import { currentUser } from '@/stores/session';
 	import CornerDownLeft from 'lucide-svelte/icons/corner-down-left';
-	import Alert from './Alert.svelte';
 
 	export let merit: MeritRequest;
 	export let rocket: NDKEvent;
