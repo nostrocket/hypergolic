@@ -36,7 +36,7 @@
 		let zapMap = new Map<string, ZapPurchase>();
 		for (let z of $zaps) {
 			let zapPurchase = new ZapPurchase(z);
-			if (zapPurchase.Valid(rocket)) {
+			if (zapPurchase.Valid(rocket) && zapPurchase.ProductID == product.ID) {
 				zapMap.set(zapPurchase.ZapReceipt.id, zapPurchase);
 			}
 		}
