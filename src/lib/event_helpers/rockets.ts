@@ -71,7 +71,7 @@ export class Rocket {
 		let hasInvalidSig = false;
 		if (request && request.Event && request.Event.sig && votes.Votes.length > 0) {
 			if (!request.Event.verifySignature(true)) {
-				hasInvalidSig = true
+				hasInvalidSig = true;
 			}
 			for (let v of votes.Votes) {
 				if (!(v.Event.sig && v.Event.verifySignature(true))) {
@@ -90,11 +90,11 @@ export class Rocket {
 			}
 		}
 		return proof;
-		//add the AMR to the rocket event, and also add a proof
 	}
 	UpsertAMR(request: MeritRequest, signedProof: NDKEvent): NDKEvent | undefined {
 		let event: NDKEvent | undefined = undefined;
 		if (this.ValidateAMRProof(signedProof)) {
+			this.PrepareForUpdate();
 			event = new NDKEvent(this.Event.ndk, this.Event.rawEvent());
 			event.created_at = Math.floor(new Date().getTime() / 1000);
 			event.tags.push(['merit', `${request.Pubkey}:${request.ID}:0:0:${request.Merits}`]);
@@ -103,12 +103,8 @@ export class Rocket {
 		}
 		return event;
 	}
-	// ApprovedMeritRequests():Map<string, MeritRequest> {
-	// 	let amr = new Map<string, MeritRequest>()
-
-	// 	return amr
-	// }
 	UpsertProduct(id: string, price: number, maxSales?: number): NDKEvent {
+		this.PrepareForUpdate();
 		let event = new NDKEvent(this.Event.ndk, this.Event.rawEvent());
 		event.created_at = Math.floor(new Date().getTime() / 1000);
 		let existingProducts = this.CurrentProducts();
@@ -129,7 +125,52 @@ export class Rocket {
 	CurrentProducts(): Map<string, RocketProduct> {
 		return getMapOfProductsFromRocket(this.Event);
 	}
-
+	RemoveDuplicateTags() {
+		function iterate(event: NDKEvent): NDKEvent {
+			let purged = 0;
+			for (let i = 0; i < event.tags.length; i++) {
+				for (let j = i + 1; j < event.tags.length; j++) {
+					// quick elimination by comparing sub-array lengths
+					if (event.tags[i].length !== event.tags[j].length) {
+						continue;
+					}
+					// look for dupes
+					var dupe = true;
+					for (var k = 0; k < event.tags[i].length; k++) {
+						if (event.tags[i][k] !== event.tags[j][k]) {
+							dupe = false;
+							break;
+						}
+					}
+					// if a dupe then remove it
+					if (dupe) {
+						purged++;
+						event.tags.splice(j, 1);
+					}
+				}
+			}
+			if (purged > 0) {
+				return iterate(event);
+			} else {
+				return event;
+			}
+		}
+		this.Event = iterate(this.Event);
+	}
+	RemoveProofs() {
+		let newTags: NDKTag[] = [];
+		for (let t of this.Event.tags) {
+			if (!t[0].includes('proof') && t[0] != 'client') {
+				newTags.push(t);
+			}
+		}
+		this.Event.tags = newTags;
+	}
+	PrepareForUpdate() {
+		this.RemoveDuplicateTags();
+		this.RemoveProofs();
+		this.Event.sig = undefined
+	}
 	constructor(event: NDKEvent) {
 		this.Event = event;
 	}

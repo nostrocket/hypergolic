@@ -25,7 +25,6 @@
 		if (!$ndk.signer) {
 			throw new Error('no ndk signer found');
 		}
-		rocket.ndk = $ndk;
 		let author = $currentUser;
 		if (!author) {
 			throw new Error('no current user');
@@ -35,10 +34,11 @@
 			throw new Error('you are not the creator of this rocket');
 		}
 		let event = parsedRocket.UpsertProduct(product.id, price, max);
+		event.ndk = $ndk
 		event.publish().then((x) => {
 			console.log(x);
 			goto(`${base}/products`);
-		});
+		}).catch(()=>{ console.log("failed to publish", event.rawEvent())});
 	}
 </script>
 
