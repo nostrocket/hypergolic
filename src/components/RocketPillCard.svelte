@@ -8,7 +8,7 @@
 
 {#if $page.route.id != '/'}
 	<Card.Root>
-		<Card.Header class="p-4 pt-0">
+		<Card.Header class="p-4">
 			<Card.Title>WTF</Card.Title>
 			<Card.Description>I'm new to Nostrocket, wtf is this thing all about?</Card.Description>
 		</Card.Header>
