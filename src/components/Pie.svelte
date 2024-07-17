@@ -69,14 +69,14 @@
 		yaxis: {
 			labels: {
 				formatter: function (value) {
-					return value + 'k';
+					return value + '';
 				}
 			}
 		},
 		xaxis: {
 			labels: {
 				formatter: function (value) {
-					return value + 'k';
+					return value + '';
 				}
 			},
 			axisTicks: {
