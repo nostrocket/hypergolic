@@ -46,8 +46,10 @@
 {#if productsToRender && $productsToRender}
 	{#each $productsToRender as [r, p]}
 		<Heading title={r.dTag} />
-		{#each p as product}
-			<ProductCard {product} rocket={r} />
-		{/each}
+		<div class="grid gap-2" style="grid-template-columns: repeat(auto-fit, 350px);">
+			{#each p as product}
+				<ProductCard {product} rocket={r} />
+			{/each}
+		</div>
 	{/each}
 {/if}

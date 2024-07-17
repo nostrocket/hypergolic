@@ -24,15 +24,19 @@
 <Card.Root class="sm:col-span-3">
 	<Card.Header class="pb-3">
 		<Card.Title>Products and Purchases</Card.Title>
-		<Card.Description class="grid grid-cols-2">
-			{#each $products as product}
-				<div class="grid-cols-1">
-					<ProductCardFromId {rocket} productID={product.ID}>
-						<ProductPurchases {rocket} {product} />
-					</ProductCardFromId>
-				</div>
-			{/each}
-		</Card.Description>
+		<Card.Description></Card.Description>
 	</Card.Header>
+	<Card.Content
+		class="grid gap-2"
+		style="grid-template-columns: repeat(auto-fit, minmax(min(100% - 2rem, 400px), 1fr));"
+	>
+		{#each $products as product}
+			<div>
+				<ProductCardFromId {rocket} productID={product.ID}>
+					<ProductPurchases {rocket} {product} />
+				</ProductCardFromId>
+			</div>
+		{/each}
+	</Card.Content>
 	<Card.Footer></Card.Footer>
 </Card.Root>
