@@ -46,16 +46,31 @@
 </script>
 
 {#if validate(product)}
-	<Card.Root class="m-2 w-[450px]">
+	<Card.Root>
 		<Card.Header>
 			<Card.Title>{product.getMatchingTags('name')[0][1]}</Card.Title>
 			<Card.Description>{product.getMatchingTags('description')[0][1]}</Card.Description>
 		</Card.Header>
-		<img src={product.getMatchingTags('cover')[0][1]} alt="cover" />
-		<Card.Content>
-			<slot />
-		</Card.Content>
-		<Card.Footer class="flex justify-between">
+
+		{#if $$slots.default}
+			<Card.Content>
+				<div class="flex flex-col items-center justify-center gap-2 sm:flex-row">
+					<img
+						src={product.getMatchingTags('cover')[0][1]}
+						alt="cover"
+						class="aspect-square w-[200px] object-cover"
+					/>
+					<slot />
+				</div>
+			</Card.Content>
+		{:else}
+			<img
+				src={product.getMatchingTags('cover')[0][1]}
+				alt="cover"
+				class="aspect-square object-cover"
+			/>
+		{/if}
+		<Card.Footer class="flex justify-between pt-2">
 			{#if !includedInRocket()}
 				<AddProductToRocket {product} {rocket} />
 			{:else}

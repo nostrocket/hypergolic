@@ -47,7 +47,6 @@
 </script>
 
 {#if $purchases.size > 0}
-	<div class="pt-2 text-lg font-semibold">Purchases</div>
 	<Table.Root>
 		<Table.Header>
 			<Table.Row>
