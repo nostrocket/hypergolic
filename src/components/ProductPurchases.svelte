@@ -48,6 +48,10 @@
 
 {#if $purchases.size > 0}
 	<Table.Root>
+		<Table.Caption
+			class="mt-0 caption-top text-center text-lg font-semibold tracking-tight text-card-foreground"
+			>Purchases</Table.Caption
+		>
 		<Table.Header>
 			<Table.Row>
 				<Table.Head>Buyer</Table.Head>
