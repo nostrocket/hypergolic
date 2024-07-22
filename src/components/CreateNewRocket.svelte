@@ -4,7 +4,6 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { ndk } from '@/ndk';
-	import Todo from './Todo.svelte';
 	import { currentUser } from '@/stores/session';
 	import { Terminal } from 'lucide-svelte';
 	import * as Alert from '@/components/ui/alert';
@@ -13,8 +12,46 @@
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { getRocketURL } from '@/helpers';
+	import type { NDKEventStore } from '@nostr-dev-kit/ndk-svelte';
+	import { onDestroy } from 'svelte';
+	import { writable } from 'svelte/store';
 
-	let name: string;
+	let rockets: NDKEventStore<NDKEvent> | undefined;
+	const rocketsStore = writable<NDKEvent[]>([]);
+	let name: string = '';
+	$: nameInValid = true;
+	$: nameError = '';
+
+	rockets = $ndk.storeSubscribe([{ kinds: [31108 as number] }], { subId: 'rockets' });
+	onDestroy(() => {
+		rockets?.unsubscribe();
+	});
+	$: if (rockets) {
+		rockets.subscribe((events) => {
+			rocketsStore.set(events);
+		});
+	}
+
+	const rocketNameValidator = /^\w{4,20}$/;
+	const nameIsUnique = (name: string, rocketEvents: NDKEvent[]) => {
+		return !rocketEvents.some((event) => event.tags[0][1] === name);
+	};
+
+	$: if (name) {
+		if (!rocketNameValidator.test(name)) {
+			nameInValid = true;
+			nameError = 'Rocket names MUST be 4-20 alphanumeric characters';
+		} else if (!$rocketsStore) {
+			nameInValid = true;
+			nameError = 'Loading Nostr';
+		} else if (!nameIsUnique(name, $rocketsStore)) {
+			nameInValid = true;
+			nameError = 'Rocket names MUST be unique';
+		} else {
+			nameInValid = false;
+			nameError = '';
+		}
+	}
 
 	function publish(ndk: NDKSvelte, name: string) {
 		if (!ndk.signer) {
@@ -25,10 +62,12 @@
 		if (!author) {
 			throw new Error('no current user');
 		}
+		if (nameInValid) {
+			throw new Error('name is invalid');
+		}
 		e.author = author;
 		e.kind = 31108;
 		e.created_at = Math.floor(new Date().getTime() / 1000);
-		//todo validate d tag
 		e.tags.push(['d', name]);
 		e.tags.push(['ruleset', '334000']);
 		e.tags.push(['ignition', 'this']);
@@ -62,9 +101,10 @@
 				<Input bind:value={name} id="name" placeholder="Name-of-your-rocket" class="col-span-3" />
 			</div>
 		</div>
-		<Todo text={['validate input is a valid d tag (NIP01)']} />
+		<div class="m-0 p-0 text-sm text-red-500">{nameError}</div>
 		<Dialog.Footer>
 			<Button
+				disabled={nameInValid}
 				on:click={() => {
 					publish($ndk, name);
 				}}
