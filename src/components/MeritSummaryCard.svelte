@@ -11,7 +11,7 @@
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import * as Table from '@/components/ui/table';
 	import { Rocket, RocketATagFilter } from '@/event_helpers/rockets';
-	import { getCuckPrice, getRocketURL, unixToRelativeTime } from '@/helpers';
+	import { formatReferenceTime, getCuckPrice, getRocketURL, unixToRelativeTime } from '@/helpers';
 	import { derived } from 'svelte/store';
 
 	import { goto } from '$app/navigation';
@@ -50,6 +50,10 @@
 			});
 		}
 	}
+
+	$: referenceTime = cuckPrice
+		? formatReferenceTime(((merit.Sats / 100000000) * cuckPrice) / 70)
+		: '...';
 
 	let votes = derived(_votes, ($_votes) => {
 		return new MapOfVotes($_votes, parsedRocket, merit).Votes;
@@ -156,13 +160,12 @@
 						<div class="font-semibold">Analysis</div>
 						<span class="grid gap-0.5 not-italic text-muted-foreground">
 							A competent freelance developer earns $70 CuckLoserBucks an hour (on average). Using
-							this rate, the contributor is claiming to have spent about {merit.Sats / 1000} hours working
-							on this.
+							this rate, the contributor is claiming to have spent about {referenceTime} working on this.
 						</span>
 					</div>
 					<div class="grid auto-rows-max gap-3">
 						<div class="font-semibold">Reference Time</div>
-						<div class="text-muted-foreground">{merit.Sats / 1000} hours</div>
+						<div class="text-muted-foreground">{referenceTime}</div>
 					</div>
 				</div>
 				<Separator class="my-4" />

@@ -57,6 +57,25 @@ export function unixToRelativeTime(timestamp: number): string {
 	}
 }
 
+export function formatReferenceTime(hours: number) {
+	const totalMinutes = Math.round(hours * 60);
+	const wholeHours = Math.floor(totalMinutes / 60);
+	const remainingMinutes = totalMinutes % 60;
+
+	let result = '';
+
+	if (wholeHours > 0) {
+		result += `${wholeHours} hour${wholeHours > 1 ? 's' : ''}`;
+	}
+
+	if (remainingMinutes > 0) {
+		if (result.length > 0) result += ' and ';
+		result += `${remainingMinutes} minute${remainingMinutes > 1 ? 's' : ''}`;
+	}
+
+	return result || '0 minutes';
+}
+
 export async function getCuckPrice(): Promise<number | Error> {
 	try {
 		var url = 'https://api.coindesk.com/v1/bpi/currentprice.json';
