@@ -33,8 +33,8 @@ export class MeritRequest {
 		return _solution;
 	}
 	IncludedInRocketState(rocket: Rocket): boolean {
-		let included = rocket.ApprovedMeritRequests()
-		return Boolean(included.get(this.ID))
+		let included = rocket.ApprovedMeritRequests();
+		return Boolean(included.get(this.ID));
 	}
 	BasicValidation(): boolean {
 		//todo: make a ValidateAgainstRocket and check that pubkey is in WoT
@@ -67,9 +67,9 @@ export class MeritRequest {
 	}
 	constructor(request: NDKEvent | string) {
 		if (typeof request == 'string') {
-			console.log(69)
+			console.log(69);
 		} else {
-			console.log(71)
+			console.log(71);
 			this.LeadTime = 0;
 			this.LastLTUpdate = 0;
 			this.Event = request;
@@ -300,4 +300,42 @@ export class MapOfVotes {
 			this.Votes.set(v.ID, v);
 		}
 	}
+}
+
+export class MapOfMeritResult {
+	meritResult: Map</* merit id */ string, VoteDirection | undefined>;
+	constructor(votes: NDKEvent[], rocket: Rocket) {
+		const meritVotes = new Map<string, Votes>();
+		for (let v of votes) {
+			let vote = new Vote(v);
+			if (vote.BasicValidation() && vote.ValidateAgainstRocket(rocket)) {
+				const mVotes = meritVotes.get(vote.Request);
+				if (mVotes) {
+					meritVotes.set(vote.Request, pubkeyLatestVote(new Votes([...mVotes.Votes, vote])));
+				} else {
+					meritVotes.set(vote.Request, new Votes([vote]));
+				}
+			}
+		}
+		this.meritResult = new Map<string, VoteDirection | undefined>();
+		for (let [merit, votes] of meritVotes) {
+			const result = votes.Results().Result(rocket);
+			this.meritResult.set(merit, result);
+		}
+	}
+}
+
+/**
+ * only show the latest vote from each pubkey
+ */
+function pubkeyLatestVote(votes: Votes) {
+	let pMap = new Map<string, Vote>();
+	for (let v of votes.Votes) {
+		let existing = pMap.get(v.Pubkey);
+		if (!existing || (existing && existing.TimeStamp < v.TimeStamp)) {
+			//todo: check if this merit request has already been included in the rocket. If not, and if we have enough votes to approve it, update the rocket.
+			pMap.set(v.Pubkey, v);
+		}
+	}
+	return new Votes([...pMap.values()]);
 }

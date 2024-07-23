@@ -3,7 +3,8 @@
 	import { base } from '$app/paths';
 	import * as Card from '@/components/ui/card';
 	import * as Table from '@/components/ui/table';
-	import { MeritRequest } from '@/event_helpers/merits';
+	import { MapOfMeritResult, MeritRequest } from '@/event_helpers/merits';
+	import { Rocket, RocketATagFilter } from '@/event_helpers/rockets';
 	import { unixToRelativeTime } from '@/helpers';
 	import { ndk } from '@/ndk';
 	import { NDKEvent, NDKKind } from '@nostr-dev-kit/ndk';
@@ -12,6 +13,7 @@
 	import { derived } from 'svelte/store';
 
 	export let rocket: NDKEvent;
+	let parsedRocket = new Rocket(rocket);
 
 	let _merits = $ndk.storeSubscribe(
 		[{ '#a': [`31108:${rocket.author.pubkey}:${rocket.dTag}`], kinds: [1409 as NDKKind] }],
@@ -20,14 +22,19 @@
 		}
 	);
 
+	let _votes = $ndk.storeSubscribe({ '#a': [RocketATagFilter(rocket)], kinds: [1410 as NDKKind] });
+
 	onDestroy(() => {
 		_merits?.unsubscribe();
+		_votes?.unsubscribe();
 	});
 
 	let merits = derived(_merits, ($merits) => {
 		let map = new Map<string, MeritRequest>();
 		for (let z of $merits) {
+			console.log('z', z);
 			let meritRequest = new MeritRequest(z);
+			console.log('meritRequest', meritRequest);
 			if (meritRequest.BasicValidation()) {
 				if (meritRequest.Event.sig) {
 					//broadcast the events to our relays
@@ -39,6 +46,32 @@
 		}
 		return map;
 	});
+
+	let votes = derived(_votes, ($_votes) => {
+		return new MapOfMeritResult($_votes, parsedRocket).meritResult;
+	});
+
+	type MeritUIStatus = 'approved' | 'rejected' | 'pending';
+
+	const status = (merit: MeritRequest): MeritUIStatus => {
+		if (merit.IncludedInRocketState(parsedRocket)) {
+			return 'approved';
+		}
+		if ($votes.get(merit.ID) === 'blackball') {
+			return 'rejected';
+		}
+		return 'pending';
+	};
+
+	const background = (merit: MeritRequest) => {
+		if (status(merit) === 'approved') {
+			return 'bg-lime-600';
+		} else if (status(merit) === 'rejected') {
+			return 'bg-red-600';
+		} else {
+			return 'bg-accent';
+		}
+	};
 
 	//todo: update rocket event with confirmed zaps if we have votepower
 </script>
@@ -65,7 +98,7 @@
 						on:click={() => {
 							goto(`${base}/rockets/merits/${merit.ID}`);
 						}}
-						class="cursor-pointer bg-accent"
+						class={`cursor-pointer ${background(merit)}`}
 					>
 						<Table.Cell>
 							<div class="flex flex-nowrap">
@@ -87,6 +120,7 @@
 						<Table.Cell class="hidden text-right md:table-cell"
 							>{unixToRelativeTime(merit.TimeStamp * 1000)}</Table.Cell
 						>
+						<Table.Cell class="table-cell">{status(merit).toUpperCase()}</Table.Cell>
 					</Table.Row>
 				{/each}
 			</Table.Body>
