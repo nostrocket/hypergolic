@@ -80,7 +80,9 @@
 </script>
 
 <Dialog.Root>
-	<Dialog.Trigger class={buttonVariants({ variant: 'default' })}>Create a Rocket</Dialog.Trigger>
+	<Dialog.Trigger class={`${buttonVariants({ variant: 'default' })} w-full`}
+		>Create a Rocket</Dialog.Trigger
+	>
 	<Dialog.Content class="sm:max-w-[425px]">
 		<Dialog.Header>
 			<Dialog.Title>Name Your Rocket</Dialog.Title>
