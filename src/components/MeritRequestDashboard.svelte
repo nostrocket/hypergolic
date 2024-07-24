@@ -2,7 +2,7 @@
 	import { base } from '$app/paths';
 	import * as Breadcrumb from '$lib/components/ui/breadcrumb/index.js';
 	import type { MeritRequest } from '@/event_helpers/merits';
-	import { getRocketURL } from '@/helpers';
+	import { getRocketURL, parseProblem } from '@/helpers';
 	import type { NDKEvent } from '@nostr-dev-kit/ndk';
 	import MeritSummaryCard from './MeritSummaryCard.svelte';
 
@@ -27,11 +27,13 @@
 				</Breadcrumb.Item>
 				<Breadcrumb.Separator />
 				<Breadcrumb.Item>
-					<Breadcrumb.Page
-						>{merit
-							.Problem()
-							.substring(0, 16)}{#if merit.Problem().length > 16}...{/if}</Breadcrumb.Page
-					>
+					<Breadcrumb.Page>
+						{#await parseProblem(merit.Problem())}
+							{merit.Problem().substring(0, 16)}{#if merit.Problem().length > 16}...{/if}
+						{:then parsed}
+							{parsed.substring(0, 16)}{#if parsed.length > 16}...{/if}
+						{/await}
+					</Breadcrumb.Page>
 				</Breadcrumb.Item>
 			</Breadcrumb.List>
 		</Breadcrumb.Root>

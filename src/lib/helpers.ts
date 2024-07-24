@@ -88,3 +88,56 @@ export async function getCuckPrice(): Promise<number | Error> {
 		return e as Error;
 	}
 }
+
+export async function parseProblem(problem: string) {
+	try {
+		if (isGitHubIssueUrl(problem)) {
+			const apiURL = convertToGitHubApiUrl(problem);
+			if (!apiURL) {
+				return problem;
+			}
+			const response = await fetch(apiURL);
+			const json = await response.json();
+			return json.title;
+		} else {
+			return problem;
+		}
+	} catch (error) {
+		console.error('Get title error:', error);
+		return problem;
+	}
+}
+
+function isGitHubIssueUrl(url: string): boolean {
+	try {
+		const parsedUrl: URL = new URL(url);
+		if (parsedUrl.hostname !== 'github.com') {
+			return false;
+		}
+		const pathParts: string[] = parsedUrl.pathname.split('/').filter((part) => part !== '');
+		if (pathParts.length !== 4 || pathParts[2] !== 'issues' || !/^[1-9]\d*$/.test(pathParts[3])) {
+			return false;
+		}
+		return true;
+	} catch (error) {
+		return false;
+	}
+}
+
+function convertToGitHubApiUrl(issueUrl: URL | string): URL | null {
+	try {
+		const url = new URL(issueUrl);
+		if (url.hostname !== 'github.com') {
+			throw new Error('Not a valid GitHub URL');
+		}
+		const pathParts = url.pathname.split('/').filter((part) => part !== '');
+		if (pathParts.length !== 4 || pathParts[2] !== 'issues') {
+			throw new Error('Not a valid GitHub issue URL');
+		}
+		const [owner, repo, , issueNumber] = pathParts;
+		return new URL(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`);
+	} catch (error) {
+		console.error('URL conversion error:', error);
+		return null;
+	}
+}
