@@ -5,7 +5,7 @@
 	import * as Table from '@/components/ui/table';
 	import { MapOfMeritResult, MeritRequest } from '@/event_helpers/merits';
 	import { Rocket, RocketATagFilter } from '@/event_helpers/rockets';
-	import { unixToRelativeTime } from '@/helpers';
+	import { parseProblem, unixToRelativeTime } from '@/helpers';
 	import { ndk } from '@/ndk';
 	import { NDKEvent, NDKKind } from '@nostr-dev-kit/ndk';
 	import { Avatar, Name } from '@nostr-dev-kit/ndk-svelte-components';
@@ -114,7 +114,13 @@
 								/>
 							</div>
 						</Table.Cell>
-						<Table.Cell class="hidden text-left md:table-cell">{merit.Problem()}</Table.Cell>
+						<Table.Cell class="hidden text-left md:table-cell">
+							{#await parseProblem(merit.Problem())}
+								{merit.Problem()}
+							{:then parsed}
+								{parsed}
+							{/await}
+						</Table.Cell>
 						<Table.Cell class="table-cell">{merit.Sats}</Table.Cell>
 						<Table.Cell class="table-cell">{merit.Merits}</Table.Cell>
 						<Table.Cell class="hidden text-right md:table-cell"
