@@ -10,6 +10,7 @@
 	import ProductFomo from './ProductFomo.svelte';
 	import ProposedProducts from './ProposedProducts.svelte';
 	import Todo from './Todo.svelte';
+	import UpdateMission from './UpdateMission.svelte';
 
 	export let rocket: NDKEvent;
 </script>
@@ -42,9 +43,14 @@
 			<Card.Header class="pb-3">
 				<Card.Title>Actions</Card.Title>
 				<Card.Description class="flex space-x-4">
+					<UpdateMission rocketEvent={rocket} />
 					<CreateNewProduct rocketEvent={rocket} />
 					<CreateMeritRequest rocketEvent={rocket} />
-					<Button on:click={()=>{console.log(rocket.rawEvent())}}>Print to Console</Button>
+					<Button
+						on:click={() => {
+							console.log(rocket.rawEvent());
+						}}>Print to Console</Button
+					>
 				</Card.Description>
 			</Card.Header>
 			<Card.Footer></Card.Footer>
