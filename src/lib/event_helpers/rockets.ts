@@ -122,6 +122,15 @@ export class Rocket {
 		updateIgnitionAndParentTag(event);
 		return event;
 	}
+	UpdateMission(mission: string): NDKEvent {
+		this.PrepareForUpdate();
+		let event = new NDKEvent(this.Event.ndk, this.Event.rawEvent());
+		event.created_at = Math.floor(new Date().getTime() / 1000);
+		event.removeTag('mission');
+		event.tags.push(['mission', mission]);
+		updateIgnitionAndParentTag(event);
+		return event;
+	}
 	CurrentProducts(): Map<string, RocketProduct> {
 		return getMapOfProductsFromRocket(this.Event);
 	}
@@ -169,7 +178,7 @@ export class Rocket {
 	PrepareForUpdate() {
 		this.RemoveDuplicateTags();
 		this.RemoveProofs();
-		this.Event.sig = undefined
+		this.Event.sig = undefined;
 	}
 	constructor(event: NDKEvent) {
 		this.Event = event;
@@ -213,11 +222,11 @@ export class RocketAMR {
 	LeadTime: number;
 	LeadTimeUpdate: number;
 	Merits: number;
-	SatsOwed():number {
-		return 0
+	SatsOwed(): number {
+		return 0;
 	}
-	SatsPaid():number {
-		return 0
+	SatsPaid(): number {
+		return 0;
 	}
 	Valid(): boolean {
 		let valid = true;
