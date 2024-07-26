@@ -27,7 +27,7 @@
 		<Card.Description></Card.Description>
 	</Card.Header>
 	<Card.Content class="grid grid-cols-1 gap-2">
-		{#each $products as product}
+		{#each $products as product (product.ID)}
 			<div>
 				<ProductCardFromId {rocket} productID={product.ID}>
 					<ProductPurchases {rocket} {product} />

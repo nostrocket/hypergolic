@@ -11,7 +11,7 @@
 </script>
 
 {#if rocketEvent && rocketProducts.size > 0}
-	{#each rocketProducts as [id, product]}
+	{#each rocketProducts as [id, product] (id)}
 		<ProductCardFromID rocket={rocketEvent} productID={product.ID} />
 		<ProductPurchases rocket={rocketEvent} {product} />{/each}
 {/if}
