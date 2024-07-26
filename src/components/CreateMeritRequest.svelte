@@ -13,6 +13,7 @@
 	import { Terminal } from 'lucide-svelte';
 	import Todo from './Todo.svelte';
 	import { isValidUrl } from '@/event_helpers/rockets';
+	import CalculateSats from './CalculateSats.svelte';
 
 	export let rocketEvent: NDKEvent;
 
@@ -127,6 +128,7 @@
 				/>
 				{#if parseInt(sats, 10) > 0}<Label class="text-left">({merits.toString()} Merits)</Label>
 				{/if}
+				<CalculateSats on:result={(event) => (sats = event.detail)} />
 			</div>
 
 			<div class="flex items-center space-x-2">
