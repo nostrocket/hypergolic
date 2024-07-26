@@ -29,4 +29,4 @@
 	});
 </script>
 
-{#each $unratified as r}<ProductCard {rocket} product={r} />{/each}
+{#each $unratified as r (r.id)}<ProductCard {rocket} product={r} />{/each}

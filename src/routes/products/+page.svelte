@@ -44,10 +44,10 @@
 </script>
 
 {#if productsToRender && $productsToRender}
-	{#each $productsToRender as [r, p]}
+	{#each $productsToRender as [r, p] (r.id)}
 		<Heading title={r.dTag} />
 		<div class="grid gap-2" style="grid-template-columns: repeat(auto-fit, 350px);">
-			{#each p as product}
+			{#each p as product (product.id)}
 				<ProductCard {product} rocket={r} />
 			{/each}
 		</div>
