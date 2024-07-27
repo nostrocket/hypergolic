@@ -14,6 +14,7 @@
 	import Todo from './Todo.svelte';
 	import { isValidUrl } from '@/event_helpers/rockets';
 	import CalculateSats from './CalculateSats.svelte';
+	import { isGitHubUrl, parseProblem } from '@/helpers';
 
 	export let rocketEvent: NDKEvent;
 
@@ -46,6 +47,14 @@
 			_minimum_from_sats = true;
 			minimum = sats;
 		}
+	}
+
+	$: if (isGitHubUrl(problem)) {
+		parseProblem(problem).then((title) => {
+			if (title) {
+				problem = `${title}\n\n${problem}`;
+			}
+		});
 	}
 
 	function validateSolution(solution: string) {

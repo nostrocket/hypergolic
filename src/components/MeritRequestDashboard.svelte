@@ -28,11 +28,7 @@
 				<Breadcrumb.Separator />
 				<Breadcrumb.Item>
 					<Breadcrumb.Page>
-						{#await parseProblem(merit.Problem())}
-							{merit.Problem().substring(0, 16)}{#if merit.Problem().length > 16}...{/if}
-						{:then parsed}
-							{parsed.substring(0, 16)}{#if parsed.length > 16}...{/if}
-						{/await}
+						{merit.Problem().substring(0, 16)}{#if merit.Problem().length > 16}...{/if}
 					</Breadcrumb.Page>
 				</Breadcrumb.Item>
 			</Breadcrumb.List>
