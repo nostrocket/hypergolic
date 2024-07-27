@@ -11,13 +11,7 @@
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import * as Table from '@/components/ui/table';
 	import { Rocket, RocketATagFilter } from '@/event_helpers/rockets';
-	import {
-		formatReferenceTime,
-		getCuckPrice,
-		getRocketURL,
-		parseProblem,
-		unixToRelativeTime
-	} from '@/helpers';
+	import { formatReferenceTime, getCuckPrice, getRocketURL, unixToRelativeTime } from '@/helpers';
 	import { derived } from 'svelte/store';
 
 	import { goto } from '$app/navigation';
@@ -123,11 +117,7 @@
 	<Card.Header class="pb-3">
 		<div class="flex flex-nowrap justify-between">
 			<Card.Title>
-				{#await parseProblem(merit.Problem())}
-					Problem: {merit.Problem().substring(0, 20)}
-				{:then parsed}
-					{parsed}
-				{/await}
+				{merit.Problem().split('\n')[0]}
 			</Card.Title>{#if merit.Solution()}<a
 					class="flex flex-nowrap text-orange-500 underline decoration-orange-500"
 					href={merit.Solution()}>View Solution <ExternalLink size={18} class="m-1" /></a
