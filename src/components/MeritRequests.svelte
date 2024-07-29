@@ -32,9 +32,7 @@
 	let merits = derived(_merits, ($merits) => {
 		let map = new Map<string, MeritRequest>();
 		for (let z of $merits) {
-			console.log('z', z);
 			let meritRequest = new MeritRequest(z);
-			console.log('meritRequest', meritRequest);
 			if (meritRequest.BasicValidation()) {
 				if (meritRequest.Event.sig) {
 					//broadcast the events to our relays

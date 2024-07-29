@@ -69,7 +69,6 @@ export class MeritRequest {
 		if (typeof request == 'string') {
 			console.log(69);
 		} else {
-			console.log(71);
 			this.LeadTime = 0;
 			this.LastLTUpdate = 0;
 			this.Event = request;

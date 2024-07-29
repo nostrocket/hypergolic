@@ -1,10 +1,18 @@
 import { NDKEvent, type NDKTag } from '@nostr-dev-kit/ndk';
-import { MapOfVotes, MeritRequest, Vote, Votes } from './merits';
+import { MapOfVotes, MeritRequest, Votes } from './merits';
 
 export class Rocket {
 	Event: NDKEvent;
 	Name(): string {
 		return this.Event.dTag!;
+	}
+	Products(): RocketProduct[] {
+		let _products: RocketProduct[] = [];
+		for (let p of this.Event.getMatchingTags('product')) {
+			_products.push(new RocketProduct(p));
+		}
+		console.log(_products)
+		return _products
 	}
 	VotePowerForPubkey(pubkey: string): number {
 		let votepower = 0;
