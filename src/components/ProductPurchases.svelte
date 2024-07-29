@@ -1,12 +1,12 @@
 <script lang="ts">
 	import * as Table from '@/components/ui/table';
-	import { ZapPurchase, type RocketProduct } from '@/event_helpers/rockets';
+	import { ValidateZapPublisher, ZapPurchase, type RocketProduct } from '@/event_helpers/rockets';
 	import { unixToRelativeTime } from '@/helpers';
 	import { ndk } from '@/ndk';
 	import { NDKEvent } from '@nostr-dev-kit/ndk';
 	import { Avatar, Name } from '@nostr-dev-kit/ndk-svelte-components';
 	import { onDestroy, onMount } from 'svelte';
-	import { derived } from 'svelte/store';
+	import { derived, writable } from 'svelte/store';
 
 	export let product: RocketProduct;
 	export let rocket: NDKEvent;
@@ -32,7 +32,7 @@
 		});
 	});
 
-	let purchases = derived(zaps, ($zaps) => {
+	let validZaps = derived(zaps, ($zaps) => {
 		let zapMap = new Map<string, ZapPurchase>();
 		for (let z of $zaps) {
 			let zapPurchase = new ZapPurchase(z);
@@ -43,10 +43,46 @@
 		return zapMap;
 	});
 
+	let zapsNotInRocket = derived(validZaps, ($validZaps) => {
+		let zapMap = new Map<string, ZapPurchase>();
+		for (let [id, z] of $validZaps) {
+			if (!z.IncludedInRocketState(rocket)) {
+				zapMap.set(id, z);
+			}
+		}
+		return zapMap;
+	});
+
+	let validPubkeys = writable(new Set<string>())
+
+	zapsNotInRocket.subscribe((z) => {
+		z.forEach((z) => {
+			ValidateZapPublisher(rocket, z.ZapReceipt).then((result) => {
+				if (result) {
+					validPubkeys.update(existing=>{
+						existing.add(z.ZapReceipt.pubkey);
+						return existing
+					})
+				}
+			});
+		});
+	});
+
+	let validatedZapsNotInRocket = derived([zapsNotInRocket, validPubkeys], ([$zapsNotInRocket, $validPubkeys]) => {
+		let zapMap = new Map<string, ZapPurchase>();
+		for (let [id, zap] of $zapsNotInRocket) {
+			if ($validPubkeys.has(zap.ZapReceipt.pubkey)) {
+				zapMap.set(id, zap);
+			}
+		}
+		return zapMap;
+	});
+
+	//todo: get existing purchases from rocket and render them
+
 	//todo: update rocket event with confirmed zaps if we have votepower
 </script>
 
-{#if $purchases.size > 0}
 	<Table.Root>
 		<Table.Caption
 			class="mt-0 caption-top text-center text-lg font-semibold tracking-tight text-card-foreground"
@@ -60,7 +96,7 @@
 			</Table.Row>
 		</Table.Header>
 		<Table.Body>
-			{#each $purchases as [id, purchase], _ (id)}
+			{#each $validatedZapsNotInRocket as [id, purchase], _ (id)}
 				<Table.Row
 					on:click={() => {
 						console.log(purchase.ZapReceipt.rawEvent());
@@ -89,4 +125,3 @@
 			{/each}
 		</Table.Body>
 	</Table.Root>
-{/if}

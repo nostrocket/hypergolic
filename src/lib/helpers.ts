@@ -1,4 +1,4 @@
-import type { NDKEvent } from '@nostr-dev-kit/ndk';
+import { NDKZap, type NDKEvent } from '@nostr-dev-kit/ndk';
 
 export function getRocketURL(e: NDKEvent): string {
 	let ignitionID = undefined;
@@ -142,4 +142,22 @@ function convertToGitHubApiUrl(issueUrl: string): URL | null {
 		console.error('URL conversion error:', error);
 		return null;
 	}
+}
+
+export async function getAuthorizedZapper(rocket: NDKEvent): Promise<string> {
+	return new Promise((resolve, reject) => {
+		let z = new NDKZap({ ndk: rocket.ndk!, zappedEvent: rocket, zappedUser: rocket.author });
+		z.getZapEndpoint()
+			.then((url) => {
+				if (url) {
+					url = url.trim().replace('/callback', '');
+					fetch(url).then((result) => {
+						result.json().then((j) => {
+							resolve(j.nostrPubkey);
+						}).catch(reject);
+					});
+				} else {(reject())}
+			})
+			.catch(reject);
+	});
 }
