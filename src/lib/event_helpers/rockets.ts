@@ -11,7 +11,6 @@ export class Rocket {
 		for (let p of this.Event.getMatchingTags('product')) {
 			_products.push(new RocketProduct(p));
 		}
-		console.log(_products)
 		return _products
 	}
 	VotePowerForPubkey(pubkey: string): number {
