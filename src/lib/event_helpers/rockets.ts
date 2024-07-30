@@ -1,4 +1,4 @@
-import { NDKEvent, NDKZap, type NDKTag } from '@nostr-dev-kit/ndk';
+import { NDKEvent, type NDKTag } from '@nostr-dev-kit/ndk';
 import { MapOfVotes, MeritRequest, Votes } from './merits';
 import { getAuthorizedZapper } from '@/helpers';
 
@@ -12,7 +12,7 @@ export class Rocket {
 		for (let p of this.Event.getMatchingTags('product')) {
 			_products.push(new RocketProduct(p));
 		}
-		return _products
+		return _products;
 	}
 	VotePowerForPubkey(pubkey: string): number {
 		let votepower = 0;
@@ -338,7 +338,6 @@ export class ZapPurchase {
 		return false;
 	}
 	Valid(rocket: NDKEvent): boolean {
-
 		//todo: validate zapper pubkey is from a LSP specified in rocket
 		let valid = true;
 		if (!this.ValidAmount(rocket)) {
@@ -411,19 +410,21 @@ export function RocketATagFilter(rocket: NDKEvent): string {
 	return `31108:${rocket.pubkey}:${rocket.dTag}`;
 }
 
-export async function ValidateZapPublisher(rocket:NDKEvent, zap:NDKEvent):Promise<boolean> {
-	return new Promise((resolve, reject)=>{
-		getAuthorizedZapper(rocket).then(pubkey=>{
-			if (pubkey == zap.pubkey) {
-				resolve(true)
-			} else {
-				reject()
-			}
-		}).catch(reject)
+export async function ValidateZapPublisher(rocket: NDKEvent, zap: NDKEvent): Promise<boolean> {
+	return new Promise((resolve, reject) => {
+		getAuthorizedZapper(rocket)
+			.then((pubkey) => {
+				if (pubkey == zap.pubkey) {
+					resolve(true);
+				} else {
+					reject();
+				}
+			})
+			.catch(reject);
 		// let z = new NDKZap({ ndk: rocket.ndk!, zappedEvent: rocket, zappedUser: rocket.author });
 		// z.getZapEndpoint().then(x=>{
 		// 	console.log(x)
 		// 	resolve(true)
 		// }).catch(()=>{reject(false)})
-	})
+	});
 }

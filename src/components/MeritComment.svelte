@@ -1,8 +1,8 @@
 <script lang="ts">
 	import * as Card from '$lib/components/ui/card/index.js';
-	import { type MeritRequest } from '@/event_helpers/merits';
+	import { prepareMeritNoteEvent, type MeritRequest } from '@/event_helpers/merits';
 	import { ndk } from '@/ndk';
-	import { NDKEvent, type NDKKind } from '@nostr-dev-kit/ndk';
+	import { NDKKind } from '@nostr-dev-kit/ndk';
 	import { Avatar, Name } from '@nostr-dev-kit/ndk-svelte-components';
 	import { onDestroy } from 'svelte';
 
@@ -14,6 +14,7 @@
 	import { currentUser } from '@/stores/session';
 	import CornerDownLeft from 'lucide-svelte/icons/corner-down-left';
 	import type NDKSvelte from '@nostr-dev-kit/ndk-svelte';
+
 	export let merit: MeritRequest;
 
 	let comments = $ndk.storeSubscribe({ kinds: [1 as NDKKind], '#e': [merit.ID] });
@@ -28,18 +29,16 @@
 		if (!ndk.signer) {
 			throw new Error('no ndk signer found');
 		}
-		let e = new NDKEvent(ndk);
 		let author = $currentUser;
 		if (!author) {
 			throw new Error('no current user');
 		}
-		e.author = author;
-		e.kind = 1;
-		e.created_at = Math.floor(new Date().getTime() / 1000);
-		e.content = content;
-		e.tags.push(['p', merit.Pubkey]);
-		e.tags.push(['e', merit.ID, 'root', merit.Pubkey]);
-		console.log(e.rawEvent());
+		const e = prepareMeritNoteEvent({
+			ndk,
+			author,
+			merit,
+			content
+		});
 		e.publish().then((x) => {
 			console.log(x);
 		});

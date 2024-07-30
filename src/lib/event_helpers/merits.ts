@@ -1,5 +1,7 @@
-import type { NDKEvent, NDKFilter, NDKTag } from '@nostr-dev-kit/ndk';
+import { NDKEvent, NDKKind, type NDKFilter, type NDKTag, type NDKUser } from '@nostr-dev-kit/ndk';
 import { Rocket, getNumberFromTag, isValidUrl } from './rockets';
+import type NDKSvelte from '@nostr-dev-kit/ndk-svelte';
+import { prepareNostrEvent } from '@/helpers';
 
 export class MeritRequest {
 	ID: string;
@@ -337,4 +339,43 @@ function pubkeyLatestVote(votes: Votes) {
 		}
 	}
 	return new Votes([...pMap.values()]);
+}
+
+export function prepareMeritNoteEvent(args: {
+	ndk: NDKSvelte;
+	author: NDKUser;
+	merit: MeritRequest;
+	content: string;
+}) {
+	const tags = [
+		['p', args.merit.Pubkey],
+		['e', args.merit.ID, 'root', args.merit.Pubkey]
+	];
+	return prepareNostrEvent({
+		...args,
+		kind: NDKKind.Text,
+		tags
+	});
+}
+
+export function prepareMeritVoteEvent(args: {
+	ndk: NDKSvelte;
+	author: NDKUser;
+	rocket: Rocket;
+	merit: MeritRequest;
+	direction: string;
+}) {
+	const tags = [
+		['a', `31108:${args.rocket.Event.pubkey}:${args.rocket.Event.dTag}`],
+		['request', args.merit.ID],
+		['e', args.merit.ID],
+		['p', args.merit.Pubkey],
+		['vote', args.direction]
+	];
+	return prepareNostrEvent({
+		...args,
+		kind: 1410 as NDKKind,
+		tags,
+		content: ''
+	});
 }

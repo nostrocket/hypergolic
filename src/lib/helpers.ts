@@ -1,4 +1,5 @@
-import { NDKZap, type NDKEvent } from '@nostr-dev-kit/ndk';
+import { NDKZap, NDKEvent, type NDKKind, type NDKTag, type NDKUser } from '@nostr-dev-kit/ndk';
+import type NDKSvelte from '@nostr-dev-kit/ndk-svelte';
 
 export function getRocketURL(e: NDKEvent): string {
 	let ignitionID = undefined;
@@ -152,12 +153,36 @@ export async function getAuthorizedZapper(rocket: NDKEvent): Promise<string> {
 				if (url) {
 					url = url.trim().replace('/callback', '');
 					fetch(url).then((result) => {
-						result.json().then((j) => {
-							resolve(j.nostrPubkey);
-						}).catch(reject);
+						result
+							.json()
+							.then((j) => {
+								resolve(j.nostrPubkey);
+							})
+							.catch(reject);
 					});
-				} else {(reject())}
+				} else {
+					reject();
+				}
 			})
 			.catch(reject);
 	});
+}
+
+export function prepareNostrEvent(args: {
+	ndk: NDKSvelte;
+	author: NDKUser;
+	kind: NDKKind;
+	content: string;
+	tags?: NDKTag[];
+}) {
+	let e = new NDKEvent(args.ndk);
+	e.author = args.author;
+	e.kind = args.kind;
+	e.created_at = Math.floor(new Date().getTime() / 1000);
+	e.content = args.content;
+	if (args.tags) {
+		e.tags = args.tags;
+	}
+	console.log(e.rawEvent());
+	return e;
 }

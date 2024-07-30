@@ -1,38 +1,55 @@
 <script lang="ts">
 	import { Button } from '@/components/ui/button';
-	import { MeritRequest } from '@/event_helpers/merits';
+	import {
+		MeritRequest,
+		prepareMeritNoteEvent,
+		prepareMeritVoteEvent,
+		type VoteDirection
+	} from '@/event_helpers/merits';
 	import type { Rocket } from '@/event_helpers/rockets';
 	import { ndk } from '@/ndk';
 	import { currentUser } from '@/stores/session';
-	import { NDKEvent } from '@nostr-dev-kit/ndk';
 	import type NDKSvelte from '@nostr-dev-kit/ndk-svelte';
-	import { Name } from '@nostr-dev-kit/ndk-svelte-components';
 	import Login from './Login.svelte';
 
 	export let merit: MeritRequest;
 	export let rocket: Rocket;
 
-	function publish(ndk: NDKSvelte, direction: string) {
+	function publish(ndk: NDKSvelte, direction: VoteDirection) {
 		if (!ndk.signer) {
 			throw new Error('no ndk signer found');
 		}
-		let e = new NDKEvent(ndk);
 		let author = $currentUser;
 		if (!author) {
 			throw new Error('no current user');
 		}
-		e.author = author;
-		e.kind = 1410;
-		e.created_at = Math.floor(new Date().getTime() / 1000);
-		e.tags.push(['a', `31108:${rocket.Event.pubkey}:${rocket.Event.dTag}`]);
-		e.tags.push(['request', merit.ID]);
-		e.tags.push(['e', merit.ID]);
-		e.tags.push(['p', merit.Pubkey]);
-		e.tags.push(['vote', direction]);
-		console.log(e.rawEvent());
-		e.publish().then((x) => {
-			console.log(x);
-		});
+		prepareMeritVoteEvent({
+			ndk,
+			author,
+			rocket,
+			merit,
+			direction
+		})
+			.publish()
+			.then((x) => {
+				console.log(x);
+			});
+		let content;
+		if (direction === 'ratify') {
+			content = `I ratify your merit request: \n\n${merit.Problem()}`;
+		} else {
+			content = `I reject your merit request: \n\n${merit.Problem()}`;
+		}
+		prepareMeritNoteEvent({
+			ndk,
+			author,
+			merit,
+			content
+		})
+			.publish()
+			.then((x) => {
+				console.log(x);
+			});
 	}
 
 	$: currentUserHasVotepower = false;
