@@ -63,9 +63,9 @@
 
 	const background = (merit: MeritRequest) => {
 		if (status(merit) === 'approved') {
-			return 'bg-lime-600';
+			return 'bg-lime-500 hover:bg-lime-400 dark:hover:bg-lime-600';
 		} else if (status(merit) === 'rejected') {
-			return 'bg-red-600';
+			return 'bg-red-500 hover:bg-red-400 dark:hover:bg-red-600';
 		} else {
 			return 'bg-accent';
 		}
