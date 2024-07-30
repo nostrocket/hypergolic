@@ -26,7 +26,7 @@
 	}
 </script>
 
-<ModeWatcher />
+<ModeWatcher defaultMode="dark" />
 <SidePanelLayout>
 	<div slot="content"><slot></slot></div>
 </SidePanelLayout>

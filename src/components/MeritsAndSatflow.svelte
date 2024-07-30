@@ -69,7 +69,7 @@
 						<Table.Row>
 							<Table.Head>Participant</Table.Head>
 							<Table.Head class="hidden md:table-cell">Merits</Table.Head>
-							<Table.Head class="text-right">Sats Received</Table.Head>
+							<Table.Head class="text-right">Revenue (Sats)</Table.Head>
 						</Table.Row>
 					</Table.Header>
 					<Table.Body>
