@@ -349,7 +349,8 @@ export function prepareMeritNoteEvent(args: {
 }) {
 	const tags = [
 		['p', args.merit.Pubkey],
-		['e', args.merit.ID, 'root', args.merit.Pubkey]
+		['e', args.merit.ID, "wss://relay.nostrocket.org", 'reply'],
+		args.merit.RocketTag?['a', args.merit.RocketTag]:[],
 	];
 	return prepareNostrEvent({
 		...args,

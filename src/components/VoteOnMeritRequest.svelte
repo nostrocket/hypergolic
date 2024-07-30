@@ -34,22 +34,19 @@
 			.then((x) => {
 				console.log(x);
 			});
-		let content;
 		if (direction === 'ratify') {
-			content = `I ratify your merit request: \n\n${merit.Problem()}`;
-		} else {
-			content = `I reject your merit request: \n\n${merit.Problem()}`;
+			let content = `I've voted to ratify your merit request! ${merit.Problem()} \n\n ${merit.Solution()?merit.Solution():""}`;
+			prepareMeritNoteEvent({
+				ndk,
+				author,
+				merit,
+				content
+			})
+				.publish()
+				.then((x) => {
+					console.log(x);
+				});
 		}
-		prepareMeritNoteEvent({
-			ndk,
-			author,
-			merit,
-			content
-		})
-			.publish()
-			.then((x) => {
-				console.log(x);
-			});
 	}
 
 	$: currentUserHasVotepower = false;
