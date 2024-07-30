@@ -13,6 +13,8 @@
 	import UpdateMission from './UpdateMission.svelte';
 
 	export let rocket: NDKEvent;
+
+	$: unratifiedZaps = 0
 </script>
 
 <div class="flex flex-col sm:gap-4">
@@ -32,9 +34,9 @@
 	<main
 		class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-2 lg:grid-cols-3 xl:grid-cols-3"
 	>
-		<MeritsAndSatflow {rocket} />
+		<MeritsAndSatflow {unratifiedZaps} {rocket} />
 
-		<ProductFomo {rocket} />
+		<ProductFomo bind:unratifiedZaps {rocket} />
 
 		<ProposedProducts {rocket} />
 
@@ -58,8 +60,7 @@
 
 		<Todo
 			text={[
-				'delete rocket (if current user is rocket creator)',
-				'modify relevant data and republish event according to https://github.com/nostrocket/NIPS/blob/main/31108.md and https://github.com/nostrocket/NIPS/blob/main/MSBR334000.md '
+				'delete rocket (if current user is rocket creator) - publish deletion request'
 			]}
 		/>
 	</main>

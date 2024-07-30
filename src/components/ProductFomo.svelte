@@ -6,6 +6,8 @@
 	import ProductPurchases from './ProductPurchases.svelte';
 
 	export let rocket: NDKEvent;
+	export let unratifiedZaps = 0;
+
 	let products = new Rocket(rocket).Products()
 
 </script>
@@ -19,7 +21,7 @@
 		{#each products as product (product.ID)}
 			<div>
 				<ProductCardFromId {rocket} productID={product.ID}>
-					<ProductPurchases {rocket} {product} />
+					<ProductPurchases bind:unratifiedZaps={unratifiedZaps} {rocket} {product} />
 				</ProductCardFromId>
 			</div>
 		{/each}

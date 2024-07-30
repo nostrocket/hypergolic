@@ -36,6 +36,14 @@ export class Rocket {
 		}
 		return amr;
 	}
+	TotalMerits(): number {
+		let total = 0
+		let amr = this.ApprovedMeritRequests()
+		for (let [_, _amr] of amr) {
+			total += _amr.Merits
+		}
+		return total
+	}
 	ValidateAMRProof(amrProof: NDKEvent): boolean {
 		let result = false;
 		if (this.VotePowerForPubkey(amrProof.pubkey) > 0 && amrProof.verifySignature(true)) {

@@ -11,6 +11,8 @@
 	export let product: RocketProduct;
 	export let rocket: NDKEvent;
 
+	export let unratifiedZaps:number = 0; //todo upstream bind this and parse outstanding zaps to merits and satflow component.
+
 	let zaps = $ndk.storeSubscribe(
 		[{ '#a': [`31108:${rocket.author.pubkey}:${rocket.dTag}`], kinds: [9735] }],
 		{
@@ -77,6 +79,14 @@
 		}
 		return zapMap;
 	});
+
+	validatedZapsNotInRocket.subscribe(zaps=>{
+		let total = 0
+		for (let [_, z] of zaps) {
+			total += z.Amount
+		}
+		unratifiedZaps = total/1000
+	})
 
 	//todo: get existing purchases from rocket and render them
 

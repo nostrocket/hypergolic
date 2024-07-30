@@ -9,6 +9,7 @@
 	import { ndk } from '@/ndk';
 
 	export let rocket: NDKEvent;
+	export let unratifiedZaps:number = 0;
 
 	let parsedRocket = new Rocket(rocket);
 	let _merits: { pubkey: string; merits: number; sats: number }[] = [];
@@ -27,6 +28,15 @@
 			m.set(amr.Pubkey, existing);
 		}
 
+		//calculate percentage ownership of each pubkey and divide the unratified sats among them (round up to nearest sat):
+		let satsPerMeritPercentage = unratifiedZaps/100
+		let totalMerits = parsedRocket.TotalMerits()
+		for (let [id, _m] of m) {
+			_m.sats += (((_m.merits/totalMerits)*100)*satsPerMeritPercentage)
+			_m.sats = Math.round(_m.sats)
+			m.set(id, _m)
+		}
+
 		let _merits: { pubkey: string; merits: number; sats: number }[] = [];
 		for (let [pubkey, _m] of m) {
 			_merits.push({ pubkey: pubkey, merits: _m.merits, sats: _m.sats });
@@ -34,6 +44,7 @@
 		if (_merits.length == 0) {
 			_merits.push({pubkey: rocket.pubkey, merits: 1, sats: 0})
 		}
+
 		merits.set(_merits);
 	}
 
