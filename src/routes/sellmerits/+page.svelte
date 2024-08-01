@@ -30,21 +30,21 @@
 			}
 			m.set(e.pubkey + e.dTag, e);
 		}
-		return Array.from(m, ([_, e]) => e);
+		return Array.from(m, ([_, e]) => new Rocket(e));
 	});
 
 	let myMeritRequests = derived([currentUser, rockets], ([$currentUser, $rockets]) => {
 		let merits = new Map<Rocket, RocketAMR[]>();
 		if ($currentUser) {
 			for (let r of $rockets) {
-				let parsedRocket = new Rocket(r);
+				//let parsedRocket = new Rocket(r);
 				let _merits: RocketAMR[] = [];
-				for (let [_, amr] of parsedRocket.ApprovedMeritRequests()) {
+				for (let [_, amr] of r.ApprovedMeritRequests()) {
 					if (amr.Pubkey == $currentUser.pubkey) {
 						_merits.push(amr);
 					}
 				}
-				merits.set(parsedRocket, _merits);
+				merits.set(r, _merits);
 			}
 		}
 		return merits;
@@ -53,71 +53,73 @@
 	let selected_amrs = new Map<string, AMRAuction>();
 	function toggleSelected(amr: RocketAMR, rocket: Rocket) {
 		if (!selected_amrs.has(rocket.Event.id)) {
-			selected_amrs.set(rocket.Event.id, new AMRAuction(rocket.Event))
+			selected_amrs.set(rocket.Event.id, new AMRAuction(rocket.Event));
 		}
-		let existing = selected_amrs.get(rocket.Event.id)!
+		let existing = selected_amrs.get(rocket.Event.id)!;
 		if (existing.AMRIDs.includes(amr.ID)) {
-			existing.Pop(amr)
+			existing.Pop(amr);
 		} else {
-			existing.Push(amr)
+			existing.Push(amr);
 		}
-		selected_amrs.set(rocket.Event.id, existing)
+		selected_amrs.set(rocket.Event.id, existing);
 		selected_amrs = selected_amrs;
 	}
 
-	function getSelectedStatus(rocket: string, id:string, data: Map<string, AMRAuction>):boolean {
-		let has = false
+	function getSelectedStatus(rocket: string, id: string, data: Map<string, AMRAuction>): boolean {
+		let has = false;
 		let amr = data.get(rocket);
 		if (amr) {
-			has = amr.AMRIDs.includes(id)
+			has = amr.AMRIDs.includes(id);
 		}
-		return has
+		return has;
 	}
 
-	function getMerits(rocket:string, data:Map<string, AMRAuction>):number {
-		let m = data.get(rocket)
-		console.log(m)
-		let merits = 0
+	function getMerits(rocket: string, data: Map<string, AMRAuction>): number {
+		let m = data.get(rocket);
+		console.log(m);
+		let merits = 0;
 		if (m && m.Merits) {
-			merits = m.Merits
+			merits = m.Merits;
 		}
-		return merits
+		return merits;
 	}
 
-
-
-    // function getTotal(auction:AMRAuction):number {
-    //     let total = 0
-    //     for (let [_, amr] of list) {
-    //         total += amr.Merits
-    //     }
-    //     return total
-    // }
+	// function getTotal(auction:AMRAuction):number {
+	//     let total = 0
+	//     for (let [_, amr] of list) {
+	//         total += amr.Merits
+	//     }
+	//     return total
+	// }
 
 	// function getAllForRocket(rocket:Rocket, selected:Map<string, AMRAuction>):Map<string, AMRAuction> {
-    //     let thisRocket = new Map<string, AMRAuction>()
-    //     for (let [_, amr] of selected) {
-    //         if (amr.RocketD == rocket.Name() && amr.RocketP == rocket.Event.author.pubkey) {
-    //             thisRocket.set(amr.AMRID, amr)
-    //         }
-    //     }
+	//     let thisRocket = new Map<string, AMRAuction>()
+	//     for (let [_, amr] of selected) {
+	//         if (amr.RocketD == rocket.Name() && amr.RocketP == rocket.Event.author.pubkey) {
+	//             thisRocket.set(amr.AMRID, amr)
+	//         }
+	//     }
 	// 	return thisRocket
-    // }
+	// }
 
-	function publish(amr:AMRAuction, rocket:Rocket) {
+	function publish(amr: AMRAuction, rocket: Rocket) {
 		if (!$ndk.signer) {
 			throw new Error('no ndk signer found');
 		}
-		
+
 		let author = $currentUser;
 		if (!author) {
 			throw new Error('no current user');
 		}
-		amr.RxAddress = bitcoinAddress
-		if (!amr.Validate()) {throw new Error("invalid")}
-		if (!amr.ValidateAgainstRocket(rocket)) {throw new Error("invalid against rocket")}
-		let e = amr.GenerateEvent()
-		e.ndk = $ndk
+		amr.RxAddress = bitcoinAddress;
+		if (!amr.Validate()) {
+			throw new Error('invalid');
+		}
+		if (!amr.ValidateAgainstRocket(rocket)) {
+			throw new Error('invalid against rocket');
+		}
+		let e = amr.GenerateEvent();
+		e.ndk = $ndk;
 		e.author = author;
 		e.publish().then((x) => {
 			console.log(x, e);
@@ -126,7 +128,7 @@
 		});
 	}
 
-	let bitcoinAddress:string = ""
+	let bitcoinAddress: string = '';
 </script>
 
 <h1 class=" m-2 text-nowrap text-center text-xl">Trade your Merits for Sats</h1>
@@ -141,46 +143,77 @@
 					<Table.Row>
 						<Table.Head class="w-[100px]">Selected</Table.Head>
 						<Table.Head class="w-[10px]">AMR</Table.Head>
-						<Table.Head class="w-[10px]">Elegible</Table.Head>
 						<Table.Head>Merits</Table.Head>
+						<Table.Head>Status</Table.Head>
+						<Table.Head>Receiving Address</Table.Head>
 						<Table.Head class="text-right">Sats (approx)</Table.Head>
 					</Table.Row>
 				</Table.Header>
 				<Table.Body>
-					{#each amr as a, id (a.ID)}
-						<Table.Row class={getSelectedStatus(rocket.Event.id, a.ID, selected_amrs) ? 'bg-orange-500 hover:bg-orange-500' : ''}>
-							<Table.Cell
-								><Checkbox
-									id={a.ID}
-									checked={getSelectedStatus(rocket.Event.id, a.ID, selected_amrs)}
-									on:click={() => {
-										toggleSelected(a, rocket);
-									}}
-								/></Table.Cell
-							>
-							<Table.Cell
-								><span
-									class="cursor-pointer font-medium underline"
-									on:click={() => {
-										goto(`${base}/rockets/merits/${a.ID}`);
-									}}>{a.ID.substring(0, 6)}</span
-								></Table.Cell
-							>
-							<Table.Cell>{a.LeadTime == 0}</Table.Cell>
-							<Table.Cell>{a.Merits}</Table.Cell>
-							<Table.Cell class="text-right">{a.Merits}</Table.Cell>
+					{#each rocket.PendingAMRAuctions() as p}
+						<Table.Row class="bg-purple-500">
+							<Table.Cell><Checkbox /></Table.Cell>
+							<Table.Cell>{p.AMRIDs.length > 1?"multiple":p.AMRIDs[0]}</Table.Cell>
+							<Table.Cell>{p.Merits}</Table.Cell>
+							<Table.Cell>Pending</Table.Cell>
+							<Table.Cell>{p.RxAddress}</Table.Cell>
+							<Table.Cell class="text-right">{p.Merits}</Table.Cell>
 						</Table.Row>
+					{/each}
+
+					{#each amr as a, id (a.ID)}
+						{#if rocket.CanThisAMRBeSold(a.ID)}
+							<Table.Row
+								class={getSelectedStatus(rocket.Event.id, a.ID, selected_amrs)
+									? 'bg-orange-500 hover:bg-orange-500'
+									: ''}
+							>
+								<Table.Cell
+									><Checkbox
+										id={a.ID}
+										checked={getSelectedStatus(rocket.Event.id, a.ID, selected_amrs)}
+										on:click={() => {
+											toggleSelected(a, rocket);
+										}}
+									/></Table.Cell
+								>
+								<Table.Cell
+									><span
+										class="cursor-pointer font-medium underline"
+										on:click={() => {
+											goto(`${base}/rockets/merits/${a.ID}`);
+										}}>{a.ID.substring(0, 6)}</span
+									></Table.Cell
+								>
+								<Table.Cell>{a.Merits}</Table.Cell>
+								<Table.Cell>Elegible</Table.Cell>
+								<Table.Cell></Table.Cell>
+								<Table.Cell class="text-right">{a.Merits}</Table.Cell>
+							</Table.Row>
+						{/if}
 					{/each}
 				</Table.Body>
 			</Table.Root>
 			{#if selected_amrs.get(rocket.Event.id)}
-            <div class="m-2 flex">You are selling {selected_amrs.get(rocket.Event.id)?.Merits} Merits</div>
 				<div class="m-2 flex">
-					<Input bind:value={bitcoinAddress} type="text" placeholder="Bitcoin Address for Payment" class="m-1 max-w-xs" />
-					<Button on:click={()=>{publish(selected_amrs.get(rocket.Event.id), rocket)}} class="m-1">Sell Now</Button>
+					You are selling {selected_amrs.get(rocket.Event.id)?.Merits} Merits
+				</div>
+				<div class="m-2 flex">
+					<Input
+						bind:value={bitcoinAddress}
+						type="text"
+						placeholder="Bitcoin Address for Payment"
+						class="m-1 max-w-xs"
+					/>
+					<Button
+						on:click={() => {
+							publish(selected_amrs.get(rocket.Event.id), rocket);
+						}}
+						class="m-1">Sell Now</Button
+					>
 				</div>
 			{/if}
 		{/if}
 	{/each}
 {:else}<Login />{/if}
-<MeritAuctions />
+<MeritAuctions {rockets} />

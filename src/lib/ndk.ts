@@ -19,8 +19,8 @@ const _ndk = new NDKSvelte({
 });
 
 //we need to check for browser environment before calling window because svelte is slightly retarded when used client side only
-if (browser && window.indexedDB) {
-	_ndk.cacheAdapter = new NDKCacheAdapterDexie({ dbName: 'gulag' });
-}
+// if (browser && window.indexedDB) {
+// 	_ndk.cacheAdapter = new NDKCacheAdapterDexie({ dbName: 'gulag' });
+// }
 
 export const ndk = writable(_ndk);

@@ -120,15 +120,81 @@ export class Rocket {
 		}
 		return event;
 	}
+	PendingAMRAuctions(): AMRAuction[] {
+		let auctions:AMRAuction[] = [];
+		for (let t of this.Event.getMatchingTags('amr_auction')) {
+			if (t.length == 2) {
+				let items = t[1].split(':');
+				if (items.length == 6) {
+					let a = new AMRAuction(this.Event);
+					a.RxAddress = items[0];
+					a.StartPrice = parseInt(items[2], 10);
+					a.EndPrice = parseInt(items[3], 10);
+					a.Merits = parseInt(items[4], 10);
+					let ids = items[5].match(/.{1,64}/g);
+					if (ids) {
+						for (let id of ids) {
+							a.AMRIDs.push(id)
+						}
+					}
+					auctions.push(a)
+				}
+			}
+		}
+		return auctions
+	}
+	CanThisAMRBeSold(amr:string):boolean {
+		let valid = true
+		let existing = this.ApprovedMeritRequests().get(amr)
+		if (!existing) {
+			valid = false
+		}
+		if (existing && existing.LeadTime > 0) {
+			valid = false
+		}
+		let pending = this.PendingAMRAuctions()
+		for (let p of pending) {
+			if (p.AMRIDs.includes(amr)) {
+				valid = false
+			}
+		}
+		return valid
+	}
 	UpsertAMRAuction(request: AMRAuction): NDKEvent | undefined {
+		//todo: validate that all items in the request exist and the total amount is correct, from same pubkey
 		let event: NDKEvent | undefined = undefined;
+		let invalid = false;
 		if (request.ValidateAgainstRocket(this)) {
 			this.PrepareForUpdate();
 			event = new NDKEvent(this.Event.ndk, this.Event.rawEvent());
 			event.created_at = Math.floor(new Date().getTime() / 1000);
-
+			let totalMerits = 0;
+			let requestIDs: string = '';
+			for (let id of request.AMRIDs) {
+				let amr = this.ApprovedMeritRequests().get(id);
+				if (!amr) {
+					invalid = true;
+				} else {
+					if (amr.LeadTime > 0 || amr.Pubkey != request.Owner) {
+						invalid = true;
+					} else {
+						totalMerits += amr.Merits;
+						requestIDs += id;
+					}
+				}
+			}
+			if (totalMerits != request.Merits) {
+				invalid = true;
+			}
+			event.tags.push([
+				'amr_auction',
+				`${request.RxAddress}:${0}:${request.StartPrice}:${request.EndPrice}:${request.Merits}:${requestIDs}`
+			]); //<merit request ID:start price:end price:start height:rx address>
 			event.tags.push(['proof_full', JSON.stringify(request.Event!.rawEvent())]);
 			updateIgnitionAndParentTag(event);
+		}
+		if (invalid) {
+			event = undefined;
 		}
 		return event;
 	}
@@ -453,7 +519,7 @@ export async function ValidateZapPublisher(rocket: NDKEvent, zap: NDKEvent): Pro
 
 export class AMRAuction {
 	AMRIDs: string[];
-	Owner: string|undefined;
+	Owner: string | undefined;
 	StartPrice: number;
 	EndPrice: number;
 	RxAddress: string;
@@ -461,25 +527,27 @@ export class AMRAuction {
 	RocketP: string;
 	Merits: number;
 	Event: NDKEvent;
+	Extra: { rocket: Rocket };
 	GenerateEvent(): NDKEvent {
 		let e = new NDKEvent();
 		e.kind = 1412;
 		e.created_at = Math.floor(new Date().getTime() / 1000);
 		for (let id of this.AMRIDs) {
-			e.tags.push(["request", id])
+			e.tags.push(['request', id]);
 		}
 		e.tags.push(['a', `31108:${this.RocketP}:${this.RocketD}`]);
 		//todo: allow user to set start and end auction price
-		
-		e.tags.push(['price', this.StartPrice + ":" + this.EndPrice]);
-		e.tags.push(["onchain", this.RxAddress])
-		return e
+
+		e.tags.push(['price', this.StartPrice + ':' + this.EndPrice]);
+		e.tags.push(['merits', this.Merits.toString()]);
+		e.tags.push(['onchain', this.RxAddress]);
+		return e;
 	}
 	Push(amr: RocketAMR) {
 		if (this.Owner && amr.Pubkey != this.Owner) {
-			throw new Error("invalid pubkey")
+			throw new Error('invalid pubkey');
 		}
-		this.Owner = amr.Pubkey
+		this.Owner = amr.Pubkey;
 		this.AMRIDs.push(amr.ID);
 		this.StartPrice += amr.Merits;
 		this.EndPrice += amr.Merits;
@@ -487,17 +555,17 @@ export class AMRAuction {
 	}
 	Pop(amr: RocketAMR) {
 		if (this.AMRIDs.includes(amr.ID) && amr.Pubkey == this.Owner) {
-			let n:string[] = []
+			let n: string[] = [];
 			for (let id of this.AMRIDs) {
 				if (id != amr.ID) {
-					n.push(id)
+					n.push(id);
 				}
 			}
 			this.AMRIDs = n;
 			//todo: allow user to set start/end price
-			this.StartPrice -= amr.Merits
-			this.EndPrice -= amr.Merits
-			this.Merits -= amr.Merits
+			this.StartPrice -= amr.Merits;
+			this.EndPrice -= amr.Merits;
+			this.Merits -= amr.Merits;
 		}
 	}
 	Validate(): boolean {
@@ -525,26 +593,30 @@ export class AMRAuction {
 			if (!rocketAMR || (rocketAMR && rocketAMR.Pubkey != this.Owner) || rocketAMR.LeadTime > 0) {
 				valid = false;
 			}
+			for (let a of rocket.PendingAMRAuctions()) {
+				if (a.AMRIDs.includes(id)) {
+					valid = false
+				}
+			}
 		}
-
 		//todo: check if this AMR is already listed for sale
 		return valid;
 	}
 	constructor(rocket?: NDKEvent, event?: NDKEvent, address?: string) {
 		this.AMRIDs = [];
-		this.Merits = 0
-		this.EndPrice = 0
-		this.StartPrice = 0
+		this.Merits = 0;
+		this.EndPrice = 0;
+		this.StartPrice = 0;
 		if (rocket && !event) {
-			this.RxAddress = address?address:""
+			this.RxAddress = address ? address : '';
 			this.RocketD = rocket.dTag!;
 			this.RocketP = rocket.author.pubkey;
 		}
 		if (event && !rocket) {
-			this.Event = event
-			for (let id of event.getMatchingTags("request")) {
+			this.Event = event;
+			for (let id of event.getMatchingTags('request')) {
 				if (id && id.length == 2 && id[1].length == 64) {
-					this.AMRIDs.push(id[1])
+					this.AMRIDs.push(id[1]);
 				}
 			}
 			this.Owner = event.author.pubkey;
@@ -556,6 +628,11 @@ export class AMRAuction {
 				let end = parseInt(_end, 10);
 				this.StartPrice = start;
 				this.EndPrice = end;
+			}
+			let merits = event.tagValue('merits');
+			if (merits) {
+				let int = parseInt(merits, 10);
+				this.Merits = int;
 			}
 			let address = event.tagValue('onchain');
 			if (address) {
