@@ -1,70 +1,31 @@
 <script lang="ts">
 	import { page } from '$app/stores';
-	import { ndk } from '@/ndk';
 	import { NDKEvent } from '@nostr-dev-kit/ndk';
-	import type { ExtendedBaseType, NDKEventStore } from '@nostr-dev-kit/ndk-svelte';
-	import { onDestroy } from 'svelte';
-	import { derived, type Readable } from 'svelte/store';
+	import type { ExtendedBaseType } from '@nostr-dev-kit/ndk-svelte';
+	import { type Readable } from 'svelte/store';
 	import Heading from '../../../components/Heading.svelte';
 	import RocketDashboard from '../../../components/RocketDashboard.svelte';
+	import Rocket from '../../../route_helpers/Rocket.svelte';
 	//flow if we only have a d-tag: fetch all 31108's with this d-tag, sort by WoT, put Nostrocket Name Service one at the top. Dedupe same rocket (same state, shadows) from multiple users, just show them all as everyone agreeing.
 	//second pass: fetch ignition event for each, rebuild current state and validate all proofs, compute votepower and display only the states with > 50%.
 
 	let rIgnitionOrActual = $page.params.ignition;
-	let rName = $page.url.searchParams.get('d');
-	let rPubkey = $page.url.searchParams.get('p');
+	let dTag = $page.url.searchParams.get('d');
+	let pubkey = $page.url.searchParams.get('p');
 
-	let rocketEvents: NDKEventStore<NDKEvent> | undefined;
 	let latestRocketEvent: Readable<ExtendedBaseType<NDKEvent> | undefined>;
 
-	let candidateProducts: Readable<ExtendedBaseType<NDKEvent>[]>;
-	onDestroy(() => {
-		rocketEvents?.unsubscribe();
-	});
 
 	//if we don't have a d/p tags we just render the event provided
 	//todo: to find the latest by name alone we should use a new route and redirect to this page once we've got the relevant data
-	if (!rName && !rPubkey && rIgnitionOrActual.length == 64) {
+	if (!dTag && !pubkey && rIgnitionOrActual.length == 64) {
 		//this is the actual event ID the user wants to view so fetch the single event and render
 		//warn user that this information is probably out of date and let them reroute to get the latest
 	}
 
-	if (rName && rPubkey) {
+	if (dTag && pubkey) {
 		//the user wants the latest valid state of this rocket
-		rocketEvents = $ndk.storeSubscribe(
-			[
-				{ '#d': [rName], authors: [rPubkey], kinds: [31108 as number] },
-				{ '#a': [`31108:${rPubkey}:${rName}`] }
-			],
-			{ subId: rName }
-		);
-	}
-
-	$: {
-		if (rocketEvents && !latestRocketEvent) {
-			latestRocketEvent = derived(rocketEvents, ($events) => {
-				let sorted = $events.filter((e) => {
-					return e.kind == 31108;
-				});
-				sorted = sorted.toSorted((a, b) => {
-					return a.created_at - b.created_at;
-				});
-				return sorted[0];
-			});
-
-			if ($latestRocketEvent && !candidateProducts) {
-				candidateProducts = derived(rocketEvents, ($events) => {
-					return $events.filter((e) => {
-						for (let p of $latestRocketEvent.getMatchingTags('product')) {
-							if (p[1].includes(e.id)) {
-								return false;
-							}
-						}
-						return e.kind == 1908;
-					});
-				});
-			}
-		}
+		
 	}
 
 	//todo: check that this zap is not already included in the payment JSON for the product
@@ -75,12 +36,15 @@
 
 	//todo: handle shadow events (fetch the shadowed event and render it instead)
 </script>
+{#if dTag && pubkey}
+<Rocket bind:latestRocketEvent {dTag} {pubkey} />
+{/if}
 
 {#if latestRocketEvent && $latestRocketEvent}
 	<RocketDashboard rocket={$latestRocketEvent} />
 {:else}
 	<Heading title="Fetching events for the requested rocket" />
 	IGNITION: {rIgnitionOrActual} <br />
-	NAME: {rName} <br />
-	PUBKEY: {rPubkey} <br />
+	NAME: {dTag} <br />
+	PUBKEY: {pubkey} <br />
 {/if}

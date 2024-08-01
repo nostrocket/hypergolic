@@ -44,6 +44,7 @@
 		"@nostr-dev-kit/ndk-svelte": "^2.2.15",
 		"@nostr-dev-kit/ndk-svelte-components": "^2.2.16",
 		"@sveltejs/adapter-static": "^3.0.1",
+		"bitcoin-address-validation": "^2.2.3",
 		"bits-ui": "^0.21.10",
 		"clsx": "^2.1.1",
 		"cmdk-sv": "^0.0.17",

@@ -5,6 +5,8 @@
 	import { Avatar } from '@nostr-dev-kit/ndk-svelte-components';
 	import { NDKNip07Signer } from '@nostr-dev-kit/ndk';
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 
 	onMount(() => {
 		if (localStorage.getItem('signed-in')) {
@@ -47,6 +49,9 @@
 		</DropdownMenu.Trigger>
 		<DropdownMenu.Content align="end">
 			<DropdownMenu.Label>My Account</DropdownMenu.Label>
+			<DropdownMenu.Separator />
+			<DropdownMenu.Item on:click={()=>{goto(`${base}/sellmerits`)}}>Sell Merits</DropdownMenu.Item>
+			<DropdownMenu.Item>Buy Merits</DropdownMenu.Item>
 			<DropdownMenu.Separator />
 			<DropdownMenu.Item>Settings</DropdownMenu.Item>
 			<DropdownMenu.Item>Support</DropdownMenu.Item>

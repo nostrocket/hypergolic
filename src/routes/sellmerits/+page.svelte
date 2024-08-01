@@ -1,0 +1,186 @@
+<script lang="ts">
+	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
+	import Button from '@/components/ui/button/button.svelte';
+	import { Checkbox } from '@/components/ui/checkbox';
+	import { Input } from '@/components/ui/input';
+	import * as Table from '@/components/ui/table';
+	import { type RocketAMR, AMRAuction, Rocket } from '@/event_helpers/rockets';
+	import { ndk } from '@/ndk';
+	import { currentUser } from '@/stores/session';
+	import { NDKEvent } from '@nostr-dev-kit/ndk';
+	import { onDestroy } from 'svelte';
+	import { derived } from 'svelte/store';
+	import Login from '../../components/Login.svelte';
+	import MeritAuctions from '../../stateupdaters/MeritAuctions.svelte';
+	let rocketEvents = $ndk.storeSubscribe([{ kinds: [31108 as number] }], { subId: 'all_rockets' });
+	onDestroy(() => {
+		rocketEvents?.unsubscribe();
+	});
+
+	let rockets = derived(rocketEvents, ($rocketEvents) => {
+		let m = new Map<string, NDKEvent>();
+		for (let e of $rocketEvents) {
+			let existing = m.get(e.pubkey + e.dTag);
+			if (!existing) {
+				existing = e;
+			}
+			if (e.created_at > existing) {
+				existing = e;
+			}
+			m.set(e.pubkey + e.dTag, e);
+		}
+		return Array.from(m, ([_, e]) => e);
+	});
+
+	let myMeritRequests = derived([currentUser, rockets], ([$currentUser, $rockets]) => {
+		let merits = new Map<Rocket, RocketAMR[]>();
+		if ($currentUser) {
+			for (let r of $rockets) {
+				let parsedRocket = new Rocket(r);
+				let _merits: RocketAMR[] = [];
+				for (let [_, amr] of parsedRocket.ApprovedMeritRequests()) {
+					if (amr.Pubkey == $currentUser.pubkey) {
+						_merits.push(amr);
+					}
+				}
+				merits.set(parsedRocket, _merits);
+			}
+		}
+		return merits;
+	});
+
+	let selected_amrs = new Map<string, AMRAuction>();
+	function toggleSelected(amr: RocketAMR, rocket: Rocket) {
+		if (!selected_amrs.has(rocket.Event.id)) {
+			selected_amrs.set(rocket.Event.id, new AMRAuction(rocket.Event))
+		}
+		let existing = selected_amrs.get(rocket.Event.id)!
+		if (existing.AMRIDs.includes(amr.ID)) {
+			existing.Pop(amr)
+		} else {
+			existing.Push(amr)
+		}
+		selected_amrs.set(rocket.Event.id, existing)
+		selected_amrs = selected_amrs;
+	}
+
+	function getSelectedStatus(rocket: string, id:string, data: Map<string, AMRAuction>):boolean {
+		let has = false
+		let amr = data.get(rocket);
+		if (amr) {
+			has = amr.AMRIDs.includes(id)
+		}
+		return has
+	}
+
+	function getMerits(rocket:string, data:Map<string, AMRAuction>):number {
+		let m = data.get(rocket)
+		console.log(m)
+		let merits = 0
+		if (m && m.Merits) {
+			merits = m.Merits
+		}
+		return merits
+	}
+
+
+
+    // function getTotal(auction:AMRAuction):number {
+    //     let total = 0
+    //     for (let [_, amr] of list) {
+    //         total += amr.Merits
+    //     }
+    //     return total
+    // }
+
+	// function getAllForRocket(rocket:Rocket, selected:Map<string, AMRAuction>):Map<string, AMRAuction> {
+    //     let thisRocket = new Map<string, AMRAuction>()
+    //     for (let [_, amr] of selected) {
+    //         if (amr.RocketD == rocket.Name() && amr.RocketP == rocket.Event.author.pubkey) {
+    //             thisRocket.set(amr.AMRID, amr)
+    //         }
+    //     }
+	// 	return thisRocket
+    // }
+
+	function publish(amr:AMRAuction, rocket:Rocket) {
+		if (!$ndk.signer) {
+			throw new Error('no ndk signer found');
+		}
+		
+		let author = $currentUser;
+		if (!author) {
+			throw new Error('no current user');
+		}
+		amr.RxAddress = bitcoinAddress
+		if (!amr.Validate()) {throw new Error("invalid")}
+		if (!amr.ValidateAgainstRocket(rocket)) {throw new Error("invalid against rocket")}
+		let e = amr.GenerateEvent()
+		e.ndk = $ndk
+		e.author = author;
+		e.publish().then((x) => {
+			console.log(x, e);
+			selected_amrs = new Map<string, AMRAuction>();
+			//goto(`${base}/rockets/${getRocketURL(e)}`);
+		});
+	}
+
+	let bitcoinAddress:string = ""
+</script>
+
+<h1 class=" m-2 text-nowrap text-center text-xl">Trade your Merits for Sats</h1>
+
+{#if $currentUser}
+	{#each $myMeritRequests as [rocket, amr]}
+		{#if amr.length > 0}
+			<h1>ROCKET: {rocket.Name()}</h1>
+
+			<Table.Root>
+				<Table.Header>
+					<Table.Row>
+						<Table.Head class="w-[100px]">Selected</Table.Head>
+						<Table.Head class="w-[10px]">AMR</Table.Head>
+						<Table.Head class="w-[10px]">Elegible</Table.Head>
+						<Table.Head>Merits</Table.Head>
+						<Table.Head class="text-right">Sats (approx)</Table.Head>
+					</Table.Row>
+				</Table.Header>
+				<Table.Body>
+					{#each amr as a, id (a.ID)}
+						<Table.Row class={getSelectedStatus(rocket.Event.id, a.ID, selected_amrs) ? 'bg-orange-500 hover:bg-orange-500' : ''}>
+							<Table.Cell
+								><Checkbox
+									id={a.ID}
+									checked={getSelectedStatus(rocket.Event.id, a.ID, selected_amrs)}
+									on:click={() => {
+										toggleSelected(a, rocket);
+									}}
+								/></Table.Cell
+							>
+							<Table.Cell
+								><span
+									class="cursor-pointer font-medium underline"
+									on:click={() => {
+										goto(`${base}/rockets/merits/${a.ID}`);
+									}}>{a.ID.substring(0, 6)}</span
+								></Table.Cell
+							>
+							<Table.Cell>{a.LeadTime == 0}</Table.Cell>
+							<Table.Cell>{a.Merits}</Table.Cell>
+							<Table.Cell class="text-right">{a.Merits}</Table.Cell>
+						</Table.Row>
+					{/each}
+				</Table.Body>
+			</Table.Root>
+			{#if selected_amrs.get(rocket.Event.id)}
+            <div class="m-2 flex">You are selling {selected_amrs.get(rocket.Event.id)?.Merits} Merits</div>
+				<div class="m-2 flex">
+					<Input bind:value={bitcoinAddress} type="text" placeholder="Bitcoin Address for Payment" class="m-1 max-w-xs" />
+					<Button on:click={()=>{publish(selected_amrs.get(rocket.Event.id), rocket)}} class="m-1">Sell Now</Button>
+				</div>
+			{/if}
+		{/if}
+	{/each}
+{:else}<Login />{/if}
+<MeritAuctions />

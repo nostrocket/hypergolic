@@ -1,0 +1,43 @@
+<script lang="ts">
+	import { AMRAuction, Rocket } from "@/event_helpers/rockets";
+	import { ndk } from "@/ndk";
+	import { onDestroy } from "svelte";
+	import { derived } from "svelte/store";
+
+    let saleEvents = $ndk.storeSubscribe([{ kinds: [1412 as number] }], { subId: 'all_sale_requests' });
+	onDestroy(() => {
+		saleEvents?.unsubscribe();
+	});
+
+    export let rockets:Set<Rocket>|undefined = undefined;
+
+    let validAuctionRequests = derived(saleEvents, ($saleEvents) =>{
+        let provisional = new Map<string, AMRAuction>()
+        let valid = new Map<string, AMRAuction>()
+        for (let e of $saleEvents) {
+            let a = new AMRAuction(undefined, e)
+
+            if (a.Validate()) {
+                provisional.set(a.Event.id, a)
+            }
+            
+        }
+        if (rockets) {
+            for (let [_, a] of provisional) {
+                for (let r of rockets) {
+                    if (r.Name() == a.RocketD && a.RocketP == r.Event.pubkey) {
+                        if (a.ValidateAgainstRocket(r)) {
+                            valid.set(a.Event.id, a)
+                        }
+                    }
+                }
+            }
+        } else {valid = provisional}
+        return valid
+    })
+validAuctionRequests.subscribe(requests=>{
+
+})
+</script>
+
+{#each $validAuctionRequests as [_, a]}<span on:click={()=>{console.log(a)}}>{a.Event.id}</span>{/each}

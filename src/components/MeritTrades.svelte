@@ -1,14 +1,14 @@
 <script lang="ts">
 	import { base } from '$app/paths';
 	import * as Breadcrumb from '$lib/components/ui/breadcrumb/index.js';
-	import type { MeritRequest } from '@/event_helpers/merits';
-	import { getRocketURL, parseProblem } from '@/helpers';
-	import type { NDKEvent } from '@nostr-dev-kit/ndk';
-	import MeritSummaryCard from './MeritSummaryCard.svelte';
 	import { Rocket } from '@/event_helpers/rockets';
+	import { getRocketURL } from '@/helpers';
+	import type { NDKEvent } from '@nostr-dev-kit/ndk';
 
 	export let rocket: NDKEvent;
-	export let merit: MeritRequest;
+    let parsedRocket = new Rocket(rocket)
+
+    
 </script>
 
 <div class="flex flex-col sm:gap-4">
@@ -29,7 +29,7 @@
 				<Breadcrumb.Separator />
 				<Breadcrumb.Item>
 					<Breadcrumb.Page>
-						{merit.Problem().substring(0, 16)}{#if merit.Problem().length > 16}...{/if}
+						Trade
 					</Breadcrumb.Page>
 				</Breadcrumb.Item>
 			</Breadcrumb.List>
@@ -38,6 +38,6 @@
 	<main
 		class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-2 lg:grid-cols-3 xl:grid-cols-3"
 	>
-		<MeritSummaryCard parsedRocket={new Rocket(rocket)} {merit} />
+		Trade {parsedRocket.Name()} Merits
 	</main>
 </div>

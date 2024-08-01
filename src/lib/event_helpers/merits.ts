@@ -36,6 +36,7 @@ export class MeritRequest {
 	}
 	IncludedInRocketState(rocket: Rocket): boolean {
 		let included = rocket.ApprovedMeritRequests();
+		console.log(39, rocket, included.get(this.ID))
 		return Boolean(included.get(this.ID));
 	}
 	BasicValidation(): boolean {

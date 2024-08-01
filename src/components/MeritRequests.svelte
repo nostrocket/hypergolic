@@ -12,17 +12,17 @@
 	import { onDestroy } from 'svelte';
 	import { derived } from 'svelte/store';
 
-	export let rocket: NDKEvent;
-	let parsedRocket = new Rocket(rocket);
+	//export let rocket: NDKEvent;
+	export let parsedRocket:Rocket;// = new Rocket(rocket);
 
 	let _merits = $ndk.storeSubscribe(
-		[{ '#a': [`31108:${rocket.author.pubkey}:${rocket.dTag}`], kinds: [1409 as NDKKind] }],
+		[{ '#a': [`31108:${parsedRocket.Event.author.pubkey}:${parsedRocket.Name()}`], kinds: [1409 as NDKKind] }],
 		{
-			subId: `${rocket.dTag}_merits`
+			subId: `${parsedRocket.Name()}_merits`
 		}
 	);
 
-	let _votes = $ndk.storeSubscribe({ '#a': [RocketATagFilter(rocket)], kinds: [1410 as NDKKind] });
+	let _votes = $ndk.storeSubscribe({ '#a': [RocketATagFilter(parsedRocket.Event)], kinds: [1410 as NDKKind] });
 
 	onDestroy(() => {
 		_merits?.unsubscribe();

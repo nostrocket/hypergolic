@@ -11,6 +11,7 @@
 	import ProposedProducts from './ProposedProducts.svelte';
 	import Todo from './Todo.svelte';
 	import UpdateMission from './UpdateMission.svelte';
+	import { Rocket } from '@/event_helpers/rockets';
 
 	export let rocket: NDKEvent;
 
@@ -40,7 +41,7 @@
 
 		<ProposedProducts {rocket} />
 
-		<MeritRequests {rocket} />
+		<MeritRequests parsedRocket={new Rocket(rocket)} />
 		<Card.Root class="sm:col-span-3">
 			<Card.Header class="pb-3">
 				<Card.Title>Actions</Card.Title>

@@ -44,15 +44,15 @@
 	>
 	<Dialog.Content>
 		<Dialog.Header>
-			<Dialog.Title>Calculate the sats</Dialog.Title>
+			<Dialog.Title>How much should you request?</Dialog.Title>
 			<Dialog.Description
-				>Calculate the sats of the request according to your hour rate.</Dialog.Description
+				>Use this form to calculate how many Sats you should claim. This information will be public and permanent.</Dialog.Description
 			>
 		</Dialog.Header>
-		<Label for="hourly_rate">Hour rate</Label>
-		<Input bind:value={hourly_rate} id="hourly_rate" placeholder="? USD / hour" />
-		<Label for="spent_minutes">Working hours</Label>
-		<Input bind:value={spent_minutes} id="spent_minutes" placeholder="? minutes" />
+		<Label for="hourly_rate">Your hourly rate in CuckLoserBucks</Label>
+		<Input bind:value={hourly_rate} id="hourly_rate" placeholder="USD hourly rate" />
+		<Label for="spent_minutes">Time spent solving this problem (minutes)</Label>
+		<Input bind:value={spent_minutes} id="spent_minutes" placeholder="minutes" />
 		{#if calcSats}
 			<div>Result: {calcSats.toFixed(0)} sats</div>
 		{/if}

@@ -21,15 +21,15 @@
 	import MeritComment from './MeritComment.svelte';
 
 	export let merit: MeritRequest;
-	export let rocket: NDKEvent;
+	//export let rocket: NDKEvent;
 	let cuckPrice: number | undefined = undefined;
 
 	let result: VoteDirection | undefined;
 
-	let parsedRocket = new Rocket(rocket);
+	export let parsedRocket:Rocket;
 
 	let _votes = $ndk.storeSubscribe(
-		{ '#a': [RocketATagFilter(rocket)], '#e': [merit.ID], kinds: [1410 as NDKKind] },
+		{ '#a': [RocketATagFilter(parsedRocket.Event)], '#e': [merit.ID], kinds: [1410 as NDKKind] },
 		{
 			subId: merit.ID
 		}
@@ -80,7 +80,7 @@
 								updatedRocket.ndk = $ndk;
 								updatedRocket.sign().then(() => {
 									updatedRocket.publish().then(() => {
-										goto(`${base}/rockets/${getRocketURL(rocket)}`);
+										goto(`${base}/rockets/${getRocketURL(parsedRocket.Event)}`);
 									});
 								});
 							}
@@ -170,7 +170,7 @@
 				<Separator class="my-4" />
 				<div class="font-semibold">Votes</div>
 				{#if $votes.size == 0}<Alert
-						><Info />Waiting for existing <span class="italic">{new Rocket(rocket).Name()}</span> Merit
+						><Info />Waiting for existing <span class="italic">{parsedRocket.Name()}</span> Merit
 						holders to vote</Alert
 					>
 				{/if}
@@ -219,7 +219,7 @@
 		{:else if result == 'blackball'}
 			<span class="scroll-m-20 text-lg font-semibold tracking-tight md:text-xl">REJECTED</span>
 		{:else if !result}
-			<VoteOnMeritRequest {merit} rocket={new Rocket(rocket)} />
+			<VoteOnMeritRequest {merit} rocket={parsedRocket} />
 		{/if}
 	</Card.Footer>
 </Card.Root>

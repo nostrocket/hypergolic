@@ -1,6 +1,7 @@
 import { NDKEvent, type NDKTag } from '@nostr-dev-kit/ndk';
 import { MapOfVotes, MeritRequest, Votes } from './merits';
 import { getAuthorizedZapper } from '@/helpers';
+import validate from 'bitcoin-address-validation';
 
 export class Rocket {
 	Event: NDKEvent;
@@ -37,12 +38,12 @@ export class Rocket {
 		return amr;
 	}
 	TotalMerits(): number {
-		let total = 0
-		let amr = this.ApprovedMeritRequests()
+		let total = 0;
+		let amr = this.ApprovedMeritRequests();
 		for (let [_, _amr] of amr) {
-			total += _amr.Merits
+			total += _amr.Merits;
 		}
-		return total
+		return total;
 	}
 	ValidateAMRProof(amrProof: NDKEvent): boolean {
 		let result = false;
@@ -114,7 +115,19 @@ export class Rocket {
 			event = new NDKEvent(this.Event.ndk, this.Event.rawEvent());
 			event.created_at = Math.floor(new Date().getTime() / 1000);
 			event.tags.push(['merit', `${request.Pubkey}:${request.ID}:0:0:${request.Merits}`]);
-			event.tags.push(['proof_full', JSON.stringify(signedProof)]);
+			event.tags.push(['proof_full', JSON.stringify(signedProof.rawEvent())]);
+			updateIgnitionAndParentTag(event);
+		}
+		return event;
+	}
+	UpsertAMRAuction(request: AMRAuction): NDKEvent | undefined {
+		let event: NDKEvent | undefined = undefined;
+		if (request.ValidateAgainstRocket(this)) {
+			this.PrepareForUpdate();
+			event = new NDKEvent(this.Event.ndk, this.Event.rawEvent());
+			event.created_at = Math.floor(new Date().getTime() / 1000);
+
+			event.tags.push(['proof_full', JSON.stringify(request.Event!.rawEvent())]);
 			updateIgnitionAndParentTag(event);
 		}
 		return event;
@@ -238,6 +251,7 @@ export class RocketAMR {
 	LeadTime: number;
 	LeadTimeUpdate: number;
 	Merits: number;
+	Extra: {};
 	SatsOwed(): number {
 		return 0;
 	}
@@ -435,4 +449,127 @@ export async function ValidateZapPublisher(rocket: NDKEvent, zap: NDKEvent): Pro
 		// 	resolve(true)
 		// }).catch(()=>{reject(false)})
 	});
+}
+
+export class AMRAuction {
+	AMRIDs: string[];
+	Owner: string|undefined;
+	StartPrice: number;
+	EndPrice: number;
+	RxAddress: string;
+	RocketD: string;
+	RocketP: string;
+	Merits: number;
+	Event: NDKEvent;
+	GenerateEvent(): NDKEvent {
+		let e = new NDKEvent();
+		e.kind = 1412;
+		e.created_at = Math.floor(new Date().getTime() / 1000);
+		for (let id of this.AMRIDs) {
+			e.tags.push(["request", id])
+		}
+		e.tags.push(['a', `31108:${this.RocketP}:${this.RocketD}`]);
+		//todo: allow user to set start and end auction price
+		
+		e.tags.push(['price', this.StartPrice + ":" + this.EndPrice]);
+		e.tags.push(["onchain", this.RxAddress])
+		return e
+	}
+	Push(amr: RocketAMR) {
+		if (this.Owner && amr.Pubkey != this.Owner) {
+			throw new Error("invalid pubkey")
+		}
+		this.Owner = amr.Pubkey
+		this.AMRIDs.push(amr.ID);
+		this.StartPrice += amr.Merits;
+		this.EndPrice += amr.Merits;
+		this.Merits += amr.Merits;
+	}
+	Pop(amr: RocketAMR) {
+		if (this.AMRIDs.includes(amr.ID) && amr.Pubkey == this.Owner) {
+			let n:string[] = []
+			for (let id of this.AMRIDs) {
+				if (id != amr.ID) {
+					n.push(id)
+				}
+			}
+			this.AMRIDs = n;
+			//todo: allow user to set start/end price
+			this.StartPrice -= amr.Merits
+			this.EndPrice -= amr.Merits
+			this.Merits -= amr.Merits
+		}
+	}
+	Validate(): boolean {
+		let valid = true;
+		if (
+			this.Owner?.length != 64 ||
+			!this.StartPrice ||
+			!this.EndPrice ||
+			!validate(this.RxAddress) ||
+			this.RocketP.length != 64
+		) {
+			valid = false;
+		}
+		for (let id of this.AMRIDs) {
+			if (id.length != 64) {
+				valid = false;
+			}
+		}
+		return valid;
+	}
+	ValidateAgainstRocket(rocket: Rocket): boolean {
+		let valid = true;
+		for (let id of this.AMRIDs) {
+			let rocketAMR = rocket.ApprovedMeritRequests().get(id);
+			if (!rocketAMR || (rocketAMR && rocketAMR.Pubkey != this.Owner) || rocketAMR.LeadTime > 0) {
+				valid = false;
+			}
+		}
+
+		//todo: check if this AMR is already listed for sale
+		return valid;
+	}
+	constructor(rocket?: NDKEvent, event?: NDKEvent, address?: string) {
+		this.AMRIDs = [];
+		this.Merits = 0
+		this.EndPrice = 0
+		this.StartPrice = 0
+		if (rocket && !event) {
+			this.RxAddress = address?address:""
+			this.RocketD = rocket.dTag!;
+			this.RocketP = rocket.author.pubkey;
+		}
+		if (event && !rocket) {
+			this.Event = event
+			for (let id of event.getMatchingTags("request")) {
+				if (id && id.length == 2 && id[1].length == 64) {
+					this.AMRIDs.push(id[1])
+				}
+			}
+			this.Owner = event.author.pubkey;
+			let price = event.tagValue('price');
+			if (price) {
+				let _start = price.split(':')[0];
+				let _end = price.split(':')[1];
+				let start = parseInt(_start, 10);
+				let end = parseInt(_end, 10);
+				this.StartPrice = start;
+				this.EndPrice = end;
+			}
+			let address = event.tagValue('onchain');
+			if (address) {
+				if (validate(address)) {
+					this.RxAddress = address;
+				}
+			}
+			let _rocket = event.tagValue('a');
+			if (_rocket) {
+				if (_rocket.split(':').length == 3) {
+					this.RocketP = _rocket.split(':')[1];
+					this.RocketD = _rocket.split(':')[2];
+				}
+			}
+		}
+	}
 }
