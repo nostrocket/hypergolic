@@ -2,36 +2,45 @@
 	import { buttonVariants } from '$lib/components/ui/button/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as Alert from '@/components/ui/alert';
+	import { Input } from '$lib/components/ui/input';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import { ndk } from '@/ndk';
 	import { currentUser } from '@/stores/session';
 	import { NDKEvent, NDKZap } from '@nostr-dev-kit/ndk';
 	import { Terminal } from 'lucide-svelte';
-	import Todo from './Todo.svelte';
 	import { requestProvider } from 'webln';
+	import QrCodeSvg from './QrCodeSvg.svelte';
+	import CopyButton from './CopyButton.svelte';
 
 	export let product: NDKEvent;
 	export let rocket: NDKEvent;
 
-	function zap() {
-		let z = new NDKZap({ ndk: $ndk, zappedEvent: rocket, zappedUser: rocket.author });
-		z.createZapRequest(
+	let invoice: string | null;
+
+	async function zap() {
+		const z = new NDKZap({ ndk: $ndk, zappedEvent: rocket, zappedUser: rocket.author });
+		invoice = await z.createZapRequest(
 			1000,
 			`Purchase of ${product.getMatchingTags('name')[0][1]} from ${rocket.dTag}`,
 			[['product', product.id]]
-		).then((invoice) => {
-			if (invoice) {
-				requestProvider().then((webln) => {
-					webln.sendPayment(invoice).then((response) => {
-						if (response && response.preimage) {
-							console.log(response.preimage);
-							open = false;
-						}
-					});
-				});
-			}
-		});
+		);
 	}
 
+	async function payWithWebLn() {
+		try {
+			if (!invoice) {
+				throw Error('invoice not found');
+			}
+			const webln = await requestProvider();
+			const response = await webln.sendPayment(invoice);
+			if (response && response.preimage) {
+				console.log(response.preimage);
+				open = false;
+			}
+		} catch (error) {
+			console.error(error);
+		}
+	}
 	let open: boolean;
 </script>
 
@@ -53,10 +62,15 @@
 			{/if}
 			<Dialog.Description>Pay now with Lightning</Dialog.Description>
 		</Dialog.Header>
-		<Todo text={['generate zap request and get invoice']} />
-
-		<Dialog.Footer>
-			<a href="#" on:click={zap}>test</a>
-		</Dialog.Footer>
+		{#if invoice}
+			<QrCodeSvg content={invoice} />
+			<div class="flex gap-2">
+				<Input bind:value={invoice} readonly />
+				<CopyButton text={invoice} />
+			</div>
+			<Button on:click={payWithWebLn}>Pay with WebLN</Button>
+		{:else}
+			<Button on:click={zap}>Create invoice</Button>
+		{/if}
 	</Dialog.Content>
 </Dialog.Root>

@@ -1,5 +1,6 @@
 import { NDKZap, NDKEvent, type NDKKind, type NDKTag, type NDKUser } from '@nostr-dev-kit/ndk';
 import type NDKSvelte from '@nostr-dev-kit/ndk-svelte';
+import { QrCode } from '$lib/qrcodegen';
 
 export function getRocketURL(e: NDKEvent): string {
 	let ignitionID = undefined;
@@ -185,4 +186,15 @@ export function prepareNostrEvent(args: {
 	}
 	console.log(e.rawEvent());
 	return e;
+}
+
+export function drawSvgPath(qr: QrCode, border: number): string {
+	if (border < 0) throw new RangeError('Border must be non-negative');
+	let parts: Array<string> = [];
+	for (let y = 0; y < qr.size; y++) {
+		for (let x = 0; x < qr.size; x++) {
+			if (qr.getModule(x, y)) parts.push(`M${x + border},${y + border}h1v1h-1z`);
+		}
+	}
+	return parts.join(' ');
 }
