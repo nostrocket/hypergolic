@@ -1,9 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
-	import Button from '@/components/ui/button/button.svelte';
 	import { Checkbox } from '@/components/ui/checkbox';
-	import { Input } from '@/components/ui/input';
 	import * as Table from '@/components/ui/table';
 	import { type RocketAMR, AMRAuction, Rocket } from '@/event_helpers/rockets';
 	import { ndk } from '@/ndk';
@@ -12,6 +10,7 @@
 	import { onDestroy } from 'svelte';
 	import { derived } from 'svelte/store';
 	import Login from '../../components/Login.svelte';
+	import CreateAMRAuction from '../../components/CreateAMRAuction.svelte';
 	import MeritAuctions from '../../stateupdaters/MeritAuctions.svelte';
 	let rocketEvents = $ndk.storeSubscribe([{ kinds: [31108 as number] }], { subId: 'all_rockets' });
 	onDestroy(() => {
@@ -50,7 +49,7 @@
 		return merits;
 	});
 
-	let selected_amrs = new Map<string, AMRAuction>();
+	let selected_amrs = new Map</* rocket id */ string, AMRAuction>();
 	function toggleSelected(amr: RocketAMR, rocket: Rocket) {
 		if (!selected_amrs.has(rocket.Event.id)) {
 			selected_amrs.set(rocket.Event.id, new AMRAuction(rocket.Event));
@@ -101,34 +100,6 @@
 	//     }
 	// 	return thisRocket
 	// }
-
-	function publish(amr: AMRAuction, rocket: Rocket) {
-		if (!$ndk.signer) {
-			throw new Error('no ndk signer found');
-		}
-
-		let author = $currentUser;
-		if (!author) {
-			throw new Error('no current user');
-		}
-		amr.RxAddress = bitcoinAddress;
-		if (!amr.Validate()) {
-			throw new Error('invalid');
-		}
-		if (!amr.ValidateAgainstRocket(rocket)) {
-			throw new Error('invalid against rocket');
-		}
-		let e = amr.GenerateEvent();
-		e.ndk = $ndk;
-		e.author = author;
-		e.publish().then((x) => {
-			console.log(x, e);
-			selected_amrs = new Map<string, AMRAuction>();
-			//goto(`${base}/rockets/${getRocketURL(e)}`);
-		});
-	}
-
-	let bitcoinAddress: string = '';
 </script>
 
 <h1 class=" m-2 text-nowrap text-center text-xl">Trade your Merits for Sats</h1>
@@ -153,7 +124,7 @@
 					{#each rocket.PendingAMRAuctions() as p}
 						<Table.Row class="bg-purple-500">
 							<Table.Cell><Checkbox /></Table.Cell>
-							<Table.Cell>{p.AMRIDs.length > 1?"multiple":p.AMRIDs[0]}</Table.Cell>
+							<Table.Cell>{p.AMRIDs.length > 1 ? 'multiple' : p.AMRIDs[0]}</Table.Cell>
 							<Table.Cell>{p.Merits}</Table.Cell>
 							<Table.Cell>Pending</Table.Cell>
 							<Table.Cell>{p.RxAddress}</Table.Cell>
@@ -194,25 +165,11 @@
 					{/each}
 				</Table.Body>
 			</Table.Root>
-			{#if selected_amrs.get(rocket.Event.id)}
-				<div class="m-2 flex">
-					You are selling {selected_amrs.get(rocket.Event.id)?.Merits} Merits
-				</div>
-				<div class="m-2 flex">
-					<Input
-						bind:value={bitcoinAddress}
-						type="text"
-						placeholder="Bitcoin Address for Payment"
-						class="m-1 max-w-xs"
-					/>
-					<Button
-						on:click={() => {
-							publish(selected_amrs.get(rocket.Event.id), rocket);
-						}}
-						class="m-1">Sell Now</Button
-					>
-				</div>
-			{/if}
+			<CreateAMRAuction
+				{rocket}
+				amrAuction={selected_amrs.get(rocket.Event.id)}
+				bind:selected_amrs
+			/>
 		{/if}
 	{/each}
 {:else}<Login />{/if}
