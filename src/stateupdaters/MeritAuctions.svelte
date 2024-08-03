@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { AMRAuction, Rocket } from '@/event_helpers/rockets';
 	import { ndk } from '@/ndk';
+	import { currentUser } from '@/stores/session';
 	import { onDestroy } from 'svelte';
 	import { derived, type Readable } from 'svelte/store';
 
@@ -40,14 +41,16 @@
 		return valid;
 	});
 	validAuctionRequests.subscribe((requests) => {
-		if ($rockets && $rockets.length > 0) {
+		if ($rockets && $rockets.length > 0 && currentUser && $currentUser) {
 			for (let [_, r] of requests) {
-                let e = r.Extra.rocket.UpsertAMRAuction(r)
+                if (r.Extra.rocket.VotePowerForPubkey($currentUser.pubkey)) {
+                    let e = r.Extra.rocket.UpsertAMRAuction(r)
                 if (e) {
                     e.ndk = $ndk
                     e.publish().then(x=>{
                         console.log(x, e)
                     })
+                }
                 }
 			}
 		}

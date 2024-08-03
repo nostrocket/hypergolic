@@ -53,7 +53,9 @@
 					goto(`${base}/sellmerits`);
 				}}>Sell Merits</DropdownMenu.Item
 			>
-			<DropdownMenu.Item>Buy Merits</DropdownMenu.Item>
+			<DropdownMenu.Item on:click={() => {
+				goto(`${base}/buymerits`);
+			}}>Buy Merits</DropdownMenu.Item>
 			<DropdownMenu.Separator />
 			<DropdownMenu.Item>Settings</DropdownMenu.Item>
 			<DropdownMenu.Item>Support</DropdownMenu.Item>
