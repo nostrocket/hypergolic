@@ -39,7 +39,7 @@
 	<Card.Header><Card.Title>Associate Bitcoin Address</Card.Title></Card.Header>
 	<Card.Content>
 	<div class="m-2 flex">
-		You must associate at least one Bitcoin address with your npub before you can pay a Contributor.
+		You must associate at least one Bitcoin address with your npub before you can pay a Contributor. Merit purchases from this address will be associated with your pubkey.
 	</div>
 	<div class="flex"><InputBitcoinAddress bind:bitcoinAddress /><Button on:click={()=>publish(bitcoinAddress)} class="mt-3 max-w-xs">Publish</Button></div>
 </Card.Content>

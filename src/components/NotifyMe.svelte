@@ -7,7 +7,7 @@ let open = false;
 
 <Dialog.Root bind:open>
 	<Dialog.Trigger
-		><Badge href="/" variant="nostr" class="flex h-8 shrink-0 items-center justify-center rounded-sm">Nostrocket is sooooo not ready yet but whatever</Badge></Dialog.Trigger
+		><Badge href="#" variant="nostr" class="flex h-8 shrink-0 items-center justify-center rounded-sm">Nostrocket is sooooo not ready yet but whatever</Badge></Dialog.Trigger
 	>
 	<Dialog.Content>
 		<Dialog.Header>
