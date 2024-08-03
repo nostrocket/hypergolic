@@ -68,7 +68,7 @@
 							</div>
 						</Table.Cell>
 						<Table.Cell class="hidden text-left md:table-cell">
-							{ba.Balance}
+							{ba.Balance?ba.Balance.toLocaleString():"just wait a sec..."}
 						</Table.Cell>
 						<Table.Cell class="table-cell">{ba.Address}</Table.Cell>
 						

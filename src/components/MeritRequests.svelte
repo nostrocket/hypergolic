@@ -1,33 +1,39 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
+	import Badge from '@/components/ui/badge/badge.svelte';
 	import * as Card from '@/components/ui/card';
 	import * as Table from '@/components/ui/table';
 	import { MapOfMeritResult, MeritRequest } from '@/event_helpers/merits';
 	import { Rocket, RocketATagFilter } from '@/event_helpers/rockets';
 	import { unixToRelativeTime } from '@/helpers';
 	import { ndk } from '@/ndk';
-	import { NDKEvent, NDKKind } from '@nostr-dev-kit/ndk';
+	import { NDKKind } from '@nostr-dev-kit/ndk';
 	import { Avatar, Name } from '@nostr-dev-kit/ndk-svelte-components';
 	import { onDestroy } from 'svelte';
-	import { derived } from 'svelte/store';
+	import { derived, writable } from 'svelte/store';
 
 	//export let rocket: NDKEvent;
-	export let parsedRocket:Rocket;// = new Rocket(rocket);
+	export let rocket: Rocket; // = new Rocket(rocket);
 
 	let _merits = $ndk.storeSubscribe(
-		[{ '#a': [`31108:${parsedRocket.Event.author.pubkey}:${parsedRocket.Name()}`], kinds: [1409 as NDKKind] }],
+		[{ '#a': [`31108:${rocket.Event.author.pubkey}:${rocket.Name()}`], kinds: [1409 as NDKKind] }],
 		{
-			subId: `${parsedRocket.Name()}_merits`
+			subId: `${rocket.Name()}_merits`
 		}
 	);
 
-	let _votes = $ndk.storeSubscribe({ '#a': [RocketATagFilter(parsedRocket.Event)], kinds: [1410 as NDKKind] });
+	let _votes = $ndk.storeSubscribe({
+		'#a': [RocketATagFilter(rocket.Event)],
+		kinds: [1410 as NDKKind]
+	});
 
 	onDestroy(() => {
 		_merits?.unsubscribe();
 		_votes?.unsubscribe();
 	});
+
+	let truncate = writable(true)
 
 	let merits = derived(_merits, ($merits) => {
 		let map = new Map<string, MeritRequest>();
@@ -45,14 +51,24 @@
 		return map;
 	});
 
+	let meritsTruncated = derived([merits, truncate], ([$merits, $truncate]) => {
+		let meritsArray = Array.from($merits, ([_, m]) => {
+			return m;
+		});
+		if (meritsArray.length > 6 && $truncate) {
+			meritsArray.length = 6;
+		}
+		return meritsArray;
+	});
+
 	let votes = derived(_votes, ($_votes) => {
-		return new MapOfMeritResult($_votes, parsedRocket).meritResult;
+		return new MapOfMeritResult($_votes, rocket).meritResult;
 	});
 
 	type MeritUIStatus = 'approved' | 'rejected' | 'pending';
 
 	const status = (merit: MeritRequest): MeritUIStatus => {
-		if (merit.IncludedInRocketState(parsedRocket)) {
+		if (merit.IncludedInRocketState(rocket)) {
 			return 'approved';
 		}
 		if ($votes.get(merit.ID) === 'blackball') {
@@ -83,7 +99,7 @@
 		<Table.Root>
 			<Table.Header>
 				<Table.Row>
-					<Table.Head>Contributor</Table.Head>
+					<Table.Head class="w-[100px]">Contributor</Table.Head>
 					<Table.Head class="hidden text-left md:table-cell">Problem</Table.Head>
 					<Table.Head class="table-cell">Amount (Sats)</Table.Head>
 					<Table.Head class="table-cell">Merits</Table.Head>
@@ -91,7 +107,7 @@
 				</Table.Row>
 			</Table.Header>
 			<Table.Body>
-				{#each $merits as [id, merit], _ (id)}
+				{#each $meritsTruncated as merit, _ (merit.ID)}
 					<Table.Row
 						on:click={() => {
 							goto(`${base}/rockets/merits/${merit.ID}`);
@@ -123,6 +139,15 @@
 						<Table.Cell class="table-cell">{status(merit).toUpperCase()}</Table.Cell>
 					</Table.Row>
 				{/each}
+				{#if $merits.size > $meritsTruncated.length}
+					<span
+						on:click={() => {
+							truncate.set(false)
+						}}
+						class="m-2 flex w-48 flex-nowrap text-lg"
+						><Badge href="#">View {$merits.size - $meritsTruncated.length} more</Badge></span
+					>
+				{/if}
 			</Table.Body>
 		</Table.Root>
 	</Card.Content>

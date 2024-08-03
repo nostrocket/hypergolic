@@ -17,6 +17,7 @@
 	export let rocket: NDKEvent;
 
 	$: unratifiedZaps = 0
+
 </script>
 
 <div class="flex flex-col sm:gap-4">
@@ -24,7 +25,7 @@
 		<Breadcrumb.Root class="flex">
 			<Breadcrumb.List>
 				<Breadcrumb.Item>
-					<Breadcrumb.Link href="##">{rocket.getMatchingTags('d')[0][1]}</Breadcrumb.Link>
+					<Breadcrumb.Link href="#">{rocket.getMatchingTags('d')[0][1]}</Breadcrumb.Link>
 				</Breadcrumb.Item>
 				<Breadcrumb.Separator />
 				<Breadcrumb.Item>
@@ -42,7 +43,7 @@
 
 		<ProposedProducts {rocket} />
 
-		<MeritRequests parsedRocket={new Rocket(rocket)} />
+		<MeritRequests rocket={new Rocket(rocket)} />
 		<BitcoinAssociations rocket={new Rocket(rocket)}/>
 		<Card.Root class="sm:col-span-3">
 			<Card.Header class="pb-3">
