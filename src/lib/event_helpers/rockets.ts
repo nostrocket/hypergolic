@@ -5,9 +5,67 @@ import validate from 'bitcoin-address-validation';
 import { BitcoinTipTag } from '@/stores/bitcoin';
 
 export class Rocket {
+	UpsertBitcoinAssociation(association: BitcoinAssociation): NDKEvent {
+		let event: NDKEvent | undefined = undefined;
+		if (true) { //todo: check if exists
+			this.PrepareForUpdate();
+			event = new NDKEvent(this.Event.ndk, this.Event.rawEvent());
+			event.created_at = Math.floor(new Date().getTime() / 1000);
+			event.tags.push(["address", `${association.Pubkey}:${association.Address}`])
+			event.tags.push(['proof_full', JSON.stringify(association.Event.rawEvent())]);
+			updateIgnitionAndParentTag(event);
+			updateBitcoinTip(event);
+		}
+		return event;
+	}
+	BitcoinAssociations():Map<string, BitcoinAssociation> {
+		let a = new Map<string, BitcoinAssociation>()
+		for (let t of this.Event.getMatchingTags("address")) {
+			if (t.length == 2) {
+				let split = t[1].split(":")
+				if (split.length == 2) {
+					let ba = new BitcoinAssociation()
+					ba.Address = split[1]
+					ba.Pubkey = split[0]
+					if (ba.Validate()) {
+						a.set(ba.Pubkey, ba)
+					}
+				}
+				
+			}
+		}
+		return a
+	}
 	Event: NDKEvent;
+
+	URL(): string {
+		let ignitionID = undefined;
+		if (
+			this.Event.getMatchingTags('ignition') &&
+			this.Event.getMatchingTags('ignition')[0] &&
+			this.Event.getMatchingTags('ignition')[0][1]
+		) {
+			ignitionID = this.Event.getMatchingTags('ignition')[0][1];
+		}
+		if (!ignitionID) {
+			ignitionID = this.Event.id;
+		}
+		let d = this.Event.getMatchingTags('d')[0][1];
+		let p = this.Event.pubkey;
+		return `${ignitionID}?d=${d}&p=${p}`;
+	}
 	Name(): string {
 		return this.Event.dTag!;
+	}
+	Mission(): string {
+		if (
+			this.Event.getMatchingTags('mission') &&
+			this.Event.getMatchingTags('mission')[0] &&
+			this.Event.getMatchingTags('mission')[0][1]
+		) {
+			return this.Event.getMatchingTags('mission')[0][1];
+		}
+		return '';
 	}
 	Products(): RocketProduct[] {
 		let _products: RocketProduct[] = [];
@@ -118,7 +176,7 @@ export class Rocket {
 			event.tags.push(['merit', `${request.Pubkey}:${request.ID}:0:0:${request.Merits}`]);
 			event.tags.push(['proof_full', JSON.stringify(signedProof.rawEvent())]);
 			updateIgnitionAndParentTag(event);
-			updateBitcionTip(event);
+			updateBitcoinTip(event);
 		}
 		return event;
 	}
@@ -133,33 +191,32 @@ export class Rocket {
 					a.StartPrice = parseInt(items[2], 10);
 					a.EndPrice = parseInt(items[3], 10);
 					a.Merits = parseInt(items[4], 10);
-					
+
 					let ids = items[5].match(/.{1,64}/g);
 					if (ids) {
 						for (let id of ids) {
 							a.AMRIDs.push(id);
 						}
 					}
-					let amrs = this.ApprovedMeritRequests()
+					let amrs = this.ApprovedMeritRequests();
 					let failed = false;
 					for (let id of a.AMRIDs) {
-						let amr = amrs.get(id)
+						let amr = amrs.get(id);
 						if (!amr) {
-							failed = true
+							failed = true;
 						} else {
 							if (!a.Owner) {
-								a.Owner = amr.Pubkey
+								a.Owner = amr.Pubkey;
 							} else if (a.Owner != amr.Pubkey) {
-								failed = true
+								failed = true;
 							}
 						}
 					}
 					if (!failed) {
-						auctions.push(a)
+						auctions.push(a);
 					} else {
-						throw new Error("this should not happen, bug!")
+						throw new Error('this should not happen, bug!');
 					}
-					
 				}
 			}
 		}
@@ -214,7 +271,7 @@ export class Rocket {
 			]); //<merit request ID:start price:end price:start height:rx address>
 			event.tags.push(['proof_full', JSON.stringify(request.Event!.rawEvent())]);
 			updateIgnitionAndParentTag(event);
-			updateBitcionTip(event);
+			updateBitcoinTip(event);
 		}
 		if (invalid) {
 			event = undefined;
@@ -238,7 +295,7 @@ export class Rocket {
 			purchases
 		]);
 		updateIgnitionAndParentTag(event);
-		updateBitcionTip(event);
+		updateBitcoinTip(event);
 		return event;
 	}
 	UpdateMission(mission: string): NDKEvent {
@@ -248,7 +305,7 @@ export class Rocket {
 		event.removeTag('mission');
 		event.tags.push(['mission', mission]);
 		updateIgnitionAndParentTag(event);
-		updateBitcionTip(event);
+		updateBitcoinTip(event);
 		return event;
 	}
 	CurrentProducts(): Map<string, RocketProduct> {
@@ -335,7 +392,7 @@ function updateIgnitionAndParentTag(event: NDKEvent) {
 	event.tags.push(['parent', event.id]);
 }
 
-function updateBitcionTip(event: NDKEvent) {
+function updateBitcoinTip(event: NDKEvent) {
 	let existingBitcoinTip = event.getMatchingTags('bitcoin');
 	let existing = [];
 	for (let t of event.tags) {
@@ -639,7 +696,7 @@ export class AMRAuction {
 			}
 			for (let pending of rocket.PendingAMRAuctions()) {
 				if (pending.AMRIDs.includes(id)) {
-					valid = false
+					valid = false;
 				}
 			}
 		}
@@ -690,6 +747,30 @@ export class AMRAuction {
 					this.RocketD = _rocket.split(':')[2];
 				}
 			}
+		}
+	}
+}
+
+export class BitcoinAssociation {
+	Pubkey: string;
+	Address: string | undefined;
+	Event: NDKEvent;
+	Validate(): boolean {
+		let valid = true;
+		if (this.Pubkey.length != 64) {
+			valid = false;
+		}
+		if ((this.Address && !validate(this.Address)) || !this.Address) {
+			valid = false;
+		}
+		return valid;
+	}
+
+	constructor(event?: NDKEvent) {
+		if (event) {
+			this.Pubkey = event.pubkey;
+			this.Address = event.tagValue('onchain');
+			this.Event = event;
 		}
 	}
 }

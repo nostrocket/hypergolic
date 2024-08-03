@@ -19,16 +19,7 @@ export function getRocketURL(e: NDKEvent): string {
 	return `${ignitionID}?d=${d}&p=${p}`;
 }
 
-export function getMission(rocketEvent: NDKEvent): string {
-	if (
-		rocketEvent.getMatchingTags('mission') &&
-		rocketEvent.getMatchingTags('mission')[0] &&
-		rocketEvent.getMatchingTags('mission')[0][1]
-	) {
-		return rocketEvent.getMatchingTags('mission')[0][1];
-	}
-	return '';
-}
+
 
 export function unixTimeNow() {
 	return Math.floor(new Date().getTime() / 1000);

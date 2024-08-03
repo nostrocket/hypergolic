@@ -12,6 +12,7 @@
 	import Login from '../../components/Login.svelte';
 	import CreateAMRAuction from '../../components/CreateAMRAuction.svelte';
 	import MeritAuctions from '../../stateupdaters/MeritAuctions.svelte';
+	import Heading from '../../components/Heading.svelte';
 	let rocketEvents = $ndk.storeSubscribe([{ kinds: [31108 as number] }], { subId: 'all_rockets' });
 	onDestroy(() => {
 		rocketEvents?.unsubscribe();
@@ -101,8 +102,7 @@
 	// 	return thisRocket
 	// }
 </script>
-
-<h1 class=" m-2 text-nowrap text-center text-xl">Trade your Merits for Sats</h1>
+<Heading title="Trade your Merits for Sats" />
 
 {#if $currentUser}
 	{#each $myMeritRequests as [rocket, amr]}
@@ -122,7 +122,7 @@
 				</Table.Header>
 				<Table.Body>
 					{#each rocket.PendingAMRAuctions().filter(r=>{return Boolean(r.Owner == $currentUser.pubkey)}) as p}
-						<Table.Row class="bg-purple-500">
+						<Table.Row class="bg-purple-500 hover:bg-purple-600">
 							<Table.Cell><Checkbox /></Table.Cell>
 							<Table.Cell>{p.AMRIDs.length > 1 ? 'multiple' : p.AMRIDs[0].substring(0,12)}</Table.Cell>
 							<Table.Cell>{p.Merits}</Table.Cell>

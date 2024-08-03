@@ -8,6 +8,7 @@
 	import { Avatar } from '@nostr-dev-kit/ndk-svelte-components';
 	import { onDestroy } from 'svelte';
 	import { derived } from 'svelte/store';
+	import AssociateBitcoinAddress from '../../components/AssociateBitcoinAddress.svelte';
 	import Login from '../../components/Login.svelte';
 	import MeritAuctions from '../../stateupdaters/MeritAuctions.svelte';
 	let rocketEvents = $ndk.storeSubscribe([{ kinds: [31108 as number] }], { subId: 'all_rockets' });
@@ -40,10 +41,21 @@
 		return merits;
 	});
 
-	
+	let noAssociatedBitcoinAddress = derived([currentUser, pendingSales], ([$currentUser, $pendingSales])=>{
+		let show = false
+		if ($currentUser) {
+			for (let [r, _] of $pendingSales) {
+				if (!r.BitcoinAssociations().get($currentUser.pubkey)) {
+					show = true
+				}
+			}
+		}
+		return show
+	})
+
 </script>
 
-<h1 class=" m-2 text-nowrap text-center text-xl">Sponsor a Contributor</h1>
+{#if $noAssociatedBitcoinAddress}<AssociateBitcoinAddress />{/if}
 
 {#if $currentUser}
 	{#each $pendingSales as [rocket, amr]}
