@@ -7,7 +7,7 @@ type BitcoinTip = {
 };
 
 let _b: BitcoinTip = { hash: '', height: 0 };
-export let bitcoinTip = writable(_b);
+export const bitcoinTip = writable(_b);
 
 export function BitcoinTipTag(): string[] {
 	let tip = get(bitcoinTip);
@@ -19,6 +19,7 @@ export function BitcoinTipTag(): string[] {
 }
 
 export async function getBitcoinTip() {
+	try {
 	const response = await fetch('https://blockstream.info/api/blocks/tip');
 	const _json = await response.json();
 	if (_json[0]) {
@@ -28,6 +29,8 @@ export async function getBitcoinTip() {
 		};
 		bitcoinTip.set(r);
 		return r;
+	}} catch {
+		return null;
 	}
 	return null;
 }
