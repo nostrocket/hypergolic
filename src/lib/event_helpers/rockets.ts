@@ -131,13 +131,33 @@ export class Rocket {
 					a.StartPrice = parseInt(items[2], 10);
 					a.EndPrice = parseInt(items[3], 10);
 					a.Merits = parseInt(items[4], 10);
+					
 					let ids = items[5].match(/.{1,64}/g);
 					if (ids) {
 						for (let id of ids) {
 							a.AMRIDs.push(id)
 						}
 					}
-					auctions.push(a)
+					let amrs = this.ApprovedMeritRequests()
+					let failed = false;
+					for (let id of a.AMRIDs) {
+						let amr = amrs.get(id)
+						if (!amr) {
+							failed = true
+						} else {
+							if (!a.Owner) {
+								a.Owner = amr.Pubkey
+							} else if (a.Owner != amr.Pubkey) {
+								failed = true
+							}
+						}
+					}
+					if (!failed) {
+						auctions.push(a)
+					} else {
+						throw new Error("this should not happen, bug!")
+					}
+					
 				}
 			}
 		}
@@ -593,13 +613,12 @@ export class AMRAuction {
 			if (!rocketAMR || (rocketAMR && rocketAMR.Pubkey != this.Owner) || rocketAMR.LeadTime > 0) {
 				valid = false;
 			}
-			for (let a of rocket.PendingAMRAuctions()) {
-				if (a.AMRIDs.includes(id)) {
+			for (let pending of rocket.PendingAMRAuctions()) {
+				if (pending.AMRIDs.includes(id)) {
 					valid = false
 				}
 			}
 		}
-		//todo: check if this AMR is already listed for sale
 		return valid;
 	}
 	constructor(rocket?: NDKEvent, event?: NDKEvent, address?: string) {

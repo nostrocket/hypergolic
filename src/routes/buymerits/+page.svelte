@@ -122,7 +122,7 @@
 					<Table.Row>
 						<Table.Head class="w-[100px]">Selected</Table.Head>
 						<Table.Head class="w-[10px]">AMR</Table.Head>
-						<Table.Head class="w-[10px]">Elegible</Table.Head>
+						<Table.Head class="w-[10px]">Eligible</Table.Head>
 						<Table.Head>Merits</Table.Head>
 						<Table.Head class="text-right">Sats (approx)</Table.Head>
 					</Table.Row>

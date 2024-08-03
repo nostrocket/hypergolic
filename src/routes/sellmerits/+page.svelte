@@ -121,10 +121,10 @@
 					</Table.Row>
 				</Table.Header>
 				<Table.Body>
-					{#each rocket.PendingAMRAuctions() as p}
+					{#each rocket.PendingAMRAuctions().filter(r=>{return Boolean(r.Owner == $currentUser.pubkey)}) as p}
 						<Table.Row class="bg-purple-500">
 							<Table.Cell><Checkbox /></Table.Cell>
-							<Table.Cell>{p.AMRIDs.length > 1 ? 'multiple' : p.AMRIDs[0]}</Table.Cell>
+							<Table.Cell>{p.AMRIDs.length > 1 ? 'multiple' : p.AMRIDs[0].substring(0,12)}</Table.Cell>
 							<Table.Cell>{p.Merits}</Table.Cell>
 							<Table.Cell>Pending</Table.Cell>
 							<Table.Cell>{p.RxAddress}</Table.Cell>
@@ -157,7 +157,7 @@
 									></Table.Cell
 								>
 								<Table.Cell>{a.Merits}</Table.Cell>
-								<Table.Cell>Elegible</Table.Cell>
+								<Table.Cell>Eligible</Table.Cell>
 								<Table.Cell></Table.Cell>
 								<Table.Cell class="text-right">{a.Merits}</Table.Cell>
 							</Table.Row>
