@@ -2,6 +2,7 @@ import { NDKEvent, type NDKTag } from '@nostr-dev-kit/ndk';
 import { MapOfVotes, MeritRequest, Votes } from './merits';
 import { getAuthorizedZapper } from '@/helpers';
 import validate from 'bitcoin-address-validation';
+import { BitcoinTipTag } from '@/stores/bitcoin';
 
 export class Rocket {
 	Event: NDKEvent;
@@ -117,11 +118,12 @@ export class Rocket {
 			event.tags.push(['merit', `${request.Pubkey}:${request.ID}:0:0:${request.Merits}`]);
 			event.tags.push(['proof_full', JSON.stringify(signedProof.rawEvent())]);
 			updateIgnitionAndParentTag(event);
+			updateBitcionTip(event);
 		}
 		return event;
 	}
 	PendingAMRAuctions(): AMRAuction[] {
-		let auctions:AMRAuction[] = [];
+		let auctions: AMRAuction[] = [];
 		for (let t of this.Event.getMatchingTags('amr_auction')) {
 			if (t.length == 2) {
 				let items = t[1].split(':');
@@ -135,7 +137,7 @@ export class Rocket {
 					let ids = items[5].match(/.{1,64}/g);
 					if (ids) {
 						for (let id of ids) {
-							a.AMRIDs.push(id)
+							a.AMRIDs.push(id);
 						}
 					}
 					let amrs = this.ApprovedMeritRequests()
@@ -161,24 +163,24 @@ export class Rocket {
 				}
 			}
 		}
-		return auctions
+		return auctions;
 	}
-	CanThisAMRBeSold(amr:string):boolean {
-		let valid = true
-		let existing = this.ApprovedMeritRequests().get(amr)
+	CanThisAMRBeSold(amr: string): boolean {
+		let valid = true;
+		let existing = this.ApprovedMeritRequests().get(amr);
 		if (!existing) {
-			valid = false
+			valid = false;
 		}
 		if (existing && existing.LeadTime > 0) {
-			valid = false
+			valid = false;
 		}
-		let pending = this.PendingAMRAuctions()
+		let pending = this.PendingAMRAuctions();
 		for (let p of pending) {
 			if (p.AMRIDs.includes(amr)) {
-				valid = false
+				valid = false;
 			}
 		}
-		return valid
+		return valid;
 	}
 	UpsertAMRAuction(request: AMRAuction): NDKEvent | undefined {
 		//todo: validate that all items in the request exist and the total amount is correct, from same pubkey
@@ -212,6 +214,7 @@ export class Rocket {
 			]); //<merit request ID:start price:end price:start height:rx address>
 			event.tags.push(['proof_full', JSON.stringify(request.Event!.rawEvent())]);
 			updateIgnitionAndParentTag(event);
+			updateBitcionTip(event);
 		}
 		if (invalid) {
 			event = undefined;
@@ -235,6 +238,7 @@ export class Rocket {
 			purchases
 		]);
 		updateIgnitionAndParentTag(event);
+		updateBitcionTip(event);
 		return event;
 	}
 	UpdateMission(mission: string): NDKEvent {
@@ -244,6 +248,7 @@ export class Rocket {
 		event.removeTag('mission');
 		event.tags.push(['mission', mission]);
 		updateIgnitionAndParentTag(event);
+		updateBitcionTip(event);
 		return event;
 	}
 	CurrentProducts(): Map<string, RocketProduct> {
@@ -328,6 +333,25 @@ function updateIgnitionAndParentTag(event: NDKEvent) {
 		}
 	}
 	event.tags.push(['parent', event.id]);
+}
+
+function updateBitcionTip(event: NDKEvent) {
+	let existingBitcoinTip = event.getMatchingTags('bitcoin');
+	let existing = [];
+	for (let t of event.tags) {
+		existing.push(t);
+	}
+	event.tags = [];
+	for (let t of existing) {
+		if (t[0] !== 'bitcoin') {
+			event.tags.push(t);
+		}
+	}
+	if (existingBitcoinTip.length > 1) {
+		throw new Error('too many bitcoin tip tags!');
+	} else {
+		event.tags.push(BitcoinTipTag());
+	}
 }
 
 export class RocketAMR {

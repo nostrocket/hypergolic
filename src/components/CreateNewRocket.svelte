@@ -15,6 +15,7 @@
 	import type { NDKEventStore } from '@nostr-dev-kit/ndk-svelte';
 	import { onDestroy } from 'svelte';
 	import { writable } from 'svelte/store';
+	import { BitcoinTipTag } from '@/stores/bitcoin';
 
 	let rockets: NDKEventStore<NDKEvent> | undefined;
 	const rocketsStore = writable<NDKEvent[]>([]);
@@ -72,6 +73,7 @@
 		e.tags.push(['ruleset', '334000']);
 		e.tags.push(['ignition', 'this']);
 		e.tags.push(['parent', 'this']);
+		e.tags.push(BitcoinTipTag());
 		e.publish().then((x) => {
 			console.log(x);
 			goto(`${base}/rockets/${getRocketURL(e)}`);
