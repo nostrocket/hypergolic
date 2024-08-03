@@ -755,6 +755,7 @@ export class BitcoinAssociation {
 	Pubkey: string;
 	Address: string | undefined;
 	Event: NDKEvent;
+	Balance:number;
 	Validate(): boolean {
 		let valid = true;
 		if (this.Pubkey.length != 64) {
@@ -767,6 +768,7 @@ export class BitcoinAssociation {
 	}
 
 	constructor(event?: NDKEvent) {
+		this.Balance = 0;
 		if (event) {
 			this.Pubkey = event.pubkey;
 			this.Address = event.tagValue('onchain');

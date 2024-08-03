@@ -1,3 +1,4 @@
+import validate from 'bitcoin-address-validation';
 import { get, writable } from 'svelte/store';
 
 type BitcoinTip = {
@@ -29,4 +30,35 @@ export async function getBitcoinTip() {
 		return r;
 	}
 	return null;
+}
+
+export async function getBalance(address: string): Promise<number> {
+	return new Promise((resolve, reject) => {
+		if (!validate(address)) {
+			reject('invalid address');
+		} else {
+			try {
+				fetch(`https://blockstream.info/api/address/${address}`)
+					.then((response) => {
+						if (!response.ok) {
+							reject('invalid response from server');
+						} else {
+							response
+								.json()
+								.then((j) => {
+									let spent = parseInt(j.chain_stats.spent_txo_sum, 10);
+									let funded = parseInt(j.chain_stats.funded_txo_sum, 10);
+									resolve(funded - spent);
+								})
+								.catch((x) => reject(x));
+						}
+					})
+					.catch((x) => {
+						reject(x);
+					});
+			} catch {
+				reject('failed');
+			}
+		}
+	});
 }

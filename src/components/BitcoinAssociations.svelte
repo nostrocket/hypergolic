@@ -1,11 +1,12 @@
 <script lang="ts">
 	import * as Card from '@/components/ui/card';
 	import * as Table from '@/components/ui/table';
-	import { Rocket } from '@/event_helpers/rockets';
+	import { BitcoinAssociation, Rocket } from '@/event_helpers/rockets';
 	import { ndk } from '@/ndk';
+	import { getBalance } from '@/stores/bitcoin';
 	import { NDKKind } from '@nostr-dev-kit/ndk';
 	import { Avatar, Name } from '@nostr-dev-kit/ndk-svelte-components';
-	import { onDestroy } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 
 	export let rocket: Rocket;
 
@@ -19,6 +20,18 @@
 	onDestroy(() => {
 		_associationRequests?.unsubscribe();
 	});
+
+	let addresses = new Map<string, BitcoinAssociation>()
+
+	onMount(()=>{
+		addresses = rocket.BitcoinAssociations()
+		addresses.forEach(a => {
+			if (a.Address) {
+				getBalance(a.Address).then(v=>{a.Balance = v; addresses.set(a.Pubkey, a); addresses = addresses})
+			}
+		})
+	})
+
 </script>
 
 <Card.Root class="sm:col-span-3">
@@ -32,13 +45,13 @@
 		<Table.Root>
 			<Table.Header>
 				<Table.Row>
-					<Table.Head>Sponsor</Table.Head>
-					<Table.Head class="hidden text-left md:table-cell">Address</Table.Head>
-					<Table.Head class="table-cell">Amount (Sats)</Table.Head>
+					<Table.Head class="w-[200px]">Sponsor</Table.Head>
+					<Table.Head class="hidden text-left md:table-cell">Amount (Sats)</Table.Head>
+					<Table.Head class="table-cell">Address</Table.Head>
 				</Table.Row>
 			</Table.Header>
 			<Table.Body>
-				{#each rocket.BitcoinAssociations() as [pubkey, ba], _ (pubkey)}
+				{#each addresses as [pubkey, ba], _ (pubkey)}
 					<Table.Row>
 						<Table.Cell>
 							<div class="flex flex-nowrap">
@@ -55,7 +68,7 @@
 							</div>
 						</Table.Cell>
 						<Table.Cell class="hidden text-left md:table-cell">
-							{0}
+							{ba.Balance}
 						</Table.Cell>
 						<Table.Cell class="table-cell">{ba.Address}</Table.Cell>
 						
