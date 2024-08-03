@@ -5,6 +5,8 @@
 	import { ndk } from '@/ndk';
 	import type { NDKUser } from '@nostr-dev-kit/ndk';
 	import { currentUser, prepareUserSession } from '@/stores/session';
+	import { unixTimeNow } from '@/helpers';
+	import { getBitcoinTip } from '@/stores/bitcoin';
 
 	let sessionStarted = false;
 	let connected = false;
@@ -23,6 +25,18 @@
 			});
 		});
 		sessionStarted = true;
+	}
+
+	let lastRequestTime = 0;
+
+	$: {
+		if (unixTimeNow() > lastRequestTime + 30000) {
+			getBitcoinTip().then((x) => {
+				if (x) {
+					lastRequestTime = unixTimeNow();
+				}
+			});
+		}
 	}
 </script>
 

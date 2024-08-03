@@ -30,6 +30,10 @@ export function getMission(rocketEvent: NDKEvent): string {
 	return '';
 }
 
+export function unixTimeNow() {
+	return Math.floor(new Date().getTime() / 1000);
+}
+
 export function unixToRelativeTime(timestamp: number): string {
 	const currentTime = Date.now();
 	const secondsAgo = Math.floor((currentTime - timestamp) / 1000);
