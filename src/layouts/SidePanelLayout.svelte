@@ -1,18 +1,14 @@
 <script lang="ts">
-	import Bell from 'lucide-svelte/icons/bell';
-	import CircleUser from 'lucide-svelte/icons/circle-user';
 	import Menu from 'lucide-svelte/icons/menu';
 	import Search from 'lucide-svelte/icons/search';
 
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Sheet from '$lib/components/ui/sheet/index.js';
-	import { Rocket } from 'lucide-svelte';
 	import NewMenu from '../components/Menu.svelte';
 	import RocketPillCard from '../components/RocketPillCard.svelte';
 	import { base } from '$app/paths';
 	import Login from '../components/Login.svelte';
-	import { page } from '$app/stores';
 
 	export let title = '';
 </script>
@@ -36,7 +32,9 @@
 		</div>
 	</div>
 	<div class="flex h-dvh flex-col">
-		<header class="flex h-14 items-center gap-4 border-b bg-muted/40 px-4 lg:h-[60px] lg:px-6">
+		<header
+			class="flex h-14 items-center justify-center gap-4 border-b bg-muted/40 px-4 lg:h-[60px] lg:px-6"
+		>
 			<Sheet.Root>
 				<Sheet.Trigger asChild let:builder>
 					<Button variant="outline" size="icon" class="shrink-0 md:hidden" builders={[builder]}>
@@ -58,18 +56,18 @@
 			</Sheet.Root>
 
 			<div
-				class="flex items-center bg-indigo-800 p-2 leading-none text-indigo-100 lg:inline-flex lg:rounded-full"
+				class="flex shrink items-center gap-1 bg-indigo-800 p-1 leading-none text-indigo-100 sm:p-2 lg:inline-flex lg:rounded-full"
 				role="alert"
 			>
-				<span class="mr-3 flex rounded-full bg-indigo-500 px-2 py-1 text-xs font-bold uppercase"
+				<span class="flex rounded-full bg-indigo-500 px-2 py-1 text-xs font-bold uppercase"
 					>Alert</span
 				>
-				<span class="mr-2 flex-auto text-left font-semibold"
+				<span class="flex-auto text-left font-semibold"
 					>Nostrocket is sooooo not ready yet but whatever</span
 				>
 			</div>
 
-			<div class="w-full flex-1">
+			<div class="w-full flex-1 shrink">
 				<form>
 					<div class="relative">
 						<Search class="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />

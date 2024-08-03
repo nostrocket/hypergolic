@@ -36,13 +36,11 @@
 </script>
 
 {#if !$ndk.signer}
-	<Button on:click={nip07}>
-		<span class="hidden sm:block">Sign in</span>
-	</Button>
+	<Button on:click={nip07} class="shrink-0">Sign in</Button>
 {:else}
 	<DropdownMenu.Root>
 		<DropdownMenu.Trigger asChild let:builder>
-			<Button builders={[builder]} variant="secondary" size="icon" class="rounded-full">
+			<Button builders={[builder]} variant="secondary" size="icon" class="shrink-0 rounded-full">
 				<Avatar ndk={$ndk} {pubkey} class="h-10 w-10 flex-none rounded-full object-cover" />
 				<span class="sr-only">Toggle user menu</span>
 			</Button>
@@ -50,7 +48,11 @@
 		<DropdownMenu.Content align="end">
 			<DropdownMenu.Label>My Account</DropdownMenu.Label>
 			<DropdownMenu.Separator />
-			<DropdownMenu.Item on:click={()=>{goto(`${base}/sellmerits`)}}>Sell Merits</DropdownMenu.Item>
+			<DropdownMenu.Item
+				on:click={() => {
+					goto(`${base}/sellmerits`);
+				}}>Sell Merits</DropdownMenu.Item
+			>
 			<DropdownMenu.Item>Buy Merits</DropdownMenu.Item>
 			<DropdownMenu.Separator />
 			<DropdownMenu.Item>Settings</DropdownMenu.Item>
