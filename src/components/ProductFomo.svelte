@@ -8,8 +8,6 @@
 	export let rocket: NDKEvent;
 	export let unratifiedZaps = 0;
 
-	let products = new Rocket(rocket).Products()
-
 </script>
 
 <Card.Root class="sm:col-span-3">
@@ -18,7 +16,7 @@
 		<Card.Description></Card.Description>
 	</Card.Header>
 	<Card.Content class="grid grid-cols-1 gap-2">
-		{#each products as product (product.ID)}
+		{#each new Rocket(rocket).Products() as [id, product] (id)}
 			<div>
 				<ProductCardFromId {rocket} productID={product.ID}>
 					<ProductPurchases bind:unratifiedZaps={unratifiedZaps} {rocket} {product} />

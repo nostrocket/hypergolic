@@ -3,6 +3,7 @@
 	import type { NDKEvent } from '@nostr-dev-kit/ndk';
 	import AddProductToRocket from './AddProductToRocket.svelte';
 	import PayNow from './PayNow.svelte';
+	import { Rocket } from '@/event_helpers/rockets';
 
 	export let product: NDKEvent;
 	export let rocket: NDKEvent;
@@ -34,14 +35,8 @@
 		return test == 3;
 	}
 
-	function includedInRocket(): boolean {
-		let included = false;
-		for (let p of rocket.getMatchingTags('product')) {
-			if (p[1].split(':')[0] == product.id) {
-				included = true;
-			}
-		}
-		return included;
+	function includedInRocket(rocket:Rocket, product:NDKEvent): boolean {
+		return Boolean(rocket.Products().get(product.id))
 	}
 </script>
 
@@ -71,10 +66,10 @@
 			/>
 		{/if}
 		<Card.Footer class="flex justify-center pt-2">
-			{#if !includedInRocket()}
+			{#if !includedInRocket(new Rocket(rocket), product)}
 				<AddProductToRocket {product} {rocket} />
 			{:else}
-				<PayNow {product} {rocket} />
+				<PayNow {product} rocketProduct={new Rocket(rocket).Products().get(product.id)} {rocket} />
 			{/if}
 		</Card.Footer>
 	</Card.Root>

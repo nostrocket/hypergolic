@@ -11,19 +11,23 @@
 	import { requestProvider } from 'webln';
 	import QrCodeSvg from './QrCodeSvg.svelte';
 	import CopyButton from './CopyButton.svelte';
+	import type { RocketProduct } from '@/event_helpers/rockets';
 
 	export let product: NDKEvent;
+	export let rocketProduct: RocketProduct | undefined;
 	export let rocket: NDKEvent;
 
 	let invoice: string | null;
 
 	async function zap() {
-		const z = new NDKZap({ ndk: $ndk, zappedEvent: rocket, zappedUser: rocket.author });
-		invoice = await z.createZapRequest(
-			1000,
-			`Purchase of ${product.getMatchingTags('name')[0][1]} from ${rocket.dTag}`,
-			[['product', product.id]]
-		);
+		if (rocketProduct) {
+			const z = new NDKZap({ ndk: $ndk, zappedEvent: rocket, zappedUser: rocket.author });
+			invoice = await z.createZapRequest(
+				rocketProduct.Price * 1000,
+				`Purchase of ${product.getMatchingTags('name')[0][1]} from ${rocket.dTag}`,
+				[['product', product.id]]
+			);
+		}
 	}
 
 	async function payWithWebLn() {
@@ -44,33 +48,37 @@
 	let open: boolean;
 </script>
 
-<Dialog.Root bind:open>
-	<Dialog.Trigger class={buttonVariants({ variant: 'default' })}>Buy Now</Dialog.Trigger>
-	<Dialog.Content class="sm:max-w-[425px]">
-		<Dialog.Header>
-			<Dialog.Title
-				>Buy {product.getMatchingTags('name')[0][1]} from {rocket.dTag} now!</Dialog.Title
-			>
-			{#if !currentUser}
-				<Alert.Root>
-					<Terminal class="h-4 w-4" />
-					<Alert.Title>Heads up!</Alert.Title>
-					<Alert.Description
-						>You need a nostr signing extension to use Nostrocket!</Alert.Description
-					>
-				</Alert.Root>
+{#if rocketProduct}
+	<Dialog.Root bind:open>
+		<Dialog.Trigger class={buttonVariants({ variant: 'default' })}
+			>Buy Now for {rocketProduct.Price} sats</Dialog.Trigger
+		>
+		<Dialog.Content class="sm:max-w-[425px]">
+			<Dialog.Header>
+				<Dialog.Title
+					>Buy {product.getMatchingTags('name')[0][1]} from {rocket.dTag} now!</Dialog.Title
+				>
+				{#if !currentUser}
+					<Alert.Root>
+						<Terminal class="h-4 w-4" />
+						<Alert.Title>Heads up!</Alert.Title>
+						<Alert.Description
+							>You need a nostr signing extension to use Nostrocket!</Alert.Description
+						>
+					</Alert.Root>
+				{/if}
+				<Dialog.Description>Pay now with Lightning</Dialog.Description>
+			</Dialog.Header>
+			{#if invoice}
+				<QrCodeSvg content={invoice} />
+				<div class="flex gap-2">
+					<Input bind:value={invoice} readonly />
+					<CopyButton text={invoice} />
+				</div>
+				<Button on:click={payWithWebLn}>Pay with WebLN</Button>
+			{:else}
+				<Button on:click={zap}>Create invoice</Button>
 			{/if}
-			<Dialog.Description>Pay now with Lightning</Dialog.Description>
-		</Dialog.Header>
-		{#if invoice}
-			<QrCodeSvg content={invoice} />
-			<div class="flex gap-2">
-				<Input bind:value={invoice} readonly />
-				<CopyButton text={invoice} />
-			</div>
-			<Button on:click={payWithWebLn}>Pay with WebLN</Button>
-		{:else}
-			<Button on:click={zap}>Create invoice</Button>
-		{/if}
-	</Dialog.Content>
-</Dialog.Root>
+		</Dialog.Content>
+	</Dialog.Root>
+{/if}

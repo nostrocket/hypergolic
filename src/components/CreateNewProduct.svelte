@@ -21,6 +21,8 @@
 	let desc: string;
 	let image: string;
 
+	let o = false;
+
 	function publish(ndk: NDKSvelte) {
 		if (!ndk.signer) {
 			throw new Error('no ndk signer found');
@@ -42,12 +44,13 @@
 		console.log(e.rawEvent());
 		e.publish().then((x) => {
 			console.log(x);
-			goto(`${base}/rockets/${getRocketURL(e)}`);
+			o = false;
+			goto(`${base}/rockets/${getRocketURL(rocketEvent)}`);
 		});
 	}
 </script>
 
-<Dialog.Root>
+<Dialog.Root bind:open={o}>
 	<Dialog.Trigger class={buttonVariants({ variant: 'default' })}
 		>Propose a New Product</Dialog.Trigger
 	>

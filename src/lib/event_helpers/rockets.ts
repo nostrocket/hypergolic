@@ -67,10 +67,11 @@ export class Rocket {
 		}
 		return '';
 	}
-	Products(): RocketProduct[] {
-		let _products: RocketProduct[] = [];
+	Products(): Map<string, RocketProduct> {
+		let _products = new Map<string, RocketProduct>()
 		for (let p of this.Event.getMatchingTags('product')) {
-			_products.push(new RocketProduct(p));
+			let rp = new RocketProduct(p)
+			_products.set(rp.ID, rp);
 		}
 		return _products;
 	}
@@ -521,7 +522,7 @@ export class ZapPurchase {
 			return true;
 		}
 		let product = this.ProductFromRocket(rocket);
-		if (product && this.Amount >= product.Price) {
+		if (product && this.Amount/1000 >= product.Price) {
 			return true;
 		}
 		return false;
