@@ -9,6 +9,9 @@
 	import RocketPillCard from '../components/RocketPillCard.svelte';
 	import { base } from '$app/paths';
 	import Login from '../components/Login.svelte';
+	import { Badge } from '@/components/ui/badge';
+	import { bitcoinTip } from '@/stores/bitcoin';
+	import NotifyMe from '../components/NotifyMe.svelte';
 
 	export let title = '';
 </script>
@@ -54,30 +57,9 @@
 					</div>
 				</Sheet.Content>
 			</Sheet.Root>
+			 <NotifyMe />
 
-			<div
-				class="flex shrink items-center gap-1 bg-indigo-800 p-1 leading-none text-indigo-100 sm:p-2 lg:inline-flex lg:rounded-full"
-				role="alert"
-			>
-				<span class="flex rounded-full bg-indigo-500 px-2 py-1 text-xs font-bold uppercase"
-					>Alert</span
-				>
-				<span class="flex-auto text-left font-semibold"
-					>Nostrocket is sooooo not ready yet but whatever</span
-				>
-			</div>
-
-			<div class="w-full flex-1 shrink">
-				<form>
-					<div class="relative">
-						<Search class="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-						<Input
-							type="search"
-							placeholder="Search Nostrocket..."
-							class="w-full appearance-none bg-background pl-8 shadow-none md:w-2/3 lg:w-1/3"
-						/>
-					</div>
-				</form>
+			<div class="w-full flex-1 shrink"><Badge class="flex h-8 max-w-16 shrink-0 items-center justify-center rounded-sm">{$bitcoinTip.height}</Badge>
 			</div>
 			<Login />
 		</header>
