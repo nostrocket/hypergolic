@@ -103,6 +103,7 @@
 					<Table.Head class="hidden text-left md:table-cell">Problem</Table.Head>
 					<Table.Head class="table-cell">Amount (Sats)</Table.Head>
 					<Table.Head class="table-cell">Merits</Table.Head>
+					<Table.Head class="hidden text-center md:table-cell">Status</Table.Head>
 					<Table.Head class="hidden text-right md:table-cell">When</Table.Head>
 				</Table.Row>
 			</Table.Header>
@@ -119,12 +120,12 @@
 								<Avatar
 									ndk={$ndk}
 									pubkey={merit.Pubkey}
-									class="h-10 w-10 flex-none rounded-full object-cover"
+									class="h-8 w-8 flex-none rounded-full object-cover"
 								/>
 								<Name
 									ndk={$ndk}
 									pubkey={merit.Pubkey}
-									class="hidden max-w-32 truncate p-2 md:inline-block"
+									class="hidden max-w-32 truncate p-1 md:inline-block"
 								/>
 							</div>
 						</Table.Cell>
@@ -133,10 +134,11 @@
 						</Table.Cell>
 						<Table.Cell class="table-cell">{merit.Sats}</Table.Cell>
 						<Table.Cell class="table-cell">{merit.Merits}</Table.Cell>
+						<Table.Cell class="table-cell text-center">{status(merit).toUpperCase()}</Table.Cell>
 						<Table.Cell class="hidden text-right md:table-cell"
 							>{unixToRelativeTime(merit.TimeStamp * 1000)}</Table.Cell
 						>
-						<Table.Cell class="table-cell">{status(merit).toUpperCase()}</Table.Cell>
+						
 					</Table.Row>
 				{/each}
 				{#if $merits.size > $meritsTruncated.length}

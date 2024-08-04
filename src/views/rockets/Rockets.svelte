@@ -18,7 +18,6 @@
 		for (let e of $rockets) {
 			let existing = _r.get(`${e.pubkey}${e.dTag}`)
 			if (!existing) {
-				console.log(e)
 				existing = new Rocket(e)
 			}
 			if (existing.Event.created_at <= e.created_at) {

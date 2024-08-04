@@ -11,7 +11,7 @@
 	import { ChevronLeft, ChevronRight } from 'lucide-svelte';
 
 	export let rocket: Rocket;
-	export let unratifiedZaps = 0;
+	export let unratifiedZaps:Map<string, number>;
 
 	let products = writable(new Map<string, Product>());
 

@@ -8,17 +8,25 @@
 	import { Avatar, Name } from '@nostr-dev-kit/ndk-svelte-components';
 	import { ndk } from '@/ndk';
 
-	export let rocket: NDKEvent;
-	export let unratifiedZaps:number = 0;
+	export let rocket: Rocket;
+	export let unratifiedZaps: Map<string, number>;
 
-	let parsedRocket = new Rocket(rocket);
+	let unratifiedZapsAmount = 0;
+
+	$: {
+		unratifiedZapsAmount = 0;
+		for (let [_, a] of unratifiedZaps) {
+			unratifiedZapsAmount += a / 1000;
+		}
+		unratifiedZapsAmount = unratifiedZapsAmount;
+	}
 	let _merits: { pubkey: string; merits: number; sats: number }[] = [];
 
 	let merits = writable(_merits);
 
 	$: {
 		let m = new Map<string, { merits: number; sats: number }>();
-		for (let [_, amr] of parsedRocket.ApprovedMeritRequests()) {
+		for (let [_, amr] of rocket.ApprovedMeritRequests()) {
 			let existing = m.get(amr.Pubkey);
 			if (!existing) {
 				existing = { merits: 0, sats: 0 };
@@ -29,12 +37,12 @@
 		}
 
 		//calculate percentage ownership of each pubkey and divide the unratified sats among them (round up to nearest sat):
-		let satsPerMeritPercentage = unratifiedZaps/100
-		let totalMerits = parsedRocket.TotalMerits()
+		let satsPerMeritPercentage = unratifiedZapsAmount / 100;
+		let totalMerits = rocket.TotalMerits();
 		for (let [id, _m] of m) {
-			_m.sats += (((_m.merits/totalMerits)*100)*satsPerMeritPercentage)
-			_m.sats = Math.round(_m.sats)
-			m.set(id, _m)
+			_m.sats += (_m.merits / totalMerits) * 100 * satsPerMeritPercentage;
+			_m.sats = Math.round(_m.sats);
+			m.set(id, _m);
 		}
 
 		let _merits: { pubkey: string; merits: number; sats: number }[] = [];
@@ -42,16 +50,16 @@
 			_merits.push({ pubkey: pubkey, merits: _m.merits, sats: _m.sats });
 		}
 		if (_merits.length == 0) {
-			_merits.push({pubkey: rocket.pubkey, merits: 1, sats: 0})
+			_merits.push({ pubkey: rocket.Event.pubkey, merits: 1, sats: 0 });
 		}
 
 		merits.set(_merits);
 	}
 
-	const COLORS = ["bg-pink-800", 'bg-red-800', 'bg-purple-800', 'bg-blue-800'];
+	const COLORS = ['bg-pink-800', 'bg-red-800', 'bg-purple-800', 'bg-blue-800'];
 
-	function c(i:number) {
-		return COLORS[i]
+	function c(i: number) {
+		return COLORS[i];
 	}
 </script>
 
@@ -60,13 +68,13 @@
 		<Card.Title>Merits and Satflow</Card.Title>
 		<Card.Description class="grid grid-cols-2">
 			<div class=" grid-cols-1">
-				This graph displays the Meritization of equity in {rocket.getMatchingTags('d')[0][1]}
-				<Pie data={$merits}/>
+				This graph displays the Meritization of equity in {rocket.Name()}
+				<Pie data={$merits} />
 			</div>
 			<div class=" grid-cols-1">
 				<Table.Root>
 					<Table.Header>
-						<Table.Row>
+						<Table.Row class="">
 							<Table.Head>Participant</Table.Head>
 							<Table.Head class="hidden md:table-cell">Merits</Table.Head>
 							<Table.Head class="text-right">Revenue (Sats)</Table.Head>
@@ -80,12 +88,12 @@
 										<Avatar
 											ndk={$ndk}
 											{pubkey}
-											class="h-10 w-10 flex-none rounded-full object-cover"
+											class="h-8 w-8 flex-none rounded-full object-cover"
 										/>
 										<Name
 											ndk={$ndk}
 											{pubkey}
-											class="hidden max-w-32 truncate p-2 md:inline-block"
+											class="hidden max-w-32 truncate p-1 md:inline-block"
 										/>
 									</div>
 								</Table.Cell>

@@ -1,18 +1,17 @@
 <script lang="ts">
 	import * as Table from '@/components/ui/table';
-	import { Product, Rocket, ValidateZapPublisher, ZapPurchase, type RocketProduct } from '@/event_helpers/rockets';
+	import { Product, Rocket, ValidateZapPublisher, ZapPurchase } from '@/event_helpers/rockets';
 	import { unixToRelativeTime } from '@/helpers';
 	import { ndk } from '@/ndk';
-	import { NDKEvent } from '@nostr-dev-kit/ndk';
 	import { Avatar, Name } from '@nostr-dev-kit/ndk-svelte-components';
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy } from 'svelte';
 	import { derived, writable } from 'svelte/store';
 
 	export let products: Product[];
 	//export let products: Product[];
 	export let rocket: Rocket;
 
-	export let unratifiedZaps:number = 0; //todo upstream bind this and parse outstanding zaps to merits and satflow component.
+	export let unratifiedZaps:Map<string, number>; //todo upstream bind this and pass outstanding zaps to merits and satflow component.
 
 	let zaps = $ndk.storeSubscribe(
 		[{ '#a': [`31108:${rocket.Event.author.pubkey}:${rocket.Event.dTag}`], kinds: [9735] }],
@@ -90,11 +89,10 @@
 	});
 
 	validatedZapsNotInRocket.subscribe(zaps=>{
-		let total = 0
 		for (let [_, z] of zaps) {
-			total += z.Amount
+			unratifiedZaps.set(z.ZapReceipt.id, z.Amount)
 		}
-		unratifiedZaps = total/1000
+		unratifiedZaps = unratifiedZaps
 	})
 
 	//todo: get existing purchases from rocket and render them
@@ -127,12 +125,12 @@
 							<Avatar
 								ndk={$ndk}
 								pubkey={purchase.BuyerPubkey}
-								class="h-10 w-10 flex-none rounded-full object-cover"
+								class="h-8 w-8 flex-none rounded-full object-cover"
 							/>
 							<Name
 								ndk={$ndk}
 								pubkey={purchase.BuyerPubkey}
-								class="inline-block max-w-32 truncate p-2"
+								class="inline-block max-w-32 truncate p-1"
 							/>
 						</div>
 					</Table.Cell>

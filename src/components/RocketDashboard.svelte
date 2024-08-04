@@ -16,7 +16,7 @@
 
 	export let rocket: NDKEvent;
 
-	$: unratifiedZaps = 0
+	$: unratifiedZaps = new Map<string, number>()
 
 </script>
 
@@ -37,7 +37,7 @@
 	<main
 		class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-2 lg:grid-cols-3 xl:grid-cols-3"
 	>
-		<MeritsAndSatflow {unratifiedZaps} {rocket} />
+		<MeritsAndSatflow {unratifiedZaps} rocket={new Rocket(rocket)} />
 
 		<ProductFomo bind:unratifiedZaps rocket={new Rocket(rocket)} />
 
