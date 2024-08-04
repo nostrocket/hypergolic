@@ -3,30 +3,22 @@
 	import { ndk } from '@/ndk';
 	import type { NDKEvent } from '@nostr-dev-kit/ndk';
 	import ProductCard from './ProductCard.svelte';
-	export let productID: string;
-	export let rocket: NDKEvent;
-	let productEvent: NDKEvent | undefined;
+	import { fetchEvent } from '@/event_helpers/products';
+	import { Product, type Rocket } from '@/event_helpers/rockets';
+	export let productID: string | undefined = undefined;
+	export let rocket: Rocket;
+	export let product:Product | undefined = undefined;
 
 	onMount(() => {
-		$ndk.fetchEvent(productID).then((e) => {
-			if (e) {
-				productEvent = e;
-			} else {
-				let _p = $ndk.storeSubscribe([{ids:[productID] }], { subId: productID });
-				_p.subscribe(x=>{
-					if (x[0]) {
-						productEvent = x[0]
-						_p.unsubscribe()
-					}
-				})
-			}
-		});
+		if (!product && productID) {
+			fetchEvent(productID, $ndk).then(e => product = new Product(e))
+		}
 	});
 
 </script>
 
-{#if productEvent}
-	<ProductCard {rocket} product={productEvent}>
+{#if product}
+	<ProductCard {rocket} {product}>
 		<slot />
 	</ProductCard>
 {/if}

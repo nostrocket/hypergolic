@@ -11,15 +11,16 @@
 	import { NDKEvent } from '@nostr-dev-kit/ndk';
 	import { Terminal } from 'lucide-svelte';
 	import Todo from './Todo.svelte';
-	import { Rocket } from '@/event_helpers/rockets';
+	import { Product, Rocket } from '@/event_helpers/rockets';
 
-	export let product: NDKEvent;
-	export let rocket: NDKEvent;
+	export let product: Product;
+	export let rocket: Rocket;
 
-	let parsedRocket: Rocket = new Rocket(rocket);
 
 	let price: number = 0;
 	let max: number = 0;
+
+	let o = false;
 
 	function publish() {
 		if (!$ndk.signer) {
@@ -29,20 +30,19 @@
 		if (!author) {
 			throw new Error('no current user');
 		}
-		if (rocket.author.pubkey != author.pubkey) {
-			console.log(rocket.author, author);
-			throw new Error('you are not the creator of this rocket');
+		if (rocket.Event.author.pubkey != author.pubkey) {
+			throw new Error(`${author.pubkey} is not the creator of this rocket`);
 		}
-		let event = parsedRocket.UpsertProduct(product.id, price, max);
+		let event = rocket.UpsertProduct(product.ID(), price, max);
 		event.ndk = $ndk
 		event.publish().then((x) => {
 			console.log(x);
-			goto(`${base}/products`);
+			o = false
 		}).catch(()=>{ console.log("failed to publish", event.rawEvent())});
 	}
 </script>
 
-<Dialog.Root>
+<Dialog.Root bind:open={o}>
 	<Dialog.Trigger class={buttonVariants({ variant: 'default' })}
 		>Make Available for Purchase</Dialog.Trigger
 	>

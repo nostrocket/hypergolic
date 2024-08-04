@@ -777,3 +777,70 @@ export class BitcoinAssociation {
 		}
 	}
 }
+
+export class Product {
+	Event: NDKEvent;
+	Group():string {
+		let s = this.Name()
+		//let regex = /\[\w+\]/i;
+		//if (regex.test(this.Name())) {
+			let g = this.Name().substring(this.Name().indexOf("[")+1, this.Name().lastIndexOf("]"))
+			if (g.length > 0) {
+				s = g
+			}
+		//}
+		return s
+	}
+	Option():string {
+		let result = ""
+		let group = this.Name().substring(this.Name().indexOf("["), this.Name().lastIndexOf("]")+1)
+		if (group.length > 0) {
+			for (let s of this.Name().trim().split(group)) {
+				if (s.trim().length > 0) {
+					result = s.trim()
+				}
+			}
+		}
+		return result
+	}
+	ID():string {
+		return this.Event.id
+	}
+	Name():string {
+		return this.Event.getMatchingTags('name')[0][1]
+	}
+	Description():string {
+		return this.Event.getMatchingTags('description')[0][1]
+	}
+	CoverImage():string {
+		return this.Event.getMatchingTags('cover')[0][1]
+	}
+	Validate(): boolean {
+		let test = 0;
+		if (
+			this.Event.getMatchingTags('name') &&
+			this.Event.getMatchingTags('name')[0] &&
+			this.Event.getMatchingTags('name')[0][1]
+		) {
+			test++;
+		}
+		if (
+			this.Event.getMatchingTags('description') &&
+			this.Event.getMatchingTags('description')[0] &&
+			this.Event.getMatchingTags('description')[0][1]
+		) {
+			test++;
+		}
+		if (
+			this.Event.getMatchingTags('cover') &&
+			this.Event.getMatchingTags('cover')[0] &&
+			this.Event.getMatchingTags('cover')[0][1]
+		) {
+			test++;
+		}
+		return test == 3;
+	}
+	constructor(event: NDKEvent) {
+		this.Event = event
+	}
+}

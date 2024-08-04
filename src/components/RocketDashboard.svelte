@@ -39,7 +39,7 @@
 	>
 		<MeritsAndSatflow {unratifiedZaps} {rocket} />
 
-		<ProductFomo bind:unratifiedZaps {rocket} />
+		<ProductFomo bind:unratifiedZaps rocket={new Rocket(rocket)} />
 
 		<ProposedProducts {rocket} />
 

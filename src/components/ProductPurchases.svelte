@@ -1,6 +1,6 @@
 <script lang="ts">
 	import * as Table from '@/components/ui/table';
-	import { ValidateZapPublisher, ZapPurchase, type RocketProduct } from '@/event_helpers/rockets';
+	import { Product, Rocket, ValidateZapPublisher, ZapPurchase, type RocketProduct } from '@/event_helpers/rockets';
 	import { unixToRelativeTime } from '@/helpers';
 	import { ndk } from '@/ndk';
 	import { NDKEvent } from '@nostr-dev-kit/ndk';
@@ -8,15 +8,16 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { derived, writable } from 'svelte/store';
 
-	export let product: RocketProduct;
-	export let rocket: NDKEvent;
+	export let products: Product[];
+	//export let products: Product[];
+	export let rocket: Rocket;
 
 	export let unratifiedZaps:number = 0; //todo upstream bind this and parse outstanding zaps to merits and satflow component.
 
 	let zaps = $ndk.storeSubscribe(
-		[{ '#a': [`31108:${rocket.author.pubkey}:${rocket.dTag}`], kinds: [9735] }],
+		[{ '#a': [`31108:${rocket.Event.author.pubkey}:${rocket.Event.dTag}`], kinds: [9735] }],
 		{
-			subId: product.ID
+			subId: rocket.Name() + "_zaps"
 		}
 	);
 
@@ -24,21 +25,29 @@
 		zaps?.unsubscribe();
 	});
 
-	let productEvent: NDKEvent | undefined;
+	// let productEvent: NDKEvent | undefined;
 
-	onMount(() => {
-		$ndk.fetchEvent(product.ID).then((e) => {
-			if (e) {
-				productEvent = e;
-			}
-		});
-	});
+	// onMount(() => {
+	// 	$ndk.fetchEvent(product.ID).then((e) => {
+	// 		if (e) {
+	// 			productEvent = e;
+	// 		}
+	// 	});
+	// });
+
+	function productsInclude(id:string) {
+		let included = false
+		for (let p of products) {
+			if (p.ID() == id) {included = true}
+		}
+		return included
+	}
 
 	let validZaps = derived(zaps, ($zaps) => {
 		let zapMap = new Map<string, ZapPurchase>();
 		for (let z of $zaps) {
 			let zapPurchase = new ZapPurchase(z);
-			if (zapPurchase.Valid(rocket) && zapPurchase.ProductID == product.ID) {
+			if (zapPurchase.Valid(rocket.Event) && productsInclude(zapPurchase.ProductID)) {
 				zapMap.set(zapPurchase.ZapReceipt.id, zapPurchase);
 			}
 		}
@@ -48,7 +57,7 @@
 	let zapsNotInRocket = derived(validZaps, ($validZaps) => {
 		let zapMap = new Map<string, ZapPurchase>();
 		for (let [id, z] of $validZaps) {
-			if (!z.IncludedInRocketState(rocket)) {
+			if (!z.IncludedInRocketState(rocket.Event)) {
 				zapMap.set(id, z);
 			}
 		}
@@ -59,7 +68,7 @@
 
 	zapsNotInRocket.subscribe((z) => {
 		z.forEach((z) => {
-			ValidateZapPublisher(rocket, z.ZapReceipt).then((result) => {
+			ValidateZapPublisher(rocket.Event, z.ZapReceipt).then((result) => {
 				if (result) {
 					validPubkeys.update(existing=>{
 						existing.add(z.ZapReceipt.pubkey);

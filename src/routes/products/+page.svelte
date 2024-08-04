@@ -6,6 +6,7 @@
 	import { derived } from 'svelte/store';
 	import Heading from '../../components/Heading.svelte';
 	import ProductCard from '../../components/ProductCard.svelte';
+	import { Product, Rocket } from '@/event_helpers/rockets';
 
 	let rockets: NDKEventStore<NDKEvent> | undefined;
 	let products: NDKEventStore<NDKEvent> | undefined;
@@ -48,7 +49,7 @@
 		<Heading title={r.dTag} />
 		<div class="grid gap-2" style="grid-template-columns: repeat(auto-fit, 350px);">
 			{#each p as product (product.id)}
-				<ProductCard {product} rocket={r} />
+				<ProductCard product={new Product(product)} rocket={new Rocket(r)} />
 			{/each}
 		</div>
 	{/each}
