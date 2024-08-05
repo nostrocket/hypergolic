@@ -1,12 +1,12 @@
 <script lang="ts">
+	import { ndk } from '@/ndk';
+	import { getBitcoinTip } from '@/stores/bitcoin';
+	import { currentUser, prepareUserSession } from '@/stores/session';
+	import type { NDKUser } from '@nostr-dev-kit/ndk';
 	import { ModeWatcher } from 'mode-watcher';
+	import { onMount } from 'svelte';
 	import '../app.css';
 	import SidePanelLayout from '../layouts/SidePanelLayout.svelte';
-	import { ndk } from '@/ndk';
-	import type { NDKUser } from '@nostr-dev-kit/ndk';
-	import { currentUser, prepareUserSession } from '@/stores/session';
-	import { unixTimeNow } from '@/helpers';
-	import { getBitcoinTip } from '@/stores/bitcoin';
 
 	let sessionStarted = false;
 	let connected = false;
@@ -27,17 +27,11 @@
 		sessionStarted = true;
 	}
 
-	let lastRequestTime = 0;
+	onMount(()=>{getBitcoinTip();})
 
-	$: {
-		if (unixTimeNow() > lastRequestTime + 30000) {
-			getBitcoinTip().then((x) => {
-				if (x) {
-					lastRequestTime = unixTimeNow();
-				}
-			});
-		}
-	}
+	setInterval(function () {
+		getBitcoinTip();
+	}, 2* 60 * 1000);
 </script>
 
 <ModeWatcher defaultMode="dark" />

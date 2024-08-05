@@ -2,7 +2,7 @@ import { NDKEvent, type NDKTag } from '@nostr-dev-kit/ndk';
 import { MapOfVotes, MeritRequest, Votes } from './merits';
 import { getAuthorizedZapper } from '@/helpers';
 import validate from 'bitcoin-address-validation';
-import { BitcoinTipTag, txs } from '@/stores/bitcoin';
+import { BitcoinTipTag, bitcoinTip, txs } from '@/stores/bitcoin';
 
 export class Rocket {
 	UpsertBitcoinAssociation(association: BitcoinAssociation): NDKEvent {
@@ -619,6 +619,8 @@ export async function ValidateZapPublisher(rocket: NDKEvent, zap: NDKEvent): Pro
 	});
 }
 
+type AMRAuctionStatus = 'PENDING' | 'OPEN' | 'TX DETECTED' | 'SOLD & PENDING RATIFICATION' | 'CHECKING MEMPOOL';
+
 export class AMRAuction {
 	AMRIDs: string[];
 	Owner: string | undefined;
@@ -630,32 +632,50 @@ export class AMRAuction {
 	Merits: number;
 	Event: NDKEvent;
 	Extra: { rocket: Rocket };
-	Status(rocket: Rocket, transactions?: txs): string {
-		let status = 'PENDING';
+	Status(
+		rocket: Rocket,
+		bitcoinTip: number,
+		transactions?: txs
+	): AMRAuctionStatus {
+		let status:AMRAuctionStatus = "PENDING"
 		if (transactions && transactions.Address != this.RxAddress) {
 			throw new Error('invalid address');
 		}
-		for (let pending of rocket.PendingAMRAuctions()) {
-			this.AMRIDs.sort()
-			pending.AMRIDs.sort()
-			if (
-				pending.Owner == this.Owner &&
-				pending.Merits == this.Merits &&
-				pending.RxAddress == this.RxAddress &&
-				pending.AMRIDs[0] == this.AMRIDs[0] //todo: check whole array
-			) {
-				status = "OPEN"
-			}
-		}
 		if (transactions) {
+			status = 'CHECKING MEMPOOL';
 			for (let [t, txo] of transactions.From()) {
 				//todo: implement pricing based on block height
 				if (txo.Amount == this.EndPrice && txo.To == this.RxAddress) {
-					status = "SOLD"
+					if (txo.Height > 0 && txo.Height < bitcoinTip) {
+						status = 'SOLD & PENDING RATIFICATION';
+					} else {
+						status = 'TX DETECTED';
+					}
 				}
 			}
+			let found = false;
+			for (let pending of rocket.PendingAMRAuctions()) {
+				this.AMRIDs.sort();
+				pending.AMRIDs.sort();
+				if (
+					pending.Owner == this.Owner &&
+					pending.Merits == this.Merits &&
+					pending.RxAddress == this.RxAddress &&
+					pending.AMRIDs[0] == this.AMRIDs[0] //todo: check whole array
+				) {
+					found = true
+					if (status == "CHECKING MEMPOOL") {
+						if (
+							Math.floor(new Date().getTime() / 1000) < transactions.LastUpdate + 60000
+						) {
+							status = 'OPEN';
+						}
+					}
+				}
+			}
+
 		}
-		return status
+		return status;
 	}
 	GenerateEvent(): NDKEvent {
 		let e = new NDKEvent();

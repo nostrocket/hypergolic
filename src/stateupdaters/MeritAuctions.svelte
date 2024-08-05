@@ -57,5 +57,3 @@
 		//todo: validate and publish rocket updates
 	});
 </script>
-
-<!-- {#each $validAuctionRequests as [_, a]}<span on:click={()=>{console.log(a)}}>{a.Event.id}</span>{/each} -->

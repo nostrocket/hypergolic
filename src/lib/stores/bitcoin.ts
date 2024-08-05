@@ -19,17 +19,45 @@ export function BitcoinTipTag(): string[] {
 }
 
 export async function getBitcoinTip() {
+	getBitcoinTipBlockstream();
+	getBitcoinTipMempool();
+}
+
+async function getBitcoinTipBlockstream() {
 	try {
-	const response = await fetch('https://blockstream.info/api/blocks/tip');
-	const _json = await response.json();
-	if (_json[0]) {
-		let r: BitcoinTip = {
-			height: _json[0].height,
-			hash: _json[0].id
-		};
-		bitcoinTip.set(r);
-		return r;
-	}} catch {
+		const response = await fetch('https://blockstream.info/api/blocks/tip');
+		const _json = await response.json();
+		if (_json[0]) {
+			let r: BitcoinTip = {
+				height: _json[0].height,
+				hash: _json[0].id
+			};
+			if (r.hash && r.height) {
+				bitcoinTip.set(r);
+				return r;
+			}
+		}
+	} catch {
+		return null;
+	}
+	return null;
+}
+
+async function getBitcoinTipMempool() {
+	try {
+		const response = await fetch('https://mempool.space/api/blocks/tip');
+		const _json = await response.json();
+		if (_json[0]) {
+			let r: BitcoinTip = {
+				height: _json[0].height,
+				hash: _json[0].id
+			};
+			if (r.hash && r.height) {
+				bitcoinTip.set(r);
+				return r;
+			}
+		}
+	} catch {
 		return null;
 	}
 	return null;
@@ -66,7 +94,7 @@ export async function getBalance(address: string): Promise<number> {
 	});
 }
 
-export async function getIncomingTransactions(address: string):Promise<JSON> {
+export async function getIncomingTransactions(address: string): Promise<JSON> {
 	return new Promise((resolve, reject) => {
 		if (!validate(address)) {
 			reject('invalid address');
@@ -80,7 +108,7 @@ export async function getIncomingTransactions(address: string):Promise<JSON> {
 							response
 								.json()
 								.then((j) => {
-									resolve(j)
+									resolve(j);
 								})
 								.catch((x) => reject(x));
 						}
@@ -98,40 +126,44 @@ export async function getIncomingTransactions(address: string):Promise<JSON> {
 export class txs {
 	Address: string;
 	LastUpdate: number;
+	LastAttempt: number;
 	Data: JSON;
-	From():Map<string, txo> {
-		let possibles = new Map<string, txo>()
+	From(): Map<string, txo> {
+		let possibles = new Map<string, txo>();
 		for (let tx of this.Data) {
-			let amount = 0
-			let height = tx.status.block_height;
+			let amount = 0;
+			let height = tx.status.block_height ? tx.status.block_height : 0;
 			let txid = tx.txid;
 			for (let vout of tx.vout) {
-				let address = vout.scriptpubkey_address
+				let address = vout.scriptpubkey_address;
 				if (address && address.trim() == this.Address) {
-					let value = vout.value
+					let value = vout.value;
 					if (value) {
-						amount += parseInt(value, 10)
+						amount += parseInt(value, 10);
 					}
 				}
 			}
 			for (let vin of tx.vin) {
-				let address = vin.prevout.scriptpubkey_address
+				let address = vin.prevout.scriptpubkey_address;
 				if (address && validate(address)) {
-					let t = new txo()
-					t.Amount = amount
-					t.Height = height
-					t.From = address
-					t.To = this.Address
-					t.ID = txid
-					possibles.set(address, t)
+					let t = new txo();
+					t.Amount = amount;
+					t.Height = height;
+					t.From = address;
+					t.To = this.Address;
+					t.ID = txid;
+					possibles.set(address, t);
+				} else {
+					console.log(156, vin)
 				}
 			}
 		}
-		return possibles
+		return possibles;
 	}
 	constructor(address: string) {
 		this.Address = address.trim();
 		this.LastUpdate = 0;
+		this.LastAttempt = 0;
 		this.Data = JSON.parse('[]');
 	}
 }
@@ -142,7 +174,5 @@ export class txo {
 	To: string;
 	Amount: number;
 	Height: number;
-	constructor() {
-
-	}
+	constructor() {}
 }
