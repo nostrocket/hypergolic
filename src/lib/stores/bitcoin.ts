@@ -65,3 +65,84 @@ export async function getBalance(address: string): Promise<number> {
 		}
 	});
 }
+
+export async function getIncomingTransactions(address: string):Promise<JSON> {
+	return new Promise((resolve, reject) => {
+		if (!validate(address)) {
+			reject('invalid address');
+		} else {
+			try {
+				fetch(`https://mempool.space/api/address/${address}/txs`)
+					.then((response) => {
+						if (!response.ok) {
+							reject('invalid response from server');
+						} else {
+							response
+								.json()
+								.then((j) => {
+									resolve(j)
+								})
+								.catch((x) => reject(x));
+						}
+					})
+					.catch((x) => {
+						reject(x);
+					});
+			} catch {
+				reject('failed');
+			}
+		}
+	});
+}
+
+export class txs {
+	Address: string;
+	LastUpdate: number;
+	Data: JSON;
+	From():Map<string, txo> {
+		let possibles = new Map<string, txo>()
+		for (let tx of this.Data) {
+			let amount = 0
+			let height = tx.status.block_height;
+			let txid = tx.txid;
+			for (let vout of tx.vout) {
+				let address = vout.scriptpubkey_address
+				if (address && address.trim() == this.Address) {
+					let value = vout.value
+					if (value) {
+						amount += parseInt(value, 10)
+					}
+				}
+			}
+			for (let vin of tx.vin) {
+				let address = vin.prevout.scriptpubkey_address
+				if (address && validate(address)) {
+					let t = new txo()
+					t.Amount = amount
+					t.Height = height
+					t.From = address
+					t.To = this.Address
+					t.ID = txid
+					possibles.set(address, t)
+				}
+			}
+		}
+		return possibles
+	}
+	constructor(address: string) {
+		this.Address = address.trim();
+		this.LastUpdate = 0;
+		this.Data = JSON.parse('[]');
+	}
+}
+
+export class txo {
+	ID: string;
+	From: string;
+	To: string;
+	Amount: number;
+	Height: number;
+	constructor() {
+
+	}
+}

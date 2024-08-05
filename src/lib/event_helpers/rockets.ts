@@ -2,39 +2,39 @@ import { NDKEvent, type NDKTag } from '@nostr-dev-kit/ndk';
 import { MapOfVotes, MeritRequest, Votes } from './merits';
 import { getAuthorizedZapper } from '@/helpers';
 import validate from 'bitcoin-address-validation';
-import { BitcoinTipTag } from '@/stores/bitcoin';
+import { BitcoinTipTag, txs } from '@/stores/bitcoin';
 
 export class Rocket {
 	UpsertBitcoinAssociation(association: BitcoinAssociation): NDKEvent {
 		let event: NDKEvent | undefined = undefined;
-		if (true) { //todo: check if exists
+		if (true) {
+			//todo: check if exists
 			this.PrepareForUpdate();
 			event = new NDKEvent(this.Event.ndk, this.Event.rawEvent());
 			event.created_at = Math.floor(new Date().getTime() / 1000);
-			event.tags.push(["address", `${association.Pubkey}:${association.Address}`])
+			event.tags.push(['address', `${association.Pubkey}:${association.Address}`]);
 			event.tags.push(['proof_full', JSON.stringify(association.Event.rawEvent())]);
 			updateIgnitionAndParentTag(event);
 			updateBitcoinTip(event);
 		}
 		return event;
 	}
-	BitcoinAssociations():Map<string, BitcoinAssociation> {
-		let a = new Map<string, BitcoinAssociation>()
-		for (let t of this.Event.getMatchingTags("address")) {
+	BitcoinAssociations(): Map<string, BitcoinAssociation> {
+		let a = new Map<string, BitcoinAssociation>();
+		for (let t of this.Event.getMatchingTags('address')) {
 			if (t.length == 2) {
-				let split = t[1].split(":")
+				let split = t[1].split(':');
 				if (split.length == 2) {
-					let ba = new BitcoinAssociation()
-					ba.Address = split[1]
-					ba.Pubkey = split[0]
+					let ba = new BitcoinAssociation();
+					ba.Address = split[1];
+					ba.Pubkey = split[0];
 					if (ba.Validate()) {
-						a.set(ba.Pubkey, ba)
+						a.set(ba.Pubkey, ba);
 					}
 				}
-				
 			}
 		}
-		return a
+		return a;
 	}
 	Event: NDKEvent;
 
@@ -68,9 +68,9 @@ export class Rocket {
 		return '';
 	}
 	Products(): Map<string, RocketProduct> {
-		let _products = new Map<string, RocketProduct>()
+		let _products = new Map<string, RocketProduct>();
 		for (let p of this.Event.getMatchingTags('product')) {
-			let rp = new RocketProduct(p)
+			let rp = new RocketProduct(p);
 			_products.set(rp.ID, rp);
 		}
 		return _products;
@@ -522,7 +522,7 @@ export class ZapPurchase {
 			return true;
 		}
 		let product = this.ProductFromRocket(rocket);
-		if (product && this.Amount/1000 >= product.Price) {
+		if (product && this.Amount / 1000 >= product.Price) {
 			return true;
 		}
 		return false;
@@ -630,6 +630,33 @@ export class AMRAuction {
 	Merits: number;
 	Event: NDKEvent;
 	Extra: { rocket: Rocket };
+	Status(rocket: Rocket, transactions?: txs): string {
+		let status = 'PENDING';
+		if (transactions && transactions.Address != this.RxAddress) {
+			throw new Error('invalid address');
+		}
+		for (let pending of rocket.PendingAMRAuctions()) {
+			this.AMRIDs.sort()
+			pending.AMRIDs.sort()
+			if (
+				pending.Owner == this.Owner &&
+				pending.Merits == this.Merits &&
+				pending.RxAddress == this.RxAddress &&
+				pending.AMRIDs[0] == this.AMRIDs[0] //todo: check whole array
+			) {
+				status = "OPEN"
+			}
+		}
+		if (transactions) {
+			for (let [t, txo] of transactions.From()) {
+				//todo: implement pricing based on block height
+				if (txo.Amount == this.EndPrice && txo.To == this.RxAddress) {
+					status = "SOLD"
+				}
+			}
+		}
+		return status
+	}
 	GenerateEvent(): NDKEvent {
 		let e = new NDKEvent();
 		e.kind = 1412;
@@ -756,7 +783,7 @@ export class BitcoinAssociation {
 	Pubkey: string;
 	Address: string | undefined;
 	Event: NDKEvent;
-	Balance:number;
+	Balance: number;
 	Validate(): boolean {
 		let valid = true;
 		if (this.Pubkey.length != 64) {
@@ -780,40 +807,40 @@ export class BitcoinAssociation {
 
 export class Product {
 	Event: NDKEvent;
-	Group():string {
-		let s = this.Name()
+	Group(): string {
+		let s = this.Name();
 		//let regex = /\[\w+\]/i;
 		//if (regex.test(this.Name())) {
-			let g = this.Name().substring(this.Name().indexOf("[")+1, this.Name().lastIndexOf("]"))
-			if (g.length > 0) {
-				s = g
-			}
+		let g = this.Name().substring(this.Name().indexOf('[') + 1, this.Name().lastIndexOf(']'));
+		if (g.length > 0) {
+			s = g;
+		}
 		//}
-		return s
+		return s;
 	}
-	Option():string {
-		let result = ""
-		let group = this.Name().substring(this.Name().indexOf("["), this.Name().lastIndexOf("]")+1)
+	Option(): string {
+		let result = '';
+		let group = this.Name().substring(this.Name().indexOf('['), this.Name().lastIndexOf(']') + 1);
 		if (group.length > 0) {
 			for (let s of this.Name().trim().split(group)) {
 				if (s.trim().length > 0) {
-					result = s.trim()
+					result = s.trim();
 				}
 			}
 		}
-		return result
+		return result;
 	}
-	ID():string {
-		return this.Event.id
+	ID(): string {
+		return this.Event.id;
 	}
-	Name():string {
-		return this.Event.getMatchingTags('name')[0][1]
+	Name(): string {
+		return this.Event.getMatchingTags('name')[0][1];
 	}
-	Description():string {
-		return this.Event.getMatchingTags('description')[0][1]
+	Description(): string {
+		return this.Event.getMatchingTags('description')[0][1];
 	}
-	CoverImage():string {
-		return this.Event.getMatchingTags('cover')[0][1]
+	CoverImage(): string {
+		return this.Event.getMatchingTags('cover')[0][1];
 	}
 	Validate(): boolean {
 		let test = 0;
@@ -841,6 +868,6 @@ export class Product {
 		return test == 3;
 	}
 	constructor(event: NDKEvent) {
-		this.Event = event
+		this.Event = event;
 	}
 }

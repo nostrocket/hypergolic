@@ -27,7 +27,7 @@
 		addresses = rocket.BitcoinAssociations()
 		addresses.forEach(a => {
 			if (a.Address) {
-				getBalance(a.Address).then(v=>{a.Balance = v; addresses.set(a.Pubkey, a); addresses = addresses})
+				getBalance(a.Address).then(v=>{a.Balance = v; addresses.set(a.Pubkey, a); addresses = addresses}).catch(err=>{console.log(err)})
 			}
 		})
 	})
@@ -68,7 +68,7 @@
 							</div>
 						</Table.Cell>
 						<Table.Cell class="hidden text-left md:table-cell">
-							{ba.Balance?ba.Balance.toLocaleString():"just wait a sec..."}
+							{ba.Balance.toLocaleString()}
 						</Table.Cell>
 						<Table.Cell class="table-cell">{ba.Address}</Table.Cell>
 						
