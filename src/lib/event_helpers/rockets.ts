@@ -419,7 +419,7 @@ export class RocketAMR {
 	LeadTime: number;
 	LeadTimeUpdate: number;
 	Merits: number;
-	Extra: {};
+	Extra: {eventAMR: AMRAuction};
 	SatsOwed(): number {
 		return 0;
 	}

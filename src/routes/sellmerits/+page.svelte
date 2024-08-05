@@ -7,15 +7,21 @@
 	import { ndk } from '@/ndk';
 	import { currentUser } from '@/stores/session';
 	import { NDKEvent } from '@nostr-dev-kit/ndk';
-	import { onDestroy } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { derived } from 'svelte/store';
 	import Login from '../../components/Login.svelte';
 	import CreateAMRAuction from '../../components/CreateAMRAuction.svelte';
 	import MeritAuctions from '../../stateupdaters/MeritAuctions.svelte';
 	import Heading from '../../components/Heading.svelte';
+	import type { NDKEventStore, ExtendedBaseType } from '@nostr-dev-kit/ndk-svelte';
 	let rocketEvents = $ndk.storeSubscribe([{ kinds: [31108 as number] }], { subId: 'all_rockets' });
+	let amrAuctionEvents = $ndk.storeSubscribe([{ kinds: [1412 as number] }], {
+		subId: 'my_auctions'
+	});
+
 	onDestroy(() => {
 		rocketEvents?.unsubscribe();
+		amrAuctionEvents?.unsubscribe();
 	});
 
 	let rockets = derived(rocketEvents, ($rocketEvents) => {
@@ -33,22 +39,48 @@
 		return Array.from(m, ([_, e]) => new Rocket(e));
 	});
 
-	let myMeritRequests = derived([currentUser, rockets], ([$currentUser, $rockets]) => {
-		let merits = new Map<Rocket, RocketAMR[]>();
-		if ($currentUser) {
-			for (let r of $rockets) {
-				//let parsedRocket = new Rocket(r);
-				let _merits: RocketAMR[] = [];
-				for (let [_, amr] of r.ApprovedMeritRequests()) {
-					if (amr.Pubkey == $currentUser.pubkey) {
-						_merits.push(amr);
+	let myAmrAuctionEvents = derived(
+		[currentUser, amrAuctionEvents],
+		([$currentUser, $amrAuctionEvents]) => {
+			let events = new Map<string, AMRAuction>();
+			if ($currentUser) {
+				for (let e of $amrAuctionEvents) {
+					if (e.pubkey == $currentUser.pubkey) {
+						let amr = e.tagValue('request');
+						if (amr) {
+							events.set(amr, new AMRAuction(undefined, e, undefined));
+						}
 					}
 				}
-				merits.set(r, _merits);
 			}
+			return events;
 		}
-		return merits;
-	});
+	);
+
+	let myMeritRequests = derived(
+		[currentUser, rockets, myAmrAuctionEvents],
+		([$currentUser, $rockets, $myAmrAuctionEvents]) => {
+			let merits = new Map<Rocket, RocketAMR[]>();
+			if ($currentUser) {
+				for (let r of $rockets) {
+					//let parsedRocket = new Rocket(r);
+					let _merits: RocketAMR[] = [];
+					for (let [_, amr] of r.ApprovedMeritRequests()) {
+						let amrAuction = $myAmrAuctionEvents.get(amr.ID);
+						if (amrAuction) {
+							amr.Extra = { eventAMR: amrAuction };
+						}
+						if (amr.Pubkey == $currentUser.pubkey) {
+							_merits.push(amr);
+						}
+					}
+					merits.set(r, _merits);
+				}
+			}
+
+			return merits;
+		}
+	);
 
 	let selected_amrs = new Map</* rocket id */ string, AMRAuction>();
 	function toggleSelected(amr: RocketAMR, rocket: Rocket) {
@@ -102,6 +134,7 @@
 	// 	return thisRocket
 	// }
 </script>
+
 <Heading title="Trade your Merits for Sats" />
 
 {#if $currentUser}
@@ -121,10 +154,14 @@
 					</Table.Row>
 				</Table.Header>
 				<Table.Body>
-					{#each rocket.PendingAMRAuctions().filter(r=>{return Boolean(r.Owner == $currentUser.pubkey)}) as p}
+					{#each rocket.PendingAMRAuctions().filter((r) => {
+						return Boolean(r.Owner == $currentUser.pubkey);
+					}) as p}
 						<Table.Row class="bg-purple-500 hover:bg-purple-600">
 							<Table.Cell><Checkbox /></Table.Cell>
-							<Table.Cell>{p.AMRIDs.length > 1 ? 'multiple' : p.AMRIDs[0].substring(0,12)}</Table.Cell>
+							<Table.Cell
+								>{p.AMRIDs.length > 1 ? 'multiple' : p.AMRIDs[0].substring(0, 12)}</Table.Cell
+							>
 							<Table.Cell>{p.Merits}</Table.Cell>
 							<Table.Cell>Pending</Table.Cell>
 							<Table.Cell>{p.RxAddress}</Table.Cell>
@@ -141,6 +178,7 @@
 							>
 								<Table.Cell
 									><Checkbox
+										disabled={Boolean(a.Extra.eventAMR)}
 										id={a.ID}
 										checked={getSelectedStatus(rocket.Event.id, a.ID, selected_amrs)}
 										on:click={() => {
@@ -157,8 +195,8 @@
 									></Table.Cell
 								>
 								<Table.Cell>{a.Merits}</Table.Cell>
-								<Table.Cell>Eligible</Table.Cell>
-								<Table.Cell></Table.Cell>
+								<Table.Cell>{a.Extra.eventAMR ? 'pending' : 'Eligible'}</Table.Cell>
+								<Table.Cell>{a.Extra.eventAMR?.RxAddress}</Table.Cell>
 								<Table.Cell class="text-right">{a.Merits}</Table.Cell>
 							</Table.Row>
 						{/if}
