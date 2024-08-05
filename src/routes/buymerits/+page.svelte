@@ -71,17 +71,28 @@
 		return _transactions;
 	});
 
-	let soldButNotInState = derived(
+	let nextSoldButNotInState = derived(
 		[pendingSales, transactions, bitcoinTip, currentUser],
 		([$pendingSales, $transactions, $bitcoinTip, $currentUser]) => {
 			if ($currentUser) {
 				for (let [r, p] of $pendingSales) {
 					if (r.VotePowerForPubkey($currentUser.pubkey) > 0) {
-						for (let ps of p) {
+						for (let amrAuction of p) {
 							if (
-								ps.Status(r, $bitcoinTip.height, $transactions.get(ps.RxAddress)) ==
+								amrAuction.Status(r, $bitcoinTip.height, $transactions.get(amrAuction.RxAddress)) ==
 								'SOLD & PENDING RATIFICATION'
 							) {
+								let txs = $transactions.get(amrAuction.RxAddress)
+								if (txs) {
+									for (let [address, txo] of txs.From()) {
+										for (let [_, ba] of r.BitcoinAssociations()) {
+											if (ba.Address == txo.From) {
+												return {auction:amrAuction, buyer: ba.Pubkey, txid: txo.ID, sats: txo.Amount}
+											}
+										}
+									}
+								}
+								
 							}
 						}
 					}
@@ -90,7 +101,7 @@
 		}
 	);
 
-	soldButNotInState.subscribe((t) => {
+	nextSoldButNotInState.subscribe((t) => {
 		if (t) console.log(t);
 	});
 
