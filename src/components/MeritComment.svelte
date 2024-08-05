@@ -35,7 +35,6 @@
 		}
 		const e = prepareMeritNoteEvent({
 			ndk,
-			author,
 			merit,
 			content
 		});
