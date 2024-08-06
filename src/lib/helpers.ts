@@ -1,4 +1,4 @@
-import { NDKZap, NDKEvent, type NDKKind, type NDKTag, type NDKUser } from '@nostr-dev-kit/ndk';
+import { NDKKind, NDKZap, NDKEvent, NDKUser, type NDKTag } from '@nostr-dev-kit/ndk';
 import type NDKSvelte from '@nostr-dev-kit/ndk-svelte';
 import { QrCode } from '$lib/qrcodegen';
 
@@ -18,8 +18,6 @@ export function getRocketURL(e: NDKEvent): string {
 	let p = e.pubkey;
 	return `${ignitionID}?d=${d}&p=${p}`;
 }
-
-
 
 export function unixTimeNow() {
 	return Math.floor(new Date().getTime() / 1000);
@@ -166,21 +164,37 @@ export async function getAuthorizedZapper(rocket: NDKEvent): Promise<string> {
 
 export function prepareNostrEvent(args: {
 	ndk: NDKSvelte;
-	author: NDKUser;
 	kind: NDKKind;
 	content: string;
 	tags?: NDKTag[];
 }) {
 	let e = new NDKEvent(args.ndk);
-	e.author = args.author;
 	e.kind = args.kind;
-	e.created_at = Math.floor(new Date().getTime() / 1000);
 	e.content = args.content;
 	if (args.tags) {
 		e.tags = args.tags;
 	}
 	console.log(e.rawEvent());
 	return e;
+}
+
+export async function prepareEncryptedDirectMessageEvent(args: {
+	ndk: NDKSvelte;
+	receiver: NDKUser;
+	content: string;
+}) {
+	const signer = args.ndk.signer;
+	if (!signer) {
+		return new Error('no signer');
+	}
+	const tags = [['p', args.receiver.pubkey]];
+	const event = prepareNostrEvent({
+		...args,
+		kind: NDKKind.EncryptedDirectMessage,
+		tags
+	});
+	await event.encrypt(args.receiver, signer);
+	return event;
 }
 
 export function drawSvgPath(qr: QrCode, border: number): string {

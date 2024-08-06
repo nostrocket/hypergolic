@@ -343,14 +343,13 @@ function pubkeyLatestVote(votes: Votes) {
 
 export function prepareMeritNoteEvent(args: {
 	ndk: NDKSvelte;
-	author: NDKUser;
 	merit: MeritRequest;
 	content: string;
 }) {
 	const tags = [
 		['p', args.merit.Pubkey],
-		['e', args.merit.ID, "wss://relay.nostrocket.org", 'reply'],
-		args.merit.RocketTag?['a', args.merit.RocketTag]:[],
+		['e', args.merit.ID, 'wss://relay.nostrocket.org', 'reply'],
+		args.merit.RocketTag ? ['a', args.merit.RocketTag] : []
 	];
 	return prepareNostrEvent({
 		...args,
@@ -361,7 +360,6 @@ export function prepareMeritNoteEvent(args: {
 
 export function prepareMeritVoteEvent(args: {
 	ndk: NDKSvelte;
-	author: NDKUser;
 	rocket: Rocket;
 	merit: MeritRequest;
 	direction: string;

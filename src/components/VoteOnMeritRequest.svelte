@@ -25,7 +25,6 @@
 		}
 		prepareMeritVoteEvent({
 			ndk,
-			author,
 			rocket,
 			merit,
 			direction
@@ -35,10 +34,9 @@
 				console.log(x);
 			});
 		if (direction === 'ratify') {
-			let content = `I've voted to ratify your merit request! ${merit.Problem()} \n\n ${merit.Solution()?merit.Solution():""}`;
+			let content = `I've voted to ratify your merit request! ${merit.Problem()} \n\n ${merit.Solution() ? merit.Solution() : ''}`;
 			prepareMeritNoteEvent({
 				ndk,
-				author,
 				merit,
 				content
 			})
