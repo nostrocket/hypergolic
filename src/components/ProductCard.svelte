@@ -11,7 +11,10 @@
 {#if product.Validate()}
 	<Card.Root>
 		<Card.Header>
-			<Card.Title>{product.Group()} {#if product.Option().length > 0}(variant: {product.Option()}){/if}</Card.Title>
+			<Card.Title
+				>{product.Group()}
+				{#if product.Option().length > 0}(variant: {product.Option()}){/if}</Card.Title
+			>
 			<Card.Description>{product.Description()}</Card.Description>
 		</Card.Header>
 
@@ -27,9 +30,11 @@
 				</div>
 			</Card.Content>
 		{:else}
-			<img src={product.CoverImage()} alt="cover" class="aspect-square object-cover" />
+			<div class="grid place-items-center">
+				<img src={product.CoverImage()} alt="cover" class="aspect-square object-cover" />
+			</div>
 		{/if}
-		<Card.Footer class="flex justify-center pt-2">
+		<Card.Footer class="flex items-center justify-center pt-2">
 			{#if !rocket.Products().get(product.ID())}
 				<AddProductToRocket {product} {rocket} />
 			{:else}

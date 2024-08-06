@@ -2,7 +2,6 @@
 	import * as Card from '@/components/ui/card';
 	import * as Table from '@/components/ui/table';
 	import { Rocket } from '@/event_helpers/rockets';
-	import type { NDKEvent } from '@nostr-dev-kit/ndk';
 	import { writable } from 'svelte/store';
 	import Pie from './Pie.svelte';
 	import { Avatar, Name } from '@nostr-dev-kit/ndk-svelte-components';
