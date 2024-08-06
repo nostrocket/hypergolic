@@ -178,7 +178,7 @@
 							>
 								<Table.Cell
 									><Checkbox
-										disabled={Boolean(a.Extra.eventAMR)}
+										disabled={Boolean(a.Extra?.eventAMR)}
 										id={a.ID}
 										checked={getSelectedStatus(rocket.Event.id, a.ID, selected_amrs)}
 										on:click={() => {
@@ -195,8 +195,8 @@
 									></Table.Cell
 								>
 								<Table.Cell>{a.Merits}</Table.Cell>
-								<Table.Cell>{a.Extra.eventAMR ? 'pending' : 'Eligible'}</Table.Cell>
-								<Table.Cell>{a.Extra.eventAMR?.RxAddress}</Table.Cell>
+								<Table.Cell>{a.Extra?.eventAMR ? 'pending' : 'Eligible'}</Table.Cell>
+								<Table.Cell>{a.Extra?.eventAMR?.RxAddress}</Table.Cell>
 								<Table.Cell class="text-right">{a.Merits}</Table.Cell>
 							</Table.Row>
 						{/if}
