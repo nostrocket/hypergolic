@@ -12,6 +12,7 @@
 	import QrCodeSvg from './QrCodeSvg.svelte';
 	import CopyButton from './CopyButton.svelte';
 	import type { Product, Rocket, RocketProduct } from '@/event_helpers/rockets';
+	import { formatSats } from '@/helpers';
 
 	export let product: Product;
 	export let rocketProduct: RocketProduct | undefined;
@@ -21,7 +22,11 @@
 
 	async function zap() {
 		if (rocketProduct) {
-			const z = new NDKZap({ ndk: $ndk, zappedEvent: rocket.Event, zappedUser: rocket.Event.author });
+			const z = new NDKZap({
+				ndk: $ndk,
+				zappedEvent: rocket.Event,
+				zappedUser: rocket.Event.author
+			});
 			invoice = await z.createZapRequest(
 				rocketProduct.Price * 1000,
 				`Purchase of ${product.Name()} from ${rocket.Event.dTag}`,
@@ -51,13 +56,11 @@
 {#if rocketProduct}
 	<Dialog.Root bind:open>
 		<Dialog.Trigger class={buttonVariants({ variant: 'default' })}
-			>Buy Now for {rocketProduct.Price} sats</Dialog.Trigger
+			>Buy Now for {formatSats(rocketProduct.Price)}</Dialog.Trigger
 		>
 		<Dialog.Content class="sm:max-w-[425px]">
 			<Dialog.Header>
-				<Dialog.Title
-					>Buy {product.Name()} from {rocket.Name()} now!</Dialog.Title
-				>
+				<Dialog.Title>Buy {product.Name()} from {rocket.Name()} now!</Dialog.Title>
 				{#if !currentUser}
 					<Alert.Root>
 						<Terminal class="h-4 w-4" />
@@ -67,7 +70,11 @@
 						>
 					</Alert.Root>
 				{/if}
-				<Dialog.Description>Pay {rocketProduct.Price} sats now with Lightning</Dialog.Description>
+				<Dialog.Description
+					>Pay {rocketProduct.Price === 1
+						? `${rocketProduct.Price} sat`
+						: `${rocketProduct.Price} sats`} now with Lightning</Dialog.Description
+				>
 			</Dialog.Header>
 			{#if invoice}
 				<QrCodeSvg content={invoice} />

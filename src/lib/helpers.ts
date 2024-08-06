@@ -71,6 +71,17 @@ export function formatReferenceTime(hours: number) {
 	return result || '0 minutes';
 }
 
+export function formatSats(sats: number): string {
+	if (sats === 1) {
+		return '1 sat';
+	} else if (sats >= 1000) {
+		const kSats = (sats / 1000).toFixed(0);
+		return `${kSats}k sats`;
+	} else {
+		return `${sats} sats`;
+	}
+}
+
 export async function getCuckPrice(): Promise<number | Error> {
 	try {
 		var url = 'https://api.coindesk.com/v1/bpi/currentprice.json';
