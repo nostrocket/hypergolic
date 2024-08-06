@@ -5,7 +5,7 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { ndk } from '@/ndk';
 	import { currentUser } from '@/stores/session';
-	import { Terminal } from 'lucide-svelte';
+	import { Info, Terminal } from 'lucide-svelte';
 	import * as Alert from '@/components/ui/alert';
 	import type NDKSvelte from '@nostr-dev-kit/ndk-svelte';
 	import { NDKEvent } from '@nostr-dev-kit/ndk';
@@ -16,6 +16,7 @@
 	import { onDestroy } from 'svelte';
 	import { writable } from 'svelte/store';
 	import { BitcoinTipTag } from '@/stores/bitcoin';
+	import { Description } from 'formsnap';
 
 	let rockets: NDKEventStore<NDKEvent> | undefined;
 	const rocketsStore = writable<NDKEvent[]>([]);
@@ -97,7 +98,16 @@
 					>
 				</Alert.Root>
 			{/if}
-			<Dialog.Description>Choose a name for your new Rocket and click Publish</Dialog.Description>
+			<Dialog.Description
+				>Choose a name for your new Rocket and click Publish.
+				<Alert.Root
+					><Info class="h-4 w-4" /><Alert.Title>Heads up!</Alert.Title><Alert.Description
+						>If you just want to test things out, include the characters <span class="font-mono"
+							>test</span
+						> somewhere in the name.</Alert.Description
+					></Alert.Root
+				></Dialog.Description
+			>
 		</Dialog.Header>
 		<div class="grid gap-4 py-4">
 			<div class="grid grid-cols-4 items-center gap-4">
