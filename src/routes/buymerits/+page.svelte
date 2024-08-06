@@ -51,20 +51,22 @@
 					_transactions.set(amr.RxAddress, new txs(amr.RxAddress));
 				}
 				let existing = _transactions.get(amr.RxAddress)!;
-				if (
-					Math.floor(new Date().getTime() / 1000) > existing.LastAttempt + 10000
-				) {
+				if (Math.floor(new Date().getTime() / 1000) > existing.LastAttempt + 10000) {
 					existing.LastAttempt = Math.floor(new Date().getTime() / 1000);
-					getIncomingTransactions(amr.RxAddress).then((result) => {
-						if (result) {
-							existing.LastUpdate = Math.floor(new Date().getTime() / 1000);
-						}
-						if (result.length > 0) {
-							existing.Data = result;
-							_transactions.set(amr.RxAddress, existing);
-							_transactions = _transactions;
-						}
-					}).catch(c=>{console.log(c)});
+					getIncomingTransactions(amr.RxAddress)
+						.then((result) => {
+							if (result) {
+								existing.LastUpdate = Math.floor(new Date().getTime() / 1000);
+							}
+							if (result.length > 0) {
+								existing.Data = result;
+								_transactions.set(amr.RxAddress, existing);
+								_transactions = _transactions;
+							}
+						})
+						.catch((c) => {
+							console.log(c);
+						});
 				}
 			}
 		}
@@ -82,17 +84,21 @@
 								amrAuction.Status(r, $bitcoinTip.height, $transactions.get(amrAuction.RxAddress)) ==
 								'SOLD & PENDING RATIFICATION'
 							) {
-								let txs = $transactions.get(amrAuction.RxAddress)
+								let txs = $transactions.get(amrAuction.RxAddress);
 								if (txs) {
 									for (let [address, txo] of txs.From()) {
 										for (let [_, ba] of r.BitcoinAssociations()) {
 											if (ba.Address == txo.From) {
-												return {auction:amrAuction, buyer: ba.Pubkey, txid: txo.ID, sats: txo.Amount}
+												return {
+													auction: amrAuction,
+													buyer: ba.Pubkey,
+													txid: txo.ID,
+													sats: txo.Amount
+												};
 											}
 										}
 									}
 								}
-								
 							}
 						}
 					}
@@ -127,7 +133,7 @@
 {#if $noAssociatedBitcoinAddress}<AssociateBitcoinAddress />{/if}
 
 {#if $currentUser}
-	{#each $pendingSales as [rocket, amr]}
+	{#each $pendingSales as [rocket, amr] (rocket.Event.id)}
 		{#if amr.length > 0}
 			<Heading title={`ROCKET: ${rocket.Name()}`} />
 			<Table.Root>
@@ -143,13 +149,13 @@
 					</Table.Row>
 				</Table.Header>
 				<Table.Body>
-					{#each amr as p}
+					{#each amr as p (p.AMRIDs)}
 						<Table.Row>
 							<Table.Cell
 								><Avatar
 									ndk={$ndk}
 									pubkey={p.Owner}
-									class="h-10 w-10 flex-none rounded-full object-cover"
+									class="aspect-square w-10 flex-none rounded-full object-cover"
 								/></Table.Cell
 							>
 							<Table.Cell
