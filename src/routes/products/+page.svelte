@@ -5,8 +5,8 @@
 	import { onDestroy } from 'svelte';
 	import { derived } from 'svelte/store';
 	import Heading from '../../components/Heading.svelte';
-	import ProductCard from '../../components/ProductCard.svelte';
 	import { Product, Rocket } from '@/event_helpers/rockets';
+	import ProductGroup from '../../components/ProductGroup.svelte';
 
 	let rockets: NDKEventStore<NDKEvent> | undefined;
 	let products: NDKEventStore<NDKEvent> | undefined;
@@ -26,30 +26,41 @@
 	});
 
 	let productsToRender = derived([rocketsWithProducts, products], ([$rocketsWP, $products]) => {
-		let data = new Map<NDKEvent, NDKEvent[]>();
+		let data = new Map<Rocket, Map<string, Product[]>>();
 		let productMap = new Map($products.map((e) => [e.id, e]));
 		for (let r of $rocketsWP) {
-			let events = [];
+			let events: Product[] = [];
 			for (let p of r.getMatchingTags('product')) {
 				let productEvent = productMap.get(p[1].split(':')[0]);
 				if (productEvent) {
-					events.push(productEvent);
+					events.push(new Product(productEvent));
 				}
 			}
 			if (events.length > 0) {
-				data.set(r, events);
+				data.set(new Rocket(r), groups(events));
 			}
+		}
+
+		function groups(products: Product[]): Map</* group name*/ string, Product[]> {
+			return products.reduce((acc, product) => {
+				const group = product.Group();
+				if (!acc.has(group)) {
+					acc.set(group, []);
+				}
+				acc.get(group)!.push(product);
+				return acc;
+			}, new Map<string, Product[]>());
 		}
 		return data;
 	});
 </script>
 
 {#if productsToRender && $productsToRender}
-	{#each $productsToRender as [r, p] (r.id)}
-		<Heading title={r.dTag} />
-		<div class="grid gap-2" style="grid-template-columns: repeat(auto-fit, 350px);">
-			{#each p as product (product.id)}
-				<ProductCard product={new Product(product)} rocket={new Rocket(r)} />
+	{#each $productsToRender as [rocket, groups] (rocket.Event.id)}
+		<Heading title={rocket.Event.dTag} />
+		<div class="grid gap-4" style="grid-template-columns: repeat(auto-fit, 350px);">
+			{#each groups as [identifier, products] (identifier)}
+				<ProductGroup {products} {rocket} />
 			{/each}
 		</div>
 	{/each}
