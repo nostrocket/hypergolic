@@ -1,9 +1,9 @@
 <script lang="ts">
 	import Menu from 'lucide-svelte/icons/menu';
-	import Search from 'lucide-svelte/icons/search';
-
+	import Sun from 'svelte-radix/Sun.svelte';
+	import Moon from 'svelte-radix/Moon.svelte';
+	import { toggleMode } from 'mode-watcher';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { Input } from '$lib/components/ui/input/index.js';
 	import * as Sheet from '$lib/components/ui/sheet/index.js';
 	import NewMenu from '../components/Menu.svelte';
 	import RocketPillCard from '../components/RocketPillCard.svelte';
@@ -57,10 +57,21 @@
 					</div>
 				</Sheet.Content>
 			</Sheet.Root>
-			 <NotifyMe />
-
-			<div class="w-full flex-1 shrink"><Badge class="flex h-8 max-w-16 shrink-0 items-center justify-center rounded-sm">{$bitcoinTip.height}</Badge>
+			<NotifyMe />
+			<div class="w-full flex-1 shrink">
+				<Badge class="flex h-8 max-w-16 shrink-0 items-center justify-center rounded-sm"
+					>{$bitcoinTip.height}</Badge
+				>
 			</div>
+			<Button on:click={toggleMode} variant="outline" size="icon" class="shrink-0">
+				<Sun
+					class="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0"
+				/>
+				<Moon
+					class="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100"
+				/>
+				<span class="sr-only">Toggle theme</span>
+			</Button>
 			<Login />
 		</header>
 		<div class="flex flex-1 flex-col gap-4 overflow-auto p-4 lg:gap-6 lg:p-6">
