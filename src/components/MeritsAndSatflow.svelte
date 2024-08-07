@@ -55,7 +55,18 @@
 		merits.set(_merits);
 	}
 
-	const COLORS = ['bg-pink-800', 'bg-red-800', 'bg-purple-800', 'bg-blue-800'];
+	const COLORS = [
+		'bg-rose-500',
+		'bg-pink-500',
+		'bg-teal-500',
+		'bg-orange-500',
+		'bg-purple-500',
+		'bg-sky-500',
+		'bg-green-500',
+		'bg-yellow-500',
+		'bg-zinc-500',
+		'bg-light-500'
+	];
 
 	function c(i: number) {
 		return COLORS[i];

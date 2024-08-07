@@ -2,12 +2,23 @@
 	import { ndk } from '@/ndk.js';
 	import { Chart } from 'flowbite-svelte';
 	import { writable } from 'svelte/store';
-	export let data:{pubkey: string; merits: number; sats: number}[]
+	export let data: { pubkey: string; merits: number; sats: number }[];
 
-	let pubkeys = Array.from(data,(x)=>x.pubkey)
+	let pubkeys = Array.from(data, (x) => x.pubkey);
 	let options = {
-		series: Array.from(data,(x)=>x.merits),
-		colors: ['#9d174d', '#991b1b', '#6b21a8', '#1e40af'],
+		series: Array.from(data, (x) => x.merits),
+		colors: [
+			'#f43f5e',
+			'#ec4899',
+			'#14b8a6',
+			'#f97316',
+			'#a855f7',
+			'#0ea5e9',
+			'#22c55e',
+			'#eab308',
+			'#71717a',
+			'#f2f2f2'
+		],
 		chart: {
 			height: 320,
 			width: '100%',
@@ -88,22 +99,22 @@
 		}
 	};
 
-	let o = writable(options)
+	let o = writable(options);
 
 	$: {
-		let usernames:string[] = []
+		let usernames: string[] = [];
 		for (let pk of pubkeys) {
-			let user = $ndk.getUser({pubkey:pk})
+			let user = $ndk.getUser({ pubkey: pk });
 			if (user && user.profile && user.profile.name) {
-				usernames.push(user.profile.name)
+				usernames.push(user.profile.name);
 			} else {
-				usernames.push(user.npub.substring(0, 10))
+				usernames.push(user.npub.substring(0, 10));
 			}
 		}
-		o.update(existing=>{
-			existing.labels = usernames
-			return existing
-		})
+		o.update((existing) => {
+			existing.labels = usernames;
+			return existing;
+		});
 	}
 
 	//     <Card>
