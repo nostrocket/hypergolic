@@ -6,7 +6,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { ndk } from '@/ndk';
 	import { currentUser } from '@/stores/session';
-	import { NDKEvent, NDKZap } from '@nostr-dev-kit/ndk';
+	import { NDKZap } from '@nostr-dev-kit/ndk';
 	import { Terminal } from 'lucide-svelte';
 	import { requestProvider } from 'webln';
 	import QrCodeSvg from './QrCodeSvg.svelte';
@@ -50,6 +50,13 @@
 			console.error(error);
 		}
 	}
+
+	let previousProduct: Product;
+	$: if (product !== previousProduct) {
+		invoice = null;
+		previousProduct = product;
+	}
+
 	let open: boolean;
 </script>
 
