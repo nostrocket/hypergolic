@@ -9,10 +9,11 @@
 	import { ChevronRight } from 'lucide-svelte';
 
 	export let rocket: Rocket;
+
 	//$page.url.searchParams.get("tab")
 </script>
 
-<Card.Root class="w-[350px]">
+<Card.Root class="flex w-[350px] flex-col justify-between">
 	<Card.Header>
 		<Card.Title>{rocket.Name()}</Card.Title>
 		<Card.Description>{rocket.Mission()}</Card.Description>
@@ -27,17 +28,19 @@
 			<Name ndk={$ndk} pubkey={rocket.Event.pubkey} class="inline-block truncate" />
 		</div>
 	</Card.Content>
-	<Card.Footer class="flex justify-between">
-		<Button
-			on:click={() => {
-				console.log(rocket.Event.rawEvent());
-			}}
-			variant="outline">Print to Console</Button
-		>
-		<Button
-			on:click={() => {
-				goto(`${base}/rockets/${rocket.URL()}`);
-			}}>View Full Rocket<ChevronRight class="h-4 w-4" /></Button
-		>
+	<Card.Footer>
+		<div class="flex justify-between gap-2">
+			<Button
+				on:click={() => {
+					console.log(rocket.Event.rawEvent());
+				}}
+				variant="outline">Print to Console</Button
+			>
+			<Button
+				on:click={() => {
+					goto(`${base}/rockets/${rocket.URL()}`);
+				}}>View Full Rocket<ChevronRight class="h-4 w-4" /></Button
+			>
+		</div>
 	</Card.Footer>
 </Card.Root>
