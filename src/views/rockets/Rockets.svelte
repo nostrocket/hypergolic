@@ -28,29 +28,13 @@
 				_r.set(`${e.pubkey}${e.dTag}`, existing);
 			}
 		}
-		let rocketArray = Array.from(_r.values());
-		rocketArray.sort((a, b) => sortRockets(a, b));
-		return rocketArray;
+		return Array.from(_r.values());
 	});
 
-	function sortRockets(a: Rocket, b: Rocket): number {
-		// First condition: "Nostrocket" at the top
-		if (a.Name() === 'Nostrocket') return 1;
-		if (b.Name() === 'Nostrocket') return -1;
-		// Second condition: "test" rockets grouped underneath
-		const aIsTest = a.Name().toLowerCase().includes('test');
-		const bIsTest = b.Name().toLowerCase().includes('test');
-		if (aIsTest && !bIsTest) return -1;
-		if (!aIsTest && bIsTest) return 1;
-		// Default sorting by created_at, handling undefined
-		const aCreatedAt = a.Event?.created_at ?? 0;
-		const bCreatedAt = b.Event?.created_at ?? 0;
-		return bCreatedAt - aCreatedAt;
-	}
-
-	function splitRockets(rocketArray: Rocket[]): { mainnet: Rocket[]; testnet: Rocket[] } {
+	function splitAndSortRockets(rocketArray: Rocket[]): { mainnet: Rocket[]; testnet: Rocket[] } {
 		let mainnet: Rocket[] = [];
 		let testnet: Rocket[] = [];
+
 		for (let rocket of rocketArray) {
 			if (rocket.Name().toLowerCase().includes('test')) {
 				testnet.push(rocket);
@@ -58,10 +42,20 @@
 				mainnet.push(rocket);
 			}
 		}
+
+		testnet.sort((a, b) => (b.Event?.created_at ?? 0) - (a.Event?.created_at ?? 0));
+
+		mainnet.sort((a, b) => {
+			if (a.Name() === 'NOSTROCKET') return -1;
+			if (b.Name() === 'NOSTROCKET') return 1;
+			return (b.Event?.created_at ?? 0) - (a.Event?.created_at ?? 0);
+		});
+
 		return { mainnet, testnet };
 	}
 
-	let rocketStore = derived(rockets, (rocketArray) => splitRockets(rocketArray));
+	let rocketStore = derived(rockets, (rocketArray) => splitAndSortRockets(rocketArray));
+
 	let mainnet: Rocket[] = [];
 	let testnet: Rocket[] = [];
 
