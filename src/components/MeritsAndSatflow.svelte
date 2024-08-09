@@ -77,11 +77,11 @@
 	<Card.Header class="pb-3">
 		<Card.Title>Merits and Satflow</Card.Title>
 		<Card.Description class="grid grid-cols-2">
-			<div class=" grid-cols-1">
+			<div class="grid-cols-1">
 				This graph displays the Meritization of equity in {rocket.Name()}
 				<Pie data={$merits} />
 			</div>
-			<div class=" grid-cols-1">
+			<div class="grid-cols-1 text-black">
 				<Table.Root>
 					<Table.Header>
 						<Table.Row class="">
@@ -92,9 +92,9 @@
 					</Table.Header>
 					<Table.Body>
 						{#each $merits as { pubkey, merits, sats }, i (pubkey)}
-							<Table.Row class="{c(i)} hover:{c(i)}">
+							<Table.Row class="{c(i)} hover:{c(i)} hover:brightness-125 hover:contrast-150">
 								<Table.Cell>
-									<div class="flex flex-nowrap">
+									<div class="flex flex-nowrap items-center gap-2">
 										<Avatar
 											ndk={$ndk}
 											{pubkey}
