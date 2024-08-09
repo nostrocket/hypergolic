@@ -4,15 +4,18 @@
 	import Button from '@/components/ui/button/button.svelte';
 	import { ndk } from '@/ndk';
 	import { currentUser } from '@/stores/session';
+	import ExclamationTriangle from 'svelte-radix/ExclamationTriangle.svelte';
+	import * as Alert from '$lib/components/ui/alert/index.js';
 	import validate from 'bitcoin-address-validation';
 
 	export let amrAuction: AMRAuction | undefined;
 	export let rocket: Rocket;
-	export let selected_amrs: Map<string, AMRAuction>;
+	export let selected_amrs: AMRAuction | undefined;
 
 	let bitcoinAddress: string = '';
 	$: bitcoinAddressInValid = true;
 	$: bitcoinAddressError = '';
+	$: isTestRocket = rocket.Name().toLowerCase().includes('test');
 
 	$: if (bitcoinAddress) {
 		if (!validate(bitcoinAddress)) {
@@ -49,7 +52,7 @@
 		console.log('AMRAuction', e);
 		e.publish().then((x) => {
 			console.log(x, e);
-			selected_amrs = new Map<string, AMRAuction>();
+			selected_amrs = undefined;
 			//goto(`${base}/rockets/${getRocketURL(e)}`);
 		});
 	}
@@ -60,6 +63,15 @@
 		You are selling {amrAuction.Merits} Merits
 	</div>
 	<div class="m-2 flex flex-col">
+		{#if isTestRocket}
+			<Alert.Root variant="destructive">
+				<ExclamationTriangle class="h-4 w-4" />
+				<Alert.Title>Warning</Alert.Title>
+				<Alert.Description
+					>Please do not enter a real Bitcoin address, as this is a test rocket.</Alert.Description
+				>
+			</Alert.Root>
+		{/if}
 		<div class="flex">
 			<Input
 				bind:value={bitcoinAddress}
