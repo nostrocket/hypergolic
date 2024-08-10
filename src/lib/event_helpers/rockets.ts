@@ -5,17 +5,20 @@ import validate from 'bitcoin-address-validation';
 import { BitcoinTipTag, bitcoinTip, txs } from '@/stores/bitcoin';
 
 export class Rocket {
-	UpsertBitcoinAssociation(association: BitcoinAssociation): NDKEvent {
+	Event: NDKEvent;
+	UpsertBitcoinAssociation(association: BitcoinAssociation): NDKEvent | undefined {
 		let event: NDKEvent | undefined = undefined;
-		if (true) {
-			//todo: check if exists
-			this.PrepareForUpdate();
-			event = new NDKEvent(this.Event.ndk, this.Event.rawEvent());
-			event.created_at = Math.floor(new Date().getTime() / 1000);
-			event.tags.push(['address', `${association.Pubkey}:${association.Address}`]);
-			event.tags.push(['proof_full', JSON.stringify(association.Event.rawEvent())]);
-			updateIgnitionAndParentTag(event);
-			updateBitcoinTip(event);
+		if (association.Validate()) {
+			let existing = this.BitcoinAssociations().get(association.Address!);
+			if ((existing && existing.Pubkey != association.Pubkey) || !existing) {
+				this.PrepareForUpdate();
+				event = new NDKEvent(this.Event.ndk, this.Event.rawEvent());
+				event.created_at = Math.floor(new Date().getTime() / 1000);
+				event.tags.push(['address', `${association.Pubkey}:${association.Address}`]);
+				event.tags.push(['proof_full', JSON.stringify(association.Event.rawEvent())]);
+				updateIgnitionAndParentTag(event);
+				updateBitcoinTip(event);
+			}
 		}
 		return event;
 	}
@@ -29,14 +32,17 @@ export class Rocket {
 					ba.Address = split[1];
 					ba.Pubkey = split[0];
 					if (ba.Validate()) {
-						a.set(ba.Pubkey, ba);
+						a.set(ba.Address, ba);
 					}
 				}
 			}
 		}
 		return a;
 	}
-	Event: NDKEvent;
+	UpsertMeritTransfer(): NDKEvent | undefined {
+		let event: NDKEvent | undefined = undefined;
+		return event;
+	}
 
 	URL(): string {
 		let ignitionID = undefined;
@@ -419,7 +425,7 @@ export class RocketAMR {
 	LeadTime: number;
 	LeadTimeUpdate: number;
 	Merits: number;
-	Extra: {eventAMR: AMRAuction};
+	Extra: { eventAMR: AMRAuction };
 	SatsOwed(): number {
 		return 0;
 	}
@@ -619,7 +625,12 @@ export async function ValidateZapPublisher(rocket: NDKEvent, zap: NDKEvent): Pro
 	});
 }
 
-type AMRAuctionStatus = 'PENDING' | 'OPEN' | 'TX DETECTED' | 'SOLD & PENDING RATIFICATION' | 'CHECKING MEMPOOL';
+type AMRAuctionStatus =
+	| 'PENDING'
+	| 'OPEN'
+	| 'TX DETECTED'
+	| 'SOLD & PENDING RATIFICATION'
+	| 'CHECKING MEMPOOL';
 
 export class AMRAuction {
 	AMRIDs: string[];
@@ -632,12 +643,8 @@ export class AMRAuction {
 	Merits: number;
 	Event: NDKEvent;
 	Extra: { rocket: Rocket };
-	Status(
-		rocket: Rocket,
-		bitcoinTip: number,
-		transactions?: txs
-	): AMRAuctionStatus {
-		let status:AMRAuctionStatus = "PENDING"
+	Status(rocket: Rocket, bitcoinTip: number, transactions?: txs): AMRAuctionStatus {
+		let status: AMRAuctionStatus = 'PENDING';
 		if (transactions && transactions.Address != this.RxAddress) {
 			throw new Error('invalid address');
 		}
@@ -663,17 +670,14 @@ export class AMRAuction {
 					pending.RxAddress == this.RxAddress &&
 					pending.AMRIDs[0] == this.AMRIDs[0] //todo: check whole array
 				) {
-					found = true
-					if (status == "CHECKING MEMPOOL") {
-						if (
-							Math.floor(new Date().getTime() / 1000) < transactions.LastUpdate + 60000
-						) {
+					found = true;
+					if (status == 'CHECKING MEMPOOL') {
+						if (Math.floor(new Date().getTime() / 1000) < transactions.LastUpdate + 60000) {
 							status = 'OPEN';
 						}
 					}
 				}
 			}
-
 		}
 		return status;
 	}
@@ -805,6 +809,7 @@ export class BitcoinAssociation {
 	Event: NDKEvent;
 	Balance: number;
 	Validate(): boolean {
+		console.log(819, this);
 		let valid = true;
 		if (this.Pubkey.length != 64) {
 			valid = false;

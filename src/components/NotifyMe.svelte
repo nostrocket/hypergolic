@@ -91,15 +91,18 @@
 		<Dialog.Header>
 			<Dialog.Title>Subscribe for Updates</Dialog.Title>
 			<Dialog.Description>
-				Subscribe via DM or email and we'll ping you when there are new releases/features
+				Subscribe now and we'll ping you when there are new releases/features
 			</Dialog.Description>
 			<div class="flex flex-col gap-4 py-4">
 				{#if $currentUser}
-					<Button on:click={Subscribe}>I use nostr, please DM me with updates</Button>
+					<Button on:click={Subscribe}>DM me with updates</Button>
 				{:else}
 					<Login />
 				{/if}
 				<Separator />
+				<span class="ml-auto mr-auto flex"
+					>If you don't use nostr, you can subscribe to updates with an email address instead</span
+				>
 				<div class="grid grid-cols-4 items-center gap-4">
 					<Label for="email" class="text-right">Email</Label>
 					<Input bind:value={email} id="email" placeholder="Your email" class="col-span-3" />
@@ -109,7 +112,7 @@
 				{/if}
 			</div>
 			<Button disabled={emailInValid} on:click={SubmitEmailAndSubscribe}
-				>I don't use nostr yet, please email me with updates</Button
+				>Please email me with updates</Button
 			>
 		</Dialog.Header>
 	</Dialog.Content>

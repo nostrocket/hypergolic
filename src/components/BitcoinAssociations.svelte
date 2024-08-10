@@ -21,17 +21,24 @@
 		_associationRequests?.unsubscribe();
 	});
 
-	let addresses = new Map<string, BitcoinAssociation>()
+	let addresses = new Map<string, BitcoinAssociation>();
 
-	onMount(()=>{
-		addresses = rocket.BitcoinAssociations()
-		addresses.forEach(a => {
+	onMount(() => {
+		addresses = rocket.BitcoinAssociations();
+		addresses.forEach((a) => {
 			if (a.Address) {
-				getBalance(a.Address).then(v=>{a.Balance = v; addresses.set(a.Pubkey, a); addresses = addresses}).catch(err=>{console.log(err)})
+				getBalance(a.Address)
+					.then((v) => {
+						a.Balance = v;
+						addresses.set(a.Address!, a);
+						addresses = addresses;
+					})
+					.catch((err) => {
+						console.log(err);
+					});
 			}
-		})
-	})
-
+		});
+	});
 </script>
 
 <Card.Root class="sm:col-span-3">
@@ -51,18 +58,18 @@
 				</Table.Row>
 			</Table.Header>
 			<Table.Body>
-				{#each addresses as [pubkey, ba], _ (pubkey)}
+				{#each addresses as [address, ba], _ (address)}
 					<Table.Row>
 						<Table.Cell>
 							<div class="flex flex-nowrap">
 								<Avatar
 									ndk={$ndk}
-									pubkey={pubkey}
+									pubkey={ba.Pubkey}
 									class="h-10 w-10 flex-none rounded-full object-cover"
 								/>
 								<Name
 									ndk={$ndk}
-									pubkey={pubkey}
+									pubkey={ba.Pubkey}
 									class="hidden max-w-32 truncate p-2 md:inline-block"
 								/>
 							</div>
@@ -71,7 +78,6 @@
 							{ba.Balance.toLocaleString()}
 						</Table.Cell>
 						<Table.Cell class="table-cell">{ba.Address}</Table.Cell>
-						
 					</Table.Row>
 				{/each}
 			</Table.Body>
