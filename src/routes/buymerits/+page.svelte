@@ -111,26 +111,45 @@
 		if (t) console.log(t);
 	});
 
+	let nostrocket = derived(rockets, ($rockets) => {
+		let rocket: Rocket | undefined = undefined;
+		for (let r of $rockets) {
+			if (
+				r.Name() == 'NOSTROCKET' &&
+				r.Event.pubkey == 'd91191e30e00444b942c0e82cad470b32af171764c2275bee0bd99377efd4075'
+			) {
+				//we consume the current list of bitcoin addresses from Nostrocket as a service so that users don't need to add a new address for every rocket
+				//todo: make this dependent on votepower not my pubkey
+				//todo: also allow rockets to have their own list of addresses so they can be used without nostrocket
+				rocket = r;
+			}
+		}
+		return rocket;
+	});
+
 	transactions.subscribe((t) => {});
 
-	let noAssociatedBitcoinAddress = derived(
-		[currentUser, pendingSales],
-		([$currentUser, $pendingSales]) => {
-			let show = false;
-			if ($currentUser) {
-				for (let [r, a] of $pendingSales) {
-					if (a.length > 0 && !r.BitcoinAssociations().get($currentUser.pubkey)) {
-						console.log($currentUser.pubkey, r.Name());
-						show = true;
-					}
-				}
-			}
-			return show;
-		}
-	);
+	// let noAssociatedBitcoinAddress = derived(
+	// 	[currentUser, pendingSales],
+	// 	([$currentUser, $pendingSales]) => {
+	// 		let show = false;
+	// 		if ($currentUser) {
+	// 			for (let [r, a] of $pendingSales) {
+	// 				if (a.length > 0) {
+	// 					let show = true
+	// 					for (let [_, ba] of r.BitcoinAssociations()) {
+
+	// 					}
+	// 				}
+	// 			}
+	// 		}
+	// 		return show;
+	// 	}
+	// );
 </script>
 
-{#if $noAssociatedBitcoinAddress}<AssociateBitcoinAddress />{/if}
+{#if $nostrocket}<AssociateBitcoinAddress rocket={$nostrocket} />
+{/if}
 
 {#if $currentUser}
 	{#each $pendingSales as [rocket, amr] (rocket.Event.id)}

@@ -1,8 +1,8 @@
-import { NDKEvent, type NDKTag } from '@nostr-dev-kit/ndk';
-import { MapOfVotes, MeritRequest, Votes } from './merits';
 import { getAuthorizedZapper } from '@/helpers';
+import { BitcoinTipTag, txs } from '@/stores/bitcoin';
+import { NDKEvent, type NDKTag } from '@nostr-dev-kit/ndk';
 import validate from 'bitcoin-address-validation';
-import { BitcoinTipTag, bitcoinTip, txs } from '@/stores/bitcoin';
+import { MapOfVotes, MeritRequest, Votes } from './merits';
 
 export class Rocket {
 	Event: NDKEvent;
@@ -41,6 +41,13 @@ export class Rocket {
 	}
 	UpsertMeritTransfer(): NDKEvent | undefined {
 		let event: NDKEvent | undefined = undefined;
+		this.PrepareForUpdate();
+		event = new NDKEvent(this.Event.ndk, this.Event.rawEvent());
+		event.created_at = Math.floor(new Date().getTime() / 1000);
+		event.tags.push(['address', `${association.Pubkey}:${association.Address}`]);
+		event.tags.push(['proof_full', JSON.stringify(association.Event.rawEvent())]);
+		updateIgnitionAndParentTag(event);
+		updateBitcoinTip(event);
 		return event;
 	}
 
