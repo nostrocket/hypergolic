@@ -1,5 +1,5 @@
 import { getAuthorizedZapper } from '@/helpers';
-import { BitcoinTipTag, txs } from '@/stores/bitcoin';
+import { BitcoinTipTag, txo, txs } from '@/stores/bitcoin';
 import { NDKEvent, type NDKTag } from '@nostr-dev-kit/ndk';
 import validate from 'bitcoin-address-validation';
 import { sha256 } from 'js-sha256';
@@ -47,7 +47,6 @@ export class Rocket {
 	}
 	UpsertMeritTransfer(request: MeritPurchase): NDKEvent | undefined {
 		let event: NDKEvent | undefined = undefined;
-		let fatal = false;
 		if (this.PendingAMRAuctionsMap().get(request.auction.ID())) {
 			this.PrepareForUpdate();
 			let _event = new NDKEvent(this.Event.ndk, this.Event.rawEvent());
@@ -62,7 +61,7 @@ export class Rocket {
 					_event.tags.push(t);
 				}
 			}
-			_event.tags.push(['proof_raw', `txid:${request.txid}`]);
+			_event.tags.push(['proof_raw', `txid:${request.tx.ID}`]);
 
 			let modifiedMerits: Map<string, RocketAMR> = new Map();
 			for (let id of request.auction.AMRIDs) {
@@ -86,8 +85,29 @@ export class Rocket {
 			}
 			_event.tags.push([
 				'swap',
-				`${request.auction.Merits}:${request.sats}:${Math.floor(new Date().getTime() / 1000)}`
+				`${request.auction.Merits}:${request.tx.Amount}:${Math.floor(new Date().getTime() / 1000)}`
 			]);
+			let existingAssociation = this.BitcoinAssociations().get(request.tx.From);
+			if (
+				!existingAssociation ||
+				(existingAssociation && existingAssociation.Pubkey != request.buyer)
+			) {
+				return event;
+			}
+			if (request.tx.Change) {
+				let existingAssociations = this.BitcoinAssociations();
+				_event.removeTag('address');
+				for (let [_, ba] of existingAssociations) {
+					if (ba.Address != request.tx.From) {
+						_event.tags.push(ba.Tag());
+					}
+					if (ba.Address == request.tx.From) {
+						ba.Address = request.tx.Change;
+						_event.tags.push(ba.Tag());
+					}
+				}
+			}
+
 			updateIgnitionAndParentTag(_event);
 			updateBitcoinTip(_event);
 			event = _event;
@@ -863,6 +883,9 @@ export class BitcoinAssociation {
 	Address: string | undefined;
 	Event: NDKEvent;
 	Balance: number;
+	Tag(): NDKTag {
+		return ['address', `${this.Pubkey}:${this.Address}`];
+	}
 	Validate(): boolean {
 		let valid = true;
 		if (this.Pubkey.length != 64) {
@@ -954,19 +977,17 @@ export class Product {
 export class MeritPurchase {
 	auction: AMRAuction;
 	buyer: string;
-	txid: string;
-	sats: number;
+	tx: txo;
 	rocket: Rocket;
 	Validate(): boolean {
 		//todo: at least validate the utxo format
 		return true;
 	}
-	constructor(rocket: Rocket, auction: AMRAuction, buyer: string, txid: string, sats: number) {
+	constructor(rocket: Rocket, auction: AMRAuction, buyer: string, tx: txo) {
 		this.rocket = rocket;
 		this.auction = auction;
 		this.buyer = buyer;
-		this.txid = txid;
-		this.sats = sats;
+		this.tx = tx;
 	}
 }
 

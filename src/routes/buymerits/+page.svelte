@@ -7,7 +7,7 @@
 	import { currentUser } from '@/stores/session';
 	import { NDKEvent } from '@nostr-dev-kit/ndk';
 	import { Avatar } from '@nostr-dev-kit/ndk-svelte-components';
-	import { onDestroy } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { derived } from 'svelte/store';
 	import AssociateBitcoinAddress from '../../components/AssociateBitcoinAddress.svelte';
 	import Heading from '../../components/Heading.svelte';
@@ -89,7 +89,7 @@
 									for (let [address, txo] of txs.From()) {
 										for (let [_, ba] of r.BitcoinAssociations()) {
 											if (ba.Address == txo.From) {
-												return new MeritPurchase(r, amrAuction, ba.Pubkey, txo.ID, txo.Amount);
+												return new MeritPurchase(r, amrAuction, ba.Pubkey, txo);
 											}
 										}
 									}
