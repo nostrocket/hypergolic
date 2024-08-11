@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Button from '@/components/ui/button/button.svelte';
 	import * as Table from '@/components/ui/table';
-	import { AMRAuction, Rocket } from '@/event_helpers/rockets';
+	import { AMRAuction, MeritPurchase, Rocket } from '@/event_helpers/rockets';
 	import { ndk } from '@/ndk';
 	import { bitcoinTip, getIncomingTransactions, txs } from '@/stores/bitcoin';
 	import { currentUser } from '@/stores/session';
@@ -89,12 +89,7 @@
 									for (let [address, txo] of txs.From()) {
 										for (let [_, ba] of r.BitcoinAssociations()) {
 											if (ba.Address == txo.From) {
-												return {
-													auction: amrAuction,
-													buyer: ba.Pubkey,
-													txid: txo.ID,
-													sats: txo.Amount
-												};
+												return new MeritPurchase(r, amrAuction, ba.Pubkey, txo.ID, txo.Amount);
 											}
 										}
 									}
@@ -108,7 +103,10 @@
 	);
 
 	nextSoldButNotInState.subscribe((t) => {
-		if (t) console.log(t);
+		if (t) {
+			console.log(t.rocket.UpsertMeritTransfer(t)?.rawEvent());
+			//t.rocket.UpsertMeritTransfer(t)?.publish().then(x=>{console.log(goto(...))})
+		}
 	});
 
 	let nostrocket = derived(rockets, ($rockets) => {
@@ -128,24 +126,6 @@
 	});
 
 	transactions.subscribe((t) => {});
-
-	// let noAssociatedBitcoinAddress = derived(
-	// 	[currentUser, pendingSales],
-	// 	([$currentUser, $pendingSales]) => {
-	// 		let show = false;
-	// 		if ($currentUser) {
-	// 			for (let [r, a] of $pendingSales) {
-	// 				if (a.length > 0) {
-	// 					let show = true
-	// 					for (let [_, ba] of r.BitcoinAssociations()) {
-
-	// 					}
-	// 				}
-	// 			}
-	// 		}
-	// 		return show;
-	// 	}
-	// );
 </script>
 
 {#if $nostrocket}<AssociateBitcoinAddress rocket={$nostrocket} />
