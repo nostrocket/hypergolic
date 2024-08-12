@@ -58,7 +58,7 @@
 					!rocket.Included(association.Event.id)
 				) {
 					for (let a of association.Event.getMatchingTags('a')) {
-						if (a == rocket.ATag()) {
+						if (a.length == 2 && a[1] == rocket.ATag()[1]) {
 							let e = rocket.UpsertBitcoinAssociation(association);
 							if (e) {
 								e.ndk = $ndk;
