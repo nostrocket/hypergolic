@@ -1,5 +1,4 @@
 <script lang="ts">
-	import Button from '@/components/ui/button/button.svelte';
 	import * as Table from '@/components/ui/table';
 	import { AMRAuction, MeritPurchase, Rocket } from '@/event_helpers/rockets';
 	import { ndk } from '@/ndk';
@@ -7,12 +6,15 @@
 	import { currentUser } from '@/stores/session';
 	import { NDKEvent } from '@nostr-dev-kit/ndk';
 	import { Avatar } from '@nostr-dev-kit/ndk-svelte-components';
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy } from 'svelte';
 	import { derived } from 'svelte/store';
 	import AssociateBitcoinAddress from '../../components/AssociateBitcoinAddress.svelte';
 	import Heading from '../../components/Heading.svelte';
 	import Login from '../../components/Login.svelte';
 	import MeritAuctions from '../../stateupdaters/MeritAuctions.svelte';
+	import BuyAmr from '../../components/BuyAMR.svelte';
+	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	let rocketEvents = $ndk.storeSubscribe([{ kinds: [31108 as number] }], { subId: 'all_rockets' });
 	onDestroy(() => {
 		rocketEvents?.unsubscribe();
@@ -104,8 +106,14 @@
 
 	nextSoldButNotInState.subscribe((t) => {
 		if (t) {
-			console.log(t.rocket.UpsertMeritTransfer(t)?.rawEvent());
-			//t.rocket.UpsertMeritTransfer(t)?.publish().then(x=>{console.log(goto(...))})
+			//console.log(t.rocket.UpsertMeritTransfer(t)?.rawEvent());
+			let e = t.rocket.UpsertMeritTransfer(t);
+			if (e) {
+				e.publish().then((x) => {
+					console.log(goto(`${base}/${new Rocket(e).URL()}`));
+				});
+			}
+			//t.rocket.UpsertMeritTransfer(t)?.publish()
 		}
 	});
 
@@ -171,9 +179,9 @@
 								}}>{p.RxAddress}</Table.Cell
 							>
 							<Table.Cell
-								>{#if p.Status(rocket, $bitcoinTip.height, $transactions.get(p.RxAddress)) == 'OPEN'}<Button
-										>BUY NOW</Button
-									>{/if}</Table.Cell
+								>{#if p.Status(rocket, $bitcoinTip.height, $transactions.get(p.RxAddress)) == 'OPEN'}<BuyAmr
+										auction={p}
+									/>{/if}</Table.Cell
 							>
 						</Table.Row>
 					{/each}

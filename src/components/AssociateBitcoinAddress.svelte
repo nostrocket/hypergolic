@@ -65,8 +65,8 @@ their Merits.
 		</div>
 		{#if $associatedAddresses.size == 0}You do not have any registered addresses{:else}
 			Your registered addresses:
-			<ul class="m-2 flex">
-				{#each $associatedAddresses as address}<li>{address}</li>{/each}
+			<ul class="m-2 flex flex-col">
+				{#each $associatedAddresses as address}<li class="list-item list-disc">{address}</li>{/each}
 			</ul>
 		{/if}
 		Add a new address now
