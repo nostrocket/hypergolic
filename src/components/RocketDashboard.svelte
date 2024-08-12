@@ -44,8 +44,8 @@
 		<BitcoinAssociations rocket={new Rocket(rocket)} />
 		<Card.Root class="sm:col-span-3">
 			<Card.Header class="pb-3">
-				<Card.Title>Actions</Card.Title>
-				<Card.Description class="flex space-x-4">
+				<Card.Title class="pb-4">Actions</Card.Title>
+				<Card.Description class="flex flex-wrap gap-2">
 					<UpdateMission rocketEvent={rocket} />
 					<CreateNewProduct rocketEvent={rocket} />
 					<CreateMeritRequest rocketEvent={rocket} />
@@ -59,6 +59,9 @@
 			<Card.Footer></Card.Footer>
 		</Card.Root>
 
-		<Todo text={['delete rocket (if current user is rocket creator) - publish deletion request']} />
+		<Todo
+			className="sm:col-span-3"
+			text={['delete rocket (if current user is rocket creator) - publish deletion request']}
+		/>
 	</main>
 </div>
