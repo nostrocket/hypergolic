@@ -84,22 +84,25 @@
 			variant="nostr"
 			class="flex h-8 shrink-0 items-center justify-center rounded-sm"
 		>
-			Tell me via DM when there are updates
+			Nostrocket is totally not ready yet but whatever
 		</Badge>
 	</Dialog.Trigger>
 	<Dialog.Content>
 		<Dialog.Header>
 			<Dialog.Title>Subscribe for Updates</Dialog.Title>
 			<Dialog.Description>
-				Receive notifications about Nostrocket updates via Nostr DM or email.
+				Subscribe now and we'll ping you when there are new releases/features
 			</Dialog.Description>
 			<div class="flex flex-col gap-4 py-4">
 				{#if $currentUser}
-					<Button on:click={Subscribe}>Receive DM</Button>
+					<Button on:click={Subscribe}>DM me with updates</Button>
 				{:else}
 					<Login />
 				{/if}
 				<Separator />
+				<span class="ml-auto mr-auto flex"
+					>If you don't use nostr, you can subscribe to updates with an email address instead</span
+				>
 				<div class="grid grid-cols-4 items-center gap-4">
 					<Label for="email" class="text-right">Email</Label>
 					<Input bind:value={email} id="email" placeholder="Your email" class="col-span-3" />
@@ -108,7 +111,9 @@
 					<div class="ml-4 p-0 text-sm text-red-500">{emailError}</div>
 				{/if}
 			</div>
-			<Button disabled={emailInValid} on:click={SubmitEmailAndSubscribe}>Receive Email</Button>
+			<Button disabled={emailInValid} on:click={SubmitEmailAndSubscribe}
+				>Please email me with updates</Button
+			>
 		</Dialog.Header>
 	</Dialog.Content>
 </Dialog.Root>

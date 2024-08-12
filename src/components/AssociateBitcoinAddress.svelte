@@ -1,18 +1,32 @@
 <script lang="ts">
-	import * as Card from "@/components/ui/card";
+	import * as Card from '@/components/ui/card';
 
+	import Heading from './Heading.svelte';
+	import InputBitcoinAddress from './InputBitcoinAddress.svelte';
+	import { Button } from '@/components/ui/button';
+	import { ndk } from '@/ndk';
+	import { currentUser } from '@/stores/session';
+	import { NDKEvent } from '@nostr-dev-kit/ndk';
+	import validate from 'bitcoin-address-validation';
+	import type { Rocket } from '@/event_helpers/rockets';
+	import { derived } from 'svelte/store';
 
-	import Heading from "./Heading.svelte";
-	import InputBitcoinAddress from "./InputBitcoinAddress.svelte";
-	import { Button } from "@/components/ui/button";
-	import { ndk } from "@/ndk";
-	import { currentUser } from "@/stores/session";
-	import { NDKEvent } from "@nostr-dev-kit/ndk";
-	import validate from "bitcoin-address-validation";
+	let bitcoinAddress: string;
+	export let rocket: Rocket;
 
-    let bitcoinAddress:string;
+	let associatedAddresses = derived(currentUser, ($currentUser) => {
+		let addresses: Set<string> = new Set();
+		if ($currentUser) {
+			for (let [_, a] of rocket.BitcoinAssociations()) {
+				if (a.Pubkey == $currentUser.pubkey && a.Address && validate(a.Address)) {
+					addresses.add(a.Address);
+				}
+			}
+		}
+		return addresses;
+	});
 
-	function publish(address:string) {
+	function publish(address: string) {
 		if (!$ndk.signer) {
 			throw new Error('no ndk signer found');
 		}
@@ -20,27 +34,47 @@
 		if (!author) {
 			throw new Error('no current user');
 		}
-        if (!validate(address)) {
-            throw new Error("invalid bitcoin address")
-        }
-        let event = new NDKEvent($ndk)
-        event.kind = 1413
-        event.tags.push(["onchain", address])
+		if (!validate(address)) {
+			throw new Error('invalid bitcoin address');
+		}
+		let event = new NDKEvent($ndk);
+		event.kind = 1413;
+		event.tags.push(['onchain', address]);
 		//todo: let user specify a rocket
-		console.log("todo: let user specify a rocket")
-		event.publish().then((x) => {
-			console.log(x);
-		}).catch(()=>{ console.log("failed to publish", event.rawEvent())});
+		console.log('todo: let user specify a rocket');
+		event
+			.publish()
+			.then((x) => {
+				console.log(x);
+			})
+			.catch(() => {
+				console.log('failed to publish', event.rawEvent());
+			});
 	}
-
 </script>
+
 <Heading title="Sponsor a Contributor" />
+Contributors who need Sats are able to list their Merits for sale, to sponsor them simply buy some of
+their Merits.
 <Card.Root>
-	<Card.Header><Card.Title>Associate Bitcoin Address</Card.Title></Card.Header>
+	<Card.Header><Card.Title>Your Bitcoin Addresses</Card.Title></Card.Header>
 	<Card.Content>
-	<div class="m-2 flex">
-		You must associate at least one Bitcoin address with your npub before you can pay a Contributor. Merit purchases from this address will be associated with your pubkey.
-	</div>
-	<div class="flex"><InputBitcoinAddress bind:bitcoinAddress /><Button on:click={()=>publish(bitcoinAddress)} class="mt-3 max-w-xs">Publish</Button></div>
-</Card.Content>
+		<div class="m-2 flex">
+			Merit purchases must be conducted with a Bitcoin address that is associated with your pubkey,
+			otherwise you will not recieve the Merits upon payment.
+		</div>
+		{#if $associatedAddresses.size == 0}You do not have any registered addresses{:else}
+			Your registered addresses:
+			<ul class="m-2 flex flex-col">
+				{#each $associatedAddresses as address}<li class="list-item list-disc">{address}</li>{/each}
+			</ul>
+		{/if}
+		Add a new address now
+		<div class="flex">
+			<InputBitcoinAddress bind:bitcoinAddress /><Button
+				on:click={() => publish(bitcoinAddress)}
+				class="mt-3 max-w-xs">Publish</Button
+			>
+		</div>
+	</Card.Content>
 </Card.Root>

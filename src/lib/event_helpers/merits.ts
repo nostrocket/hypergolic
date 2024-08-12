@@ -69,7 +69,7 @@ export class MeritRequest {
 	}
 	constructor(request: NDKEvent | string) {
 		if (typeof request == 'string') {
-			console.log(69);
+			throw new Error('implement me');
 		} else {
 			this.LeadTime = 0;
 			this.LastLTUpdate = 0;

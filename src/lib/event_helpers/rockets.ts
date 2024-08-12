@@ -1,21 +1,47 @@
-import { NDKEvent, type NDKTag } from '@nostr-dev-kit/ndk';
-import { MapOfVotes, MeritRequest, Votes } from './merits';
 import { getAuthorizedZapper } from '@/helpers';
+import { BitcoinTipTag, txo, txs } from '@/stores/bitcoin';
+import { NDKEvent, type NDKTag } from '@nostr-dev-kit/ndk';
 import validate from 'bitcoin-address-validation';
-import { BitcoinTipTag, bitcoinTip, txs } from '@/stores/bitcoin';
+import { sha256 } from 'js-sha256';
+import { MapOfVotes, MeritRequest, Votes } from './merits';
+import * as immutable from 'immutable';
+import { BloomFilter } from 'bloomfilter';
 
 export class Rocket {
-	UpsertBitcoinAssociation(association: BitcoinAssociation): NDKEvent {
+	Event: NDKEvent;
+	private Bloom(): BloomFilter {
+		let b = new BloomFilter(
+			64 * 256, // bits to allocate.
+			32 // number of hashes
+		);
+		let existing = this.Event.getMatchingTags('bloom');
+		if (existing.length == 1) {
+			b = new BloomFilter(JSON.parse(existing[0][existing[0].length - 1]), 32);
+		}
+		return b;
+	}
+	private AppendEventToBloom(id: string) {
+		let existing = this.Bloom();
+		existing.add(id);
+		this.Event.removeTag('bloom');
+		this.Event.tags.push(['bloom', '32', JSON.stringify([].slice.call(existing.buckets))]);
+	}
+	Included(id: string): boolean {
+		return this.Bloom().test(id);
+	}
+	UpsertBitcoinAssociation(association: BitcoinAssociation): NDKEvent | undefined {
 		let event: NDKEvent | undefined = undefined;
-		if (true) {
-			//todo: check if exists
-			this.PrepareForUpdate();
-			event = new NDKEvent(this.Event.ndk, this.Event.rawEvent());
-			event.created_at = Math.floor(new Date().getTime() / 1000);
-			event.tags.push(['address', `${association.Pubkey}:${association.Address}`]);
-			event.tags.push(['proof_full', JSON.stringify(association.Event.rawEvent())]);
-			updateIgnitionAndParentTag(event);
-			updateBitcoinTip(event);
+		if (association.Validate() && association.Event && !this.Included(association.Event.id)) {
+			let existing = this.BitcoinAssociations().get(association.Address!);
+			if ((existing && existing.Pubkey != association.Pubkey) || !existing) {
+				this.PrepareForUpdate(association.Event.id);
+				event = new NDKEvent(this.Event.ndk, this.Event.rawEvent());
+				event.created_at = Math.floor(new Date().getTime() / 1000);
+				event.tags.push(['address', `${association.Pubkey}:${association.Address}`]);
+				event.tags.push(['proof_full', JSON.stringify(association.Event.rawEvent())]);
+				updateIgnitionAndParentTag(event);
+				updateBitcoinTip(event);
+			}
 		}
 		return event;
 	}
@@ -29,14 +55,86 @@ export class Rocket {
 					ba.Address = split[1];
 					ba.Pubkey = split[0];
 					if (ba.Validate()) {
-						a.set(ba.Pubkey, ba);
+						a.set(ba.Address, ba);
 					}
 				}
 			}
 		}
 		return a;
 	}
-	Event: NDKEvent;
+	UpsertLeadTime(event: NDKEvent): NDKEvent {
+		//todo: validate that there are no current auctions that include this AMR
+		return new NDKEvent();
+	}
+	UpsertMeritTransfer(request: MeritPurchase): NDKEvent | undefined {
+		let event: NDKEvent | undefined = undefined;
+		if (this.PendingAMRAuctionsMap().get(request.auction.ID())) {
+			this.PrepareForUpdate();
+			let _event = new NDKEvent(this.Event.ndk, this.Event.rawEvent());
+			_event.created_at = Math.floor(new Date().getTime() / 1000);
+			//delete the auction
+			let auctionID = request.auction.ID();
+			let existing = _event.getMatchingTags('amr_auction');
+			_event.removeTag('amr_auction');
+			for (let t of existing) {
+				let amr = AMRAuctionFromTag(t, this.Event);
+				if (amr.ID() != auctionID) {
+					_event.tags.push(t);
+				}
+			}
+			_event.tags.push(['proof_raw', `txid:${request.tx.ID}`]);
+
+			let modifiedMerits: Map<string, RocketAMR> = new Map();
+			for (let id of request.auction.AMRIDs) {
+				let amr = this.ApprovedMeritRequests().get(id);
+				if (!amr) {
+					return event;
+				}
+				if (amr.LeadTime > 0) {
+					return event;
+				}
+				amr.Pubkey = request.buyer;
+				modifiedMerits.set(amr.ID, amr);
+			}
+			let existingMerits = this.ApprovedMeritRequests();
+			for (let [id, m] of modifiedMerits) {
+				existingMerits.set(id, m);
+			}
+			_event.removeTag('merit');
+			for (let [id, m] of existingMerits) {
+				_event.tags.push(m.Tag());
+			}
+			_event.tags.push([
+				'swap',
+				`${request.auction.Merits}:${request.tx.Amount}:${Math.floor(new Date().getTime() / 1000)}`
+			]);
+			let existingAssociation = this.BitcoinAssociations().get(request.tx.From);
+			if (
+				!existingAssociation ||
+				(existingAssociation && existingAssociation.Pubkey != request.buyer)
+			) {
+				return event;
+			}
+			if (request.tx.Change) {
+				let existingAssociations = this.BitcoinAssociations();
+				_event.removeTag('address');
+				for (let [_, ba] of existingAssociations) {
+					if (ba.Address != request.tx.From) {
+						_event.tags.push(ba.Tag());
+					}
+					if (ba.Address == request.tx.From) {
+						ba.Address = request.tx.Change;
+						_event.tags.push(ba.Tag());
+					}
+				}
+			}
+
+			updateIgnitionAndParentTag(_event);
+			updateBitcoinTip(_event);
+			event = _event;
+		}
+		return event;
+	}
 
 	URL(): string {
 		let ignitionID = undefined;
@@ -181,47 +279,38 @@ export class Rocket {
 		}
 		return event;
 	}
-	PendingAMRAuctions(): AMRAuction[] {
-		let auctions: AMRAuction[] = [];
+	PendingAMRAuctionsMap(): Map<string, AMRAuction> {
+		let m = new Map<string, AMRAuction>();
 		for (let t of this.Event.getMatchingTags('amr_auction')) {
-			if (t.length == 2) {
-				let items = t[1].split(':');
-				if (items.length == 6) {
-					let a = new AMRAuction(this.Event);
-					a.RxAddress = items[0];
-					a.StartPrice = parseInt(items[2], 10);
-					a.EndPrice = parseInt(items[3], 10);
-					a.Merits = parseInt(items[4], 10);
-
-					let ids = items[5].match(/.{1,64}/g);
-					if (ids) {
-						for (let id of ids) {
-							a.AMRIDs.push(id);
-						}
-					}
-					let amrs = this.ApprovedMeritRequests();
-					let failed = false;
-					for (let id of a.AMRIDs) {
-						let amr = amrs.get(id);
-						if (!amr) {
-							failed = true;
-						} else {
-							if (!a.Owner) {
-								a.Owner = amr.Pubkey;
-							} else if (a.Owner != amr.Pubkey) {
-								failed = true;
-							}
-						}
-					}
-					if (!failed) {
-						auctions.push(a);
+			let auction = AMRAuctionFromTag(t, this.Event);
+			if (auction.Validate()) {
+				let amrs = this.ApprovedMeritRequests();
+				let failed = false;
+				for (let id of auction.AMRIDs) {
+					let amr = amrs.get(id);
+					if (!amr) {
+						failed = true;
 					} else {
-						throw new Error('this should not happen, bug!');
+						if (!auction.Owner) {
+							auction.Owner = amr.Pubkey;
+						} else if (auction.Owner != amr.Pubkey) {
+							failed = true;
+						}
 					}
+				}
+				if (!failed) {
+					m.set(auction.ID(), auction);
+				} else {
+					throw new Error('this should not happen, bug!');
 				}
 			}
 		}
-		return auctions;
+		return m;
+	}
+	PendingAMRAuctions(): AMRAuction[] {
+		return Array.from(this.PendingAMRAuctionsMap(), ([_, amr]) => {
+			return amr;
+		});
 	}
 	CanThisAMRBeSold(amr: string): boolean {
 		let valid = true;
@@ -280,7 +369,7 @@ export class Rocket {
 		return event;
 	}
 	UpsertProduct(id: string, price: number, maxSales?: number): NDKEvent {
-		this.PrepareForUpdate();
+		this.PrepareForUpdate(id);
 		let event = new NDKEvent(this.Event.ndk, this.Event.rawEvent());
 		event.created_at = Math.floor(new Date().getTime() / 1000);
 		let existingProducts = this.CurrentProducts();
@@ -353,9 +442,12 @@ export class Rocket {
 		}
 		this.Event.tags = newTags;
 	}
-	PrepareForUpdate() {
+	PrepareForUpdate(id?: string) {
 		this.RemoveDuplicateTags();
 		this.RemoveProofs();
+		if (id) {
+			this.AppendEventToBloom(id);
+		}
 		this.Event.sig = undefined;
 	}
 	constructor(event: NDKEvent) {
@@ -419,8 +511,15 @@ export class RocketAMR {
 	LeadTime: number;
 	LeadTimeUpdate: number;
 	Merits: number;
-	Extra: {eventAMR: AMRAuction};
+	Extra: { eventAMR: AMRAuction };
+	Tag(): NDKTag {
+		return [
+			'merit',
+			`${this.Pubkey}:${this.ID}:${this.LeadTime}:${this.LeadTimeUpdate}:${this.Merits}`
+		];
+	}
 	SatsOwed(): number {
+		//if rocket creator is acting as custodian instead of using a cashu mint
 		return 0;
 	}
 	SatsPaid(): number {
@@ -619,7 +718,12 @@ export async function ValidateZapPublisher(rocket: NDKEvent, zap: NDKEvent): Pro
 	});
 }
 
-type AMRAuctionStatus = 'PENDING' | 'OPEN' | 'TX DETECTED' | 'SOLD & PENDING RATIFICATION' | 'CHECKING MEMPOOL';
+type AMRAuctionStatus =
+	| 'PENDING'
+	| 'OPEN'
+	| 'TX DETECTED'
+	| 'SOLD & PENDING RATIFICATION'
+	| 'CHECKING MEMPOOL';
 
 export class AMRAuction {
 	AMRIDs: string[];
@@ -630,14 +734,14 @@ export class AMRAuction {
 	RocketD: string;
 	RocketP: string;
 	Merits: number;
-	Event: NDKEvent;
+	Event: NDKEvent | undefined;
 	Extra: { rocket: Rocket };
-	Status(
-		rocket: Rocket,
-		bitcoinTip: number,
-		transactions?: txs
-	): AMRAuctionStatus {
-		let status:AMRAuctionStatus = "PENDING"
+	ID(): string {
+		this.AMRIDs.sort();
+		return sha256(''.concat(...this.AMRIDs).trim());
+	}
+	Status(rocket: Rocket, bitcoinTip: number, transactions?: txs): AMRAuctionStatus {
+		let status: AMRAuctionStatus = 'PENDING';
 		if (transactions && transactions.Address != this.RxAddress) {
 			throw new Error('invalid address');
 		}
@@ -663,17 +767,14 @@ export class AMRAuction {
 					pending.RxAddress == this.RxAddress &&
 					pending.AMRIDs[0] == this.AMRIDs[0] //todo: check whole array
 				) {
-					found = true
-					if (status == "CHECKING MEMPOOL") {
-						if (
-							Math.floor(new Date().getTime() / 1000) < transactions.LastUpdate + 60000
-						) {
+					found = true;
+					if (status == 'CHECKING MEMPOOL') {
+						if (Math.floor(new Date().getTime() / 1000) < transactions.LastUpdate + 60000) {
 							status = 'OPEN';
 						}
 					}
 				}
 			}
-
 		}
 		return status;
 	}
@@ -720,12 +821,14 @@ export class AMRAuction {
 	Validate(): boolean {
 		let valid = true;
 		if (
-			this.Owner?.length != 64 ||
+			(this.Owner && this.Owner.length != 64) ||
 			!this.StartPrice ||
 			!this.EndPrice ||
 			!validate(this.RxAddress) ||
-			this.RocketP.length != 64
+			this.RocketP.length != 64 ||
+			!this.Merits
 		) {
+			//console.log(780, this, (this.Owner && this.Owner.length != 64), !this.StartPrice, !this.EndPrice, !validate(this.RxAddress), this.RocketP.length != 64, !this.Merits)
 			valid = false;
 		}
 		for (let id of this.AMRIDs) {
@@ -804,6 +907,9 @@ export class BitcoinAssociation {
 	Address: string | undefined;
 	Event: NDKEvent;
 	Balance: number;
+	Tag(): NDKTag {
+		return ['address', `${this.Pubkey}:${this.Address}`];
+	}
 	Validate(): boolean {
 		let valid = true;
 		if (this.Pubkey.length != 64) {
@@ -890,4 +996,42 @@ export class Product {
 	constructor(event: NDKEvent) {
 		this.Event = event;
 	}
+}
+
+export class MeritPurchase {
+	auction: AMRAuction;
+	buyer: string;
+	tx: txo;
+	rocket: Rocket;
+	Validate(): boolean {
+		//todo: at least validate the utxo format
+		return true;
+	}
+	constructor(rocket: Rocket, auction: AMRAuction, buyer: string, tx: txo) {
+		this.rocket = rocket;
+		this.auction = auction;
+		this.buyer = buyer;
+		this.tx = tx;
+	}
+}
+
+function AMRAuctionFromTag(t: NDKTag, rocket: NDKEvent): AMRAuction {
+	let a = new AMRAuction(rocket);
+	if (t.length == 2) {
+		let items = t[1].split(':');
+		if (items.length == 6) {
+			a.RxAddress = items[0];
+			a.StartPrice = parseInt(items[2], 10);
+			a.EndPrice = parseInt(items[3], 10);
+			a.Merits = parseInt(items[4], 10);
+
+			let ids = items[5].match(/.{1,64}/g);
+			if (ids) {
+				for (let id of ids) {
+					a.AMRIDs.push(id);
+				}
+			}
+		}
+	}
+	return a;
 }

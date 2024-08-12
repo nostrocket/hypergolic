@@ -134,6 +134,7 @@ export class txs {
 			let amount = 0;
 			let height = tx.status.block_height ? tx.status.block_height : 0;
 			let txid = tx.txid;
+			let change: string[] = [];
 			for (let vout of tx.vout) {
 				let address = vout.scriptpubkey_address;
 				if (address && address.trim() == this.Address) {
@@ -141,8 +142,11 @@ export class txs {
 					if (value) {
 						amount += parseInt(value, 10);
 					}
+				} else {
+					change.push(address);
 				}
 			}
+
 			for (let vin of tx.vin) {
 				let address = vin.prevout.scriptpubkey_address;
 				if (address && validate(address)) {
@@ -152,9 +156,12 @@ export class txs {
 					t.From = address;
 					t.To = this.Address;
 					t.ID = txid;
+					if (change.length == 1) {
+						t.Change = change[0];
+					}
 					possibles.set(address, t);
 				} else {
-					console.log(156, vin)
+					console.log(156, vin);
 				}
 			}
 		}
@@ -174,5 +181,6 @@ export class txo {
 	To: string;
 	Amount: number;
 	Height: number;
+	Change: string;
 	constructor() {}
 }
