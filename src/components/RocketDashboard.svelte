@@ -19,7 +19,7 @@
 	$: unratifiedZaps = new Map<string, number>();
 </script>
 
-<div class="flex flex-col sm:gap-4">
+<div class="flex flex-col gap-4">
 	<header class="flex items-center">
 		<Breadcrumb.Root class="flex">
 			<Breadcrumb.List>
@@ -33,7 +33,7 @@
 			</Breadcrumb.List>
 		</Breadcrumb.Root>
 	</header>
-	<main class="grid flex-1 items-start gap-4 md:gap-2 lg:grid-cols-3 xl:grid-cols-3">
+	<main class="grid w-full flex-1 grid-cols-1 items-start gap-4 sm:grid-cols-3 md:gap-2">
 		<MeritsAndSatflow {unratifiedZaps} rocket={new Rocket(rocket)} />
 
 		<ProductFomo bind:unratifiedZaps rocket={new Rocket(rocket)} />

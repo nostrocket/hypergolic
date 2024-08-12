@@ -76,7 +76,7 @@
 <Card.Root class="sm:col-span-3">
 	<Card.Header class="pb-3">
 		<Card.Title>Merits and Satflow</Card.Title>
-		<Card.Description class="grid grid-cols-2">
+		<Card.Description class="grid grid-cols-1 sm:grid-cols-2">
 			<div class="grid-cols-1">
 				This graph displays the Meritization of equity in {rocket.Name()}
 				<Pie data={$merits} />
