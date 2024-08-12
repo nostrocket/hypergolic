@@ -40,6 +40,7 @@
 		let event = new NDKEvent($ndk);
 		event.kind = 1413;
 		event.tags.push(['onchain', address]);
+		event.tags.push(rocket.ATag());
 		//todo: let user specify a rocket
 		console.log('todo: let user specify a rocket');
 		event
