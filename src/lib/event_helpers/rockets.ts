@@ -5,15 +5,36 @@ import validate from 'bitcoin-address-validation';
 import { sha256 } from 'js-sha256';
 import { MapOfVotes, MeritRequest, Votes } from './merits';
 import * as immutable from 'immutable';
+import { BloomFilter } from 'bloomfilter';
 
 export class Rocket {
 	Event: NDKEvent;
+	private Bloom(): BloomFilter {
+		let b = new BloomFilter(
+			64 * 256, // bits to allocate.
+			32 // number of hashes
+		);
+		let existing = this.Event.getMatchingTags('bloom');
+		if (existing.length == 1) {
+			b = new BloomFilter(JSON.parse(existing[0][existing[0].length - 1]), 32);
+		}
+		return b;
+	}
+	private AppendEventToBloom(id: string) {
+		let existing = this.Bloom();
+		existing.add(id);
+		this.Event.removeTag('bloom');
+		this.Event.tags.push(['bloom', '32', JSON.stringify([].slice.call(existing.buckets))]);
+	}
+	Included(id: string): boolean {
+		return this.Bloom().test(id);
+	}
 	UpsertBitcoinAssociation(association: BitcoinAssociation): NDKEvent | undefined {
 		let event: NDKEvent | undefined = undefined;
-		if (association.Validate()) {
+		if (association.Validate() && association.Event && !this.Included(association.Event.id)) {
 			let existing = this.BitcoinAssociations().get(association.Address!);
 			if ((existing && existing.Pubkey != association.Pubkey) || !existing) {
-				this.PrepareForUpdate();
+				this.PrepareForUpdate(association.Event.id);
 				event = new NDKEvent(this.Event.ndk, this.Event.rawEvent());
 				event.created_at = Math.floor(new Date().getTime() / 1000);
 				event.tags.push(['address', `${association.Pubkey}:${association.Address}`]);
@@ -348,7 +369,7 @@ export class Rocket {
 		return event;
 	}
 	UpsertProduct(id: string, price: number, maxSales?: number): NDKEvent {
-		this.PrepareForUpdate();
+		this.PrepareForUpdate(id);
 		let event = new NDKEvent(this.Event.ndk, this.Event.rawEvent());
 		event.created_at = Math.floor(new Date().getTime() / 1000);
 		let existingProducts = this.CurrentProducts();
@@ -421,9 +442,12 @@ export class Rocket {
 		}
 		this.Event.tags = newTags;
 	}
-	PrepareForUpdate() {
+	PrepareForUpdate(id?: string) {
 		this.RemoveDuplicateTags();
 		this.RemoveProofs();
+		if (id) {
+			this.AppendEventToBloom(id);
+		}
 		this.Event.sig = undefined;
 	}
 	constructor(event: NDKEvent) {
