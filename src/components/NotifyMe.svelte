@@ -95,7 +95,7 @@
 			</Dialog.Description>
 			<div class="flex flex-col gap-4 py-4">
 				{#if $currentUser}
-					<Button on:click={Subscribe}>Reveive DM</Button>
+					<Button on:click={Subscribe}>Receive DM</Button>
 				{:else}
 					<Login />
 				{/if}
@@ -108,7 +108,7 @@
 					<div class="ml-4 p-0 text-sm text-red-500">{emailError}</div>
 				{/if}
 			</div>
-			<Button disabled={emailInValid} on:click={SubmitEmailAndSubscribe}>Reveive Email</Button>
+			<Button disabled={emailInValid} on:click={SubmitEmailAndSubscribe}>Receive Email</Button>
 		</Dialog.Header>
 	</Dialog.Content>
 </Dialog.Root>

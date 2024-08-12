@@ -16,8 +16,7 @@
 
 	export let rocket: NDKEvent;
 
-	$: unratifiedZaps = new Map<string, number>()
-
+	$: unratifiedZaps = new Map<string, number>();
 </script>
 
 <div class="flex flex-col sm:gap-4">
@@ -34,9 +33,7 @@
 			</Breadcrumb.List>
 		</Breadcrumb.Root>
 	</header>
-	<main
-		class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-2 lg:grid-cols-3 xl:grid-cols-3"
-	>
+	<main class="grid flex-1 items-start gap-4 md:gap-2 lg:grid-cols-3 xl:grid-cols-3">
 		<MeritsAndSatflow {unratifiedZaps} rocket={new Rocket(rocket)} />
 
 		<ProductFomo bind:unratifiedZaps rocket={new Rocket(rocket)} />
@@ -44,7 +41,7 @@
 		<ProposedProducts {rocket} />
 
 		<MeritRequests rocket={new Rocket(rocket)} />
-		<BitcoinAssociations rocket={new Rocket(rocket)}/>
+		<BitcoinAssociations rocket={new Rocket(rocket)} />
 		<Card.Root class="sm:col-span-3">
 			<Card.Header class="pb-3">
 				<Card.Title>Actions</Card.Title>
@@ -62,10 +59,6 @@
 			<Card.Footer></Card.Footer>
 		</Card.Root>
 
-		<Todo
-			text={[
-				'delete rocket (if current user is rocket creator) - publish deletion request'
-			]}
-		/>
+		<Todo text={['delete rocket (if current user is rocket creator) - publish deletion request']} />
 	</main>
 </div>

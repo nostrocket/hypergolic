@@ -33,7 +33,7 @@
 	<Users class={iconClass} />
 	People
 </a>
-<Separator />
+<Separator class="my-2" />
 <a href="##" class={getClass('inbox')}>
 	<Mail class={iconClass} />
 	Inbox
