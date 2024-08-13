@@ -12,12 +12,11 @@
 	import Todo from './Todo.svelte';
 	import UpdateMission from './UpdateMission.svelte';
 	import { Rocket } from '@/event_helpers/rockets';
-	import BitcoinAssociations from './BitcoinAssociations.svelte';
+	import BitcoinAssociations from './AssociatedBitcoinAddresses.svelte';
 
 	export let rocket: NDKEvent;
 
-	$: unratifiedZaps = new Map<string, number>()
-
+	$: unratifiedZaps = new Map<string, number>();
 </script>
 
 <div class="flex flex-col sm:gap-4">
@@ -44,7 +43,7 @@
 		<ProposedProducts {rocket} />
 
 		<MeritRequests rocket={new Rocket(rocket)} />
-		<BitcoinAssociations rocket={new Rocket(rocket)}/>
+		<BitcoinAssociations rocket={new Rocket(rocket)} />
 		<Card.Root class="sm:col-span-3">
 			<Card.Header class="pb-3">
 				<Card.Title>Actions</Card.Title>
@@ -62,10 +61,6 @@
 			<Card.Footer></Card.Footer>
 		</Card.Root>
 
-		<Todo
-			text={[
-				'delete rocket (if current user is rocket creator) - publish deletion request'
-			]}
-		/>
+		<Todo text={['delete rocket (if current user is rocket creator) - publish deletion request']} />
 	</main>
 </div>

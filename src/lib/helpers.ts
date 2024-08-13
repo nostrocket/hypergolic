@@ -82,17 +82,24 @@ export function formatSats(sats: number): string {
 	}
 }
 
-export async function getCuckPrice(): Promise<number | Error> {
-	try {
+export async function getCuckPrice(): Promise<number> {
+	return new Promise((resolve, reject) => {
 		var url = 'https://api.coindesk.com/v1/bpi/currentprice.json';
 		var symbol = 'USD';
-		const data = await fetch(url);
-		const json = await data.json();
-		const cuckPrice = parseFloat(json.bpi[symbol].rate.replace(/,/g, ''));
-		return cuckPrice;
-	} catch (e) {
-		return e as Error;
-	}
+		fetch(url)
+			.then((r) => {
+				r.json()
+					.then((j) => {
+						resolve(parseFloat(j.bpi[symbol].rate.replace(/,/g, '')));
+					})
+					.catch((e) => {
+						reject(e as Error);
+					});
+			})
+			.catch((e) => {
+				reject(e as Error);
+			});
+	});
 }
 
 export async function parseProblem(problem: string) {
