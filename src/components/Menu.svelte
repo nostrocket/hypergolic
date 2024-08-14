@@ -58,7 +58,3 @@
 	Help
 </a>
 <Separator class="my-2" />
-<a href="##" class={getClass('inbox')}>
-	<Mail class={iconClass} />
-	Inbox
-</a>
