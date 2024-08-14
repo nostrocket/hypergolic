@@ -5,7 +5,7 @@
 	import Separator from '@/components/ui/separator/separator.svelte';
 	import { currentUser } from '@/stores/session';
 	import { GitBranch, HelpCircle, Mail, Package, Pyramid, Rocket, Users } from 'lucide-svelte';
-	import { GitAltBrand } from 'svelte-awesome-icons';
+	import { GitAltBrand, TelegramBrand } from 'svelte-awesome-icons';
 
 	let iconClass = 'h-5 w-5 md:h-4 md:w-4';
 
@@ -48,6 +48,10 @@
 <a href="https://github.com/nostrocket/hypergolic" class={getClass('_')}>
 	<GitAltBrand class={iconClass} />
 	Source
+</a>
+<a href="https://t.me/nostrocket" class={getClass('_')}>
+	<TelegramBrand class={iconClass} />
+	Telegram Group
 </a>
 <a href="{base}/help" class={getClass('help')}>
 	<HelpCircle class={iconClass} />

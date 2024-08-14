@@ -10,6 +10,7 @@
 	import { currentUser } from '@/stores/session';
 	import Login from './Login.svelte';
 	import { NDKPrivateKeySigner, NDKUser } from '@nostr-dev-kit/ndk';
+	import { TelegramBrand } from 'svelte-awesome-icons';
 
 	let email: string = '';
 	let fax: string = '';
@@ -122,6 +123,10 @@
 			<Button disabled={emailInValid} on:click={SubmitEmailAndSubscribe}
 				>{emailError ? emailError : "I'm lame, please email me with updates"}</Button
 			>
+			<Separator />
+			<a href="https://t.me/nostrocket" class="flex flex-nowrap">
+				<TelegramBrand class="mr-2" /> Join the Telegram Group
+			</a>
 		</Dialog.Header>
 	</Dialog.Content>
 </Dialog.Root>
