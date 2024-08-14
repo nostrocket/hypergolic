@@ -9,6 +9,9 @@ import { BloomFilter } from 'bloomfilter';
 
 export class Rocket {
 	Event: NDKEvent;
+	ATag(): NDKTag {
+		return ['a', `31108:${this.Event.pubkey}:${this.Event.dTag}`];
+	}
 	private Bloom(): BloomFilter {
 		let b = new BloomFilter(
 			64 * 256, // bits to allocate.

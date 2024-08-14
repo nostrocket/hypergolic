@@ -96,9 +96,7 @@
 			{/each}
 		{:else}
 			<Alert.Root>
-				<Alert.Description
-					>Currently, there are no products on the mainnet; you can check the testnet.</Alert.Description
-				>
+				<Alert.Description>No products found!</Alert.Description>
 			</Alert.Root>
 		{/if}
 	</Tabs.Content>
@@ -106,8 +104,7 @@
 		<Alert.Root class="my-2">
 			<ExclamationTriangle class="h-4 w-4" />
 			<Alert.Title>Note</Alert.Title>
-			<Alert.Description
-				>The following products are for testing purposes only. Please do not send real Bitcoin.</Alert.Description
+			<Alert.Description>The following products are for testing and are not real.</Alert.Description
 			>
 		</Alert.Root>
 		{#each testnet as [rocket, groups] (rocket.Event.id)}

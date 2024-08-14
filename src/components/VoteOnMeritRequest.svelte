@@ -32,19 +32,19 @@
 			.publish()
 			.then((x) => {
 				console.log(x);
+				if (direction === 'ratify') {
+					let content = `I've voted to ratify your merit request! ${merit.Problem()} \n\n ${merit.SolutionURL() ? merit.SolutionURL() : ''}`;
+					prepareMeritNoteEvent({
+						ndk,
+						merit,
+						content
+					})
+						.publish()
+						.then((x) => {
+							console.log(x);
+						});
+				}
 			});
-		if (direction === 'ratify') {
-			let content = `I've voted to ratify your merit request! ${merit.Problem()} \n\n ${merit.Solution() ? merit.Solution() : ''}`;
-			prepareMeritNoteEvent({
-				ndk,
-				merit,
-				content
-			})
-				.publish()
-				.then((x) => {
-					console.log(x);
-				});
-		}
 	}
 
 	$: currentUserHasVotepower = false;

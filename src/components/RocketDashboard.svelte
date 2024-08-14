@@ -2,17 +2,15 @@
 	import * as Breadcrumb from '$lib/components/ui/breadcrumb/index.js';
 	import Button from '@/components/ui/button/button.svelte';
 	import * as Card from '@/components/ui/card';
+	import { Rocket } from '@/event_helpers/rockets';
 	import type { NDKEvent } from '@nostr-dev-kit/ndk';
-	import CreateMeritRequest from './CreateMeritRequest.svelte';
-	import CreateNewProduct from './CreateNewProduct.svelte';
+	import BitcoinAssociations from './AssociatedBitcoinAddresses.svelte';
 	import MeritRequests from './MeritRequests.svelte';
 	import MeritsAndSatflow from './MeritsAndSatflow.svelte';
 	import ProductFomo from './ProductFomo.svelte';
 	import ProposedProducts from './ProposedProducts.svelte';
 	import Todo from './Todo.svelte';
 	import UpdateMission from './UpdateMission.svelte';
-	import { Rocket } from '@/event_helpers/rockets';
-	import BitcoinAssociations from './BitcoinAssociations.svelte';
 
 	export let rocket: NDKEvent;
 
@@ -47,8 +45,6 @@
 				<Card.Title class="pb-4">Actions</Card.Title>
 				<Card.Description class="flex flex-wrap gap-2">
 					<UpdateMission rocketEvent={rocket} />
-					<CreateNewProduct rocketEvent={rocket} />
-					<CreateMeritRequest rocketEvent={rocket} />
 					<Button
 						on:click={() => {
 							console.log(rocket.rawEvent());
@@ -58,10 +54,5 @@
 			</Card.Header>
 			<Card.Footer></Card.Footer>
 		</Card.Root>
-
-		<Todo
-			className="sm:col-span-3"
-			text={['delete rocket (if current user is rocket creator) - publish deletion request']}
-		/>
 	</main>
 </div>

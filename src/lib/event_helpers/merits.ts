@@ -23,13 +23,22 @@ export class MeritRequest {
 		}
 		return _problem;
 	}
-	Solution(): URL | undefined {
+	SolutionURL(): URL | undefined {
 		let _solution: URL | undefined = undefined;
 		for (let solution of this.Event.getMatchingTags('solution')) {
 			if (solution && solution.length > 2 && solution[1] == 'url') {
 				if (isValidUrl(solution[2])) {
 					_solution = new URL(solution[2]);
 				}
+			}
+		}
+		return _solution;
+	}
+	SolutionText(): string | undefined {
+		let _solution: string | undefined = undefined;
+		for (let solution of this.Event.getMatchingTags('solution')) {
+			if (solution && solution.length > 2 && solution[1] == 'text') {
+				_solution = solution[2];
 			}
 		}
 		return _solution;

@@ -19,6 +19,7 @@
 	import { Alert } from '@/components/ui/alert';
 	import { currentUser } from '@/stores/session';
 	import MeritComment from './MeritComment.svelte';
+	import { Description } from 'formsnap';
 
 	export let merit: MeritRequest;
 	//export let rocket: NDKEvent;
@@ -26,7 +27,7 @@
 
 	let result: VoteDirection | undefined;
 
-	export let parsedRocket:Rocket;
+	export let parsedRocket: Rocket;
 
 	let _votes = $ndk.storeSubscribe(
 		{ '#a': [RocketATagFilter(parsedRocket.Event)], '#e': [merit.ID], kinds: [1410 as NDKKind] },
@@ -52,7 +53,7 @@
 	}
 
 	$: referenceTime = cuckPrice
-		? formatReferenceTime(((merit.Sats / 100000000) * cuckPrice) / 70)
+		? formatReferenceTime(((merit.Sats / 100000000) * cuckPrice) / 50)
 		: '...';
 
 	let votes = derived(_votes, ($_votes) => {
@@ -118,9 +119,9 @@
 		<div class="flex flex-nowrap justify-between">
 			<Card.Title>
 				{merit.Problem().split('\n')[0]}
-			</Card.Title>{#if merit.Solution()}<a
+			</Card.Title>{#if merit.SolutionURL()}<a
 					class="flex flex-nowrap text-orange-500 underline decoration-orange-500"
-					href={merit.Solution()}>View Solution <ExternalLink size={18} class="m-1" /></a
+					href={merit.SolutionURL()}>View Solution <ExternalLink size={18} class="m-1" /></a
 				>{/if}
 		</div>
 		<div class="flex flex-nowrap">
@@ -131,87 +132,101 @@
 			/>
 			<Name ndk={$ndk} pubkey={merit.Pubkey} class="inline-block max-w-32 truncate p-2" />
 		</div>
-		<Card.Content class="p-6 text-sm">
-			<div class="grid gap-3">
-				<div class="font-semibold">Merit Request Details</div>
-				<ul class="grid gap-3">
-					<li class="flex items-center justify-between">
-						<span class="text-muted-foreground"> Number of Merits being requested </span>
-						<span>{merit.Merits.toLocaleString()}</span>
-					</li>
-					<li class="flex items-center justify-between">
-						<span class="text-muted-foreground">
-							Value in Sats at the time the request was made
-						</span>
-						<span>{merit.Sats.toLocaleString()}</span>
-					</li>
-					<li class="flex items-center justify-between">
-						<span class="text-muted-foreground">
-							Approximate value of {merit.Sats.toLocaleString()} sats in CuckLoserBucks
-						</span>
-						<span>${cuckPrice ? ((merit.Sats / 100000000) * cuckPrice).toFixed(2) : 'Loading'}</span
-						>
-					</li>
-				</ul>
-				<Separator class="my-4" />
-				<div class="grid grid-cols-2 gap-4">
-					<div class="grid gap-3">
-						<div class="font-semibold">Analysis</div>
-						<span class="grid gap-0.5 not-italic text-muted-foreground">
-							A competent freelance developer earns $70 CuckLoserBucks an hour (on average). Using
-							this rate, the contributor is claiming to have spent about {referenceTime} working on this.
-						</span>
-					</div>
-					<div class="grid auto-rows-max gap-3">
-						<div class="font-semibold">Reference Time</div>
-						<div class="text-muted-foreground">{referenceTime}</div>
-					</div>
-				</div>
-				<Separator class="my-4" />
-				<div class="font-semibold">Votes</div>
-				{#if $votes.size == 0}<Alert
-						><Info />Waiting for existing <span class="italic">{parsedRocket.Name()}</span> Merit
-						holders to vote</Alert
-					>
-				{/if}
-				<Table.Root>
-					<Table.Body>
-						{#each $votes as [id, vote], _ (id)}
-							<Table.Row
-								on:click={() => {
-									console.log(vote.Event.rawEvent());
-								}}
-								class="cursor-pointer {vote.VoteDirection == 'ratify'
-									? 'bg-lime-600'
-									: 'bg-red-700'} {vote.VoteDirection == 'ratify'
-									? 'hover:bg-lime-700'
-									: 'hover:bg-red-800'}"
-							>
-								<Table.Cell>
-									<div class="flex flex-nowrap">
-										<Avatar
-											ndk={$ndk}
-											pubkey={vote.Pubkey}
-											class="h-10 w-10 flex-none rounded-full object-cover"
-										/>
-										<Name
-											ndk={$ndk}
-											pubkey={vote.Pubkey}
-											class="inline-block max-w-32 truncate p-2"
-										/>
-									</div>
-								</Table.Cell>
-								<Table.Cell class="hidden text-left md:table-cell">{vote.VoteDirection}</Table.Cell>
-								<Table.Cell class="table-cell text-right"
-									>{unixToRelativeTime(vote.TimeStamp * 1000)}</Table.Cell
-								>
-							</Table.Row>
-						{/each}
-					</Table.Body>
-				</Table.Root>
-			</div></Card.Content
-		>
+		{#if merit.SolutionText()}
+			{merit.SolutionText()?.trim()}
+		{/if}
+		<Card.Description></Card.Description>
 	</Card.Header>
+
+	<Card.Content class="p-6 text-sm">
+		<div class="grid gap-3">
+			<div class="font-semibold">Merit Request Details</div>
+			<ul class="grid gap-3">
+				<li class="flex items-center justify-between">
+					<span class="text-muted-foreground"> Number of Merits being requested </span>
+					<span>{merit.Merits.toLocaleString()}</span>
+				</li>
+				<li class="flex items-center justify-between">
+					<span class="text-muted-foreground">
+						Value in Sats at the time the request was made
+					</span>
+					<span>{merit.Sats.toLocaleString()}</span>
+				</li>
+				<li class="flex items-center justify-between">
+					<span class="text-muted-foreground">
+						Approximate value of {merit.Sats.toLocaleString()} sats in CuckLoserBucks
+					</span>
+					<span>${cuckPrice ? ((merit.Sats / 100000000) * cuckPrice).toFixed(2) : 'Loading'}</span>
+				</li>
+			</ul>
+			<Separator class="my-4" />
+			<div class="grid grid-cols-2 gap-4">
+				<div class="grid gap-3">
+					<div class="font-semibold">Analysis</div>
+					<span class="grid gap-0.5 not-italic text-muted-foreground">
+						<p class="m-1 text-justify">
+							To make it easier to compare the value of each contribution we normalize the hourly
+							rate to $50 CuckLoserBucks an hour.
+						</p>
+						<p class="m-1 text-justify">
+							At this rate, the contributor is claiming to have worked for {referenceTime} solving this
+							problem.
+						</p>
+					</span>
+				</div>
+				<div class="grid auto-rows-max gap-3">
+					<div class="font-semibold">Reference Time</div>
+					<div class="text-muted-foreground">{referenceTime}</div>
+				</div>
+			</div>
+			<Separator class="my-4" />
+			<div class="font-semibold">Votes</div>
+			{#if $votes.size == 0}<Alert
+					><Info />Waiting for existing <span class="italic">{parsedRocket.Name()}</span> Merit holders
+					to vote</Alert
+				>
+			{/if}
+			<Table.Root>
+				<Table.Body>
+					{#each $votes as [id, vote], _ (id)}
+						<Table.Row
+							on:click={() => {
+								console.log(vote.Event.rawEvent());
+							}}
+							class="cursor-pointer {vote.VoteDirection == 'ratify'
+								? 'bg-lime-600'
+								: 'bg-red-700'} {vote.VoteDirection == 'ratify'
+								? 'hover:bg-lime-700'
+								: 'hover:bg-red-800'}"
+						>
+							<Table.Cell>
+								<div class="flex flex-nowrap">
+									<Avatar
+										ndk={$ndk}
+										pubkey={vote.Pubkey}
+										class="h-10 w-10 flex-none rounded-full object-cover"
+									/>
+									<Name
+										ndk={$ndk}
+										pubkey={vote.Pubkey}
+										class="inline-block max-w-32 truncate p-2"
+									/>
+								</div>
+							</Table.Cell>
+							<Table.Cell class="hidden text-left md:table-cell">{vote.VoteDirection}</Table.Cell>
+							<Table.Cell class="table-cell text-right"
+								>{unixToRelativeTime(vote.TimeStamp * 1000)}</Table.Cell
+							>
+						</Table.Row>
+					{/each}
+				</Table.Body>
+			</Table.Root>
+		</div>
+		<a href="#" class="text-xs" on:click={() => console.log(merit.Event.rawEvent())}
+			>print to console</a
+		></Card.Content
+	>
+
 	<Card.Footer class="flex flex-row justify-center border-t px-6 py-3 text-center {background}">
 		{#if merit.IncludedInRocketState(parsedRocket)}
 			<span class="scroll-m-20 text-lg font-semibold tracking-tight md:text-xl">APPROVED</span>

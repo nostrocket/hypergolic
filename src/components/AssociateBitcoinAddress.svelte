@@ -10,9 +10,28 @@
 	import validate from 'bitcoin-address-validation';
 	import type { Rocket } from '@/event_helpers/rockets';
 	import { derived } from 'svelte/store';
+	import { onDestroy } from 'svelte';
+	import type { NDKEventStore, ExtendedBaseType } from '@nostr-dev-kit/ndk-svelte';
 
 	let bitcoinAddress: string;
 	export let rocket: Rocket;
+
+	let associations: NDKEventStore<ExtendedBaseType<NDKEvent>> | undefined = undefined;
+
+	$: {
+		if ($currentUser && !associations) {
+			associations = $ndk.storeSubscribe(
+				[{ authors: [$currentUser.pubkey], kinds: [1413 as number] }],
+				{
+					subId: `1413-${$currentUser.pubkey}`
+				}
+			);
+		}
+	}
+
+	onDestroy(() => {
+		associations?.unsubscribe();
+	});
 
 	let associatedAddresses = derived(currentUser, ($currentUser) => {
 		let addresses: Set<string> = new Set();
@@ -40,6 +59,7 @@
 		let event = new NDKEvent($ndk);
 		event.kind = 1413;
 		event.tags.push(['onchain', address]);
+		event.tags.push(rocket.ATag());
 		//todo: let user specify a rocket
 		console.log('todo: let user specify a rocket');
 		event
@@ -63,13 +83,23 @@ their Merits.
 			Merit purchases must be conducted with a Bitcoin address that is associated with your pubkey,
 			otherwise you will not recieve the Merits upon payment.
 		</div>
-		{#if $associatedAddresses.size == 0}You do not have any registered addresses{:else}
-			Your registered addresses:
+		{#if ($associatedAddresses.size == 0 && !associations) || (associations && $associations.length == 0)}You
+			do not have any registered addresses{:else if associations && $associations && $associations.length > 0}
+			<h4 class="text-lg font-bold dark:text-white">Pending Additions</h4>
+			<ul class="m-2 flex flex-col">
+				{#each $associations as event}<li class="list-item list-disc">
+						{event.getMatchingTags('onchain')[0][1]}
+					</li>{/each}
+			</ul>
+		{:else}
+			<h4 class="text-lg font-bold dark:text-white">Your registered addresses</h4>
+
 			<ul class="m-2 flex flex-col">
 				{#each $associatedAddresses as address}<li class="list-item list-disc">{address}</li>{/each}
 			</ul>
 		{/if}
-		Add a new address now
+		<h4 class="text-lg font-bold dark:text-white">Add a new address now</h4>
+
 		<div class="flex">
 			<InputBitcoinAddress bind:bitcoinAddress /><Button
 				on:click={() => publish(bitcoinAddress)}

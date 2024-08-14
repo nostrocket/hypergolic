@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
@@ -25,7 +26,7 @@
 		<Card.Root class="flex h-full w-full flex-col">
 			<Card.Header>
 				<Card.Title>Proof of Work</Card.Title>
-				<Card.Description>I have skills and I'm ready to work for sats.</Card.Description>
+				<Card.Description>I want to work for sats</Card.Description>
 			</Card.Header>
 			<img src="{base}/_work.png" alt="Proof of Work" />
 			<Card.Content class="grid gap-4 !pt-2">
@@ -33,38 +34,45 @@
 					<ul class="ml-6 list-disc [&>li]:mt-2">
 						<li>Solve problems for fun and profit</li>
 						<li>No meetings, no scrum, no task assignment, no schedules</li>
-						<li>Work only on what inspires you</li>
+						<li>Only work on fully open source projects</li>
 						<li>
-							No interview process or CV's required, apply by sending a pull request to solve a
-							small problem
+							No interview process! Apply by choosing a problem to solve and sending a pull request
 						</li>
-						<li>Get paid in Sats for every pull request</li>
+						<li>Get paid in Sats, or equity in the project's satflow</li>
 					</ul>
 				</div>
 			</Card.Content>
 			<Card.Footer class="mt-auto">
-				<Button class="w-full">Apply Now</Button>
+				<Button
+					on:click={() => {
+						window.location.href = 'https://github.com/nostrocket/hypergolic/issues';
+					}}
+					class="w-full">Apply Now</Button
+				>
 			</Card.Footer>
 		</Card.Root>
 		<Card.Root class="flex h-full w-full flex-col">
 			<Card.Header>
 				<Card.Title>Proof of Sats</Card.Title>
-				<Card.Description>I have Sats, and I want a slice of a Rocket's satflow.</Card.Description>
+				<Card.Description>I want to invest in the satflow of a Rocket</Card.Description>
 			</Card.Header>
 			<img src="{base}/_sats.png" width="100%" alt="Proof of Sats" />
 			<Card.Content class="grid gap-4 !pt-2">
 				<div>
 					<ul class="ml-6 list-disc [&>li]:mt-2">
-						<li>Nostrocket is the most efficient way (ever) to invest in emerging technologies</li>
 						<li>
-							Every Sat goes directly to a contributor for solving a problem in the critical path
-							towards (more) revenue
+							Nostrocket is the most efficient way (ever) to invest in emerging technologies like
+							nostr
 						</li>
 						<li>
-							Revenue goes straight from the paying customer's wallet into your wallet as an equity
-							holder
+							Your sats go directly to a contributor for work that has already been completed and
+							solves a problem in the critical path to (more) revenue
 						</li>
-						<li>No KYC, ever.</li>
+						<li>
+							Nostrocket is non-custodial - revenue goes directly from the paying customer to your
+							wallet as an equity holder
+						</li>
+						<li>No KYC (ever).</li>
 					</ul>
 				</div>
 			</Card.Content>
@@ -76,7 +84,7 @@
 			<Card.Header>
 				<Card.Title>Launch a new Rocket</Card.Title>
 				<Card.Description
-					>I'm working on my own project and I want other people to join me.</Card.Description
+					>I have an open source project and I want to make it profitable</Card.Description
 				>
 			</Card.Header>
 			<img src="{base}/_rocket.png" width="100%" alt="Launch a new Rocket" />
@@ -84,16 +92,16 @@
 				<div>
 					<ul class="ml-6 list-disc [&>li]:mt-2">
 						<li>
-							Attract the people you need to make your project a success (despite your lack of
-							funding)
+							Attract the right people to make your project a success (despite your lack of funding)
+						</li>
+						<li>No financial accounting, capital raising, compliance, business plans, etc.</li>
+						<li>
+							Make your project socially scalable by becoming radically fair and meritocratic to all
+							contributors and investors.
 						</li>
 						<li>
-							Nostrocket obsoletes the need for financial accounting, capital raising, compliance,
-							business plans, etc.
-						</li>
-						<li>
-							Nostrocket is radically meritocratic and fair to project creators, contributors, and
-							investors, for the entire life of the project
+							Make your project immune to parasites by giving them nowhere to hide and nothing to
+							leech from.
 						</li>
 					</ul>
 				</div>

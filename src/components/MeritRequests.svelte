@@ -13,6 +13,7 @@
 	import { Avatar, Name } from '@nostr-dev-kit/ndk-svelte-components';
 	import { onDestroy } from 'svelte';
 	import { derived, writable } from 'svelte/store';
+	import CreateMeritRequest from './CreateMeritRequest.svelte';
 
 	//export let rocket: NDKEvent;
 	export let rocket: Rocket; // = new Rocket(rocket);
@@ -92,11 +93,12 @@
 </script>
 
 <Card.Root class="sm:col-span-3">
-	<Card.Header class="px-7">
+	<Card.Header class="pb-3">
 		<Card.Title>Merit Requests</Card.Title>
 		<Card.Description>Merit Requests</Card.Description>
 	</Card.Header>
 	<Card.Content>
+		<CreateMeritRequest {rocket} />
 		<Table.Root>
 			<Table.Header>
 				<Table.Row>

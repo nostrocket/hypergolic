@@ -10,20 +10,19 @@
 	import { currentUser } from '@/stores/session';
 	import Login from './Login.svelte';
 	import { NDKPrivateKeySigner, NDKUser } from '@nostr-dev-kit/ndk';
+	import { TelegramBrand } from 'svelte-awesome-icons';
 
-	let email: string;
+	let email: string = '';
+	let fax: string = '';
 	$: emailInValid = true;
-	$: emailError = '';
+	$: emailError = 'Email is invalid';
 	const emailRegex = /^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/;
 
-	$: if (email) {
-		if (!emailRegex.test(email)) {
-			emailInValid = true;
-			emailError = 'Email is invalid';
-		} else {
-			emailInValid = false;
-			emailError = '';
-		}
+	$: {
+		emailError = emailRegex.test(email) ? '' : 'Email is invalid';
+	}
+	$: {
+		emailInValid = emailRegex.test(email) ? false : true;
 	}
 
 	async function Subscribe() {
@@ -84,14 +83,15 @@
 			variant="nostr"
 			class="flex h-8 shrink-0 items-center justify-center rounded-sm"
 		>
-			Nostrocket is totally not ready yet but whatever
+			u r so early
 		</Badge>
 	</Dialog.Trigger>
 	<Dialog.Content>
 		<Dialog.Header>
 			<Dialog.Title>Subscribe for Updates</Dialog.Title>
 			<Dialog.Description>
-				Subscribe now and we'll ping you when there are new releases/features
+				Nostrocket is under active development, many things are broken. Subscribe now and we'll ping
+				you when there are new releases and new features.
 			</Dialog.Description>
 			<div class="flex flex-col gap-4 py-4">
 				{#if $currentUser}
@@ -101,19 +101,32 @@
 				{/if}
 				<Separator />
 				<span class="ml-auto mr-auto flex"
-					>If you don't use nostr, you can subscribe to updates with an email address instead</span
+					>If you don't use nostr, that's SAD! Whatever, I guess we can fax you or email you or
+					something</span
 				>
 				<div class="grid grid-cols-4 items-center gap-4">
 					<Label for="email" class="text-right">Email</Label>
 					<Input bind:value={email} id="email" placeholder="Your email" class="col-span-3" />
 				</div>
-				{#if emailError}
+				<!-- {#if emailError}
 					<div class="ml-4 p-0 text-sm text-red-500">{emailError}</div>
+				{/if} -->
+				<div class="grid grid-cols-4 items-center gap-4">
+					<Label for="fax" class="text-right">Fax number</Label>
+					<Input bind:value={fax} id="email" placeholder="Your fax number" class="col-span-3" />
+				</div>
+				{#if fax.length > 0}
+					<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ?autoplay=1" allow="autoplay"
+					></iframe>
 				{/if}
 			</div>
 			<Button disabled={emailInValid} on:click={SubmitEmailAndSubscribe}
-				>Please email me with updates</Button
+				>{emailError ? emailError : "I'm lame, please email me with updates"}</Button
 			>
+			<Separator />
+			<a href="https://t.me/nostrocket" class="flex flex-nowrap">
+				<TelegramBrand class="mr-2" /> Join the Telegram Group
+			</a>
 		</Dialog.Header>
 	</Dialog.Content>
 </Dialog.Root>

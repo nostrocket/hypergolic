@@ -12,11 +12,12 @@
 	import type NDKSvelte from '@nostr-dev-kit/ndk-svelte';
 	import { Terminal } from 'lucide-svelte';
 	import Todo from './Todo.svelte';
-	import { isValidUrl } from '@/event_helpers/rockets';
+	import { isValidUrl, Rocket } from '@/event_helpers/rockets';
 	import CalculateSats from './CalculateSats.svelte';
 	import { isGitHubUrl, parseProblem } from '@/helpers';
+	import Login from './Login.svelte';
 
-	export let rocketEvent: NDKEvent;
+	export let rocket: Rocket;
 
 	let problem: string = '';
 	let solution: string = '';
@@ -78,17 +79,29 @@
 		e.created_at = Math.floor(new Date().getTime() / 1000);
 		e.tags.push(['problem', 'text', problem]);
 		if (solution.length > 0) {
-			e.tags.push(['solution', 'url', solution]);
+			try {
+				let url = new URL(solution);
+				e.tags.push(['solution', 'url', url.toString()]);
+			} catch {
+				e.tags.push(['solution', 'text', solution]);
+			}
 		}
-		e.tags.push(['a', `31108:${rocketEvent.pubkey}:${rocketEvent.dTag}`]);
+		e.tags.push(['a', `31108:${rocket.Event.pubkey}:${rocket.Event.dTag}`]);
 		e.tags.push(['merits', merits.toString(10)]);
 		e.tags.push(['sats', sats]);
 		console.log(e.rawEvent());
-		e.publish().then((x) => {
-			console.log(x);
-			open = false;
-			//goto(`${base}/rockets/${getRocketURL(e)}`);
-		});
+		e.publish()
+			.then((x) => {
+				console.log(x);
+				console.log('todo: publish a kind 1 and tag the rocket and author');
+				open = false;
+				//goto(`${base}/rockets/${getRocketURL(e)}`);
+			})
+			.catch(() => {
+				alert(
+					"something went wrong, copy/paste your data and refresh then try again if you don't see your merit request in the rocket dashboard (we r so early, there will be blugs)"
+				);
+			});
 	}
 </script>
 
@@ -140,7 +153,7 @@
 				<CalculateSats on:result={(event) => (sats = event.detail)} />
 			</div>
 
-			<div class="flex items-center space-x-2">
+			<!-- <div class="flex items-center space-x-2">
 				<Checkbox id="sell" bind:checked={wts} aria-labelledby="terms-label" />
 				<Label
 					id="terms-label"
@@ -149,9 +162,9 @@
 				>
 					I want Sats not Merits
 				</Label>
-			</div>
+			</div> -->
 
-			{#if wts}
+			<!-- {#if wts}
 				Your Merits will be auctioned to potential sponsors as soon as it is approved, enabling you
 				to be paid in Sats for your work. Tip: you don't have to decide right now, you can do this
 				at any time.
@@ -160,15 +173,19 @@
 					<Label for="sats" class="col-span-2 text-right">Auction Reserve Price (Sats)</Label>
 					<Input bind:value={minimum} id="price" placeholder="Reserve Price" class="col-span-1" />
 				</div>
-			{/if}
+			{/if} -->
 		</div>
 		<Dialog.Footer>
-			<Button
-				on:click={() => {
-					publish($ndk);
-				}}
-				type="submit">Publish</Button
-			>
+			{#if $currentUser}
+				<Button
+					on:click={() => {
+						publish($ndk);
+					}}
+					type="submit">Publish</Button
+				>
+			{:else}
+				<Login />
+			{/if}
 		</Dialog.Footer>
 		<Todo
 			text={['remove white border on focus so that the validation indication color can be seen']}

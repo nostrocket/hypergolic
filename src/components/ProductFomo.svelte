@@ -5,6 +5,8 @@
 	import { ndk } from '@/ndk';
 	import { derived, writable } from 'svelte/store';
 	import ProductGroup from './ProductGroup.svelte';
+	import CreateNewProduct from './CreateNewProduct.svelte';
+	import CreateMeritRequest from './CreateMeritRequest.svelte';
 
 	export let rocket: Rocket;
 	export let unratifiedZaps: Map<string, number>;
@@ -51,10 +53,11 @@
 		<Card.Title>Products and Purchases</Card.Title>
 		<Card.Description></Card.Description>
 	</Card.Header>
+
 	<Card.Content class="grid grid-cols-1 gap-2">
 		{#each $groups as [identifier, products] (identifier)}
 			<ProductGroup {products} {rocket} bind:unratifiedZaps />
 		{/each}
 	</Card.Content>
-	<Card.Footer></Card.Footer>
+	<Card.Footer><CreateNewProduct rocketEvent={rocket.Event} /></Card.Footer>
 </Card.Root>

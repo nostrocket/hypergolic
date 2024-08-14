@@ -1,6 +1,17 @@
 # Hypergolic
 
-A nostrocket client
+A nostr client that implements the nostrocket [NIPS](https://github.com/nostrocket/NIPS).
+
+## Developing
+
+```bash
+npm install
+
+npm run dev
+
+# or start the server and open the app in a new browser tab
+npm run dev -- --open
+```
 
 ## Pull Requests
 
@@ -12,6 +23,8 @@ Pull request should contain only ONE commit that solves exactly ONE problem. The
 
 The commit message MUST be a short summary of the problem being solved, usually this should be the same as title of the problem from the github or nostrocket issue tracker.
 
+Do not send pull requests unless they are ready to merge, no "work in progress" pull requests.
+
 ## Style Guide
 
 Avoid uneccessary whitespace changes. Whitespace changes make it difficult to see what code was really changed.
@@ -22,25 +35,8 @@ https://www.shadcn-svelte.com/docs
 
 ## Getting Paid
 
-If you want to get paid for working on this project, demonstrate your capability by solving some problems and adhering to the instructions in this readme. After you have 2-3 PR's merged, DM gsovereignty on nostr to have a conversation about paid work.
+Once your pull request has been merged, go to nostrocket.org and submit a Merit Request.
 
-## Developing
+Upon your Merit Request being approved by the existing contributors to Nostrocket, you will be able to sell your Approved Merit Request (there are people wanting to buy these for sats).
 
-`npm install`
-
-```bash
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
-
-## Building
-
-To create a production version of your app:
-
-```bash
-npm run build
-```
-
-You can preview the production build with `npm run preview`.
+Ask in the Telegram group or on Nostr if you need help or have questions.
