@@ -3,7 +3,9 @@
 	import { page } from '$app/stores';
 	import { Badge } from '@/components/ui/badge';
 	import Separator from '@/components/ui/separator/separator.svelte';
-	import { Mail, Package, Pyramid, Rocket, Users } from 'lucide-svelte';
+	import { currentUser } from '@/stores/session';
+	import { GitBranch, HelpCircle, Mail, Package, Pyramid, Rocket, Users } from 'lucide-svelte';
+	import { GitAltBrand } from 'svelte-awesome-icons';
 
 	let iconClass = 'h-5 w-5 md:h-4 md:w-4';
 
@@ -16,25 +18,39 @@
 	};
 </script>
 
+{#if $currentUser}
+	<a href="{base}/inbox" class={getClass('inbox')}>
+		<Mail class={iconClass} />
+		Inbox
+		<Badge class="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-full">1</Badge>
+	</a>
+	<Separator class="dark:bg-slate-700" />
+{/if}
 <a href="{base}/rockets" class={getClass('rockets')}>
 	<Rocket class={iconClass} />
 	Rockets
-</a>
-<a href="##" class={getClass('problems')}>
-	<Pyramid class={iconClass} />
-	Problem Tracker
-	<Badge class="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-full">6</Badge>
 </a>
 <a href="{base}/products" class={getClass('products')}>
 	<Package class={iconClass} />
 	Products
 </a>
-<a href="##" class={getClass('people')}>
+<a href="{base}/problems" class={getClass('problems')}>
+	<Pyramid class={iconClass} />
+	Problem Tracker
+	<!-- <Badge class="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-full">6</Badge> -->
+</a>
+
+<!-- <a href="##" class={getClass('people')}>
 	<Users class={iconClass} />
 	People
+</a> -->
+<Separator class="dark:bg-slate-700" />
+<a href="https://github.com/nostrocket/hypergolic" class={getClass('_')}>
+	<GitAltBrand class={iconClass} />
+	Source
+</a>
+<a href="{base}/help" class={getClass('help')}>
+	<HelpCircle class={iconClass} />
+	Help
 </a>
 <Separator />
-<a href="##" class={getClass('inbox')}>
-	<Mail class={iconClass} />
-	Inbox
-</a>
