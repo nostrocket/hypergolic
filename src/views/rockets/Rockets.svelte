@@ -84,10 +84,7 @@
 			<Alert.Root class="my-2">
 				<ExclamationTriangle class="h-4 w-4" />
 				<Alert.Title>Note</Alert.Title>
-				<Alert.Description
-					>The following rocket is for testing purposes only. Any rocket with "test" in its name is
-					intended solely for testing.</Alert.Description
-				>
+				<Alert.Description>The following rockets are for testing purposes only.</Alert.Description>
 			</Alert.Root>
 			<div class="grid gap-2" style="grid-template-columns: repeat(auto-fit, 350px);">
 				{#each testnet as rocket (`${rocket.Event.pubkey}${rocket.Name()}`)}
