@@ -19,6 +19,7 @@
 	import { Alert } from '@/components/ui/alert';
 	import { currentUser } from '@/stores/session';
 	import MeritComment from './MeritComment.svelte';
+	import { Description } from 'formsnap';
 
 	export let merit: MeritRequest;
 	//export let rocket: NDKEvent;
@@ -118,9 +119,9 @@
 		<div class="flex flex-nowrap justify-between">
 			<Card.Title>
 				{merit.Problem().split('\n')[0]}
-			</Card.Title>{#if merit.Solution()}<a
+			</Card.Title>{#if merit.SolutionURL()}<a
 					class="flex flex-nowrap text-orange-500 underline decoration-orange-500"
-					href={merit.Solution()}>View Solution <ExternalLink size={18} class="m-1" /></a
+					href={merit.SolutionURL()}>View Solution <ExternalLink size={18} class="m-1" /></a
 				>{/if}
 		</div>
 		<div class="flex flex-nowrap">
@@ -131,7 +132,12 @@
 			/>
 			<Name ndk={$ndk} pubkey={merit.Pubkey} class="inline-block max-w-32 truncate p-2" />
 		</div>
+		{#if merit.SolutionText()}
+			{merit.SolutionText()?.trim()}
+		{/if}
+		<Card.Description></Card.Description>
 	</Card.Header>
+
 	<Card.Content class="p-6 text-sm">
 		<div class="grid gap-3">
 			<div class="font-semibold">Merit Request Details</div>
