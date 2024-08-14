@@ -5,7 +5,6 @@
 	import { Rocket } from '@/event_helpers/rockets';
 	import type { NDKEvent } from '@nostr-dev-kit/ndk';
 	import BitcoinAssociations from './AssociatedBitcoinAddresses.svelte';
-	import CreateNewProduct from './CreateNewProduct.svelte';
 	import MeritRequests from './MeritRequests.svelte';
 	import MeritsAndSatflow from './MeritsAndSatflow.svelte';
 	import ProductFomo from './ProductFomo.svelte';
@@ -48,7 +47,6 @@
 				<Card.Title>Actions</Card.Title>
 				<Card.Description class="flex space-x-4">
 					<UpdateMission rocketEvent={rocket} />
-					<CreateNewProduct rocketEvent={rocket} />
 					<Button
 						on:click={() => {
 							console.log(rocket.rawEvent());

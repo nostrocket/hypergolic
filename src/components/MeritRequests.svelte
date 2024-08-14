@@ -92,7 +92,7 @@
 </script>
 
 <Card.Root class="sm:col-span-3">
-	<Card.Header class="px-7">
+	<Card.Header class="pb-3">
 		<Card.Title>Merit Requests</Card.Title>
 		<Card.Description>Merit Requests</Card.Description>
 	</Card.Header>
