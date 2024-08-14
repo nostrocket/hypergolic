@@ -15,10 +15,14 @@
 	import BuyAmr from '../../components/BuyAMR.svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
+	import * as Card from '@/components/ui/card';
+	import { Badge } from '@/components/ui/badge';
 	let rocketEvents = $ndk.storeSubscribe([{ kinds: [31108 as number] }], { subId: 'all_rockets' });
 	onDestroy(() => {
 		rocketEvents?.unsubscribe();
 	});
+
+	let dev = false;
 
 	let rockets = derived(rocketEvents, ($rocketEvents) => {
 		let m = new Map<string, NDKEvent>();
@@ -134,6 +138,10 @@
 	});
 
 	transactions.subscribe((t) => {});
+
+	function getRocketClass(rocket: Rocket): string {
+		return rocket.Testnet() ? 'dark:border-red-600' : '';
+	}
 </script>
 
 {#if $nostrocket}<AssociateBitcoinAddress rocket={$nostrocket} />
@@ -142,51 +150,77 @@
 {#if $currentUser}
 	{#each $pendingSales as [rocket, amr] (rocket.Event.id)}
 		{#if amr.length > 0}
-			<Heading title={`ROCKET: ${rocket.Name()}`} />
-			<Table.Root>
-				<Table.Header>
-					<Table.Row>
-						<Table.Head class="w-[10px]">Seller</Table.Head>
-						<Table.Head class="w-[10px]">AMR</Table.Head>
-						<Table.Head class="w-[10px]">Merits</Table.Head>
-						<Table.Head class="w-[150px] text-right">Current Price (sats)</Table.Head>
-						<Table.Head>Status</Table.Head>
-						<Table.Head>Receiving Address</Table.Head>
-						<Table.Head></Table.Head>
-					</Table.Row>
-				</Table.Header>
-				<Table.Body>
-					{#each amr as p (p.AMRIDs)}
-						<Table.Row>
-							<Table.Cell
-								><Avatar
-									ndk={$ndk}
-									pubkey={p.Owner}
-									class="aspect-square w-10 flex-none rounded-full object-cover"
-								/></Table.Cell
+			<Card.Root class={getRocketClass(rocket)}>
+				<Card.CardHeader>
+					<div class="flex flex-nowrap place-items-stretch">
+						<h3 class=" mr-auto text-nowrap text-2xl">
+							{`ROCKET: ${rocket.Name().toUpperCase()}`}
+						</h3>
+						{#if rocket.Testnet()}<Badge
+								variant="destructive"
+								class="flex h-8 shrink-0 items-center justify-center rounded-sm"
 							>
-							<Table.Cell
-								>{p.AMRIDs.length > 1 ? 'multiple' : p.AMRIDs[0].substring(0, 12)}</Table.Cell
-							>
-							<Table.Cell>{p.Merits}</Table.Cell>
-							<Table.Cell class="text-right">{p.Merits}</Table.Cell>
-							<Table.Cell
-								>{p.Status(rocket, $bitcoinTip.height, $transactions.get(p.RxAddress))}</Table.Cell
-							>
-							<Table.Cell
-								on:click={() => {
-									console.log($transactions.get(p.RxAddress)?.From());
-								}}>{p.RxAddress}</Table.Cell
-							>
-							<Table.Cell
-								>{#if p.Status(rocket, $bitcoinTip.height, $transactions.get(p.RxAddress)) == 'OPEN'}<BuyAmr
-										auction={p}
-									/>{/if}</Table.Cell
-							>
-						</Table.Row>
-					{/each}
-				</Table.Body>
-			</Table.Root>
+								<span
+									on:click={() => {
+										dev = true;
+										alert(
+											'dev mode enabled, refresh page if this was unintentional or you may lose sats'
+										);
+									}}>TESTNET</span
+								>
+							</Badge>{/if}
+					</div>
+					<Heading></Heading>
+					<Table.Root>
+						<Table.Header>
+							<Table.Row>
+								<Table.Head class="w-[10px]">Seller</Table.Head>
+								<Table.Head class="w-[10px]">AMR</Table.Head>
+								<Table.Head class="w-[10px]">Merits</Table.Head>
+								<Table.Head class="w-[150px] text-right">Current Price (sats)</Table.Head>
+								<Table.Head>Status</Table.Head>
+								<Table.Head>Receiving Address</Table.Head>
+								<Table.Head></Table.Head>
+							</Table.Row>
+						</Table.Header>
+						<Table.Body>
+							{#each amr as p (p.AMRIDs)}
+								<Table.Row>
+									<Table.Cell
+										><Avatar
+											ndk={$ndk}
+											pubkey={p.Owner}
+											class="aspect-square w-10 flex-none rounded-full object-cover"
+										/></Table.Cell
+									>
+									<Table.Cell
+										>{p.AMRIDs.length > 1 ? 'multiple' : p.AMRIDs[0].substring(0, 12)}</Table.Cell
+									>
+									<Table.Cell>{p.Merits}</Table.Cell>
+									<Table.Cell class="text-right">{p.Merits}</Table.Cell>
+									<Table.Cell
+										>{p.Status(
+											rocket,
+											$bitcoinTip.height,
+											$transactions.get(p.RxAddress)
+										)}</Table.Cell
+									>
+									<Table.Cell
+										on:click={() => {
+											console.log($transactions.get(p.RxAddress)?.From());
+										}}>{p.RxAddress}</Table.Cell
+									>
+									<Table.Cell
+										>{#if p.Status(rocket, $bitcoinTip.height, $transactions.get(p.RxAddress)) == 'OPEN' && (!rocket.Testnet() || dev)}<BuyAmr
+												auction={p}
+											/>{/if}</Table.Cell
+									>
+								</Table.Row>
+							{/each}
+						</Table.Body>
+					</Table.Root>
+				</Card.CardHeader>
+			</Card.Root>
 		{/if}
 	{/each}
 {:else}<Login />{/if}

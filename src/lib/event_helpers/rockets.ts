@@ -9,6 +9,9 @@ import { BloomFilter } from 'bloomfilter';
 
 export class Rocket {
 	Event: NDKEvent;
+	Testnet(): boolean {
+		return this.Name().toLowerCase().includes('test');
+	}
 	ATag(): NDKTag {
 		return ['a', `31108:${this.Event.pubkey}:${this.Event.dTag}`];
 	}
