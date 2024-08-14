@@ -83,15 +83,16 @@ their Merits.
 			Merit purchases must be conducted with a Bitcoin address that is associated with your pubkey,
 			otherwise you will not recieve the Merits upon payment.
 		</div>
-		{#if ($associatedAddresses.size == 0 && !associations) || (associations && $associations.length == 0)}You
-			do not have any registered addresses{:else if associations && $associations && $associations.length > 0}
+		{#if ($associatedAddresses.size == 0 && !associations) || ($associatedAddresses.size == 0 && associations && $associations.length == 0)}
+			You do not have any registered addresses
+		{:else if $associatedAddresses.size == 0 && associations && $associations && $associations.length > 0}
 			<h4 class="text-lg font-bold dark:text-white">Pending Additions</h4>
 			<ul class="m-2 flex flex-col">
 				{#each $associations as event}<li class="list-item list-disc">
 						{event.getMatchingTags('onchain')[0][1]}
 					</li>{/each}
 			</ul>
-		{:else}
+		{:else if $associatedAddresses.size > 0}
 			<h4 class="text-lg font-bold dark:text-white">Your registered addresses</h4>
 
 			<ul class="m-2 flex flex-col">

@@ -49,7 +49,7 @@
 						on:click={() => {
 							window.location.href = 'https://github.com/nostrocket/hypergolic/issues';
 						}}
-						class="w-full">Apply Now</Button
+						class="w-full">View Problems</Button
 					>
 				</Card.Footer>
 			</Card.Root>
@@ -81,7 +81,12 @@
 					</div>
 				</Card.Content>
 				<Card.Footer>
-					<Button class="w-full">Read More</Button>
+					<Button
+						on:click={() => {
+							goto(`${base}/buymerits`);
+						}}
+						class="w-full">Let's GO!</Button
+					>
 				</Card.Footer>
 			</Card.Root>
 		</div>
