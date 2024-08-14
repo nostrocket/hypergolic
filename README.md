@@ -1,6 +1,6 @@
 # Hypergolic
 
-A nostrocket client
+A nostr client that implements the nostrocket [NIPS](https://github.com/nostrocket/NIPS).
 
 ## Developing
 
