@@ -76,7 +76,7 @@
 <Heading title="Sponsor a Contributor" />
 Contributors who need Sats are able to list their Merits for sale, to sponsor them simply buy some of
 their Merits.
-<Card.Root>
+<Card.Root class="m-2 mb-4">
 	<Card.Header><Card.Title>Your Bitcoin Addresses</Card.Title></Card.Header>
 	<Card.Content>
 		<div class="m-2 flex">
