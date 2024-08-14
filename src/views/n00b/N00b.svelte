@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
@@ -39,12 +40,17 @@
 								No interview process or CV's required, apply by sending a pull request to solve a
 								small problem
 							</li>
-							<li>Get paid in Sats for every pull request</li>
+							<li>Get paid in Sats</li>
 						</ul>
 					</div>
 				</Card.Content>
 				<Card.Footer>
-					<Button class="w-full">Apply Now</Button>
+					<Button
+						on:click={() => {
+							window.location.href = 'https://github.com/nostrocket/hypergolic/issues';
+						}}
+						class="w-full">Apply Now</Button
+					>
 				</Card.Footer>
 			</Card.Root>
 		</div>
@@ -60,17 +66,18 @@
 					<div>
 						<ul class="ml-6 list-disc [&>li]:mt-2">
 							<li>
-								Nostrocket is the most efficient way (ever) to invest in emerging technologies
+								Nostrocket is the most efficient way (ever) to invest in emerging technologies like
+								nostr
 							</li>
 							<li>
-								Every Sat goes directly to a contributor for solving a problem in the critical path
-								towards (more) revenue
+								Your sats go directly to a contributor for work that has already been completed and
+								solves a problem in the critical path to (more) revenue
 							</li>
 							<li>
 								Revenue goes straight from the paying customer's wallet into your wallet as an
 								equity holder
 							</li>
-							<li>No KYC, ever.</li>
+							<li>Non-custodial, no KYC (ever).</li>
 						</ul>
 					</div>
 				</Card.Content>
@@ -96,12 +103,16 @@
 								funding)
 							</li>
 							<li>
-								Nostrocket obsoletes the need for financial accounting, capital raising, compliance,
-								business plans, etc.
+								Obsolete the need for financial accounting, capital raising, compliance, business
+								plans, etc.
 							</li>
 							<li>
-								Nostrocket is radically meritocratic and fair to project creators, contributors, and
-								investors, for the entire life of the project
+								Make your project socially scalable by becoming radically fair and meritocratic to
+								all contributors and investors.
+							</li>
+							<li>
+								Makes your project immune to parasites by giving them nowhere to hide and nothing to
+								leech from.
 							</li>
 						</ul>
 					</div>
