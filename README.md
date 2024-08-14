@@ -4,9 +4,9 @@ A nostrocket client
 
 ## Developing
 
-`npm install`
-
 ```bash
+npm install
+
 npm run dev
 
 # or start the server and open the app in a new browser tab
