@@ -12,6 +12,7 @@
 	import { Avatar, Name } from '@nostr-dev-kit/ndk-svelte-components';
 	import { onDestroy } from 'svelte';
 	import { derived, writable } from 'svelte/store';
+	import CreateMeritRequest from './CreateMeritRequest.svelte';
 
 	//export let rocket: NDKEvent;
 	export let rocket: Rocket; // = new Rocket(rocket);
@@ -33,7 +34,7 @@
 		_votes?.unsubscribe();
 	});
 
-	let truncate = writable(true)
+	let truncate = writable(true);
 
 	let merits = derived(_merits, ($merits) => {
 		let map = new Map<string, MeritRequest>();
@@ -96,6 +97,7 @@
 		<Card.Description>Merit Requests</Card.Description>
 	</Card.Header>
 	<Card.Content>
+		<CreateMeritRequest {rocket} />
 		<Table.Root>
 			<Table.Header>
 				<Table.Row>
@@ -138,13 +140,12 @@
 						<Table.Cell class="hidden text-right md:table-cell"
 							>{unixToRelativeTime(merit.TimeStamp * 1000)}</Table.Cell
 						>
-						
 					</Table.Row>
 				{/each}
 				{#if $merits.size > $meritsTruncated.length}
 					<span
 						on:click={() => {
-							truncate.set(false)
+							truncate.set(false);
 						}}
 						class="m-2 flex w-48 flex-nowrap text-lg"
 						><Badge href="#">View {$merits.size - $meritsTruncated.length} more</Badge></span

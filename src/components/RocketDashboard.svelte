@@ -2,8 +2,9 @@
 	import * as Breadcrumb from '$lib/components/ui/breadcrumb/index.js';
 	import Button from '@/components/ui/button/button.svelte';
 	import * as Card from '@/components/ui/card';
+	import { Rocket } from '@/event_helpers/rockets';
 	import type { NDKEvent } from '@nostr-dev-kit/ndk';
-	import CreateMeritRequest from './CreateMeritRequest.svelte';
+	import BitcoinAssociations from './AssociatedBitcoinAddresses.svelte';
 	import CreateNewProduct from './CreateNewProduct.svelte';
 	import MeritRequests from './MeritRequests.svelte';
 	import MeritsAndSatflow from './MeritsAndSatflow.svelte';
@@ -11,8 +12,6 @@
 	import ProposedProducts from './ProposedProducts.svelte';
 	import Todo from './Todo.svelte';
 	import UpdateMission from './UpdateMission.svelte';
-	import { Rocket } from '@/event_helpers/rockets';
-	import BitcoinAssociations from './AssociatedBitcoinAddresses.svelte';
 
 	export let rocket: NDKEvent;
 
@@ -50,7 +49,6 @@
 				<Card.Description class="flex space-x-4">
 					<UpdateMission rocketEvent={rocket} />
 					<CreateNewProduct rocketEvent={rocket} />
-					<CreateMeritRequest rocketEvent={rocket} />
 					<Button
 						on:click={() => {
 							console.log(rocket.rawEvent());

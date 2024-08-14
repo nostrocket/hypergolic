@@ -26,7 +26,7 @@
 
 	let result: VoteDirection | undefined;
 
-	export let parsedRocket:Rocket;
+	export let parsedRocket: Rocket;
 
 	let _votes = $ndk.storeSubscribe(
 		{ '#a': [RocketATagFilter(parsedRocket.Event)], '#e': [merit.ID], kinds: [1410 as NDKKind] },
@@ -52,7 +52,7 @@
 	}
 
 	$: referenceTime = cuckPrice
-		? formatReferenceTime(((merit.Sats / 100000000) * cuckPrice) / 70)
+		? formatReferenceTime(((merit.Sats / 100000000) * cuckPrice) / 50)
 		: '...';
 
 	let votes = derived(_votes, ($_votes) => {
@@ -158,8 +158,14 @@
 					<div class="grid gap-3">
 						<div class="font-semibold">Analysis</div>
 						<span class="grid gap-0.5 not-italic text-muted-foreground">
-							A competent freelance developer earns $70 CuckLoserBucks an hour (on average). Using
-							this rate, the contributor is claiming to have spent about {referenceTime} working on this.
+							<p class="m-1 text-justify">
+								To make it easier to compare the value of each contribution we normalize the hourly
+								rate to $50 CuckLoserBucks an hour.
+							</p>
+							<p class="m-1 text-justify">
+								At this rate, the contributor is claiming to have worked for {referenceTime} solving
+								this problem.
+							</p>
 						</span>
 					</div>
 					<div class="grid auto-rows-max gap-3">
@@ -170,8 +176,8 @@
 				<Separator class="my-4" />
 				<div class="font-semibold">Votes</div>
 				{#if $votes.size == 0}<Alert
-						><Info />Waiting for existing <span class="italic">{parsedRocket.Name()}</span> Merit
-						holders to vote</Alert
+						><Info />Waiting for existing <span class="italic">{parsedRocket.Name()}</span> Merit holders
+						to vote</Alert
 					>
 				{/if}
 				<Table.Root>
@@ -221,6 +227,9 @@
 		{:else if !result}
 			<VoteOnMeritRequest {merit} rocket={parsedRocket} />
 		{/if}
+		<a href="#" class="text-xs" on:click={() => console.log(merit.Event.rawEvent())}
+			>print to console</a
+		>
 	</Card.Footer>
 </Card.Root>
 
