@@ -2,28 +2,6 @@
 
 A nostrocket client
 
-## Pull Requests
-
-Please only solve ONE problem at a time.
-
-Indicate to others that you are working to solve a particular problem by claiming it on nostrocket or commenting on the github issue so that others do not duplicate your work.
-
-Pull request should contain only ONE commit that solves exactly ONE problem. The probelm SHOULD be from the github or nostrocket issue tracker (but doesn't have to be).
-
-The commit message MUST be a short summary of the problem being solved, usually this should be the same as title of the problem from the github or nostrocket issue tracker.
-
-## Style Guide
-
-Avoid uneccessary whitespace changes. Whitespace changes make it difficult to see what code was really changed.
-
-## UX Library
-
-https://www.shadcn-svelte.com/docs
-
-## Getting Paid
-
-If you want to get paid for working on this project, demonstrate your capability by solving some problems and adhering to the instructions in this readme. After you have 2-3 PR's merged, DM gsovereignty on nostr to have a conversation about paid work.
-
 ## Developing
 
 `npm install`
@@ -35,12 +13,30 @@ npm run dev
 npm run dev -- --open
 ```
 
-## Building
+## Pull Requests
 
-To create a production version of your app:
+Please only solve ONE problem at a time.
 
-```bash
-npm run build
-```
+Indicate to others that you are working to solve a particular problem by claiming it on nostrocket or commenting on the github issue so that others do not duplicate your work.
 
-You can preview the production build with `npm run preview`.
+Pull request should contain only ONE commit that solves exactly ONE problem. The probelm SHOULD be from the github or nostrocket issue tracker (but doesn't have to be).
+
+The commit message MUST be a short summary of the problem being solved, usually this should be the same as title of the problem from the github or nostrocket issue tracker.
+
+Do not send pull requests unless they are ready to merge, no "work in progress" pull requests.
+
+## Style Guide
+
+Avoid uneccessary whitespace changes. Whitespace changes make it difficult to see what code was really changed.
+
+## UX Library
+
+https://www.shadcn-svelte.com/docs
+
+## Getting Paid
+
+Once your pull request has been merged, go to nostrocket.org and submit a Merit Request.
+
+Upon your Merit Request being approved by the existing contributors to Nostrocket, you will be able to sell your Approved Merit Request (there are people wanting to buy these for sats).
+
+Ask in the Telegram group or on Nostr if you need help or have questions.

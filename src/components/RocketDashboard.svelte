@@ -56,7 +56,5 @@
 			</Card.Header>
 			<Card.Footer></Card.Footer>
 		</Card.Root>
-
-		<Todo text={['delete rocket (if current user is rocket creator) - publish deletion request']} />
 	</main>
 </div>
