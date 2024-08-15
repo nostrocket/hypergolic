@@ -57,4 +57,4 @@
 	<HelpCircle class={iconClass} />
 	Help
 </a>
-<Separator />
+<Separator class="my-2" />

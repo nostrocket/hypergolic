@@ -2,9 +2,10 @@
 	import Terminal from 'lucide-svelte/icons/terminal';
 	import * as Alert from '$lib/components/ui/alert/index.js';
 	export let text: string[];
+	export let className: string = '';
 </script>
 
-<Alert.Root>
+<Alert.Root class={className}>
 	<Terminal class="h-4 w-4" />
 	<Alert.Title>Todo:</Alert.Title>
 	<Alert.Description>

@@ -13,7 +13,7 @@
 	//$page.url.searchParams.get("tab")
 </script>
 
-<Card.Root class="flex w-[350px] flex-col justify-between">
+<Card.Root class="flex flex-col justify-between">
 	<Card.Header>
 		<Card.Title>{rocket.Name()}</Card.Title>
 		<Card.Description>{rocket.Mission()}</Card.Description>
@@ -29,7 +29,7 @@
 		</div>
 	</Card.Content>
 	<Card.Footer>
-		<div class="flex justify-between gap-2">
+		<div class="flex flex-wrap justify-between gap-2 lg:gap-1">
 			<Button
 				on:click={() => {
 					console.log(rocket.Event.rawEvent());
@@ -39,7 +39,7 @@
 			<Button
 				on:click={() => {
 					goto(`${base}/rockets/${rocket.URL()}`);
-				}}>View Full Rocket<ChevronRight class="h-4 w-4" /></Button
+				}}>View Full Rocket <ChevronRight class="h-4 w-4" /></Button
 			>
 		</div>
 	</Card.Footer>

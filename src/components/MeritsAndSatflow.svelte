@@ -76,44 +76,34 @@
 <Card.Root class="sm:col-span-3">
 	<Card.Header class="pb-3">
 		<Card.Title>Merits and Satflow</Card.Title>
-		<Card.Description class="grid grid-cols-2">
-			<div class="grid-cols-1">
+		<Card.Description class="grid grid-cols-1 lg:grid-cols-2">
+			<div class="col-span-1">
 				This graph displays the Meritization of equity in {rocket.Name()}
 				<Pie data={$merits} />
 			</div>
-			<div class="grid-cols-1 text-black">
-				<Table.Root>
-					<Table.Header>
-						<Table.Row class="">
-							<Table.Head>Participant</Table.Head>
-							<Table.Head class="hidden md:table-cell">Merits</Table.Head>
-							<Table.Head class="text-right">Revenue (Sats)</Table.Head>
+			<Table.Root class="col-span-1 text-black">
+				<Table.Header>
+					<Table.Row class="">
+						<Table.Head>Participant</Table.Head>
+						<Table.Head class="hidden md:table-cell">Merits</Table.Head>
+						<Table.Head class="text-right">Revenue (Sats)</Table.Head>
+					</Table.Row>
+				</Table.Header>
+				<Table.Body>
+					{#each $merits as { pubkey, merits, sats }, i (pubkey)}
+						<Table.Row class="{c(i)} hover:{c(i)} hover:brightness-125 hover:contrast-150">
+							<Table.Cell>
+								<div class="flex flex-nowrap items-center gap-2">
+									<Avatar ndk={$ndk} {pubkey} class="h-8 w-8 flex-none rounded-full object-cover" />
+									<Name ndk={$ndk} {pubkey} class="hidden max-w-32 truncate p-1 md:inline-block" />
+								</div>
+							</Table.Cell>
+							<Table.Cell class="hidden md:table-cell">{merits}</Table.Cell>
+							<Table.Cell class="text-right">{sats}</Table.Cell>
 						</Table.Row>
-					</Table.Header>
-					<Table.Body>
-						{#each $merits as { pubkey, merits, sats }, i (pubkey)}
-							<Table.Row class="{c(i)} hover:{c(i)} hover:brightness-125 hover:contrast-150">
-								<Table.Cell>
-									<div class="flex flex-nowrap items-center gap-2">
-										<Avatar
-											ndk={$ndk}
-											{pubkey}
-											class="h-8 w-8 flex-none rounded-full object-cover"
-										/>
-										<Name
-											ndk={$ndk}
-											{pubkey}
-											class="hidden max-w-32 truncate p-1 md:inline-block"
-										/>
-									</div>
-								</Table.Cell>
-								<Table.Cell class="hidden md:table-cell">{merits}</Table.Cell>
-								<Table.Cell class="text-right">{sats}</Table.Cell>
-							</Table.Row>
-						{/each}
-					</Table.Body>
-				</Table.Root>
-			</div>
+					{/each}
+				</Table.Body>
+			</Table.Root>
 		</Card.Description>
 	</Card.Header>
 	<Card.Footer></Card.Footer>

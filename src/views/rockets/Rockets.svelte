@@ -74,7 +74,7 @@
 			<Tabs.Trigger value="testnet">Testnet</Tabs.Trigger>
 		</Tabs.List>
 		<Tabs.Content value="mainnet">
-			<div class="grid gap-2" style="grid-template-columns: repeat(auto-fit, 350px);">
+			<div class="grid grid-cols-1 gap-2 md:grid-cols-2 2xl:grid-cols-3 3xl:grid-cols-4">
 				{#each mainnet as rocket (`${rocket.Event.pubkey}${rocket.Name()}`)}
 					<RocketCard {rocket} />
 				{/each}
@@ -86,7 +86,7 @@
 				<Alert.Title>Note</Alert.Title>
 				<Alert.Description>The following rockets are for testing purposes only.</Alert.Description>
 			</Alert.Root>
-			<div class="grid gap-2" style="grid-template-columns: repeat(auto-fit, 350px);">
+			<div class="grid grid-cols-1 gap-2 md:grid-cols-2 2xl:grid-cols-3 3xl:grid-cols-4">
 				{#each testnet as rocket (`${rocket.Event.pubkey}${rocket.Name()}`)}
 					<RocketCard {rocket} />
 				{/each}

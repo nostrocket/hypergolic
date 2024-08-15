@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import Badge from '@/components/ui/badge/badge.svelte';
+	import Button from '@/components/ui/button/button.svelte';
 	import * as Card from '@/components/ui/card';
 	import * as Table from '@/components/ui/table';
 	import { MapOfMeritResult, MeritRequest } from '@/event_helpers/merits';
@@ -143,12 +144,11 @@
 					</Table.Row>
 				{/each}
 				{#if $merits.size > $meritsTruncated.length}
-					<span
+					<Button
+						class="mt-2 rounded-full"
 						on:click={() => {
 							truncate.set(false);
-						}}
-						class="m-2 flex w-48 flex-nowrap text-lg"
-						><Badge href="#">View {$merits.size - $meritsTruncated.length} more</Badge></span
+						}}>View {$merits.size - $meritsTruncated.length} more</Button
 					>
 				{/if}
 			</Table.Body>
