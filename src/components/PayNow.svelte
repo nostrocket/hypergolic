@@ -13,12 +13,21 @@
 	import CopyButton from './CopyButton.svelte';
 	import type { Product, Rocket, RocketProduct } from '@/event_helpers/rockets';
 	import { formatSats } from '@/helpers';
+	import { Spinner } from 'flowbite-svelte';
+	import { CheckCircleOutline } from 'flowbite-svelte-icons';
+	import { tweened, type Tweened } from 'svelte/motion';
+	import { cubicOut } from 'svelte/easing';
+	import { fade, fly } from 'svelte/transition';
 
 	export let product: Product;
 	export let rocketProduct: RocketProduct | undefined;
 	export let rocket: Rocket;
 
 	let invoice: string | null;
+	let paymentInitiated: boolean;
+	let paymentFinished: boolean;
+
+	const scale = tweened(0, { duration: 1000, easing: cubicOut });
 
 	async function zap() {
 		if (rocketProduct) {
@@ -36,6 +45,8 @@
 	}
 
 	async function payWithWebLn() {
+		paymentInitiated = true;
+
 		try {
 			if (!invoice) {
 				throw Error('invoice not found');
@@ -44,10 +55,20 @@
 			const response = await webln.sendPayment(invoice);
 			if (response && response.preimage) {
 				console.log(response.preimage);
+				paymentFinished = true;
+
+				await scale.set(1);
+				await new Promise((resolve) => setTimeout(resolve, 1000)); // allow 1 second before resetting payment/dialog states
+
 				open = false;
+				paymentFinished = false;
+
+				await scale.set(0);
 			}
 		} catch (error) {
 			console.error(error);
+		} finally {
+			paymentInitiated = false;
 		}
 	}
 
@@ -62,9 +83,14 @@
 
 {#if rocketProduct}
 	<Dialog.Root bind:open>
-		<Dialog.Trigger class={buttonVariants({ variant: 'default' })}
-			>Buy Now for {formatSats(rocketProduct.Price)}</Dialog.Trigger
-		>
+		<Dialog.Trigger class={buttonVariants({ variant: 'default' })}>
+			{#if open}
+				<Spinner class="me-2" color="white" size={4} /> Confirming...
+			{:else}
+				Buy Now for {formatSats(rocketProduct.Price)}
+			{/if}
+		</Dialog.Trigger>
+
 		<Dialog.Content class="sm:max-w-[425px]">
 			<Dialog.Header>
 				<Dialog.Title>Buy {product.Name()} from {rocket.Name()} now!</Dialog.Title>
@@ -89,7 +115,17 @@
 					<Input bind:value={invoice} readonly />
 					<CopyButton text={invoice} />
 				</div>
-				<Button on:click={payWithWebLn}>Pay with WebLN</Button>
+				<Button on:click={payWithWebLn}>
+					{#if paymentFinished}
+						<div style="transform: scale({$scale});">
+							<CheckCircleOutline class="me-2 text-white" color="white" />
+						</div>
+					{:else if paymentInitiated}
+						<Spinner class="me-2" color="white" size={4} /> Confirming payment...
+					{:else}
+						Pay with WebLN
+					{/if}
+				</Button>
 			{:else}
 				<Button on:click={zap}>Create invoice</Button>
 			{/if}

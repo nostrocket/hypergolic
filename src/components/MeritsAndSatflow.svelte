@@ -6,11 +6,13 @@
 	import Pie from './Pie.svelte';
 	import { Avatar, Name } from '@nostr-dev-kit/ndk-svelte-components';
 	import { ndk } from '@/ndk';
+	import NumberIncrement from '@components/ui/number-increment';
 
 	export let rocket: Rocket;
 	export let unratifiedZaps: Map<string, number>;
 
 	let unratifiedZapsAmount = 0;
+	let dataLoaded = false;
 
 	$: {
 		unratifiedZapsAmount = 0;
@@ -53,6 +55,7 @@
 		}
 
 		merits.set(_merits);
+		dataLoaded = true;
 	}
 
 	const COLORS = [
@@ -98,8 +101,12 @@
 									<Name ndk={$ndk} {pubkey} class="hidden max-w-32 truncate p-1 md:inline-block" />
 								</div>
 							</Table.Cell>
-							<Table.Cell class="hidden md:table-cell">{merits}</Table.Cell>
-							<Table.Cell class="text-right">{sats}</Table.Cell>
+							<Table.Cell class="hidden md:table-cell">
+								<NumberIncrement targetValue={merits} />
+							</Table.Cell>
+							<Table.Cell class="text-right">
+								<NumberIncrement targetValue={sats} />
+							</Table.Cell>
 						</Table.Row>
 					{/each}
 				</Table.Body>
