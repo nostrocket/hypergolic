@@ -40,6 +40,12 @@
 			{:else}
 				<PayNow {product} rocketProduct={rocket.Products().get(product.ID())} {rocket} />
 			{/if}
+			<a
+				href="#"
+				on:click={() => {
+					console.log(product);
+				}}>print to console</a
+			>
 		</Card.Footer>
 	</Card.Root>
 {/if}

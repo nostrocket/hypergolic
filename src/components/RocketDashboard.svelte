@@ -36,7 +36,7 @@
 
 		<ProductFomo bind:unratifiedZaps rocket={new Rocket(rocket)} />
 
-		<ProposedProducts {rocket} />
+		<ProposedProducts rocket={new Rocket(rocket)} />
 
 		<MeritRequests rocket={new Rocket(rocket)} />
 		<BitcoinAssociations rocket={new Rocket(rocket)} />

@@ -11,12 +11,12 @@
 	//export let products: Product[];
 	export let rocket: Rocket;
 
-	export let unratifiedZaps:Map<string, number>; //todo upstream bind this and pass outstanding zaps to merits and satflow component.
+	export let unratifiedZaps: Map<string, number>;
 
 	let zaps = $ndk.storeSubscribe(
 		[{ '#a': [`31108:${rocket.Event.author.pubkey}:${rocket.Event.dTag}`], kinds: [9735] }],
 		{
-			subId: rocket.Name() + "_zaps"
+			subId: rocket.Name() + '_zaps'
 		}
 	);
 
@@ -24,22 +24,14 @@
 		zaps?.unsubscribe();
 	});
 
-	// let productEvent: NDKEvent | undefined;
-
-	// onMount(() => {
-	// 	$ndk.fetchEvent(product.ID).then((e) => {
-	// 		if (e) {
-	// 			productEvent = e;
-	// 		}
-	// 	});
-	// });
-
-	function productsInclude(id:string) {
-		let included = false
+	function productsInclude(id: string) {
+		let included = false;
 		for (let p of products) {
-			if (p.ID() == id) {included = true}
+			if (p.ID() == id) {
+				included = true;
+			}
 		}
-		return included
+		return included;
 	}
 
 	let validZaps = derived(zaps, ($zaps) => {
@@ -63,82 +55,85 @@
 		return zapMap;
 	});
 
-	let validPubkeys = writable(new Set<string>())
+	let validPubkeys = writable(new Set<string>());
 
 	zapsNotInRocket.subscribe((z) => {
 		z.forEach((z) => {
 			ValidateZapPublisher(rocket.Event, z.ZapReceipt).then((result) => {
 				if (result) {
-					validPubkeys.update(existing=>{
+					validPubkeys.update((existing) => {
 						existing.add(z.ZapReceipt.pubkey);
-						return existing
-					})
+						return existing;
+					});
 				}
 			});
 		});
 	});
 
-	let validatedZapsNotInRocket = derived([zapsNotInRocket, validPubkeys], ([$zapsNotInRocket, $validPubkeys]) => {
-		let zapMap = new Map<string, ZapPurchase>();
-		for (let [id, zap] of $zapsNotInRocket) {
-			if ($validPubkeys.has(zap.ZapReceipt.pubkey)) {
-				zapMap.set(id, zap);
+	let validatedZapsNotInRocket = derived(
+		[zapsNotInRocket, validPubkeys],
+		([$zapsNotInRocket, $validPubkeys]) => {
+			let zapMap = new Map<string, ZapPurchase>();
+			for (let [id, zap] of $zapsNotInRocket) {
+				if ($validPubkeys.has(zap.ZapReceipt.pubkey)) {
+					zapMap.set(id, zap);
+				}
 			}
+			return zapMap;
 		}
-		return zapMap;
-	});
+	);
 
-	validatedZapsNotInRocket.subscribe(zaps=>{
+	validatedZapsNotInRocket.subscribe((zaps) => {
 		for (let [_, z] of zaps) {
-			unratifiedZaps.set(z.ZapReceipt.id, z.Amount)
+			unratifiedZaps.set(z.ZapReceipt.id, z.Amount);
 		}
-		unratifiedZaps = unratifiedZaps
-	})
+		unratifiedZaps = unratifiedZaps;
+	});
 
 	//todo: get existing purchases from rocket and render them
 
 	//todo: update rocket event with confirmed zaps if we have votepower
 </script>
 
-	<Table.Root>
-		<Table.Caption
-			class="mt-0 caption-top text-center text-lg font-semibold tracking-tight text-card-foreground"
-			>Purchases</Table.Caption
-		>
-		<Table.Header>
-			<Table.Row>
-				<Table.Head>Buyer</Table.Head>
-				<Table.Head class="hidden md:table-cell">Sats Paid</Table.Head>
-				<Table.Head class="text-right"></Table.Head>
-			</Table.Row>
-		</Table.Header>
-		<Table.Body>
-			{#each $validatedZapsNotInRocket as [id, purchase], _ (id)}
-				<Table.Row
-					on:click={() => {
-						console.log(purchase.ZapReceipt.rawEvent());
-					}}
-					class="bg-accent"
+<Table.Root>
+	<Table.Caption
+		class="mt-0 caption-top text-center text-lg font-semibold tracking-tight text-card-foreground"
+		>Purchases</Table.Caption
+	>
+	<Table.Header>
+		<Table.Row>
+			<Table.Head>Buyer</Table.Head>
+			<Table.Head class="hidden md:table-cell">Sats Paid</Table.Head>
+			<Table.Head class="text-right"></Table.Head>
+		</Table.Row>
+	</Table.Header>
+	<Table.Body>
+		{#each $validatedZapsNotInRocket as [id, purchase], _ (id)}
+			<Table.Row
+				on:click={() => {
+					console.log(purchase.ZapReceipt.rawEvent());
+				}}
+				class="bg-accent"
+			>
+				<Table.Cell>
+					<div class="flex flex-nowrap">
+						<Avatar
+							ndk={$ndk}
+							pubkey={purchase.BuyerPubkey}
+							class="h-8 w-8 flex-none rounded-full object-cover"
+						/>
+						<Name
+							ndk={$ndk}
+							pubkey={purchase.BuyerPubkey}
+							class="inline-block max-w-32 truncate p-1"
+						/>
+					</div>
+				</Table.Cell>
+				<Table.Cell class="hidden md:table-cell">{purchase.Amount / 1000}</Table.Cell>
+				<Table.Cell class="text-right"
+					>{unixToRelativeTime(purchase.ZapReceipt.created_at * 1000)}</Table.Cell
 				>
-					<Table.Cell>
-						<div class="flex flex-nowrap">
-							<Avatar
-								ndk={$ndk}
-								pubkey={purchase.BuyerPubkey}
-								class="h-8 w-8 flex-none rounded-full object-cover"
-							/>
-							<Name
-								ndk={$ndk}
-								pubkey={purchase.BuyerPubkey}
-								class="inline-block max-w-32 truncate p-1"
-							/>
-						</div>
-					</Table.Cell>
-					<Table.Cell class="hidden md:table-cell">{purchase.Amount / 1000}</Table.Cell>
-					<Table.Cell class="text-right"
-						>{unixToRelativeTime(purchase.ZapReceipt.created_at * 1000)}</Table.Cell
-					>
-				</Table.Row>
-			{/each}
-		</Table.Body>
-	</Table.Root>
+			</Table.Row>
+		{/each}
+	</Table.Body>
+</Table.Root>
