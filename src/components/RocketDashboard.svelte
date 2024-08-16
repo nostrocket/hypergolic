@@ -2,7 +2,7 @@
 	import * as Breadcrumb from '$lib/components/ui/breadcrumb/index.js';
 	import Button from '@/components/ui/button/button.svelte';
 	import * as Card from '@/components/ui/card';
-	import { Rocket } from '@/event_helpers/rockets';
+	import { Rocket, ZapPurchase } from '@/event_helpers/rockets';
 	import type { NDKEvent } from '@nostr-dev-kit/ndk';
 	import BitcoinAssociations from './AssociatedBitcoinAddresses.svelte';
 	import MeritRequests from './MeritRequests.svelte';
@@ -14,7 +14,7 @@
 
 	export let rocket: NDKEvent;
 
-	$: unratifiedZaps = new Map<string, number>();
+	$: unratifiedZaps = new Map<string, ZapPurchase>();
 </script>
 
 <div class="flex flex-col gap-4">

@@ -175,7 +175,7 @@ export class Rocket {
 		let _products = new Map<string, RocketProduct>();
 		for (let p of this.Event.getMatchingTags('product')) {
 			let rp = new RocketProduct(p);
-			_products.set(rp.ID, rp);
+			_products.set(rp.ID(), rp);
 		}
 		return _products;
 	}
@@ -551,28 +551,52 @@ export class RocketAMR {
 }
 
 export class RocketProduct {
-	ID: string;
-	Price: number;
-	ValidAfter: number; //unix time
-	MaxPurchases: number;
-	Purchases: Map<string, ProductPayment>;
+	tag: NDKTag;
+	ID(): string {
+		return this.tag[1].split(':')[0];
+	}
+	Price(): number {
+		return parseInt(this.tag[1].split(':')[1], 10);
+	}
+	ValidAfter(): number {
+		return parseInt(this.tag[1].split(':')[2], 10);
+	}
+	MaxPurchases(): number {
+		return parseInt(this.tag[1].split(':')[3], 10);
+	}
+	Purchases(): Map<string, ProductPayment> {
+		let result: Map<string, ProductPayment> = new Map();
+		let purchases = JSON.parse(this.tag[3]);
+		for (let p of purchases) {
+			let payment = new ProductPayment(p);
+			result.set(payment.ZapID, payment);
+		}
+		return result;
+	}
 	PurchasesJSON(): string {
 		let purchases = [];
-		for (let [_, p] of this.Purchases) {
+		for (let [_, p] of this.Purchases()) {
 			purchases.push(`${p.ZapID}:${p.BuyerPubkey}:${p.WitnessedAt}`);
 		}
 		return JSON.stringify(purchases);
 	}
+	Validate(): boolean {
+		try {
+			this.ID();
+			this.Price();
+			this.ValidAfter();
+			this.MaxPurchases();
+			this.Purchases();
+			this.PurchasesJSON();
+			return true;
+		} catch {
+			return false;
+		}
+	}
 	constructor(tag: NDKTag) {
-		this.Purchases = new Map();
-		this.ID = tag[1].split(':')[0];
-		this.Price = parseInt(tag[1].split(':')[1], 10);
-		this.ValidAfter = parseInt(tag[1].split(':')[2], 10);
-		this.MaxPurchases = parseInt(tag[1].split(':')[3], 10);
-		let purchases = JSON.parse(tag[3]);
-		for (let p of purchases) {
-			let payment = new ProductPayment(p);
-			this.Purchases.set(payment.ZapID, payment);
+		this.tag = tag;
+		if (!this.Validate()) {
+			throw new Error('bug!');
 		}
 	}
 }
@@ -610,7 +634,7 @@ export class ZapPurchase {
 	IncludedInRocketState(rocket: NDKEvent): boolean {
 		let thisProduct = this.ProductFromRocket(rocket);
 		if (thisProduct) {
-			return thisProduct.Purchases.get(this.ZapReceipt.id) ? true : false;
+			return thisProduct.Purchases().get(this.ZapReceipt.id) ? true : false;
 		} else {
 			return false;
 		}
@@ -627,7 +651,7 @@ export class ZapPurchase {
 			return true;
 		}
 		let product = this.ProductFromRocket(rocket);
-		if (product && this.Amount / 1000 >= product.Price) {
+		if (product && this.Amount / 1000 >= product.Price()) {
 			return true;
 		}
 		return false;

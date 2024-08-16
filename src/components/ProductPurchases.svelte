@@ -11,7 +11,7 @@
 	//export let products: Product[];
 	export let rocket: Rocket;
 
-	export let unratifiedZaps: Map<string, number>;
+	export let unratifiedZaps: Map<string, ZapPurchase>;
 
 	let zaps = $ndk.storeSubscribe(
 		[{ '#a': [`31108:${rocket.Event.author.pubkey}:${rocket.Event.dTag}`], kinds: [9735] }],
@@ -85,7 +85,7 @@
 
 	validatedZapsNotInRocket.subscribe((zaps) => {
 		for (let [_, z] of zaps) {
-			unratifiedZaps.set(z.ZapReceipt.id, z.Amount);
+			unratifiedZaps.set(z.ZapReceipt.id, z);
 		}
 		unratifiedZaps = unratifiedZaps;
 	});

@@ -3,8 +3,17 @@
 	import { page } from '$app/stores';
 	import { Badge } from '@/components/ui/badge';
 	import Separator from '@/components/ui/separator/separator.svelte';
-	import { currentUser } from '@/stores/session';
-	import { GitBranch, HelpCircle, Mail, Package, Pyramid, Rocket, Users } from 'lucide-svelte';
+	import { currentUser, devmode } from '@/stores/session';
+	import {
+		Code,
+		GitBranch,
+		HelpCircle,
+		Mail,
+		Package,
+		Pyramid,
+		Rocket,
+		Users
+	} from 'lucide-svelte';
 	import { GitAltBrand, TelegramBrand } from 'svelte-awesome-icons';
 
 	let iconClass = 'h-5 w-5 md:h-4 md:w-4';
@@ -57,4 +66,16 @@
 	<HelpCircle class={iconClass} />
 	Help
 </a>
-<Separator class="my-2" />
+<Separator class="dark:bg-slate-700" />
+<a
+	href="#"
+	class={getClass('dev')}
+	on:click={() => {
+		devmode.update((dm) => {
+			return !dm;
+		});
+	}}
+>
+	<Code class={iconClass} />
+	Toggle Dev Mode
+</a>

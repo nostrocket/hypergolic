@@ -3,16 +3,16 @@
 	import ProductPurchases from './ProductPurchases.svelte';
 	import * as Pagination from '@/components/ui/pagination';
 	import { ChevronLeft, ChevronRight } from 'lucide-svelte';
-	import { Product, Rocket } from '@/event_helpers/rockets';
+	import { Product, Rocket, ZapPurchase } from '@/event_helpers/rockets';
 
 	export let rocket: Rocket;
 	export let products: Product[];
-	export let unratifiedZaps: Map<string, number> | undefined = undefined;
+	export let unratifiedZaps: Map<string, ZapPurchase> | undefined = undefined;
 </script>
 
 <Pagination.Root count={products.length} perPage={1} siblingCount={1} let:pages let:currentPage>
 	{#if currentPage}
-		<ProductCardFromId {rocket} product={products[currentPage - 1]}>
+		<ProductCardFromId {unratifiedZaps} {rocket} product={products[currentPage - 1]}>
 			{#if unratifiedZaps}
 				<ProductPurchases bind:unratifiedZaps {rocket} {products} />
 			{/if}

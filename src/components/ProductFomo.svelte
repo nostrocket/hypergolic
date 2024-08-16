@@ -1,6 +1,6 @@
 <script lang="ts">
 	import * as Card from '$lib/components/ui/card/index.js';
-	import { Product, Rocket } from '@/event_helpers/rockets';
+	import { Product, Rocket, ZapPurchase } from '@/event_helpers/rockets';
 	import { fetchEvent } from '@/event_helpers/products';
 	import { ndk } from '@/ndk';
 	import { derived, writable } from 'svelte/store';
@@ -9,7 +9,7 @@
 	import CreateMeritRequest from './CreateMeritRequest.svelte';
 
 	export let rocket: Rocket;
-	export let unratifiedZaps: Map<string, number>;
+	export let unratifiedZaps: Map<string, ZapPurchase>;
 
 	let products = writable(new Map<string, Product>());
 
@@ -28,7 +28,6 @@
 	let groups = derived(products, ($products) => {
 		let productGroups = new Map<string, Map<string, Product>>();
 		for (let [id, p] of $products) {
-			console.log(p.Group());
 			if (!productGroups.get(p.Group())) {
 				productGroups.set(p.Group(), new Map());
 			}

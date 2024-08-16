@@ -1,7 +1,7 @@
 <script lang="ts">
 	import * as Card from '@/components/ui/card';
 	import * as Table from '@/components/ui/table';
-	import { Rocket } from '@/event_helpers/rockets';
+	import { Rocket, ZapPurchase } from '@/event_helpers/rockets';
 	import { writable } from 'svelte/store';
 	import Pie from './Pie.svelte';
 	import { Avatar, Name } from '@nostr-dev-kit/ndk-svelte-components';
@@ -9,7 +9,7 @@
 	import NumberIncrement from '@components/ui/number-increment';
 
 	export let rocket: Rocket;
-	export let unratifiedZaps: Map<string, number>;
+	export let unratifiedZaps: Map<string, ZapPurchase>;
 
 	let unratifiedZapsAmount = 0;
 	let dataLoaded = false;
@@ -17,7 +17,7 @@
 	$: {
 		unratifiedZapsAmount = 0;
 		for (let [_, a] of unratifiedZaps) {
-			unratifiedZapsAmount += a / 1000;
+			unratifiedZapsAmount += a.Amount / 1000;
 		}
 		unratifiedZapsAmount = unratifiedZapsAmount;
 	}

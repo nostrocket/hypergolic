@@ -1,27 +1,26 @@
 <script lang="ts">
-	import { buttonVariants } from '$lib/components/ui/button/index.js';
+	import { Button, buttonVariants } from '$lib/components/ui/button/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
-	import * as Alert from '@/components/ui/alert';
 	import { Input } from '$lib/components/ui/input';
-	import { Button } from '$lib/components/ui/button/index.js';
+	import * as Alert from '@/components/ui/alert';
+	import type { Product, Rocket, RocketProduct } from '@/event_helpers/rockets';
+	import { formatSats } from '@/helpers';
 	import { ndk } from '@/ndk';
 	import { currentUser } from '@/stores/session';
 	import { NDKZap } from '@nostr-dev-kit/ndk';
-	import { Terminal } from 'lucide-svelte';
-	import { requestProvider } from 'webln';
-	import QrCodeSvg from './QrCodeSvg.svelte';
-	import CopyButton from './CopyButton.svelte';
-	import type { Product, Rocket, RocketProduct } from '@/event_helpers/rockets';
-	import { formatSats } from '@/helpers';
 	import { Spinner } from 'flowbite-svelte';
 	import { CheckCircleOutline } from 'flowbite-svelte-icons';
-	import { tweened, type Tweened } from 'svelte/motion';
+	import { Terminal } from 'lucide-svelte';
 	import { cubicOut } from 'svelte/easing';
-	import { fade, fly } from 'svelte/transition';
+	import { tweened } from 'svelte/motion';
+	import { requestProvider } from 'webln';
+	import CopyButton from './CopyButton.svelte';
+	import QrCodeSvg from './QrCodeSvg.svelte';
 
 	export let product: Product;
 	export let rocketProduct: RocketProduct | undefined;
 	export let rocket: Rocket;
+	export let disabled = false;
 
 	let invoice: string | null;
 	let paymentInitiated: boolean;
@@ -37,7 +36,7 @@
 				zappedUser: rocket.Event.author
 			});
 			invoice = await z.createZapRequest(
-				rocketProduct.Price * 1000,
+				rocketProduct.Price() * 1000,
 				`Purchase of ${product.Name()} from ${rocket.Event.dTag}`,
 				[['product', product.ID()]]
 			);
@@ -83,12 +82,16 @@
 
 {#if rocketProduct}
 	<Dialog.Root bind:open>
-		<Dialog.Trigger class={buttonVariants({ variant: 'default' })}>
-			{#if open}
-				<Spinner class="me-2" color="white" size={4} /> Confirming...
-			{:else}
-				Buy Now for {formatSats(rocketProduct.Price)}
-			{/if}
+		<Dialog.Trigger>
+			<Button {disabled}>
+				{#if open}
+					<Spinner class="me-2" color="white" size={4} /> Confirming...
+				{:else if !disabled}
+					Buy Now for {formatSats(rocketProduct.Price())}
+				{:else if disabled}
+					Out of Stock!
+				{/if}
+			</Button>
 		</Dialog.Trigger>
 
 		<Dialog.Content class="sm:max-w-[425px]">
@@ -104,9 +107,9 @@
 					</Alert.Root>
 				{/if}
 				<Dialog.Description
-					>Pay {rocketProduct.Price === 1
-						? `${rocketProduct.Price} sat`
-						: `${rocketProduct.Price} sats`} now with Lightning</Dialog.Description
+					>Pay {rocketProduct.Price() === 1
+						? `${rocketProduct.Price()} sat`
+						: `${rocketProduct.Price()} sats`} now with Lightning</Dialog.Description
 				>
 			</Dialog.Header>
 			{#if invoice}

@@ -9,3 +9,5 @@ export async function prepareUserSession(ndk: NDKSvelte, user: NDKUser): Promise
 		//implement any session set up stuff here
 	});
 }
+
+export const devmode = writable(false);
