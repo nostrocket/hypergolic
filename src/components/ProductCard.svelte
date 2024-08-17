@@ -10,6 +10,7 @@
 	import PayNow from './PayNow.svelte';
 	import { onMount } from 'svelte';
 	import { devmode } from '@/stores/session';
+	import BadgeMaker from './BadgeMaker.svelte';
 
 	export let product: ProductEvent;
 	export let rocket: Rocket;
@@ -71,8 +72,17 @@
 				<AddProductToRocket {product} {rocket} />
 			{:else if productFromRocket}
 				{#if productFromRocket.MaxPurchases() && unratifiedZaps}
-					<div class="flex flex-nowrap">
-						{remainingProducts(productFromRocket, unratifiedZaps)} available
+					<div class="mb-4 flex flex-nowrap">
+						<BadgeMaker
+							><div slot="icon">SOLD:</div>
+							<div slot="content">{unratifiedZaps.size}</div></BadgeMaker
+						>
+						<BadgeMaker
+							><div slot="icon">AVAILABLE:</div>
+							<div slot="content">
+								{remainingProducts(productFromRocket, unratifiedZaps)}
+							</div></BadgeMaker
+						>
 					</div>
 				{/if}
 				<PayNow
