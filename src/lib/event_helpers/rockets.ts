@@ -6,7 +6,7 @@ import { sha256 } from 'js-sha256';
 import { MapOfVotes, MeritRequest, Votes } from './merits';
 import * as immutable from 'immutable';
 import { BloomFilter } from 'bloomfilter';
-import { zappers } from '@/stores/zappers';
+import { attempts, zappers } from '@/stores/zappers';
 import { get } from 'svelte/store';
 
 export class Rocket {
@@ -744,7 +744,11 @@ export async function ValidateZapPublisher(rocket: NDKEvent, zap: NDKEvent): Pro
 		let zapper = get(zappers).get(rocket.pubkey);
 		if (zapper && zapper == zap.pubkey) {
 			resolve(true);
-		} else {
+		} else if (!get(attempts).has(rocket.pubkey)) {
+			attempts.update((existing) => {
+				existing.add(rocket.pubkey);
+				return existing;
+			});
 			getAuthorizedZapper(rocket)
 				.then((pubkey) => {
 					if (pubkey == zap.pubkey) {
