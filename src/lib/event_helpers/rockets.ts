@@ -201,6 +201,14 @@ export class Rocket {
 		}
 		return amr;
 	}
+	Owners(): Set<string> {
+		let owners = new Set<string>();
+		owners.add(this.Event.pubkey);
+		for (let [_, amr] of this.ApprovedMeritRequests()) {
+			owners.add(amr.Pubkey);
+		}
+		return owners;
+	}
 	TotalMerits(): number {
 		let total = 0;
 		let amr = this.ApprovedMeritRequests();

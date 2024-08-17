@@ -74,8 +74,8 @@
 			<Table.Header>
 				<Table.Row>
 					<Table.Head class="w-[200px]">Sponsor</Table.Head>
-					<Table.Head class="hidden text-left md:table-cell">Amount (Sats)</Table.Head>
-					<Table.Head class="hidden text-left md:table-cell">CuckLoserBucks</Table.Head>
+					<Table.Head class="table-cell text-left">Sats</Table.Head>
+					<Table.Head class="table-cell text-left">CuckLoserBucks</Table.Head>
 				</Table.Row>
 			</Table.Header>
 			<Table.Body>
@@ -95,10 +95,10 @@
 								/>
 							</div>
 						</Table.Cell>
-						<Table.Cell class="hidden text-left md:table-cell">
+						<Table.Cell class="table-cell text-left">
 							{amount.toLocaleString()}
 						</Table.Cell>
-						<Table.Cell class="hidden text-left md:table-cell">
+						<Table.Cell class="table-cell text-left">
 							${Math.floor((amount / 100000000) * cuckprice).toLocaleString()}
 						</Table.Cell>
 					</Table.Row>
