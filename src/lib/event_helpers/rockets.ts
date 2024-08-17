@@ -6,6 +6,8 @@ import { sha256 } from 'js-sha256';
 import { MapOfVotes, MeritRequest, Votes } from './merits';
 import * as immutable from 'immutable';
 import { BloomFilter } from 'bloomfilter';
+import { zappers } from '@/stores/zappers';
+import { get } from 'svelte/store';
 
 export class Rocket {
 	Event: NDKEvent;
@@ -739,20 +741,24 @@ export function RocketATagFilter(rocket: NDKEvent): string {
 
 export async function ValidateZapPublisher(rocket: NDKEvent, zap: NDKEvent): Promise<boolean> {
 	return new Promise((resolve, reject) => {
-		getAuthorizedZapper(rocket)
-			.then((pubkey) => {
-				if (pubkey == zap.pubkey) {
-					resolve(true);
-				} else {
-					reject();
-				}
-			})
-			.catch((e) => reject(e));
-		// let z = new NDKZap({ ndk: rocket.ndk!, zappedEvent: rocket, zappedUser: rocket.author });
-		// z.getZapEndpoint().then(x=>{
-		// 	console.log(x)
-		// 	resolve(true)
-		// }).catch(()=>{reject(false)})
+		let zapper = get(zappers).get(rocket.pubkey);
+		if (zapper && zapper == zap.pubkey) {
+			resolve(true);
+		} else {
+			getAuthorizedZapper(rocket)
+				.then((pubkey) => {
+					if (pubkey == zap.pubkey) {
+						zappers.update((existing) => {
+							existing.set(rocket.pubkey, pubkey);
+							return existing;
+						});
+						resolve(true);
+					} else {
+						reject();
+					}
+				})
+				.catch((e) => reject(e));
+		}
 	});
 }
 

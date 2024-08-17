@@ -72,7 +72,7 @@
 					}
 				})
 				.catch((e) => {
-					if (e.pubkey && $currentUser && e.pubkey == $currentUser.pubkey) {
+					if (e && e.pubkey && $currentUser && e.pubkey == $currentUser.pubkey) {
 						alert(
 							'Nostrocket could not validate that the zap receipts published on your behalf are legitimate, this usually means we could not query your lightning service provider API. Consider switching to a lightning service provider that is known to work (e.g. getAlby).'
 						);

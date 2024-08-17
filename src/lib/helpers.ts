@@ -163,7 +163,6 @@ export async function getAuthorizedZapper(rocket: NDKEvent): Promise<string> {
 		z.getZapEndpoint()
 			.then((url) => {
 				if (url) {
-					console.log(url);
 					url = url.trim().replace('/callback', '');
 					fetch(url).then((result) => {
 						result
