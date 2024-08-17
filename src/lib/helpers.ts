@@ -163,6 +163,7 @@ export async function getAuthorizedZapper(rocket: NDKEvent): Promise<string> {
 		z.getZapEndpoint()
 			.then((url) => {
 				if (url) {
+					console.log(url);
 					url = url.trim().replace('/callback', '');
 					fetch(url).then((result) => {
 						result
@@ -170,13 +171,16 @@ export async function getAuthorizedZapper(rocket: NDKEvent): Promise<string> {
 							.then((j) => {
 								resolve(j.nostrPubkey);
 							})
-							.catch(reject);
+							.catch((e) => reject(e));
 					});
 				} else {
-					reject();
+					reject({
+						reason: 'could not get zap endpoint for ' + z.zappedUser.pubkey,
+						pubkey: z.zappedUser.pubkey
+					});
 				}
 			})
-			.catch(reject);
+			.catch((e) => reject(e));
 	});
 }
 

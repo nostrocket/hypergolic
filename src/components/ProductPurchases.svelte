@@ -3,6 +3,7 @@
 	import { Product, Rocket, ValidateZapPublisher, ZapPurchase } from '@/event_helpers/rockets';
 	import { unixToRelativeTime } from '@/helpers';
 	import { ndk } from '@/ndk';
+	import { currentUser } from '@/stores/session';
 	import { Avatar, Name } from '@nostr-dev-kit/ndk-svelte-components';
 	import { onDestroy } from 'svelte';
 	import { derived, writable } from 'svelte/store';
@@ -61,14 +62,22 @@
 
 	zapsNotInRocket.subscribe((z) => {
 		z.forEach((z) => {
-			ValidateZapPublisher(rocket.Event, z.ZapReceipt).then((result) => {
-				if (result) {
-					validPubkeys.update((existing) => {
-						existing.add(z.ZapReceipt.pubkey);
-						return existing;
-					});
-				}
-			});
+			ValidateZapPublisher(rocket.Event, z.ZapReceipt)
+				.then((result) => {
+					if (result) {
+						validPubkeys.update((existing) => {
+							existing.add(z.ZapReceipt.pubkey);
+							return existing;
+						});
+					}
+				})
+				.catch((e) => {
+					if (e.pubkey && $currentUser && e.pubkey == $currentUser.pubkey) {
+						alert(
+							'Nostrocket could not validate that the zap receipts published on your behalf are legitimate, this usually means we could not query your lightning service provider API. Consider switching to a lightning service provider that is known to work (e.g. getAlby).'
+						);
+					}
+				});
 		});
 	});
 

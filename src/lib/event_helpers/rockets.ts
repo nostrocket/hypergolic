@@ -747,7 +747,7 @@ export async function ValidateZapPublisher(rocket: NDKEvent, zap: NDKEvent): Pro
 					reject();
 				}
 			})
-			.catch(reject);
+			.catch((e) => reject(e));
 		// let z = new NDKZap({ ndk: rocket.ndk!, zappedEvent: rocket, zappedUser: rocket.author });
 		// z.getZapEndpoint().then(x=>{
 		// 	console.log(x)
