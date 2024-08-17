@@ -19,7 +19,7 @@
 	let iconClass = 'h-5 w-5 md:h-4 md:w-4';
 
 	$: getClass = (menuItem: string) => {
-		if ($page.url.pathname.startsWith(`/${menuItem}`)) {
+		if ($page.url.pathname.startsWith(`/${menuItem}`) || (menuItem == 'dev' && $devmode)) {
 			return 'flex items-center gap-3 rounded-lg bg-muted px-3 py-2 text-primary transition-all hover:text-primary';
 		} else {
 			return 'flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary';
@@ -77,5 +77,5 @@
 	}}
 >
 	<Code class={iconClass} />
-	Toggle Dev Mode
+	Dev Mode
 </a>

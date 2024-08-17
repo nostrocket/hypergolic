@@ -17,7 +17,7 @@
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { Alert } from '@/components/ui/alert';
-	import { currentUser } from '@/stores/session';
+	import { currentUser, devmode } from '@/stores/session';
 	import MeritComment from './MeritComment.svelte';
 	import { Description } from 'formsnap';
 
@@ -222,9 +222,10 @@
 				</Table.Body>
 			</Table.Root>
 		</div>
-		<a href="#" class="text-xs" on:click={() => console.log(merit.Event.rawEvent())}
-			>print to console</a
-		></Card.Content
+		{#if $devmode}
+			<a href="#" class="text-xs" on:click={() => console.log(merit.Event.rawEvent())}
+				>print to console</a
+			>{/if}</Card.Content
 	>
 
 	<Card.Footer class="flex flex-row justify-center border-t px-6 py-3 text-center {background}">

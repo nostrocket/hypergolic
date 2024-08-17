@@ -5,6 +5,7 @@
 	import * as Card from '$lib/components/ui/card/index.js';
 	import type { Rocket } from '@/event_helpers/rockets';
 	import { ndk } from '@/ndk';
+	import { devmode } from '@/stores/session';
 	import { Avatar, Name } from '@nostr-dev-kit/ndk-svelte-components';
 	import { ChevronRight } from 'lucide-svelte';
 
@@ -30,12 +31,13 @@
 	</Card.Content>
 	<Card.Footer>
 		<div class="flex flex-wrap justify-between gap-2 lg:gap-1">
-			<Button
-				on:click={() => {
-					console.log(rocket.Event.rawEvent());
-				}}
-				variant="outline">Print to Console</Button
-			>
+			{#if $devmode}
+				<Button
+					on:click={() => {
+						console.log(rocket.Event.rawEvent());
+					}}
+					variant="outline">Print to Console</Button
+				>{/if}
 			<Button
 				on:click={() => {
 					goto(`${base}/rockets/${rocket.URL()}`);

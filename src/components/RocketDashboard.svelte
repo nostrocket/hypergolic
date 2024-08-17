@@ -11,6 +11,7 @@
 	import ProposedProducts from './ProposedProducts.svelte';
 	import Todo from './Todo.svelte';
 	import UpdateMission from './UpdateMission.svelte';
+	import { devmode } from '@/stores/session';
 
 	export let rocket: NDKEvent;
 
@@ -45,11 +46,12 @@
 				<Card.Title class="pb-4">Actions</Card.Title>
 				<Card.Description class="flex flex-wrap gap-2">
 					<UpdateMission rocketEvent={rocket} />
-					<Button
-						on:click={() => {
-							console.log(rocket.rawEvent());
-						}}>Print to Console</Button
-					>
+					{#if $devmode}
+						<Button
+							on:click={() => {
+								console.log(rocket.rawEvent());
+							}}>Print to Console</Button
+						>{/if}
 				</Card.Description>
 			</Card.Header>
 			<Card.Footer></Card.Footer>
