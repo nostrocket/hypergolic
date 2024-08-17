@@ -2,17 +2,16 @@
 	import * as Card from '@/components/ui/card';
 	import * as Table from '@/components/ui/table';
 	import { Rocket, ZapPurchase } from '@/event_helpers/rockets';
+	import { ndk } from '@/ndk';
+	import { Avatar, Name } from '@nostr-dev-kit/ndk-svelte-components';
 	import { writable } from 'svelte/store';
 	import Pie from './Pie.svelte';
-	import { Avatar, Name } from '@nostr-dev-kit/ndk-svelte-components';
-	import { ndk } from '@/ndk';
-	import NumberIncrement from '@components/ui/number-increment';
+	import NumberIncrement from './NumberIncrement.svelte';
 
 	export let rocket: Rocket;
 	export let unratifiedZaps: Map<string, ZapPurchase>;
 
 	let unratifiedZapsAmount = 0;
-	let dataLoaded = false;
 
 	$: {
 		unratifiedZapsAmount = 0;
@@ -55,7 +54,6 @@
 		}
 
 		merits.set(_merits);
-		dataLoaded = true;
 	}
 
 	const COLORS = [

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Button, buttonVariants } from '$lib/components/ui/button/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Input } from '$lib/components/ui/input';
 	import * as Alert from '@/components/ui/alert';
@@ -8,9 +8,7 @@
 	import { ndk } from '@/ndk';
 	import { currentUser } from '@/stores/session';
 	import { NDKZap } from '@nostr-dev-kit/ndk';
-	import { Spinner } from 'flowbite-svelte';
-	import { CheckCircleOutline } from 'flowbite-svelte-icons';
-	import { Terminal } from 'lucide-svelte';
+	import { Check, Terminal } from 'lucide-svelte';
 	import { cubicOut } from 'svelte/easing';
 	import { tweened } from 'svelte/motion';
 	import { requestProvider } from 'webln';
@@ -37,7 +35,7 @@
 			});
 			invoice = await z.createZapRequest(
 				rocketProduct.Price() * 1000,
-				`Purchase of ${product.Name()} from ${rocket.Event.dTag}`,
+				`Purchase of ${product.Name()} from ${rocket.Name()}`,
 				[['product', product.ID()]]
 			);
 		}
@@ -85,7 +83,7 @@
 		<Dialog.Trigger>
 			<Button {disabled}>
 				{#if open}
-					<Spinner class="me-2" color="white" size={4} /> Confirming...
+					Confirming...
 				{:else if !disabled}
 					Buy Now for {formatSats(rocketProduct.Price())}
 				{:else if disabled}
@@ -121,10 +119,10 @@
 				<Button on:click={payWithWebLn}>
 					{#if paymentFinished}
 						<div style="transform: scale({$scale});">
-							<CheckCircleOutline class="me-2 text-white" color="white" />
+							<Check class="me-2 text-white" color="white" />
 						</div>
 					{:else if paymentInitiated}
-						<Spinner class="me-2" color="white" size={4} /> Confirming payment...
+						Confirming payment...
 					{:else}
 						Pay with WebLN
 					{/if}
