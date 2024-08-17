@@ -121,7 +121,7 @@
 				{/if}
 			</div>
 			<Button disabled={emailInValid} on:click={SubmitEmailAndSubscribe}
-				>{emailError ? emailError : "I'm lame, please email me with updates"}</Button
+				>{emailError ? emailError : 'Please email me with updates'}</Button
 			>
 			<Separator />
 			<a href="https://t.me/nostrocket" class="flex flex-nowrap">

@@ -137,7 +137,9 @@
 						</Table.Cell>
 						<Table.Cell class="table-cell">{merit.Sats}</Table.Cell>
 						<Table.Cell class="table-cell">{merit.Merits}</Table.Cell>
-						<Table.Cell class="table-cell text-center">{status(merit).toUpperCase()}</Table.Cell>
+						<Table.Cell class="hidden text-center md:table-cell"
+							>{status(merit).toUpperCase()}</Table.Cell
+						>
 						<Table.Cell class="hidden text-right md:table-cell"
 							>{unixToRelativeTime(merit.TimeStamp * 1000)}</Table.Cell
 						>

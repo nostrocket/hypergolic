@@ -3,9 +3,9 @@
 	import { expoInOut } from 'svelte/easing';
 	import { tweened } from 'svelte/motion';
 
-	export let targetValue: number = 0;
+	export let targetValue: number;
 
-	let currentValue = tweened(0, { duration: 1000, easing: expoInOut });
+	let currentValue = tweened(0, { duration: 3000, easing: expoInOut });
 
 	// Re-trigger animation whenever targetValue changes
 	$: if (targetValue !== undefined && targetValue !== null) {
@@ -17,4 +17,4 @@
 	});
 </script>
 
-<span class="merits">{$currentValue.toFixed(0)}</span>
+<span class="merits">{Math.floor($currentValue).toLocaleString()}</span>

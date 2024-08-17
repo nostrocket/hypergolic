@@ -86,7 +86,7 @@
 				<Table.Header>
 					<Table.Row class="">
 						<Table.Head>Participant</Table.Head>
-						<Table.Head class="hidden md:table-cell">Merits</Table.Head>
+						<Table.Head class="table-cell">Merits</Table.Head>
 						<Table.Head class="text-right">Revenue (Sats)</Table.Head>
 					</Table.Row>
 				</Table.Header>
@@ -99,10 +99,14 @@
 									<Name ndk={$ndk} {pubkey} class="hidden max-w-32 truncate p-1 md:inline-block" />
 								</div>
 							</Table.Cell>
-							<Table.Cell class="hidden md:table-cell">
+							<Table.Cell
+								class="table-cell text-pretty font-mono font-extrabold text-white dark:text-gray-900"
+							>
 								<NumberIncrement targetValue={merits} />
 							</Table.Cell>
-							<Table.Cell class="text-right">
+							<Table.Cell
+								class="table-cell text-pretty text-right font-mono font-extrabold text-white dark:text-gray-900"
+							>
 								<NumberIncrement targetValue={sats} />
 							</Table.Cell>
 						</Table.Row>
