@@ -77,7 +77,7 @@
 				</div>
 			</Card.Content>
 			<Card.Footer class="mt-auto">
-				<Button class="w-full">Read More</Button>
+				<Button on:click={() => goto(`${base}/buymerits`)} class="w-full">Read More</Button>
 			</Card.Footer>
 		</Card.Root>
 		<Card.Root class="flex h-full w-full flex-col">
