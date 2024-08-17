@@ -14,30 +14,28 @@
 
 	export let product: ProductEvent;
 	export let rocket: Rocket;
+	export let productFromRocket: RocketProduct | undefined;
 	export let unratifiedZaps: Map<string, ZapPurchase> | undefined = undefined;
 
-	let productFromRocket = rocket.Products().get(product.ID());
+	//$:productFromRocket = rocket.Products().get(product.ID())// RocketProduct | undefined = undefined;
 
 	onMount(() => {
 		if (!product.Validate()) {
 			throw new Error('this should not happen');
 		}
+		//productFromRocket = rocket.Products().get(product.ID());
 	});
 
-	function remainingProducts(product: RocketProduct, zaps?: Map<string, ZapPurchase>): number {
-		let numberOfPurchases = 0;
-		if (zaps) {
-			for (let [_, zap] of zaps) {
+	function zapsForThisProduct(product: RocketProduct): Map<string, ZapPurchase> {
+		let m = new Map<string, ZapPurchase>();
+		if (unratifiedZaps) {
+			for (let [_, zap] of unratifiedZaps) {
 				if (zap.ProductID == product.ID()) {
-					numberOfPurchases++;
+					m.set(zap.ZapReceipt.id, zap);
 				}
 			}
 		}
-		let remaining = product.MaxPurchases() - numberOfPurchases;
-		if (remaining < 0) {
-			remaining = 0;
-		}
-		return remaining;
+		return m;
 	}
 </script>
 
@@ -75,19 +73,19 @@
 					<div class="mb-4 flex flex-nowrap">
 						<BadgeMaker
 							><div slot="icon">SOLD:</div>
-							<div slot="content">{unratifiedZaps.size}</div></BadgeMaker
+							<div slot="content">{zapsForThisProduct(productFromRocket).size}</div></BadgeMaker
 						>
 						<BadgeMaker
 							><div slot="icon">AVAILABLE:</div>
 							<div slot="content">
-								{remainingProducts(productFromRocket, unratifiedZaps)}
+								{productFromRocket.MaxPurchases() - zapsForThisProduct(productFromRocket).size}
 							</div></BadgeMaker
 						>
 					</div>
 				{/if}
 				<PayNow
 					disabled={productFromRocket.MaxPurchases() > 0 &&
-						remainingProducts(productFromRocket, unratifiedZaps) == 0}
+						productFromRocket.MaxPurchases() - zapsForThisProduct(productFromRocket).size == 0}
 					{product}
 					rocketProduct={rocket.Products().get(product.ID())}
 					{rocket}
@@ -98,8 +96,25 @@
 					href="#"
 					on:click={() => {
 						console.log(product);
-					}}>print to console</a
-				>{/if}
+						if (productFromRocket) {
+							console.log(productFromRocket);
+							console.log(
+								'max purchases',
+								productFromRocket.MaxPurchases(),
+								'price',
+								productFromRocket.Price()
+							);
+						}
+					}}>print product</a
+				>
+
+				<a
+					href="#"
+					on:click={() => {
+						console.log(unratifiedZaps);
+					}}>print unratified zaps</a
+				>
+			{/if}
 		</Card.Footer>
 	</Card.Root>
 {/if}

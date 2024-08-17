@@ -17,7 +17,12 @@
 </script>
 
 {#if product}
-	<ProductCard {unratifiedZaps} {rocket} {product}>
+	<ProductCard
+		productFromRocket={rocket.Products().get(product.ID())}
+		{unratifiedZaps}
+		{rocket}
+		{product}
+	>
 		<slot />
 	</ProductCard>
 {/if}
