@@ -39,7 +39,11 @@
 		<Card.Header>PROPOSED PRODUCTS</Card.Header>
 		<Card.Content>
 			TODO: make this look better
-			{#each $unratified as [_, product] (product.ID())}<ProductCard {rocket} {product} />{/each}
+			{#each $unratified as [_, product] (product.ID())}<ProductCard
+					productFromRocket={rocket.Products().get(product.ID())}
+					{rocket}
+					{product}
+				/>{/each}
 		</Card.Content>
 	</Card.Root>
 {/if}
