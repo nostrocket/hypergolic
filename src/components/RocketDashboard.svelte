@@ -3,15 +3,14 @@
 	import Button from '@/components/ui/button/button.svelte';
 	import * as Card from '@/components/ui/card';
 	import { Rocket, ZapPurchase } from '@/event_helpers/rockets';
+	import { devmode } from '@/stores/session';
 	import type { NDKEvent } from '@nostr-dev-kit/ndk';
 	import BitcoinAssociations from './AssociatedBitcoinAddresses.svelte';
 	import MeritRequests from './MeritRequests.svelte';
 	import MeritsAndSatflow from './MeritsAndSatflow.svelte';
 	import ProductFomo from './ProductFomo.svelte';
 	import ProposedProducts from './ProposedProducts.svelte';
-	import Todo from './Todo.svelte';
 	import UpdateMission from './UpdateMission.svelte';
-	import { devmode } from '@/stores/session';
 
 	export let rocket: NDKEvent;
 

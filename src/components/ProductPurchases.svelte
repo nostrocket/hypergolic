@@ -13,6 +13,8 @@
 
 	export let unratifiedZaps: Map<string, ZapPurchase>;
 
+	export let hidePurchases = false;
+
 	let zaps = $ndk.storeSubscribe(
 		[{ '#a': [`31108:${rocket.Event.author.pubkey}:${rocket.Event.dTag}`], kinds: [9735] }],
 		{
@@ -95,7 +97,7 @@
 	//todo: update rocket event with confirmed zaps if we have votepower
 </script>
 
-<Table.Root>
+<Table.Root class={hidePurchases ? 'hidden' : ''}>
 	<Table.Caption
 		class="mt-0 caption-top text-center text-lg font-semibold tracking-tight text-card-foreground"
 		>Purchases</Table.Caption

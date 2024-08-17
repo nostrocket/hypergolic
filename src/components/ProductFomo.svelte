@@ -1,12 +1,11 @@
 <script lang="ts">
 	import * as Card from '$lib/components/ui/card/index.js';
-	import { Product, Rocket, ZapPurchase } from '@/event_helpers/rockets';
 	import { fetchEvent } from '@/event_helpers/products';
+	import { Product, Rocket, ZapPurchase } from '@/event_helpers/rockets';
 	import { ndk } from '@/ndk';
 	import { derived, writable } from 'svelte/store';
-	import ProductGroup from './ProductGroup.svelte';
 	import CreateNewProduct from './CreateNewProduct.svelte';
-	import CreateMeritRequest from './CreateMeritRequest.svelte';
+	import ProductGroup from './ProductGroup.svelte';
 
 	export let rocket: Rocket;
 	export let unratifiedZaps: Map<string, ZapPurchase>;

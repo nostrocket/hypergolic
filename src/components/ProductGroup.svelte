@@ -7,15 +7,15 @@
 
 	export let rocket: Rocket;
 	export let products: Product[];
-	export let unratifiedZaps: Map<string, ZapPurchase> | undefined = undefined;
+	export let unratifiedZaps: Map<string, ZapPurchase> = new Map();
+
+	export let hidePurchases = false;
 </script>
 
 <Pagination.Root count={products.length} perPage={1} siblingCount={1} let:pages let:currentPage>
 	{#if currentPage}
 		<ProductCardFromId {unratifiedZaps} {rocket} product={products[currentPage - 1]}>
-			{#if unratifiedZaps}
-				<ProductPurchases bind:unratifiedZaps {rocket} {products} />
-			{/if}
+			<ProductPurchases {hidePurchases} bind:unratifiedZaps {rocket} {products} />
 		</ProductCardFromId>
 	{/if}
 	{#if products.length > 1}

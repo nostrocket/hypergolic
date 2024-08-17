@@ -90,7 +90,7 @@
 				<Heading title={rocket.Event.dTag} />
 				<div class="grid gap-4" style="grid-template-columns: repeat(auto-fit, 350px);">
 					{#each groups as [identifier, products] (identifier)}
-						<ProductGroup {products} {rocket} />
+						<ProductGroup hidePurchases {products} {rocket} />
 					{/each}
 				</div>
 			{/each}
@@ -111,7 +111,7 @@
 			<Heading title={rocket.Event.dTag} />
 			<div class="grid gap-4" style="grid-template-columns: repeat(auto-fit, 350px);">
 				{#each groups as [identifier, products] (identifier)}
-					<ProductGroup {products} {rocket} />
+					<ProductGroup hidePurchases {products} {rocket} />
 				{/each}
 			</div>
 		{/each}
