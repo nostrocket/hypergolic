@@ -11,6 +11,9 @@
 	import Login from './Login.svelte';
 	import { NDKPrivateKeySigner, NDKUser } from '@nostr-dev-kit/ndk';
 	import { TelegramBrand } from 'svelte-awesome-icons';
+	import { RefreshCcw } from 'lucide-svelte';
+
+	export let menu = false;
 
 	let email: string = '';
 	let fax: string = '';
@@ -78,17 +81,27 @@
 
 <Dialog.Root bind:open>
 	<Dialog.Trigger>
-		<Badge
-			href="#"
-			variant="nostr"
-			class="flex h-8 shrink-0 items-center justify-center rounded-sm"
-		>
-			u r so early
-		</Badge>
+		{#if !menu}
+			<Badge
+				href="#"
+				variant="nostr"
+				class="flex h-8 shrink-0 items-center justify-center rounded-sm"
+			>
+				u r so early
+			</Badge>
+		{:else}
+			<a
+				href="#"
+				class="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary"
+			>
+				<RefreshCcw class="h-5 w-5 md:h-4 md:w-4" />
+				Subscribe to Updates
+			</a>
+		{/if}
 	</Dialog.Trigger>
 	<Dialog.Content>
 		<Dialog.Header>
-			<Dialog.Title>Subscribe for Updates</Dialog.Title>
+			<Dialog.Title>Subscribe to Updates</Dialog.Title>
 			<Dialog.Description>
 				Nostrocket is under active development, many things are broken. Subscribe now and we'll ping
 				you when there are new releases and new features.
@@ -123,7 +136,6 @@
 			<Button disabled={emailInValid} on:click={SubmitEmailAndSubscribe}
 				>{emailError ? emailError : 'Please email me with updates'}</Button
 			>
-			<Separator />
 			<a href="https://t.me/nostrocket" class="flex flex-nowrap">
 				<TelegramBrand class="mr-2" /> Join the Telegram Group
 			</a>

@@ -15,6 +15,7 @@
 		Users
 	} from 'lucide-svelte';
 	import { GitAltBrand, TelegramBrand } from 'svelte-awesome-icons';
+	import NotifyMe from './NotifyMe.svelte';
 
 	let iconClass = 'h-5 w-5 md:h-4 md:w-4';
 
@@ -62,6 +63,7 @@
 	<TelegramBrand class={iconClass} />
 	Telegram Group
 </a>
+<NotifyMe menu />
 <a href="{base}/help" class={getClass('help')}>
 	<HelpCircle class={iconClass} />
 	Help
