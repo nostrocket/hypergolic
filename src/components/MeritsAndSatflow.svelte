@@ -12,12 +12,28 @@
 	import PurchaseToast from './PurchaseToast.svelte';
 	import { devmode } from '@/stores/session';
 	import Button from '@/components/ui/button/button.svelte';
+	import { sleep } from '@/helpers';
 
 	export let rocket: Rocket;
 	export let unratifiedZaps: Map<string, ZapPurchase>;
 
 	let unratifiedZapsAmount = 0;
 	let lastCheckTime = Date.now() / 1000;
+
+	let revenueClass = '';
+
+	function toastIt(zapPurchase: ZapPurchase) {
+		revenueClass = ' text-xl';
+		toast(PurchaseToast, {
+			componentProps: {
+				zapPurchase,
+				rocket: rocket
+			}
+		});
+		sleep(3000).then(() => {
+			revenueClass = 'text-base';
+		});
+	}
 
 	function checkNewZaps() {
 		const currentTime = Date.now() / 1000;
@@ -29,12 +45,7 @@
 		);
 
 		recentZaps.forEach((zapPurchase) => {
-			toast(PurchaseToast, {
-				componentProps: {
-					zapPurchase,
-					rocket: rocket
-				}
-			});
+			toastIt(zapPurchase);
 		});
 
 		lastCheckTime = currentTime;
@@ -49,7 +60,7 @@
 		lastCheckTime = Date.now() / 1000 - 30; // 30 seconds ago
 	});
 
-	$: lasted = Array.from(unratifiedZaps.values()).sort((a, b) => {
+	$: mostRecentZap = Array.from(unratifiedZaps.values()).sort((a, b) => {
 		if (a.ZapReceipt.created_at && b.ZapReceipt.created_at) {
 			return b.ZapReceipt.created_at - a.ZapReceipt.created_at;
 		} else return 0;
@@ -148,7 +159,7 @@
 								<NumberIncrement targetValue={merits} />
 							</Table.Cell>
 							<Table.Cell
-								class="table-cell text-pretty text-right font-mono font-extrabold text-white dark:text-gray-900"
+								class="table-cell text-pretty text-right font-mono font-extrabold text-white dark:text-gray-900 {revenueClass}"
 							>
 								<NumberIncrement targetValue={sats} />
 							</Table.Cell>
@@ -162,16 +173,10 @@
 		{#if $devmode}
 			<Button
 				on:click={() => {
-					if (!lasted) {
+					if (!mostRecentZap) {
 						toast('unratifiedZaps is null');
 					} else {
-						console.log(lasted);
-						toast(PurchaseToast, {
-							componentProps: {
-								zapPurchase: lasted,
-								rocket: rocket
-							}
-						});
+						toastIt(mostRecentZap);
 					}
 				}}
 				variant="outline">Popup Last Purchase Notification</Button

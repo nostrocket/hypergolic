@@ -133,7 +133,7 @@
 
 <div class="relative h-full w-full">
 	<Chart options={$o} class="py-6" />
-	<div class="absolute left-1/2 top-0 z-20 w-[356px] -translate-x-1/2 transform">
-		<Toaster position="top-center" id="purchase" duration={10000} />
+	<div class="absolute -top-10 left-1/2 z-20 w-[356px] -translate-x-1/2 transform">
+		<Toaster position="top-center" id="purchase" duration={3000} />
 	</div>
 </div>
