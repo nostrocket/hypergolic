@@ -6,11 +6,7 @@ A nostr client that implements the nostrocket [NIPS](https://github.com/nostrock
 
 ```bash
 npm install
-
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
 ```
 
 ## Pull Requests
@@ -24,6 +20,16 @@ Pull request should contain only ONE commit that solves exactly ONE problem. The
 The commit message MUST be a short summary of the problem being solved, usually this should be the same as title of the problem from the github or nostrocket issue tracker.
 
 Do not send pull requests unless they are ready to merge, no "work in progress" pull requests.
+
+### We merge straight into production, so make sure you don't break the build
+
+To test if you did something that breaks the build process, simply run the build process.
+
+```bash
+export NODE_OPTIONS="--max-old-space-size=8192"
+npm install
+npm run build
+```
 
 ## Style Guide
 
