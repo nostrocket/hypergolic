@@ -132,7 +132,7 @@
 				/>
 			</div>
 			<div class="grid grid-cols-4 items-center gap-4">
-				<Label for="desc" class="text-right">Solution</Label>
+				<Label for="desc" class="text-right">Solution (proof of work)</Label>
 				<Textarea
 					bind:value={solution}
 					id="desc"

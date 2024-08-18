@@ -6,6 +6,9 @@
 	import Heading from '../../../components/Heading.svelte';
 	import RocketDashboard from '../../../components/RocketDashboard.svelte';
 	import Rocket from '../../../route_helpers/Rocket.svelte';
+	import { Circle2 } from 'svelte-loading-spinners';
+	import { devmode } from '@/stores/session';
+
 	//flow if we only have a d-tag: fetch all 31108's with this d-tag, sort by WoT, put Nostrocket Name Service one at the top. Dedupe same rocket (same state, shadows) from multiple users, just show them all as everyone agreeing.
 	//second pass: fetch ignition event for each, rebuild current state and validate all proofs, compute votepower and display only the states with > 50%.
 
@@ -14,7 +17,6 @@
 	let pubkey = $page.url.searchParams.get('p');
 
 	let latestRocketEvent: Readable<ExtendedBaseType<NDKEvent> | undefined>;
-
 
 	//if we don't have a d/p tags we just render the event provided
 	//todo: to find the latest by name alone we should use a new route and redirect to this page once we've got the relevant data
@@ -25,7 +27,6 @@
 
 	if (dTag && pubkey) {
 		//the user wants the latest valid state of this rocket
-		
 	}
 
 	//todo: check that this zap is not already included in the payment JSON for the product
@@ -36,15 +37,51 @@
 
 	//todo: handle shadow events (fetch the shadowed event and render it instead)
 </script>
+
 {#if dTag && pubkey}
-<Rocket bind:latestRocketEvent {dTag} {pubkey} />
+	<Rocket bind:latestRocketEvent {dTag} {pubkey} />
 {/if}
 
 {#if latestRocketEvent && $latestRocketEvent}
 	<RocketDashboard rocket={$latestRocketEvent} />
 {:else}
-	<Heading title="Fetching events for the requested rocket" />
-	IGNITION: {rIgnitionOrActual} <br />
-	NAME: {dTag} <br />
-	PUBKEY: {pubkey} <br />
+	<Heading title="Finding latest event for the requested rocket" />
+	{#if $devmode}
+		IGNITION: {rIgnitionOrActual} <br />
+		NAME: {dTag} <br />
+		PUBKEY: {pubkey} <br />
+	{/if}
+	<div class="flex flex-col overflow-hidden">
+		<div class="flex flex-row">
+			<div class="flex flex-col items-center justify-center gap-4 py-20">
+				<Circle2 size="10" unit="px" /><Circle2 size="30" unit="px" /><Circle2
+					size="60"
+					unit="px"
+				/><Circle2 size="90" unit="px" /><Circle2 size="120" unit="px" /><Circle2
+					size="240"
+					unit="px"
+				/>
+			</div>
+			<div class="flex flex-col items-center justify-center gap-4 py-20">
+				<Circle2 size="240" unit="px" /><Circle2 size="120" unit="px" /><Circle2
+					size="90"
+					unit="px"
+				/><Circle2 size="60" unit="px" /><Circle2 size="30" unit="px" /><Circle2
+					size="10"
+					unit="px"
+				/>
+			</div>
+			<div class="flex flex-col items-center justify-center gap-4 py-20">
+				<Circle2 size="10" unit="px" /><Circle2 size="30" unit="px" /><Circle2
+					size="60"
+					unit="px"
+				/><Circle2 size="90" unit="px" /><Circle2 size="120" unit="px" /><Circle2
+					size="240"
+					unit="px"
+				/>
+			</div>
+		</div>
+
+		<!-- <Circle2 size="800" unit="px" /> hodlbod's motto is "you can never have too many spinners", but I don't know about this last one, it might be too much-->
+	</div>
 {/if}
