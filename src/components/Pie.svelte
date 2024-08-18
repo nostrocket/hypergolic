@@ -2,6 +2,7 @@
 	import { ndk } from '@/ndk.js';
 	import { Chart } from 'flowbite-svelte';
 	import { writable } from 'svelte/store';
+	import { Toaster } from '$lib/components/ui/sonner';
 	export let data: { pubkey: string; merits: number; sats: number }[];
 
 	let pubkeys = Array.from(data, (x) => x.pubkey);
@@ -130,4 +131,9 @@
 	// </Card>
 </script>
 
-<Chart options={$o} class="py-6" />
+<div class="relative h-full w-full">
+	<Chart options={$o} class="py-6" />
+	<div class="absolute left-1/2 top-0 z-20 w-[356px] -translate-x-1/2 transform">
+		<Toaster position="top-center" id="purchase" duration={10000} />
+	</div>
+</div>

@@ -27,16 +27,19 @@
 		sessionStarted = true;
 	}
 
-	onMount(()=>{getBitcoinTip();})
-
-	setInterval(function () {
+	onMount(() => {
 		getBitcoinTip();
-	}, 2* 60 * 1000);
+	});
+
+	setInterval(
+		function () {
+			getBitcoinTip();
+		},
+		2 * 60 * 1000
+	);
 </script>
 
 <ModeWatcher defaultMode="dark" />
 <SidePanelLayout>
 	<div slot="content"><slot></slot></div>
 </SidePanelLayout>
-
-<style></style>
