@@ -4,45 +4,51 @@
 	import { unixToRelativeTime } from '@/helpers';
 	import { fetchEvent } from '@/event_helpers/products';
 	import { Product, Rocket, type ZapPurchase } from '@/event_helpers/rockets';
+	import Heading from './Heading.svelte';
+	import Separator from '@/components/ui/separator/separator.svelte';
 
 	export let zapPurchase: ZapPurchase;
 	export let rocket: Rocket;
 </script>
 
-<div class="flex flex-col gap-1">
-	{#if zapPurchase.ZapReceipt.content}
-		<div>{zapPurchase.ZapReceipt.content}</div>
-	{:else}
-		<!-- Sometimes ZapReceipt.content is empty -->
-		{#await fetchEvent(zapPurchase.ProductID, $ndk)}
-			<div>New purchase</div>
-		{:then product}
-			<div>{`Purchase of ${new Product(product).Name()} from ${rocket.Name()}.`}</div>
-		{/await}
-	{/if}
+<div class="flex flex-col gap-1 rounded-md bg-orange-500 p-4">
+	<div class="">
+		{#if zapPurchase.ZapReceipt.content}
+			<h1 class="scroll-m-20 text-center text-lg font-normal md:text-xl">
+				NEW {zapPurchase.ZapReceipt.content.toUpperCase()}!
+			</h1>
+		{:else}
+			<!-- Sometimes ZapReceipt.content is empty -->
+			{#await fetchEvent(zapPurchase.ProductID, $ndk)}
+				<div>New purchase!</div>
+			{:then product}
+				<div>{`Purchase of ${new Product(product).Name()} from ${rocket.Name()}.`}</div>
+			{/await}
+		{/if}
+	</div>
 	{#if zapPurchase.BuyerPubkey}
-		<div class="flex flex-nowrap gap-1">
-			<Avatar
-				ndk={$ndk}
-				pubkey={zapPurchase.BuyerPubkey}
-				class="h-10 w-10 flex-none rounded-full object-cover"
-			/>
-			<Name
-				ndk={$ndk}
-				pubkey={zapPurchase.BuyerPubkey}
-				class="hidden max-w-32 truncate p-2 md:inline-block"
-			/>
-		</div>
-	{/if}
-	{#if zapPurchase.Amount}
-		<div>
-			Amount: {(zapPurchase.Amount / 1000).toFixed(0)}
-			{(zapPurchase.Amount / 1000).toFixed(0) === '1' ? 'sat' : 'sats'}
-		</div>
-	{/if}
-	{#if zapPurchase.ZapReceipt.created_at}
-		<div>
-			{unixToRelativeTime(zapPurchase.ZapReceipt.created_at * 1000)}
+		<div class="ml-auto mr-auto mt-4 flex content-center items-center">
+			{#if zapPurchase.Amount}
+				<div class="flex-col content-center items-center gap-1">
+					<h1 class="scroll-m-20 text-center font-mono text-3xl">
+						{Math.floor(zapPurchase.Amount / 1000).toLocaleString()}
+					</h1>
+					<span class="flex">Sats paid to Merit holders</span>
+				</div>
+			{/if}
+			<div class="ml-4 flex flex-col content-center items-center gap-1 rounded-sm bg-black p-2">
+				BUYER
+				<Avatar
+					ndk={$ndk}
+					pubkey={zapPurchase.BuyerPubkey}
+					class="h-20 w-20 flex-none rounded-none object-cover"
+				/>
+				<Name
+					ndk={$ndk}
+					pubkey={zapPurchase.BuyerPubkey}
+					class="hidden max-w-32 truncate p-2 md:inline-block"
+				/>
+			</div>
 		</div>
 	{/if}
 </div>
