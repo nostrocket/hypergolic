@@ -147,7 +147,11 @@
 							<Table.Cell>
 								<div class="flex flex-nowrap items-center gap-2">
 									<Avatar ndk={$ndk} {pubkey} class="h-8 w-8 flex-none rounded-full object-cover" />
-									<Name ndk={$ndk} {pubkey} class="hidden max-w-32 truncate p-1 md:inline-block" />
+									<Name
+										ndk={$ndk}
+										{pubkey}
+										class="hidden max-w-32 truncate p-1 font-mono text-white dark:text-black md:inline-block"
+									/>
 								</div>
 							</Table.Cell>
 							<Table.Cell

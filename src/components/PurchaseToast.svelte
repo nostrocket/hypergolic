@@ -8,7 +8,7 @@
 	export let rocket: Rocket;
 </script>
 
-<div class="flex flex-col gap-1 rounded-md bg-orange-500 p-4">
+<div class="flex flex-col gap-1 rounded-md bg-orange-500 p-4 text-white dark:text-black">
 	<div class="">
 		{#if zapPurchase.ZapReceipt.content}
 			<h1 class="scroll-m-20 text-center text-lg font-normal md:text-xl">
@@ -33,7 +33,9 @@
 					<span class="flex">Sats paid to Merit holders</span>
 				</div>
 			{/if}
-			<div class="ml-4 flex flex-col content-center items-center gap-1 rounded-sm bg-black p-2">
+			<div
+				class="ml-4 flex flex-col content-center items-center gap-1 rounded-sm bg-black p-2 text-white"
+			>
 				BUYER
 				<Avatar
 					ndk={$ndk}
