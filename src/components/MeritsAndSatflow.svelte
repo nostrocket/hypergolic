@@ -36,6 +36,7 @@
 	}
 
 	function checkNewZaps() {
+		console.log(39);
 		const currentTime = Date.now() / 1000;
 		const recentZaps = Array.from(unratifiedZaps.values()).filter(
 			(zap) =>
@@ -49,11 +50,6 @@
 		});
 
 		lastCheckTime = currentTime;
-	}
-	$: {
-		if (unratifiedZaps.size > 0) {
-			checkNewZaps();
-		}
 	}
 
 	onMount(() => {
@@ -71,6 +67,7 @@
 		for (let [_, a] of unratifiedZaps) {
 			unratifiedZapsAmount += a.Amount / 1000;
 		}
+		checkNewZaps();
 		unratifiedZapsAmount = unratifiedZapsAmount;
 	}
 	let _merits: { pubkey: string; merits: number; sats: number }[] = [];
