@@ -7,11 +7,53 @@
 	import { writable } from 'svelte/store';
 	import Pie from './Pie.svelte';
 	import NumberIncrement from './NumberIncrement.svelte';
+	import { toast } from 'svelte-sonner';
+	import { onMount } from 'svelte';
+	import PurchaseToast from './PurchaseToast.svelte';
+	import { devmode } from '@/stores/session';
+	import Button from '@/components/ui/button/button.svelte';
 
 	export let rocket: Rocket;
 	export let unratifiedZaps: Map<string, ZapPurchase>;
 
 	let unratifiedZapsAmount = 0;
+	let lastCheckTime = Date.now() / 1000;
+
+	function checkNewZaps() {
+		const currentTime = Date.now() / 1000;
+		const recentZaps = Array.from(unratifiedZaps.values()).filter(
+			(zap) =>
+				zap.ZapReceipt.created_at &&
+				zap.ZapReceipt.created_at > lastCheckTime &&
+				zap.ZapReceipt.created_at <= currentTime
+		);
+
+		recentZaps.forEach((zapPurchase) => {
+			toast(PurchaseToast, {
+				componentProps: {
+					zapPurchase,
+					rocket: rocket
+				}
+			});
+		});
+
+		lastCheckTime = currentTime;
+	}
+	$: {
+		if (unratifiedZaps.size > 0) {
+			checkNewZaps();
+		}
+	}
+
+	onMount(() => {
+		lastCheckTime = Date.now() / 1000 - 30; // 30 seconds ago
+	});
+
+	$: lasted = Array.from(unratifiedZaps.values()).sort((a, b) => {
+		if (a.ZapReceipt.created_at && b.ZapReceipt.created_at) {
+			return b.ZapReceipt.created_at - a.ZapReceipt.created_at;
+		} else return 0;
+	})[0];
 
 	$: {
 		unratifiedZapsAmount = 0;
@@ -82,6 +124,7 @@
 				This graph displays the Meritization of equity in {rocket.Name()}
 				<Pie data={$merits} />
 			</div>
+
 			<Table.Root class="col-span-1 text-black">
 				<Table.Header>
 					<Table.Row class="">
@@ -115,5 +158,27 @@
 			</Table.Root>
 		</Card.Description>
 	</Card.Header>
-	<Card.Footer></Card.Footer>
+	<Card.Footer>
+		{#if $devmode}
+			<Button
+				on:click={() => {
+					if (!lasted) {
+						toast('unratifiedZaps is null');
+					} else {
+						console.log(lasted);
+						toast(PurchaseToast, {
+							componentProps: {
+								zapPurchase: lasted,
+								rocket: rocket
+							}
+						});
+					}
+				}}
+				variant="outline">Popup Last Purchase Notification</Button
+			>
+			<Button variant="outline" on:click={() => console.log(Array.from(unratifiedZaps.values()))}
+				>print unratifiedZaps</Button
+			>
+		{/if}
+	</Card.Footer>
 </Card.Root>

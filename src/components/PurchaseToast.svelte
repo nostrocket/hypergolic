@@ -1,11 +1,8 @@
 <script lang="ts">
-	import { Avatar, Name } from '@nostr-dev-kit/ndk-svelte-components';
-	import { ndk } from '@/ndk';
-	import { unixToRelativeTime } from '@/helpers';
 	import { fetchEvent } from '@/event_helpers/products';
 	import { Product, Rocket, type ZapPurchase } from '@/event_helpers/rockets';
-	import Heading from './Heading.svelte';
-	import Separator from '@/components/ui/separator/separator.svelte';
+	import { ndk } from '@/ndk';
+	import { Avatar, Name } from '@nostr-dev-kit/ndk-svelte-components';
 
 	export let zapPurchase: ZapPurchase;
 	export let rocket: Rocket;
