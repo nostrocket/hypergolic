@@ -2,8 +2,10 @@
 	import * as Breadcrumb from '$lib/components/ui/breadcrumb/index.js';
 	import Button from '@/components/ui/button/button.svelte';
 	import * as Card from '@/components/ui/card';
+	import PurchaseToast from './PruchaseToast.svelte';
 	import { Rocket, ZapPurchase } from '@/event_helpers/rockets';
 	import { devmode } from '@/stores/session';
+	import { toast } from 'svelte-sonner';
 	import type { NDKEvent } from '@nostr-dev-kit/ndk';
 	import BitcoinAssociations from './AssociatedBitcoinAddresses.svelte';
 	import MeritRequests from './MeritRequests.svelte';
@@ -11,10 +13,47 @@
 	import ProductFomo from './ProductFomo.svelte';
 	import ProposedProducts from './ProposedProducts.svelte';
 	import UpdateMission from './UpdateMission.svelte';
+	import { onMount } from 'svelte';
 
 	export let rocket: NDKEvent;
 
 	$: unratifiedZaps = new Map<string, ZapPurchase>();
+	let lastCheckTime = Date.now() / 1000; // Current time in seconds
+
+	function checkNewZaps() {
+		const currentTime = Date.now() / 1000;
+		const recentZaps = Array.from(unratifiedZaps.values()).filter(
+			(zap) =>
+				zap.ZapReceipt.created_at &&
+				zap.ZapReceipt.created_at > lastCheckTime &&
+				zap.ZapReceipt.created_at <= currentTime
+		);
+
+		recentZaps.forEach((zapPurchase) => {
+			toast(PurchaseToast, {
+				componentProps: {
+					zapPurchase,
+					rocket: new Rocket(rocket)
+				}
+			});
+		});
+
+		lastCheckTime = currentTime;
+	}
+	$: {
+		if (unratifiedZaps.size > 0) {
+			checkNewZaps();
+		}
+	}
+	onMount(() => {
+		lastCheckTime = Date.now() / 1000 - 30; // 30 seconds ago
+	});
+
+	$: lasted = Array.from(unratifiedZaps.values()).sort((a, b) => {
+		if (a.ZapReceipt.created_at && b.ZapReceipt.created_at) {
+			return b.ZapReceipt.created_at - a.ZapReceipt.created_at;
+		} else return 0;
+	})[0];
 </script>
 
 <div class="flex flex-col gap-4">
@@ -32,6 +71,27 @@
 		</Breadcrumb.Root>
 	</header>
 	<main class="grid w-full flex-1 grid-cols-1 items-start gap-4 sm:grid-cols-3 md:gap-2">
+		{#if $devmode}
+			<Button
+				on:click={() => {
+					if (!lasted) {
+						toast('unratifiedZaps is null');
+					} else {
+						console.log(lasted);
+						toast(PurchaseToast, {
+							componentProps: {
+								zapPurchase: lasted,
+								rocket: new Rocket(rocket)
+							}
+						});
+					}
+				}}
+				variant="outline">Popup Last Purchase Notification</Button
+			>
+			<Button variant="outline" on:click={() => console.log(Array.from(unratifiedZaps.values()))}
+				>print unratifiedZaps</Button
+			>
+		{/if}
 		<MeritsAndSatflow {unratifiedZaps} rocket={new Rocket(rocket)} />
 
 		<ProductFomo bind:unratifiedZaps rocket={new Rocket(rocket)} />
