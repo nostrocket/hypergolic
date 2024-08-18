@@ -129,7 +129,8 @@
 		<Card.Title>Merits and Satflow</Card.Title>
 		<Card.Description class="grid grid-cols-1 lg:grid-cols-2">
 			<div class="col-span-1">
-				This graph displays the Meritization of equity in {rocket.Name()}
+				This graph displays the Meritization of equity in {rocket.Name()}. These npubs own the {rocket.Name()}
+				satflow.
 				<Pie data={$merits} />
 			</div>
 

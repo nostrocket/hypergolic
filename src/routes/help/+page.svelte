@@ -65,9 +65,7 @@
 		</div>
 	{/if}
 	<Heading title="Help" />
-	<div>
-		If the answers to the questions below do not address your issue, you can send your question here
-	</div>
+	<div>Ask your questions here!</div>
 	<form class="relative overflow-hidden">
 		<Label for="message" class="sr-only">Question</Label>
 		<Textarea
