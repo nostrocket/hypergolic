@@ -102,11 +102,6 @@ export async function getCuckPrice(): Promise<number> {
 	});
 }
 
-interface CommitInfo {
-	count: number;
-	hash: string;
-}
-
 interface GitHubUrlParts {
 	owner: string;
 	repo: string;
@@ -114,7 +109,7 @@ interface GitHubUrlParts {
 	number?: string;
 }
 
-class GitHubApiError extends Error {
+export class GitHubApiError extends Error {
 	constructor(
 		message: string,
 		public status?: number
@@ -124,7 +119,7 @@ class GitHubApiError extends Error {
 	}
 }
 
-function parseGitHubUrl(url: URL): GitHubUrlParts {
+export function parseGitHubUrl(url: URL): GitHubUrlParts {
 	const parts = url.pathname.split('/').filter(Boolean);
 	if (parts.length < 2) {
 		throw new Error('Invalid GitHub URL');
@@ -137,38 +132,6 @@ function parseGitHubUrl(url: URL): GitHubUrlParts {
 	};
 }
 
-async function fetchGitHubApi(apiUrl: URL): Promise<any> {
-	const response = await fetch(apiUrl);
-	if (!response.ok) {
-		throw new GitHubApiError(`HTTP error! status: ${response.status}`, response.status);
-	}
-	return response.json();
-}
-
-export async function getCommit(url: URL): Promise<CommitInfo> {
-	try {
-		const { owner, repo } = parseGitHubUrl(url);
-		const apiURL = new URL(`https://api.github.com/repos/${owner}/${repo}/commits`);
-		const json = await fetchGitHubApi(apiURL);
-
-		if (!json[0]?.sha) {
-			throw new GitHubApiError('Failed to fetch commit info: API returned unexpected data');
-		}
-
-		return {
-			count: json.length,
-			hash: json[0].sha
-		};
-	} catch (error) {
-		if (error instanceof GitHubApiError) {
-			throw error;
-		}
-		throw new Error(
-			`Failed to fetch commit info: ${error instanceof Error ? error.message : String(error)}`
-		);
-	}
-}
-
 export async function parseProblem(problem: string): Promise<string | undefined> {
 	if (!isGitHubIssuesOrPullUrl(problem)) {
 		return undefined;
@@ -176,9 +139,15 @@ export async function parseProblem(problem: string): Promise<string | undefined>
 
 	try {
 		const { owner, repo, number } = parseGitHubUrl(new URL(problem));
+
 		const apiURL = new URL(`https://api.github.com/repos/${owner}/${repo}/issues/${number}`);
-		const { title } = await fetchGitHubApi(apiURL);
-		return title;
+		const response = await fetch(apiURL);
+		if (!response.ok) {
+			throw new GitHubApiError(`HTTP error! status: ${response.status}`, response.status);
+		}
+
+		const json = await response.json();
+		return json.title;
 	} catch (error) {
 		console.error('Failed to parse problem:', error);
 		return undefined;

@@ -4,6 +4,7 @@
 	import { Badge } from '@/components/ui/badge';
 	import Separator from '@/components/ui/separator/separator.svelte';
 	import { currentUser, devmode } from '@/stores/session';
+	import { commitInfo } from '@/stores/github';
 	import { Code, HelpCircle, Mail, Package, Pyramid, Rocket } from 'lucide-svelte';
 	import { GitAltBrand, TelegramBrand } from 'svelte-awesome-icons';
 	import NotifyMe from './NotifyMe.svelte';
@@ -78,6 +79,8 @@
 {#if $devmode}
 	<span class="m-2 flex flex-col border border-orange-500 p-1 font-mono text-sm">
 		<span class="text-center">RELEASE NAME:</span>
-		<span class=" text-nowrap text-center italic">shippable intermediary</span></span
-	>
+		<span class=" text-nowrap text-center italic">shippable intermediary</span>
+		<span class=" max-w-[200px] truncate text-nowrap">Commit: {$commitInfo.hash}</span>
+		<span class=" text-nowrap">Height: {$commitInfo.count}</span>
+	</span>
 {/if}

@@ -7,6 +7,7 @@
 	import { onMount } from 'svelte';
 	import '../app.css';
 	import SidePanelLayout from '../layouts/SidePanelLayout.svelte';
+	import { getCommitInfo } from '@/stores/github';
 
 	let sessionStarted = false;
 	let connected = false;
@@ -29,6 +30,7 @@
 
 	onMount(() => {
 		getBitcoinTip();
+		getCommitInfo(new URL('https://github.com/nostrocket/hypergolic/'));
 	});
 
 	setInterval(
