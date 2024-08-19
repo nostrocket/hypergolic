@@ -14,6 +14,8 @@
 	import { base } from '$app/paths';
 	import { getRocketURL } from '@/helpers';
 	import Textarea from '@/components/ui/textarea/textarea.svelte';
+	import UploadMediaLink from './UploadMediaLink.svelte';
+	import type { BlobDescriptor } from 'blossom-client-sdk';
 
 	export let rocketEvent: NDKEvent;
 
@@ -47,6 +49,10 @@
 			o = false;
 			goto(`${base}/rockets/${getRocketURL(rocketEvent)}`);
 		});
+	}
+
+	function handleUploaded(event: CustomEvent<BlobDescriptor>) {
+		image = event.detail.url;
 	}
 </script>
 
@@ -86,7 +92,10 @@
 			</div>
 			<div class="grid grid-cols-4 items-center gap-4">
 				<Label for="image" class="text-right">Cover Image</Label>
-				<Input bind:value={image} id="name" placeholder="URL of cover image" class="col-span-3" />
+				<div class="col-span-3">
+					<Input bind:value={image} id="name" placeholder="URL of cover image" />
+					<UploadMediaLink on:uploaded={handleUploaded}>Upload</UploadMediaLink>
+				</div>
 			</div>
 		</div>
 		<Dialog.Footer>
