@@ -13,7 +13,8 @@
 	import { bitcoinTip } from '@/stores/bitcoin';
 	import NotifyMe from '../components/NotifyMe.svelte';
 
-	export let title = '';
+	// export let title = '';
+	let open = false;
 </script>
 
 <div class="grid min-h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[260px_1fr]">
@@ -38,7 +39,7 @@
 		<header
 			class="flex h-14 items-center justify-center gap-4 border-b bg-muted/40 px-4 lg:h-[60px] lg:px-6"
 		>
-			<Sheet.Root>
+			<Sheet.Root bind:open>
 				<Sheet.Trigger asChild let:builder>
 					<Button variant="outline" size="icon" class="shrink-0 md:hidden" builders={[builder]}>
 						<Menu class="h-5 w-5" />
@@ -47,10 +48,14 @@
 				</Sheet.Trigger>
 				<Sheet.Content side="left" class="flex flex-col">
 					<nav class="grid gap-2 text-lg font-medium">
-						<a href="##" class="flex items-center gap-2 text-lg font-semibold">
+						<a
+							href="{base}/"
+							class="flex items-center gap-2 text-lg font-semibold"
+							on:click={() => (open = false)}
+						>
 							<span><img src={`${base}/_logo.png`} /></span>
 						</a>
-						<NewMenu />
+						<NewMenu closeSheet={() => (open = false)} />
 					</nav>
 					<div class="mt-auto">
 						<RocketPillCard />

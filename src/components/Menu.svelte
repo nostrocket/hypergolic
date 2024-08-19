@@ -4,18 +4,11 @@
 	import { Badge } from '@/components/ui/badge';
 	import Separator from '@/components/ui/separator/separator.svelte';
 	import { currentUser, devmode } from '@/stores/session';
-	import {
-		Code,
-		GitBranch,
-		HelpCircle,
-		Mail,
-		Package,
-		Pyramid,
-		Rocket,
-		Users
-	} from 'lucide-svelte';
+	import { Code, HelpCircle, Mail, Package, Pyramid, Rocket } from 'lucide-svelte';
 	import { GitAltBrand, TelegramBrand } from 'svelte-awesome-icons';
 	import NotifyMe from './NotifyMe.svelte';
+
+	export let closeSheet = () => {};
 
 	let iconClass = 'h-5 w-5 md:h-4 md:w-4';
 
@@ -29,22 +22,22 @@
 </script>
 
 {#if $currentUser}
-	<a href="{base}/inbox" class={getClass('inbox')}>
+	<a href="{base}/inbox" class={getClass('inbox')} on:click={closeSheet}>
 		<Mail class={iconClass} />
 		Inbox
 		<Badge class="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-full">1</Badge>
 	</a>
 	<Separator class="dark:bg-slate-700" />
 {/if}
-<a href="{base}/rockets" class={getClass('rockets')}>
+<a href="{base}/rockets" class={getClass('rockets')} on:click={closeSheet}>
 	<Rocket class={iconClass} />
 	Rockets
 </a>
-<a href="{base}/products" class={getClass('products')}>
+<a href="{base}/products" class={getClass('products')} on:click={closeSheet}>
 	<Package class={iconClass} />
 	Products
 </a>
-<a href="{base}/problems" class={getClass('problems')}>
+<a href="{base}/problems" class={getClass('problems')} on:click={closeSheet}>
 	<Pyramid class={iconClass} />
 	Problem Tracker
 	<!-- <Badge class="ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-full">6</Badge> -->
@@ -55,16 +48,16 @@
 	People
 </a> -->
 <Separator class="dark:bg-slate-700" />
-<a href="https://github.com/nostrocket/hypergolic" class={getClass('_')}>
+<a href="https://github.com/nostrocket/hypergolic" target="_blank" class={getClass('_')}>
 	<GitAltBrand class={iconClass} />
 	Source
 </a>
-<a href="https://t.me/nostrocket" class={getClass('_')}>
+<a href="https://t.me/nostrocket" target="_blank" class={getClass('_')}>
 	<TelegramBrand class={iconClass} />
 	Telegram Group
 </a>
 <NotifyMe menu />
-<a href="{base}/help" class={getClass('help')}>
+<a href="{base}/help" class={getClass('help')} on:click={closeSheet}>
 	<HelpCircle class={iconClass} />
 	Help
 </a>
