@@ -102,58 +102,104 @@ export async function getCuckPrice(): Promise<number> {
 	});
 }
 
-export async function parseProblem(problem: string) {
-	if (!isGitHubUrl(problem)) {
-		return;
-	}
-
-	const apiURL = convertToGitHubApiUrl(problem);
-	if (!apiURL) {
-		return;
-	}
-
-	const response = await fetch(apiURL);
-	if (!response.ok) {
-		return;
-	}
-
-	const { title } = await response.json();
-	return title;
+interface CommitInfo {
+	count: number;
+	hash: string;
 }
 
-export function isGitHubUrl(str: string): boolean {
-	let url;
+interface GitHubUrlParts {
+	owner: string;
+	repo: string;
+	type?: 'issues' | 'pull';
+	number?: string;
+}
+
+class GitHubApiError extends Error {
+	constructor(
+		message: string,
+		public status?: number
+	) {
+		super(message);
+		this.name = 'GitHubApiError';
+	}
+}
+
+function parseGitHubUrl(url: URL): GitHubUrlParts {
+	const parts = url.pathname.split('/').filter(Boolean);
+	if (parts.length < 2) {
+		throw new Error('Invalid GitHub URL');
+	}
+	return {
+		owner: parts[0],
+		repo: parts[1],
+		type: parts[2] as 'issues' | 'pull' | undefined,
+		number: parts[3]
+	};
+}
+
+async function fetchGitHubApi(apiUrl: URL): Promise<any> {
+	const response = await fetch(apiUrl);
+	if (!response.ok) {
+		throw new GitHubApiError(`HTTP error! status: ${response.status}`, response.status);
+	}
+	return response.json();
+}
+
+export async function getCommit(url: URL): Promise<CommitInfo> {
 	try {
-		url = new URL(str);
+		const { owner, repo } = parseGitHubUrl(url);
+		const apiURL = new URL(`https://api.github.com/repos/${owner}/${repo}/commits`);
+		const json = await fetchGitHubApi(apiURL);
+
+		if (!json[0]?.sha) {
+			throw new GitHubApiError('Failed to fetch commit info: API returned unexpected data');
+		}
+
+		return {
+			count: json.length,
+			hash: json[0].sha
+		};
+	} catch (error) {
+		if (error instanceof GitHubApiError) {
+			throw error;
+		}
+		throw new Error(
+			`Failed to fetch commit info: ${error instanceof Error ? error.message : String(error)}`
+		);
+	}
+}
+
+export async function parseProblem(problem: string): Promise<string | undefined> {
+	if (!isGitHubIssuesOrPullUrl(problem)) {
+		return undefined;
+	}
+
+	try {
+		const { owner, repo, number } = parseGitHubUrl(new URL(problem));
+		const apiURL = new URL(`https://api.github.com/repos/${owner}/${repo}/issues/${number}`);
+		const { title } = await fetchGitHubApi(apiURL);
+		return title;
+	} catch (error) {
+		console.error('Failed to parse problem:', error);
+		return undefined;
+	}
+}
+
+export function isGitHubIssuesOrPullUrl(str: string): boolean {
+	try {
+		const url = new URL(str);
+		const { owner, repo, type, number } = parseGitHubUrl(url);
+		return (
+			url.hostname === 'github.com' &&
+			!!owner &&
+			!!repo &&
+			!!type &&
+			!!number &&
+			['issues', 'pull'].includes(type) &&
+			/^[1-9]\d*$/.test(number)
+		);
 	} catch {
 		return false;
-	}
-	const pathParts = url.pathname.split('/').filter(Boolean);
-
-	if (url.hostname !== 'github.com') {
-		return false;
-	}
-	if (pathParts.length !== 4) {
-		return false;
-	}
-	if (!['issues', 'pull'].includes(pathParts[2])) {
-		return false;
-	}
-	if (!/^[1-9]\d*$/.test(pathParts[3])) {
-		return false;
-	}
-	return true;
-}
-
-function convertToGitHubApiUrl(issueUrl: string): URL | null {
-	const url = new URL(issueUrl);
-	const [owner, repo, , issueNumber] = url.pathname.split('/').filter(Boolean);
-	try {
-		// Whether it's `issues` or `pull`, the API uses `issues`
-		return new URL(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}`);
-	} catch (error) {
-		console.error('URL conversion error:', error);
-		return null;
 	}
 }
 
