@@ -19,8 +19,13 @@
 	<Card.Header>
 		<Card.Title>
 			<div class="flex flex-nowrap items-stretch">
-				{rocket.Name()}<BadgeMaker right
-					><div slot="icon"><RocketIcon /></div>
+				<div>
+					{rocket.Name()}
+				</div>
+				<BadgeMaker right>
+					<div slot="icon">
+						<RocketIcon />
+					</div>
 					<div slot="content">
 						<div class="flex items-center gap-2">
 							<Avatar
@@ -35,29 +40,31 @@
 								class="inline-block truncate"
 							/>
 						</div>
-					</div></BadgeMaker
-				>
+					</div>
+				</BadgeMaker>
 			</div>
 		</Card.Title>
 		{#if rocket.Mission()}<Card.Description>MISSION: {rocket.Mission()}</Card.Description>
 		{/if}
 	</Card.Header>
 	<Card.Content>
-		<BadgeMaker
-			><div slot="icon"><ShoppingCart /></div>
-			<div slot="content">{rocket.Products().size}</div></BadgeMaker
-		>
-		<BadgeMaker
-			><div slot="icon"><BicepsFlexed /></div>
-			<div slot="content">{rocket.ApprovedMeritRequests().size}</div></BadgeMaker
-		>
-		<BadgeMaker
-			><div slot="icon"><User /></div>
-			<div slot="content">{rocket.Owners().size}</div></BadgeMaker
-		>
+		<div class="flex items-center justify-start gap-2">
+			<BadgeMaker
+				><div slot="icon"><ShoppingCart /></div>
+				<div slot="content">{rocket.Products().size}</div></BadgeMaker
+			>
+			<BadgeMaker
+				><div slot="icon"><BicepsFlexed /></div>
+				<div slot="content">{rocket.ApprovedMeritRequests().size}</div></BadgeMaker
+			>
+			<BadgeMaker
+				><div slot="icon"><User /></div>
+				<div slot="content">{rocket.Owners().size}</div></BadgeMaker
+			>
+		</div>
 	</Card.Content>
 	<Card.Footer>
-		<div class="flex flex-wrap justify-between gap-2 lg:gap-1">
+		<div class="flex w-full flex-col flex-wrap justify-between gap-2 lg:gap-1">
 			{#if $devmode}
 				<Button
 					on:click={() => {
@@ -66,6 +73,7 @@
 					variant="outline">Print to Console</Button
 				>{/if}
 			<Button
+				class="w-full"
 				on:click={() => {
 					goto(`${base}/rockets/${rocket.URL()}`);
 				}}>View Full Rocket <ChevronRight class="h-4 w-4" /></Button
