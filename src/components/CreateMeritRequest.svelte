@@ -4,7 +4,6 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Alert from '@/components/ui/alert';
-	import { Checkbox } from '@/components/ui/checkbox';
 	import Textarea from '@/components/ui/textarea/textarea.svelte';
 	import { ndk } from '@/ndk';
 	import { currentUser } from '@/stores/session';
@@ -14,7 +13,7 @@
 	import Todo from './Todo.svelte';
 	import { isValidUrl, Rocket } from '@/event_helpers/rockets';
 	import CalculateSats from './CalculateSats.svelte';
-	import { isGitHubUrl, parseProblem } from '@/helpers';
+	import { isGitHubIssuesOrPullUrl, parseProblem } from '@/helpers';
 	import Login from './Login.svelte';
 
 	export let rocket: Rocket;
@@ -50,7 +49,7 @@
 		}
 	}
 
-	$: if (isGitHubUrl(problem)) {
+	$: if (isGitHubIssuesOrPullUrl(problem)) {
 		parseProblem(problem).then((title) => {
 			if (title) {
 				problem = `${title}\n\n${problem}`;
