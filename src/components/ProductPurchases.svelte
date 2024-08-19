@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Button } from '@/components/ui/button';
 	import * as Table from '@/components/ui/table';
 	import { Product, Rocket, ValidateZapPublisher, ZapPurchase } from '@/event_helpers/rockets';
 	import { unixToRelativeTime } from '@/helpers';
@@ -81,6 +82,8 @@
 		});
 	});
 
+	let truncate = writable(true);
+
 	let validatedZapsNotInRocket = derived(
 		[zapsNotInRocket, validPubkeys],
 		([$zapsNotInRocket, $validPubkeys]) => {
@@ -91,6 +94,17 @@
 				}
 			}
 			return zapMap;
+		}
+	);
+
+	let validatedZapsNotInRocketTruncated = derived(
+		[validatedZapsNotInRocket, truncate],
+		([$validatedZapsNotInRocket, $truncate]) => {
+			let validatedZapsNotInRocketArray = Array.from($validatedZapsNotInRocket);
+			if (validatedZapsNotInRocketArray.length > 6 && $truncate) {
+				validatedZapsNotInRocketArray.length = 6;
+			}
+			return validatedZapsNotInRocketArray;
 		}
 	);
 
@@ -119,7 +133,7 @@
 		</Table.Row>
 	</Table.Header>
 	<Table.Body>
-		{#each $validatedZapsNotInRocket as [id, purchase], _ (id)}
+		{#each $validatedZapsNotInRocketTruncated as [id, purchase], _ (id)}
 			<Table.Row
 				on:click={() => {
 					console.log(purchase.ZapReceipt.rawEvent());
@@ -146,5 +160,14 @@
 				>
 			</Table.Row>
 		{/each}
+		{#if $validatedZapsNotInRocket.size > $validatedZapsNotInRocketTruncated.length}
+			<Button
+				class="mt-2 rounded-full"
+				on:click={() => {
+					truncate.set(false);
+				}}
+				>View {$validatedZapsNotInRocket.size - $validatedZapsNotInRocketTruncated.length} more</Button
+			>
+		{/if}
 	</Table.Body>
 </Table.Root>
