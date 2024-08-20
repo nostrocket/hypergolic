@@ -127,12 +127,24 @@
 		});
 	}
 
-	$: {
-		if (chartInstance && hoveredPubkey !== null) {
-			const index = data.findIndex((item) => item.pubkey === hoveredPubkey);
-			if (index !== -1) {
-				chartInstance.toggleDataPointSelection(index);
+	let prehoverdPubkey: string | null = null;
+
+	$: if (chartInstance) {
+		if (hoveredPubkey !== null) {
+			selectSlice(hoveredPubkey);
+			prehoverdPubkey = hoveredPubkey;
+		} else {
+			if (prehoverdPubkey) {
+				selectSlice(prehoverdPubkey);
+				prehoverdPubkey = null;
 			}
+		}
+	}
+
+	function selectSlice(pubkey: string) {
+		const index = data.findIndex((item) => item.pubkey === pubkey);
+		if (index !== -1) {
+			chartInstance.toggleDataPointSelection(index);
 		}
 	}
 </script>
