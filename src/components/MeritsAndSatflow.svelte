@@ -122,6 +122,16 @@
 	function c(i: number) {
 		return COLORS[i];
 	}
+
+	let hoveredPubkey: string | null = null;
+
+	function handleRowHover(pubkey: string) {
+		hoveredPubkey = pubkey;
+	}
+
+	function handleRowLeave() {
+		hoveredPubkey = null;
+	}
 </script>
 
 <Card.Root class="sm:col-span-3">
@@ -131,7 +141,7 @@
 			<div class="col-span-1">
 				This graph displays the Meritization of equity in {rocket.Name()}. These npubs own the {rocket.Name()}
 				satflow.
-				<Pie data={$merits} />
+				<Pie data={$merits} {hoveredPubkey} />
 			</div>
 
 			<Table.Root class="col-span-1 text-black">
@@ -144,7 +154,11 @@
 				</Table.Header>
 				<Table.Body>
 					{#each $merits as { pubkey, merits, sats }, i (pubkey)}
-						<Table.Row class="{c(i)} hover:{c(i)} hover:brightness-125 hover:contrast-150">
+						<Table.Row
+							class="{c(i)} hover:{c(i)} filter transition duration-300 hover:brightness-50"
+							on:mouseenter={() => handleRowHover(pubkey)}
+							on:mouseleave={handleRowLeave}
+						>
 							<Table.Cell>
 								<div class="flex flex-nowrap items-center gap-2">
 									<Avatar ndk={$ndk} {pubkey} class="h-8 w-8 flex-none rounded-full object-cover" />

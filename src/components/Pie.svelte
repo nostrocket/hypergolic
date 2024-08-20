@@ -1,12 +1,16 @@
 <script lang="ts">
 	import { ndk } from '@/ndk.js';
 	import { Chart } from 'flowbite-svelte';
+	import type { ApexOptions } from 'apexcharts';
 	import { writable } from 'svelte/store';
 	import { Toaster } from '$lib/components/ui/sonner';
+
 	export let data: { pubkey: string; merits: number; sats: number }[];
+	export let hoveredPubkey: string | null = null;
 
 	let pubkeys = Array.from(data, (x) => x.pubkey);
-	let options = {
+	let chartInstance: ApexCharts;
+	let options: ApexOptions = {
 		series: Array.from(data, (x) => x.merits),
 		colors: [
 			'#f43f5e',
@@ -23,11 +27,16 @@
 		chart: {
 			height: 320,
 			width: '100%',
-			type: 'donut'
+			type: 'donut',
+			events: {
+				mounted: function (chartContext, config) {
+					chartInstance = chartContext;
+				}
+			}
 		},
 		stroke: {
 			colors: ['transparent'],
-			lineCap: ''
+			lineCap: undefined
 		},
 		plotOptions: {
 			pie: {
@@ -45,7 +54,7 @@
 							label: 'Merit Distribution',
 							fontFamily: 'Inter, sans-serif',
 							formatter: function (w) {
-								const sum = w.globals.seriesTotals.reduce((a, b) => {
+								const sum = w.globals.seriesTotals.reduce((a: number, b: number) => {
 									return a + b;
 								}, 0);
 								return `${sum}`;
@@ -71,7 +80,7 @@
 		},
 		labels: ['Direct', 'Sponsor', 'Affiliate', 'Email marketing'],
 		dataLabels: {
-			enabled: false
+			enabled: true
 		},
 		legend: {
 			show: false,
@@ -118,21 +127,18 @@
 		});
 	}
 
-	//     <Card>
-	//     <div class="flex justify-between items-start w-full">
-	//       <div class="flex-col items-center">
-	//         <div class="flex items-center mb-1">
-	//           <h5 class="text-xl font-bold leading-none text-gray-900 dark:text-white me-1">Merit Distribution</h5>
-
-	//         </div>
-	//       </div>
-
-	//     </div>
-	// </Card>
+	$: {
+		if (chartInstance && hoveredPubkey !== null) {
+			const index = data.findIndex((item) => item.pubkey === hoveredPubkey);
+			if (index !== -1) {
+				chartInstance.toggleDataPointSelection(index);
+			}
+		}
+	}
 </script>
 
 <div class="relative h-full w-full">
-	<Chart options={$o} class="py-6" />
+	<Chart options={$o} class="py-6" bind:chart={chartInstance} />
 	<div class="absolute -top-10 left-1/2 z-20 w-[356px] -translate-x-1/2 transform">
 		<Toaster position="top-center" id="purchase" duration={3000} />
 	</div>
