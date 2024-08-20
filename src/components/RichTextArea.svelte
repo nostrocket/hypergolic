@@ -29,6 +29,8 @@
 			if (file) {
 				const blob = await uploadBlob(file, $userServers);
 
+				if (!blob) throw new Error('All servers failed');
+
 				// Insert the image URL into the textarea
 				const insert = blob.url;
 				const textarea = event.target as HTMLTextAreaElement;
