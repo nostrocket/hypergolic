@@ -4,7 +4,6 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Alert from '@/components/ui/alert';
-	import Textarea from '@/components/ui/textarea/textarea.svelte';
 	import { ndk } from '@/ndk';
 	import { currentUser } from '@/stores/session';
 	import { NDKEvent } from '@nostr-dev-kit/ndk';
@@ -15,6 +14,9 @@
 	import CalculateSats from './CalculateSats.svelte';
 	import { isGitHubIssuesOrPullUrl, parseProblem } from '@/helpers';
 	import Login from './Login.svelte';
+	import RichTextArea from './RichTextArea.svelte';
+	import UploadMediaLink from './UploadMediaLink.svelte';
+	import type { BlobDescriptor } from 'blossom-client-sdk';
 
 	export let rocket: Rocket;
 
@@ -102,6 +104,10 @@
 				);
 			});
 	}
+
+	function handleUploaded(event: CustomEvent<BlobDescriptor>) {
+		solution += `\n${event.detail.url}\n`;
+	}
 </script>
 
 <Dialog.Root bind:open>
@@ -123,7 +129,7 @@
 		<div class="grid gap-4 overflow-auto py-4">
 			<div class="grid grid-cols-4 items-center gap-4">
 				<Label for="name" class="text-right">Problem</Label>
-				<Textarea
+				<RichTextArea
 					bind:value={problem}
 					id="name"
 					placeholder="Describe the problem you solved, links to github are also acceptable"
@@ -132,12 +138,15 @@
 			</div>
 			<div class="grid grid-cols-4 items-center gap-4">
 				<Label for="desc" class="text-right">Solution (proof of work)</Label>
-				<Textarea
-					bind:value={solution}
-					id="desc"
-					placeholder="Link to your solution (e.g. a merged PR or some other evidence)"
-					class="col-span-3 {validateSolution(solution) ? 'border-green-700' : 'border-red-600'}"
-				/>
+				<div class="col-span-3">
+					<RichTextArea
+						bind:value={solution}
+						id="desc"
+						placeholder="Link to your solution (e.g. a merged PR or some other evidence)"
+						class={validateSolution(solution) ? 'border-green-700' : 'border-red-600'}
+					/>
+					<UploadMediaLink on:uploaded={handleUploaded}>Upload Image</UploadMediaLink>
+				</div>
 			</div>
 			<div class="grid grid-cols-4 items-center gap-4">
 				<Label for="sats" class="text-right">Value of your work (Sats)</Label>
