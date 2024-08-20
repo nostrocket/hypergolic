@@ -31,6 +31,10 @@
 	}
 
 	{
+		checkboxes.set(
+			'I believe the Problem is in the critical path to increased revenue, participation, or lulz.',
+			false
+		);
 		checkboxes.set('I believe this problem is worth solving', false);
 		checkboxes.set(
 			'I believe the Problem statement is a true and accurate observation of reality',
