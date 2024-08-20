@@ -1,5 +1,9 @@
 import { get, writable } from 'svelte/store';
-import { BlossomClient, getServersFromServerListEvent } from 'blossom-client-sdk';
+import {
+	BlossomClient,
+	getServersFromServerListEvent,
+	type BlobDescriptor
+} from 'blossom-client-sdk';
 import { ndk } from '../ndk';
 import { signEventTemplate } from './signer';
 
@@ -19,18 +23,25 @@ export async function uploadBlob(file: File, servers?: URL[]) {
 
 	const sha256 = await BlossomClient.getFileSha256(file);
 	const auth = await BlossomClient.createUploadAuth(sha256, signEventTemplate, 'Upload Image');
-	const blob = await BlossomClient.uploadBlob(servers[0], file, auth);
+
+	let blob: BlobDescriptor | undefined = undefined;
 
 	// mirror blob to other servers in background
-	for (const server of servers.slice(1)) {
-		BlossomClient.mirrorBlob(server, blob.url, auth)
-			.catch((err) => {
-				// not all servers support mirroring, so attempt to upload
-				return BlossomClient.uploadBlob(server, file, auth);
-			})
-			.catch((error) => {
-				// upload filed, ignore error
-			});
+	for (const server of servers) {
+		try {
+			if (!blob) {
+				// if blob is not set, try to upload it
+				blob = await BlossomClient.uploadBlob(server, file, auth);
+			} else {
+				// else try to mirror it to the server
+				await BlossomClient.mirrorBlob(server, blob.url, auth).catch((err) => {
+					// not all servers support mirroring, so attempt to upload
+					return BlossomClient.uploadBlob(server, file, auth);
+				});
+			}
+		} catch (error) {
+			// ignore error
+		}
 	}
 
 	return blob;

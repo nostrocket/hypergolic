@@ -22,6 +22,9 @@
 			try {
 				dispatch('uploading');
 				const blob = await uploadBlob(file, $userServers);
+
+				if (!blob) throw new Error('All servers failed');
+
 				dispatch('uploaded', blob);
 			} catch (error) {
 				if (error instanceof Error) alert(`Failed to upload image: ${error.message}`);
