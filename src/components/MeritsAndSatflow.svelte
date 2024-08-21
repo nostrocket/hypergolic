@@ -10,9 +10,12 @@
 	import { toast } from 'svelte-sonner';
 	import { onMount } from 'svelte';
 	import PurchaseToast from './PurchaseToast.svelte';
+	import ProductCard from './ProductCard.svelte';
 	import { devmode } from '@/stores/session';
 	import Button from '@/components/ui/button/button.svelte';
+	import * as HoverCard from '$lib/components/ui/hover-card';
 	import { sleep } from '@/helpers';
+	import ProfileCard from './ProfileCard.svelte';
 
 	export let rocket: Rocket;
 	export let unratifiedZaps: Map<string, ZapPurchase>;
@@ -160,14 +163,25 @@
 							on:mouseleave={handleRowLeave}
 						>
 							<Table.Cell>
-								<div class="flex flex-nowrap items-center gap-2">
-									<Avatar ndk={$ndk} {pubkey} class="h-8 w-8 flex-none rounded-full object-cover" />
-									<Name
-										ndk={$ndk}
-										{pubkey}
-										class="hidden max-w-32 truncate p-1 font-mono text-white dark:text-black md:inline-block"
-									/>
-								</div>
+								<HoverCard.Root>
+									<HoverCard.Trigger>
+										<div class="flex flex-nowrap items-center gap-2">
+											<Avatar
+												ndk={$ndk}
+												{pubkey}
+												class="h-8 w-8 flex-none rounded-full object-cover"
+											/>
+											<Name
+												ndk={$ndk}
+												{pubkey}
+												class="hidden max-w-32 truncate p-1 font-mono text-white dark:text-black md:inline-block"
+											/>
+										</div>
+									</HoverCard.Trigger>
+									<HoverCard.Content>
+										<ProfileCard {pubkey} />
+									</HoverCard.Content>
+								</HoverCard.Root>
 							</Table.Cell>
 							<Table.Cell
 								class="table-cell text-pretty font-mono font-extrabold text-white dark:text-gray-900"
