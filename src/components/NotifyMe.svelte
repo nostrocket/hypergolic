@@ -10,7 +10,7 @@
 	import { currentUser } from '@/stores/session';
 	import Login from './Login.svelte';
 	import { NDKPrivateKeySigner, NDKUser } from '@nostr-dev-kit/ndk';
-	import { TelegramBrand } from 'svelte-awesome-icons';
+	import { ExclamationSolid, TelegramBrand, TriangleExclamationSolid } from 'svelte-awesome-icons';
 	import { RefreshCcw } from 'lucide-svelte';
 
 	export let menu = false;
@@ -84,18 +84,18 @@
 		{#if !menu}
 			<Badge
 				href="#"
-				variant="nostr"
+				variant="destructive"
 				class="flex h-8 shrink-0 items-center justify-center rounded-sm"
 			>
-				u r so early
+				<TriangleExclamationSolid class="h-5 w-5 md:h-4 md:w-4" />
 			</Badge>
 		{:else}
 			<a
 				href="#"
 				class="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary"
 			>
-				<RefreshCcw class="h-5 w-5 md:h-4 md:w-4" />
-				Subscribe to Updates
+				<TriangleExclamationSolid class="h-5 w-5 md:h-4 md:w-4" />
+				Nostrocket is broken
 			</a>
 		{/if}
 	</Dialog.Trigger>
