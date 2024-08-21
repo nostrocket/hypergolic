@@ -384,7 +384,7 @@ export class Rocket {
 		}
 		return event;
 	}
-	UpsertProduct(id: string, price: number, maxSales?: number): NDKEvent {
+	UpsertProduct(id: string, price: number, maxSales?: number, validAfter?: number): NDKEvent {
 		this.PrepareForUpdate(id);
 		let event = new NDKEvent(this.Event.ndk, this.Event.rawEvent());
 		event.created_at = Math.floor(new Date().getTime() / 1000);
@@ -394,9 +394,14 @@ export class Rocket {
 		if (existingProduct) {
 			purchases = existingProduct.PurchasesJSON();
 		}
+		let _validAfter = event.created_at;
+		if (validAfter) {
+			_validAfter = validAfter;
+		}
+		console.log(401, _validAfter);
 		event.tags.push([
 			'product',
-			`${id}:${price}:${event.created_at}:${maxSales}`,
+			`${id}:${price}:${_validAfter}:${maxSales}`,
 			'wss://relay.nostrocket.org',
 			purchases
 		]);
@@ -570,6 +575,13 @@ export class RocketProduct {
 	}
 	ValidAfter(): number {
 		return parseInt(this.tag[1].split(':')[2], 10);
+	}
+	TimeTillValid(): number {
+		return this.ValidAfter() - Math.floor(new Date().getTime() / 1000);
+	}
+	ValidNow(): boolean {
+		let valid = this.TimeTillValid() < 1;
+		return valid;
 	}
 	MaxPurchases(): number {
 		return parseInt(this.tag[1].split(':')[3], 10);

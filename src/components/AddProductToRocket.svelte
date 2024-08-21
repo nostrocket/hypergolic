@@ -16,9 +16,9 @@
 	export let product: Product;
 	export let rocket: Rocket;
 
-
 	let price: number = 0;
 	let max: number = 0;
+	let validAfter: number = 0;
 
 	let o = false;
 
@@ -33,12 +33,18 @@
 		if (rocket.Event.author.pubkey != author.pubkey) {
 			throw new Error(`${author.pubkey} is not the creator of this rocket`);
 		}
-		let event = rocket.UpsertProduct(product.ID(), price, max);
-		event.ndk = $ndk
-		event.publish().then((x) => {
-			console.log(x);
-			o = false
-		}).catch(()=>{ console.log("failed to publish", event.rawEvent())});
+		console.log(37, validAfter);
+		let event = rocket.UpsertProduct(product.ID(), price, max, validAfter);
+		event.ndk = $ndk;
+		event
+			.publish()
+			.then((x) => {
+				console.log(x);
+				o = false;
+			})
+			.catch(() => {
+				console.log('failed to publish', event.rawEvent());
+			});
 	}
 </script>
 
@@ -71,6 +77,15 @@
 					bind:value={max}
 					id="max"
 					placeholder="Maximum number that can be sold"
+					class="col-span-3"
+				/>
+			</div>
+			<div class="grid grid-cols-4 items-center gap-4">
+				<Label for="validAfter" class="text-right">Valid After</Label>
+				<Input
+					bind:value={validAfter}
+					id="validAfter"
+					placeholder="Cannot be purchased before this time (unix)"
 					class="col-span-3"
 				/>
 			</div>

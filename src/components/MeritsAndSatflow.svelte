@@ -39,7 +39,6 @@
 	}
 
 	function checkNewZaps() {
-		console.log(39);
 		const currentTime = Date.now() / 1000;
 		const recentZaps = Array.from(unratifiedZaps.values()).filter(
 			(zap) =>

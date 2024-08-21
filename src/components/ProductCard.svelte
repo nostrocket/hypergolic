@@ -23,8 +23,23 @@
 		if (!product.Validate()) {
 			throw new Error('this should not happen');
 		}
-		//productFromRocket = rocket.Products().get(product.ID());
 	});
+
+	function disabled(productFromRocket: RocketProduct): boolean {
+		let disabled = false;
+		if (!productFromRocket?.ValidNow()) {
+			disabled = true;
+		}
+		if (
+			productFromRocket.MaxPurchases() > 0 &&
+			productFromRocket.MaxPurchases() - zapsForThisProduct(productFromRocket!).size == 0
+		) {
+			disabled = true;
+		}
+		return disabled;
+		// productFromRocket.MaxPurchases() > 0 &&
+		// productFromRocket.MaxPurchases() - zapsForThisProduct(productFromRocket).size == 0 && !productFromRocket.ValidNow()
+	}
 
 	function zapsForThisProduct(product: RocketProduct): Map<string, ZapPurchase> {
 		let m = new Map<string, ZapPurchase>();
@@ -84,8 +99,7 @@
 					</div>
 				{/if}
 				<PayNow
-					disabled={productFromRocket.MaxPurchases() > 0 &&
-						productFromRocket.MaxPurchases() - zapsForThisProduct(productFromRocket).size == 0}
+					disabled={disabled(productFromRocket)}
 					{product}
 					rocketProduct={rocket.Products().get(product.ID())}
 					{rocket}
@@ -102,7 +116,13 @@
 								'max purchases',
 								productFromRocket.MaxPurchases(),
 								'price',
-								productFromRocket.Price()
+								productFromRocket.Price(),
+								'valid after',
+								productFromRocket.ValidAfter(),
+								'seconds till valid',
+								productFromRocket.TimeTillValid(),
+								'validNow',
+								productFromRocket.ValidNow()
 							);
 						}
 					}}>print product</a
