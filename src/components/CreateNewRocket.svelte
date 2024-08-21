@@ -1,27 +1,26 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import { Button, buttonVariants } from '$lib/components/ui/button/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
-	import { ndk } from '@/ndk';
-	import { currentUser } from '@/stores/session';
-	import { Info, Terminal } from 'lucide-svelte';
 	import * as Alert from '@/components/ui/alert';
-	import type NDKSvelte from '@nostr-dev-kit/ndk-svelte';
-	import { NDKEvent } from '@nostr-dev-kit/ndk';
-	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
 	import { getRocketURL } from '@/helpers';
+	import { ndk } from '@/ndk';
+	import { BitcoinTipTag } from '@/stores/bitcoin';
+	import { currentUser } from '@/stores/session';
+	import { NDKEvent } from '@nostr-dev-kit/ndk';
+	import type NDKSvelte from '@nostr-dev-kit/ndk-svelte';
 	import type { NDKEventStore } from '@nostr-dev-kit/ndk-svelte';
+	import { Info, Terminal } from 'lucide-svelte';
 	import { onDestroy } from 'svelte';
 	import { writable } from 'svelte/store';
-	import { BitcoinTipTag } from '@/stores/bitcoin';
-	import { Description } from 'formsnap';
 
 	let rockets: NDKEventStore<NDKEvent> | undefined;
 	const rocketsStore = writable<NDKEvent[]>([]);
 	let name: string = '';
-	$: nameInValid = true;
+	$: nameInvalid = true;
 	$: nameError = '';
 
 	rockets = $ndk.storeSubscribe([{ kinds: [31108 as number] }], { subId: 'rockets' });
@@ -34,6 +33,18 @@
 		});
 	}
 
+	let userHasProfile = false;
+	$: {
+		if (!userHasProfile && $currentUser) {
+			$currentUser.fetchProfile().then((r) => {
+				if (r && (r.lud06 || r.lud16) && (r.name || r.displayName) && r.image) {
+					userHasProfile = true;
+				}
+			});
+		}
+		userHasProfile = userHasProfile;
+	}
+
 	const rocketNameValidator = /^\w{4,20}$/;
 	const nameIsUnique = (name: string, rocketEvents: NDKEvent[]) => {
 		return !rocketEvents.some((event) => event.tags[0][1] === name);
@@ -41,16 +52,16 @@
 
 	$: if (name) {
 		if (!rocketNameValidator.test(name)) {
-			nameInValid = true;
+			nameInvalid = true;
 			nameError = 'Rocket names MUST be 4-20 alphanumeric characters';
 		} else if (!$rocketsStore) {
-			nameInValid = true;
-			nameError = 'Loading Nostr';
+			// nameInvalid = true;
+			// nameError = 'Loading Nostr';
 		} else if (!nameIsUnique(name, $rocketsStore)) {
-			nameInValid = true;
-			nameError = 'Rocket names MUST be unique';
+			// nameInvalid = true;
+			// nameError = 'Rocket names MUST be unique';
 		} else {
-			nameInValid = false;
+			nameInvalid = false;
 			nameError = '';
 		}
 	}
@@ -64,7 +75,7 @@
 		if (!author) {
 			throw new Error('no current user');
 		}
-		if (nameInValid) {
+		if (nameInvalid) {
 			throw new Error('name is invalid');
 		}
 		e.author = author;
@@ -89,7 +100,7 @@
 	<Dialog.Content class="sm:max-w-[425px]">
 		<Dialog.Header>
 			<Dialog.Title>Name Your Rocket</Dialog.Title>
-			{#if !currentUser}
+			{#if !$currentUser}
 				<Alert.Root>
 					<Terminal class="h-4 w-4" />
 					<Alert.Title>Heads up!</Alert.Title>
@@ -102,9 +113,7 @@
 				>Choose a name for your new Rocket and click Publish.
 				<Alert.Root
 					><Info class="h-4 w-4" /><Alert.Title>Heads up!</Alert.Title><Alert.Description
-						>If you just want to test things out, include the characters <span class="font-mono"
-							>test</span
-						> somewhere in the name.</Alert.Description
+						>You are early, you can only create testnet rockets right now.</Alert.Description
 					></Alert.Root
 				></Dialog.Description
 			>
@@ -118,9 +127,9 @@
 		<div class="m-0 p-0 text-sm text-red-500">{nameError}</div>
 		<Dialog.Footer>
 			<Button
-				disabled={nameInValid}
+				disabled={nameInvalid || !$currentUser}
 				on:click={() => {
-					publish($ndk, name);
+					publish($ndk, name + '-test');
 				}}
 				type="submit">Publish</Button
 			>
