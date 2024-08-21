@@ -102,7 +102,7 @@
 		<Table.Root>
 			<Table.Header>
 				<Table.Row>
-					<Table.Head class="w-[100px]">Contributor</Table.Head>
+					<Table.Head class="w-[60px] md:w-[160px]">Contributor</Table.Head>
 					<Table.Head class="hidden text-left md:table-cell">Problem</Table.Head>
 					<Table.Head class="table-cell">Amount (Sats)</Table.Head>
 					<Table.Head class="table-cell">Merits</Table.Head>
