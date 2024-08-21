@@ -1,11 +1,17 @@
 <script lang="ts">
 	import { AMRAuction, MeritPurchase, Rocket } from '@/event_helpers/rockets';
 	import { ndk } from '@/ndk';
-	import { bitcoinTip, getIncomingTransactions, txs } from '@/stores/bitcoin';
+	import {
+		bitcoinTip,
+		createTransactionsStore,
+		getIncomingTransactions,
+		transactions,
+		txs
+	} from '@/stores/bitcoin';
 	import { currentUser } from '@/stores/session';
 	import { NDKEvent } from '@nostr-dev-kit/ndk';
 	import { onDestroy } from 'svelte';
-	import { derived } from 'svelte/store';
+	import { derived, writable } from 'svelte/store';
 	import AssociateBitcoinAddress from '../../components/AssociateBitcoinAddress.svelte';
 	import BuyAmrCard from '../../components/BuyAMRCard.svelte';
 	import Login from '../../components/Login.svelte';
@@ -51,37 +57,11 @@
 		return { mainnet: mainnetMerits, testnet: testnetMerits };
 	});
 
-	let _transactions = new Map<string, txs>();
-	let transactions = derived(pendingSales, ($pendingSales) => {
-		for (let network of ['mainnet', 'testnet'] as const) {
-			for (let [r, s] of $pendingSales[network]) {
-				for (let amr of s) {
-					if (!_transactions.get(amr.RxAddress)) {
-						_transactions.set(amr.RxAddress, new txs(amr.RxAddress));
-					}
-					let existing = _transactions.get(amr.RxAddress)!;
-					if (Math.floor(new Date().getTime() / 1000) > existing.LastAttempt + 10000) {
-						existing.LastAttempt = Math.floor(new Date().getTime() / 1000);
-						getIncomingTransactions(amr.RxAddress)
-							.then((result) => {
-								if (result) {
-									existing.LastUpdate = Math.floor(new Date().getTime() / 1000);
-								}
-								if (result.length > 0) {
-									existing.Data = result;
-									_transactions.set(amr.RxAddress, existing);
-									_transactions = _transactions;
-								}
-							})
-							.catch((c) => {
-								console.log(c);
-							});
-					}
-				}
-			}
+	$: {
+		if ($pendingSales) {
+			transactions.updateTransactions($pendingSales);
 		}
-		return _transactions;
-	});
+	}
 
 	let nextSoldButNotInState = derived(
 		[pendingSales, transactions, bitcoinTip, currentUser],
@@ -145,8 +125,6 @@
 		}
 		return rocket;
 	});
-
-	transactions.subscribe((t) => {});
 </script>
 
 {#if $nostrocket}

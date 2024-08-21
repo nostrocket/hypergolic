@@ -1,3 +1,4 @@
+import type { AMRAuction, Rocket } from '@/event_helpers/rockets';
 import validate from 'bitcoin-address-validation';
 import { get, writable } from 'svelte/store';
 
@@ -183,4 +184,75 @@ export class txo {
 	Height: number;
 	Change: string;
 	constructor() {}
+}
+
+interface PendingSales {
+	mainnet: Map<Rocket, AMRAuction[]>;
+	testnet: Map<Rocket, AMRAuction[]>;
+}
+
+export const transactions = createTransactionsStore();
+
+export function createTransactionsStore() {
+	const { subscribe, update } = writable(new Map<string, txs>());
+
+	async function updateTransactionForAddress(address: string, transactions: Map<string, txs>) {
+		if (!transactions.has(address)) {
+			transactions.set(address, new txs(address));
+		}
+		let existingTx = transactions.get(address)!;
+		const currentTime = Math.floor(Date.now() / 1000);
+
+		if (currentTime > existingTx.LastAttempt + 3) {
+			existingTx.LastAttempt = currentTime;
+			try {
+				const result = await getIncomingTransactions(address);
+				if (result) {
+					existingTx.LastUpdate = Math.floor(Date.now() / 1000);
+					if (result.length > 0) {
+						existingTx.Data = result;
+						return true;
+					}
+				}
+			} catch (error) {
+				console.error(`Error fetching transactions for ${address}:`, error);
+			}
+		}
+		return false;
+	}
+
+	async function processNetwork(
+		network: 'mainnet' | 'testnet',
+		pendingSales: PendingSales,
+		transactions: Map<string, txs>
+	) {
+		let hasUpdates = false;
+		for (let [_, sales] of pendingSales[network]) {
+			for (let amr of sales) {
+				if (await updateTransactionForAddress(amr.RxAddress, transactions)) {
+					hasUpdates = true;
+				}
+			}
+		}
+		return hasUpdates;
+	}
+
+	return {
+		subscribe,
+		updateTransactions: async (pendingSales: PendingSales) => {
+			let hasUpdates = false;
+			await update((transactions) => {
+				processNetwork('mainnet', pendingSales, transactions).then((updated) => {
+					if (updated) hasUpdates = true;
+				});
+				processNetwork('testnet', pendingSales, transactions).then((updated) => {
+					if (updated) hasUpdates = true;
+				});
+				return transactions;
+			});
+			if (hasUpdates) {
+				update((transactions) => transactions);
+			}
+		}
+	};
 }
