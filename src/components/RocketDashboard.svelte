@@ -39,7 +39,7 @@
 		<ProposedProducts rocket={new Rocket(rocket)} />
 
 		<MeritRequests rocket={new Rocket(rocket)} />
-		<BitcoinAssociations rocket={new Rocket(rocket)} />
+		<!-- <BitcoinAssociations rocket={new Rocket(rocket)} /> -->
 		<Card.Root class="sm:col-span-3">
 			<Card.Header class="pb-3">
 				<Card.Title class="pb-4">Actions</Card.Title>
