@@ -6,10 +6,11 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Alert from '@/components/ui/alert';
+	import Checkbox from '@/components/ui/checkbox/checkbox.svelte';
 	import { getRocketURL } from '@/helpers';
 	import { ndk } from '@/ndk';
 	import { BitcoinTipTag } from '@/stores/bitcoin';
-	import { currentUser } from '@/stores/session';
+	import { currentUser, devmode, mainnet } from '@/stores/session';
 	import { NDKEvent } from '@nostr-dev-kit/ndk';
 	import type NDKSvelte from '@nostr-dev-kit/ndk-svelte';
 	import type { NDKEventStore } from '@nostr-dev-kit/ndk-svelte';
@@ -125,11 +126,18 @@
 			</div>
 		</div>
 		<div class="m-0 p-0 text-sm text-red-500">{nameError}</div>
+		{#if $devmode}
+			<Checkbox
+				on:click={() => {
+					mainnet.set(true);
+				}}
+			/>
+		{/if}
 		<Dialog.Footer>
 			<Button
 				disabled={nameInvalid || !$currentUser}
 				on:click={() => {
-					publish($ndk, name + '-test');
+					publish($ndk, `${name}${$mainnet ? '' : '-test'}`);
 				}}
 				type="submit">Publish</Button
 			>

@@ -11,3 +11,4 @@ export async function prepareUserSession(ndk: NDKSvelte, user: NDKUser): Promise
 }
 
 export const devmode = writable(false);
+export const mainnet = writable(false);
