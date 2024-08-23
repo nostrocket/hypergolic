@@ -9,6 +9,16 @@ npm install
 npm run dev
 ```
 
+### Docker 
+```bash
+git clone https://github.com/aljazceru/hypergolic.git
+cd hypergolic 
+docker build . -t hypergolic
+docker run -p 5173:5173 hypergolic 
+# open http://localhost:5173 in browser
+```
+
+
 ## Pull Requests
 
 Please only solve ONE problem at a time.
