@@ -25,7 +25,7 @@
 	<div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
 		<Card.Root class="flex h-full w-full flex-col">
 			<Card.Header>
-				<Card.Title>Nostriga Presentaton</Card.Title>
+				<Card.Title>Nostriga Keynote Talk</Card.Title>
 				<Card.Description
 					>Watch this presentation to understand why and how we nostrocket</Card.Description
 				>
