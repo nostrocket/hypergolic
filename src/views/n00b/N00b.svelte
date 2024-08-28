@@ -25,6 +25,36 @@
 	<div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
 		<Card.Root class="flex h-full w-full flex-col">
 			<Card.Header>
+				<Card.Title>Nostriga Presentaton</Card.Title>
+				<Card.Description
+					>Watch this presentation to understand why and how we nostrocket</Card.Description
+				>
+			</Card.Header>
+			<iframe
+				class="h-full w-full"
+				src="https://www.youtube.com/embed/ddvHagjmRJY?start=28"
+				allow="autoplay"
+			></iframe>
+			<Card.Content class="grid gap-4 !pt-2">
+				<div>
+					<ul class="ml-6 list-disc [&>li]:mt-2">
+						<li>Bitcoin's only value proposition is that it is not permissioned by the State</li>
+						<li>
+							Bitcoin companies are permissioned by the State, there is no separation of money and
+							state for companies
+						</li>
+						<li>
+							Bitcoin defunds the State, so the State is going to rug every single one of these
+							companies
+						</li>
+						<li>nostr fixes this</li>
+					</ul>
+				</div>
+			</Card.Content>
+			<Card.Footer class="mt-auto"></Card.Footer>
+		</Card.Root>
+		<Card.Root class="flex h-full w-full flex-col">
+			<Card.Header>
 				<Card.Title>Proof of Work</Card.Title>
 				<Card.Description>I want to work for sats</Card.Description>
 			</Card.Header>
