@@ -5,7 +5,7 @@
 	import { currentUser } from '@/stores/session';
 	import { NDKEvent } from '@nostr-dev-kit/ndk';
 	import { onDestroy } from 'svelte';
-	import { derived } from 'svelte/store';
+	import { derived, writable } from 'svelte/store';
 	import AssociateBitcoinAddress from '../../components/AssociateBitcoinAddress.svelte';
 	import BuyAmrCard from '../../components/BuyAMRCard.svelte';
 	import Login from '../../components/Login.svelte';
@@ -51,15 +51,18 @@
 		return { mainnet: mainnetMerits, testnet: testnetMerits };
 	});
 
-	let _transactions = new Map<string, txs>();
+	let _transactions = writable(new Map<string, txs>());
 	let transactions = derived(pendingSales, ($pendingSales) => {
 		for (let network of ['mainnet', 'testnet'] as const) {
 			for (let [r, s] of $pendingSales[network]) {
 				for (let amr of s) {
-					if (!_transactions.get(amr.RxAddress)) {
-						_transactions.set(amr.RxAddress, new txs(amr.RxAddress));
+					if (!$_transactions.has(amr.RxAddress)) {
+						_transactions.update((map) => {
+							map.set(amr.RxAddress, new txs(amr.RxAddress));
+							return map;
+						});
 					}
-					let existing = _transactions.get(amr.RxAddress)!;
+					let existing = $_transactions.get(amr.RxAddress)!;
 					if (Math.floor(new Date().getTime() / 1000) > existing.LastAttempt + 10000) {
 						existing.LastAttempt = Math.floor(new Date().getTime() / 1000);
 						getIncomingTransactions(amr.RxAddress)
@@ -67,10 +70,14 @@
 								if (result) {
 									existing.LastUpdate = Math.floor(new Date().getTime() / 1000);
 								}
-								if (result.length > 0) {
-									existing.Data = result;
-									_transactions.set(amr.RxAddress, existing);
-									_transactions = _transactions;
+								if (Array.isArray(result)) {
+									if (result.length > 0) {
+										existing.Data = result;
+										_transactions.update((map) => {
+											map.set(amr.RxAddress, existing);
+											return map;
+										});
+									}
 								}
 							})
 							.catch((c) => {
@@ -83,9 +90,11 @@
 		return _transactions;
 	});
 
+	transactions.subscribe((t) => {});
+
 	let nextSoldButNotInState = derived(
-		[pendingSales, transactions, bitcoinTip, currentUser],
-		([$pendingSales, $transactions, $bitcoinTip, $currentUser]) => {
+		[pendingSales, _transactions, bitcoinTip, currentUser],
+		([$pendingSales, $_transactions, $bitcoinTip, $currentUser]) => {
 			if ($currentUser) {
 				for (let network of ['mainnet', 'testnet'] as const) {
 					for (let [r, p] of $pendingSales[network]) {
@@ -95,10 +104,10 @@
 									amrAuction.Status(
 										r,
 										$bitcoinTip.height,
-										$transactions.get(amrAuction.RxAddress)
+										$_transactions.get(amrAuction.RxAddress)
 									) == 'SOLD & PENDING RATIFICATION'
 								) {
-									let txs = $transactions.get(amrAuction.RxAddress);
+									let txs = $_transactions.get(amrAuction.RxAddress);
 									if (txs) {
 										for (let [address, txo] of txs.From()) {
 											for (let [_, ba] of r.BitcoinAssociations()) {
@@ -145,8 +154,6 @@
 		}
 		return rocket;
 	});
-
-	transactions.subscribe((t) => {});
 </script>
 
 {#if $nostrocket}
@@ -162,14 +169,14 @@
 		<Tabs.Content value="mainnet">
 			{#each $pendingSales.mainnet as [rocket, amr] (rocket.Event.id)}
 				{#if amr.length > 0}
-					<BuyAmrCard {rocket} {amr} transactions={$transactions} />
+					<BuyAmrCard {rocket} {amr} transactions={$_transactions} />
 				{/if}
 			{/each}
 		</Tabs.Content>
 		<Tabs.Content value="testnet">
 			{#each $pendingSales.testnet as [rocket, amr] (rocket.Event.id)}
 				{#if amr.length > 0}
-					<BuyAmrCard {rocket} {amr} transactions={$transactions} />
+					<BuyAmrCard {rocket} {amr} transactions={$_transactions} />
 				{/if}
 			{/each}
 		</Tabs.Content>
