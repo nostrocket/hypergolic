@@ -10,12 +10,9 @@
 	import { Label } from '$lib/components/ui/label/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import { devmode, currentUser } from '@/stores/session';
-	import {
-		buildNoteTree,
-		HELP_THREAD_ROOT_EVENT_ID,
-		prepareQuestionNoteEvent
-	} from '@/event_helpers/help_thread';
+	import { buildNoteTree, prepareQuestionNoteEvent } from '@/event_helpers/help_thread';
 	import type NDKSvelte from '@nostr-dev-kit/ndk-svelte';
+	import { HELP_THREAD_ROOT_EVENT_ID } from '@/consts';
 
 	let notes = $ndk.storeSubscribe({
 		kinds: [1 as NDKKind],

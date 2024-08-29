@@ -709,6 +709,35 @@ export class ZapPurchase {
 	}
 }
 
+export class ZapRocketNamePurchase {
+	Amount: number;
+	RocketName: string | undefined;
+	BuyerPubkey: string;
+	ZapReceipt: NDKEvent;
+	ZapRequest(): NDKEvent | undefined {
+		return getZapRequest(this.ZapReceipt);
+	}
+	Valid(): boolean {
+		//todo: validate zapper pubkey is from a LSP specified in rocket
+		let valid = true;
+		if (this.BuyerPubkey.length != 64) {
+			valid = false;
+		}
+		return valid;
+	}
+	constructor(zapReceipt: NDKEvent) {
+		this.ZapReceipt = zapReceipt;
+		this.Amount = getZapAmount(this.ZapRequest());
+		let zapRequest = this.ZapRequest();
+		if (zapRequest) {
+			this.BuyerPubkey = zapRequest.pubkey;
+			if (zapRequest.tagValue('name')) {
+				this.RocketName = zapRequest.tagValue('name');
+			}
+		}
+	}
+}
+
 function getZapRequest(zapReceipt: NDKEvent): NDKEvent | undefined {
 	let zapRequestEvent: NDKEvent | undefined = undefined;
 	let zapRequest = zapReceipt.getMatchingTags('description');

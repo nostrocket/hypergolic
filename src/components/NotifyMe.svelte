@@ -12,6 +12,7 @@
 	import { NDKPrivateKeySigner, NDKUser } from '@nostr-dev-kit/ndk';
 	import { ExclamationSolid, TelegramBrand, TriangleExclamationSolid } from 'svelte-awesome-icons';
 	import { RefreshCcw } from 'lucide-svelte';
+	import { NOSTROCKET_PUBKEY } from '@/consts';
 
 	export let menu = false;
 
@@ -50,7 +51,7 @@
 
 	async function publishEncryptedDirectMessage(content: string) {
 		const RECEIVER = new NDKUser({
-			pubkey: 'd91191e30e00444b942c0e82cad470b32af171764c2275bee0bd99377efd4075'
+			pubkey: NOSTROCKET_PUBKEY
 		});
 
 		const originalSigner = $ndk.signer;
