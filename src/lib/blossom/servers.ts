@@ -7,13 +7,15 @@ import {
 import { ndk } from '../ndk';
 import { signEventTemplate } from './signer';
 
+const defaultBlossomServer = new URL('https://cdn.nostrcheck.me/');
+
 export const userServers = writable<URL[]>([]);
 
 export async function fetchUsersServers(pubkey: string) {
 	const ndkSvelte = get(ndk);
 
 	const event = await ndkSvelte.fetchEvent({ kinds: [10063 as number], authors: [pubkey] });
-	if (!event) userServers.set([]);
+	if (!event) userServers.set([defaultBlossomServer]);
 	else userServers.set(getServersFromServerListEvent(event));
 }
 
