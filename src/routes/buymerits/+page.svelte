@@ -13,6 +13,7 @@
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import * as Tabs from '$lib/components/ui/tabs/index.js';
+	import { NOSTROCKET_PUBKEY } from '@/consts';
 
 	let rocketEvents = $ndk.storeSubscribe([{ kinds: [31108 as number] }], { subId: 'all_rockets' });
 
@@ -142,10 +143,7 @@
 	let nostrocket = derived(rockets, ($rockets) => {
 		let rocket: Rocket | undefined = undefined;
 		for (let r of $rockets) {
-			if (
-				r.Name() == 'NOSTROCKET' &&
-				r.Event.pubkey == 'd91191e30e00444b942c0e82cad470b32af171764c2275bee0bd99377efd4075'
-			) {
+			if (r.Name() == 'NOSTROCKET' && r.Event.pubkey == NOSTROCKET_PUBKEY) {
 				//we consume the current list of bitcoin addresses from Nostrocket as a service so that users don't need to add a new address for every rocket
 				//todo: make this dependent on votepower not my pubkey
 				//todo: also allow rockets to have their own list of addresses so they can be used without nostrocket

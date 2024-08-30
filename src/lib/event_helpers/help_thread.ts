@@ -1,11 +1,7 @@
+import { HELP_THREAD_ROOT_AUTHOR_PUBKEY, HELP_THREAD_ROOT_EVENT_ID } from '@/consts';
 import { prepareNostrEvent } from '@/helpers';
 import { NDKKind, type NDKEvent } from '@nostr-dev-kit/ndk';
 import type NDKSvelte from '@nostr-dev-kit/ndk-svelte';
-
-export const HELP_THREAD_ROOT_EVENT_ID =
-	'850941b4b8259aea64fef1e5083dd81af0d9bf1bcf3df6e370bdddbc6f819f4c';
-const HELP_THREAD_ROOT_AUTHOR_PUBKEY =
-	'd91191e30e00444b942c0e82cad470b32af171764c2275bee0bd99377efd4075';
 
 export interface TreeNote {
 	id: string;
