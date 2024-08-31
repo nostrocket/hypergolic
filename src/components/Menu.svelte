@@ -76,11 +76,9 @@
 	Dev Mode
 </a>
 <Separator class="dark:bg-slate-700" />
-{#if $devmode}
-	<span class="m-2 flex flex-col border border-orange-500 p-1 font-mono text-sm">
-		<span class="text-center">RELEASE NAME:</span>
-		<span class=" text-nowrap text-center italic">shippable intermediary</span>
-		<span class=" max-w-[200px] truncate text-nowrap">Commit: {$commitInfo.hash}</span>
-		<span class=" text-nowrap">Height: {$commitInfo.count}</span>
-	</span>
-{/if}
+<span class="m-2 flex flex-col border border-orange-500 p-1 font-mono text-sm">
+	<span class="text-center">RELEASE NAME:</span>
+	<span class=" text-nowrap text-center italic">shippable intermediary</span>
+	<span class=" max-w-[200px] truncate text-nowrap">Commit: {$commitInfo.hash}</span>
+	<span class=" text-nowrap">Height: {$commitInfo.count}</span>
+</span>
