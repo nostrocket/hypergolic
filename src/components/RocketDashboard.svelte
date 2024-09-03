@@ -11,6 +11,7 @@
 	import ProductFomo from './ProductFomo.svelte';
 	import ProposedProducts from './ProposedProducts.svelte';
 	import UpdateMission from './UpdateMission.svelte';
+	import UpgradeRocket from './UpgradeRocket.svelte';
 
 	export let rocket: NDKEvent;
 
@@ -45,6 +46,7 @@
 				<Card.Title class="pb-4">Actions</Card.Title>
 				<Card.Description class="flex flex-wrap gap-2">
 					<UpdateMission rocketEvent={rocket} />
+					<UpgradeRocket rocketEvent={rocket} />
 					{#if $devmode}
 						<Button
 							on:click={() => {
