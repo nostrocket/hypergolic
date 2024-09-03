@@ -13,6 +13,7 @@
 	import { buildNoteTree, prepareQuestionNoteEvent } from '@/event_helpers/help_thread';
 	import type NDKSvelte from '@nostr-dev-kit/ndk-svelte';
 	import { HELP_THREAD_ROOT_EVENT_ID } from '@/consts';
+	import Login from '../../components/Login.svelte';
 
 	let notes = $ndk.storeSubscribe({
 		kinds: [1 as NDKKind],
@@ -71,17 +72,20 @@
 			class="w-full resize-none shadow-none"
 			bind:value={content}
 		/>
-		<div class="flex items-center pt-2">
-			<Button
-				type="submit"
-				size="sm"
-				class="ml-auto gap-1.5"
-				on:click={() => {
-					publish($ndk);
-				}}
-			>
-				Publish
-			</Button>
+		<div class="flex items-center justify-end pt-2">
+			{#if $currentUser}
+				<Button
+					type="submit"
+					size="sm"
+					on:click={() => {
+						publish($ndk);
+					}}
+				>
+					Publish
+				</Button>
+			{:else}
+				<Login />
+			{/if}
 		</div>
 	</form>
 	<Card.Root>

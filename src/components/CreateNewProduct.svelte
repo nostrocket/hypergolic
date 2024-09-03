@@ -16,6 +16,7 @@
 	import Textarea from '@/components/ui/textarea/textarea.svelte';
 	import UploadMediaLink from './UploadMediaLink.svelte';
 	import type { BlobDescriptor } from 'blossom-client-sdk';
+	import Login from './Login.svelte';
 
 	export let rocketEvent: NDKEvent;
 
@@ -99,12 +100,16 @@
 			</div>
 		</div>
 		<Dialog.Footer>
-			<Button
-				on:click={() => {
-					publish($ndk);
-				}}
-				type="submit">Publish</Button
-			>
+			{#if $currentUser}
+				<Button
+					on:click={() => {
+						publish($ndk);
+					}}
+					type="submit">Publish</Button
+				>
+			{:else}
+				<Login />
+			{/if}
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>
