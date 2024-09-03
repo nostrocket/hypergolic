@@ -9,8 +9,9 @@
 	import AddProductToRocket from './AddProductToRocket.svelte';
 	import PayNow from './PayNow.svelte';
 	import { onMount } from 'svelte';
-	import { devmode } from '@/stores/session';
+	import { currentUser, devmode } from '@/stores/session';
 	import BadgeMaker from './BadgeMaker.svelte';
+	import Login from './Login.svelte';
 
 	export let product: ProductEvent;
 	export let rocket: Rocket;
@@ -98,12 +99,16 @@
 						>
 					</div>
 				{/if}
-				<PayNow
-					disabled={disabled(productFromRocket)}
-					{product}
-					rocketProduct={rocket.Products().get(product.ID())}
-					{rocket}
-				/>
+				{#if $currentUser}
+					<PayNow
+						disabled={disabled(productFromRocket)}
+						{product}
+						rocketProduct={rocket.Products().get(product.ID())}
+						{rocket}
+					/>
+				{:else}
+					<Login />
+				{/if}
 			{/if}
 			{#if $devmode}
 				<a
