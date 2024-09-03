@@ -9,6 +9,7 @@
 	import * as Alert from '@/components/ui/alert';
 	import type { NDKEvent } from '@nostr-dev-kit/ndk';
 	import { Rocket } from '@/event_helpers/rockets';
+	import Login from './Login.svelte';
 
 	export let rocketEvent: NDKEvent;
 	const parsedRocket = new Rocket(rocketEvent);
@@ -73,7 +74,11 @@
 			<div class="m-0 p-0 text-sm text-red-500">{missionError}</div>
 		{/if}
 		<Dialog.Footer>
-			<Button disabled={!!missionError} on:click={publish} type="submit">Submit</Button>
+			{#if $currentUser}
+				<Button disabled={!!missionError} on:click={publish} type="submit">Submit</Button>
+			{:else}
+				<Login />
+			{/if}
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>

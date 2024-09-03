@@ -23,6 +23,7 @@
 		BUY_ROCKET_NAME_ZAPPED_EVENT,
 		BUY_ROCKET_NAME_FEE
 	} from '@/consts';
+	import Login from './Login.svelte';
 
 	let rocketEvents = $ndk.storeSubscribe([{ kinds: [31108 as number] }], { subId: 'rockets' });
 	let zaps = $ndk.storeSubscribe(
@@ -191,15 +192,6 @@
 	<Dialog.Content class="sm:max-w-[425px]">
 		<Dialog.Header>
 			<Dialog.Title>Name Your Rocket</Dialog.Title>
-			{#if !$currentUser}
-				<Alert.Root>
-					<Terminal class="h-4 w-4" />
-					<Alert.Title>Heads up!</Alert.Title>
-					<Alert.Description
-						>You need a nostr signing extension to use Nostrocket!</Alert.Description
-					>
-				</Alert.Root>
-			{/if}
 			<Dialog.Description
 				>Choose a name for your new Rocket and click Publish.
 				<Alert.Root
@@ -239,20 +231,24 @@
 			>
 		{/if}
 		<Dialog.Footer>
-			{#if $mainnet && $nostrocket && !isPurchasedByMe}
-				<PayRocketName
-					disabled={!nameValid || isPurchasedByOthers}
-					rocketName={name}
-					nostrocket={$nostrocket}
-				/>
+			{#if $currentUser}
+				{#if $mainnet && $nostrocket && !isPurchasedByMe}
+					<PayRocketName
+						disabled={!nameValid || isPurchasedByOthers}
+						rocketName={name}
+						nostrocket={$nostrocket}
+					/>
+				{/if}
+				<Button
+					disabled={!canPublish}
+					on:click={() => {
+						publish($ndk, name);
+					}}
+					type="submit">Publish</Button
+				>
+			{:else}
+				<Login />
 			{/if}
-			<Button
-				disabled={!canPublish || !$currentUser}
-				on:click={() => {
-					publish($ndk, name);
-				}}
-				type="submit">Publish</Button
-			>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>
