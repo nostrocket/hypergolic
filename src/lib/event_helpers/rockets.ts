@@ -4,7 +4,6 @@ import { NDKEvent, type NDKTag } from '@nostr-dev-kit/ndk';
 import validate from 'bitcoin-address-validation';
 import { sha256 } from 'js-sha256';
 import { MapOfVotes, MeritRequest, Votes } from './merits';
-import * as immutable from 'immutable';
 import { BloomFilter } from 'bloomfilter';
 import { attempts, zappers } from '@/stores/zappers';
 import { get } from 'svelte/store';
@@ -202,6 +201,9 @@ export class Rocket {
 			}
 		}
 		return amr;
+	}
+	Creator(): string {
+		return this.Event.pubkey;
 	}
 	Owners(): Set<string> {
 		let owners = new Set<string>();
