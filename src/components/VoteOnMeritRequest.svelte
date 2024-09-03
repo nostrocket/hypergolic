@@ -18,6 +18,7 @@
 	export let rocket: Rocket;
 
 	let checkboxes = new Map<string, boolean>();
+	let selectAll = false;
 
 	let haveUnchecked = true;
 	$: {
@@ -28,6 +29,15 @@
 			}
 		}
 		haveUnchecked = foundUnchecked;
+		selectAll = !haveUnchecked;
+	}
+
+	function handleSelectAll() {
+		selectAll = !selectAll;
+		checkboxes.forEach((_, key) => {
+			checkboxes.set(key, selectAll);
+		});
+		checkboxes = checkboxes;
 	}
 
 	{
@@ -132,6 +142,15 @@
 					</Label>
 				</div>
 			{/each}
+			<div class="mb-2 flex flex-nowrap text-left">
+				<Checkbox on:click={handleSelectAll} id="selectAll" bind:checked={selectAll} />
+				<Label
+					for="selectAll"
+					class="ml-2 font-extralight peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+				>
+					select all
+				</Label>
+			</div>
 		</div>
 		<div class="flex">
 			<Button
