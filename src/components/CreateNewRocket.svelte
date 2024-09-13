@@ -6,23 +6,17 @@
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
 	import * as Alert from '@/components/ui/alert';
-	import Checkbox from '@/components/ui/checkbox/checkbox.svelte';
 	import { Rocket, ZapRocketNamePurchase } from '@/event_helpers/rockets';
-	import { formatSats, getRocketURL } from '@/helpers';
+	import { getRocketURL } from '@/helpers';
 	import { ndk } from '@/ndk';
 	import { BitcoinTipTag } from '@/stores/bitcoin';
 	import { currentUser, devmode, mainnet } from '@/stores/session';
 	import { NDKEvent } from '@nostr-dev-kit/ndk';
 	import type NDKSvelte from '@nostr-dev-kit/ndk-svelte';
-	import { Info, Terminal } from 'lucide-svelte';
+	import { Info } from 'lucide-svelte';
 	import { onDestroy } from 'svelte';
 	import { derived } from 'svelte/store';
-	import PayRocketName from './PayRocketName.svelte';
-	import {
-		BUY_ROCKET_NAME_ZAPPED_PUBKEY,
-		BUY_ROCKET_NAME_ZAPPED_EVENT,
-		BUY_ROCKET_NAME_FEE
-	} from '@/consts';
+	import { BUY_ROCKET_NAME_ZAPPED_PUBKEY, BUY_ROCKET_NAME_ZAPPED_EVENT } from '@/consts';
 	import Login from './Login.svelte';
 
 	let rocketEvents = $ndk.storeSubscribe([{ kinds: [31108 as number] }], { subId: 'rockets' });
@@ -109,13 +103,6 @@
 		$purchasedRocketNames.all.includes(name) && !$purchasedRocketNames.my.includes(name);
 	$: isPurchasedByMe = $purchasedRocketNames.my.includes(name);
 	$: isPublished = $rockets.some((r) => r.Name() === name);
-
-	// name is purchased by others -> name invalid, cannot publish
-	// name is purchased by me, name is publish -> name invalid, cannot publish
-	// name not purchased -> name valid -> mainnet -> buy name -> publish
-	// name not purchased -> name valid -> mainnet -> not buy name -> cannot publish
-	// name not purchased -> name valid -> testnet -> publish
-	// name is purchased by me -> name valid -> publish
 
 	$: {
 		if (!name) {
@@ -206,17 +193,8 @@
 				<Label for="name" class="text-right">Name</Label>
 				<Input bind:value={name} id="name" placeholder="Name-of-your-rocket" class="col-span-3" />
 			</div>
-			<div class="grid grid-cols-4 items-center gap-4">
-				<Label for="isMainnet" class="text-right">Mainnet</Label>
-				<Checkbox id="isMainnet" bind:checked={$mainnet}></Checkbox>
-			</div>
 		</div>
 		<div class="m-0 p-0 text-sm text-red-500">{nameError}</div>
-		{#if $mainnet && nameValid && !isPurchasedByMe}
-			<div class="m-0 p-0 text-sm">
-				To create a mainnet rocket, you need to pay {formatSats(BUY_ROCKET_NAME_FEE)} for a rocket name.
-			</div>
-		{/if}
 		{#if $devmode}
 			<div>Purchased My Rocket Name: {$purchasedRocketNames.my.join(', ')}</div>
 			<div>Purchased All Rocket Name: {$purchasedRocketNames.all.join(', ')}</div>
@@ -232,13 +210,6 @@
 		{/if}
 		<Dialog.Footer>
 			{#if $currentUser}
-				{#if $mainnet && $nostrocket && !isPurchasedByMe}
-					<PayRocketName
-						disabled={!nameValid || isPurchasedByOthers}
-						rocketName={name}
-						nostrocket={$nostrocket}
-					/>
-				{/if}
 				<Button
 					disabled={!canPublish}
 					on:click={() => {
