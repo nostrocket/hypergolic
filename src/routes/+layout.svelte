@@ -19,13 +19,18 @@
 
 	$: if (connected && !sessionStarted && $ndk.signer) {
 		$ndk.signer.user().then((u) => {
-			$currentUser = u;
-			user = u;
-			prepareUserSession($ndk, user).then(() => {
+			prepareUserSession($ndk, u).then(() => {
 				sessionStarted = true;
 			});
 		});
 		sessionStarted = true;
+	}
+
+	$: if ($ndk.signer) {
+		$ndk.signer.user().then((u) => {
+			$currentUser = u;
+			user = u;
+		});
 	}
 
 	onMount(() => {

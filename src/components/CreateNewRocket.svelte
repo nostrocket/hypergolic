@@ -10,7 +10,7 @@
 	import { getRocketURL } from '@/helpers';
 	import { ndk } from '@/ndk';
 	import { BitcoinTipTag } from '@/stores/bitcoin';
-	import { currentUser, devmode, mainnet } from '@/stores/session';
+	import { currentUser, devmode, mainnet, pubkey } from '@/stores/session';
 	import { NDKEvent } from '@nostr-dev-kit/ndk';
 	import type NDKSvelte from '@nostr-dev-kit/ndk-svelte';
 	import { Info } from 'lucide-svelte';
@@ -41,19 +41,6 @@
 		return $rocketEvents.map((e) => new Rocket(e));
 	});
 
-	let nostrocket = derived(rockets, ($rockets) => {
-		let rocket: Rocket | undefined = undefined;
-		for (let r of $rockets) {
-			if (
-				r.Name() == BUY_ROCKET_NAME_ZAPPED_EVENT &&
-				r.Event.pubkey == BUY_ROCKET_NAME_ZAPPED_PUBKEY
-			) {
-				rocket = r;
-			}
-		}
-		return rocket;
-	});
-
 	let validZaps = derived(zaps, ($zaps) => {
 		let zapMap = new Map<string, ZapRocketNamePurchase>();
 		for (let z of $zaps) {
@@ -66,30 +53,19 @@
 	});
 
 	let purchasedRocketNames = derived(validZaps, ($validZaps) => {
-		let my = [];
-		let all = [];
+		let my = new Set<string>();
+		let others = new Set<string>();
 		for (let z of $validZaps.values()) {
 			if (z.RocketName) {
-				all.push(z.RocketName);
 				if ($currentUser?.pubkey === z.BuyerPubkey) {
-					my.push(z.RocketName);
+					my.add(z.RocketName);
+				} else {
+					others.add(z.RocketName);
 				}
 			}
 		}
-		return { my, all };
+		return { my, others };
 	});
-
-	let userHasProfile = false;
-	$: {
-		if (!userHasProfile && $currentUser) {
-			$currentUser.fetchProfile().then((r) => {
-				if (r && (r.lud06 || r.lud16) && (r.name || r.displayName) && r.image) {
-					userHasProfile = true;
-				}
-			});
-		}
-		userHasProfile = userHasProfile;
-	}
 
 	let name: string = '';
 
@@ -99,9 +75,8 @@
 
 	const rocketNameValidator = /^\w{4,20}$/;
 
-	$: isPurchasedByOthers =
-		$purchasedRocketNames.all.includes(name) && !$purchasedRocketNames.my.includes(name);
-	$: isPurchasedByMe = $purchasedRocketNames.my.includes(name);
+	$: isPurchasedByOthers = $purchasedRocketNames.others.has(name);
+	$: isPurchasedByMe = $purchasedRocketNames.my.has(name);
 	$: isPublished = $rockets.some((r) => r.Name() === name);
 
 	$: {
@@ -196,16 +171,27 @@
 		</div>
 		<div class="m-0 p-0 text-sm text-red-500">{nameError}</div>
 		{#if $devmode}
-			<div>Purchased My Rocket Name: {$purchasedRocketNames.my.join(', ')}</div>
-			<div>Purchased All Rocket Name: {$purchasedRocketNames.all.join(', ')}</div>
+			<div>Purchased My Rocket Names: {Array.from($purchasedRocketNames.my).join(', ')}</div>
+			<div>Purchased Other Rocket Names: {Array.from($purchasedRocketNames.others).join(', ')}</div>
 			<div>isPurchasedByOthers: {isPurchasedByOthers}</div>
 			<div>isPurchasedByMe: {isPurchasedByMe}</div>
 			<div>isPublished: {isPublished}</div>
+			{#if $purchasedRocketNames.my.size === 0}
+				<div class="whitespace-pre-wrap break-all">pubkey: {$pubkey}</div>
+				<div class="whitespace-pre-wrap break-all">currentUser: {$currentUser?.pubkey}</div>
+			{/if}
 			<Button
 				variant="outline"
 				on:click={() => {
 					console.log($validZaps);
 				}}>Print Zaps</Button
+			>
+			<Button
+				variant="outline"
+				on:click={() => {
+					console.log($currentUser);
+					console.log($pubkey);
+				}}>Print user</Button
 			>
 		{/if}
 		<Dialog.Footer>

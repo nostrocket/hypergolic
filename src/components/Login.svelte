@@ -11,7 +11,7 @@
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { connectToBunker, loginWithNsec, purgeSignedInStorage } from '@/login';
-	import { pubkey } from '@/stores/session';
+	import { pubkey, currentUser } from '@/stores/session';
 
 	$: isLoading = true;
 
@@ -73,21 +73,18 @@
 		purgeSignedInStorage();
 		$ndk.signer = undefined;
 		$pubkey = '';
+		$currentUser = undefined;
 		await goto(`${base}/`);
 	}
 </script>
 
 {#if !$ndk.signer}
 	<Dialog.Root>
-		<Dialog.Trigger class="shrink-0">
-			<Button disabled={isLoading}>
-				{#if isLoading}
-					Loading...
-				{:else}
-					Log In
-				{/if}
-			</Button>
-		</Dialog.Trigger>
+		{#if !isLoading}
+			<Dialog.Trigger class="shrink-0">
+				<Button>Log In</Button>
+			</Dialog.Trigger>
+		{/if}
 		<Dialog.Content class="flex flex-col gap-4 p-4">
 			<Dialog.Header>
 				<Dialog.Title>Log In</Dialog.Title>
