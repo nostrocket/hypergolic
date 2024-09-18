@@ -12,6 +12,10 @@
 	import { currentUser, devmode } from '@/stores/session';
 	import BadgeMaker from './BadgeMaker.svelte';
 	import Login from './Login.svelte';
+	import { Avatar, Name } from '@nostr-dev-kit/ndk-svelte-components';
+	import { ndk } from '@/ndk';
+	import * as HoverCard from '$lib/components/ui/hover-card';
+	import ProfileCard from './ProfileCard.svelte';
 
 	export let product: ProductEvent;
 	export let rocket: Rocket;
@@ -63,6 +67,33 @@
 				{#if product.Option().length > 0}(variant: {product.Option()}){/if}</Card.Title
 			>
 			<Card.Description>{product.Description()}</Card.Description>
+			<div class="flex w-full justify-start">
+				<HoverCard.Root>
+					<HoverCard.Trigger>
+						<BadgeMaker>
+							<div slot="icon">PROPOSED:</div>
+							<div slot="content">
+								<div class="flex items-center gap-2">
+									<Avatar
+										ndk={$ndk}
+										pubkey={product.Creator()}
+										class="h-5 w-5 flex-none rounded-full object-cover"
+									/>
+									<Name
+										npubMaxLength={10}
+										ndk={$ndk}
+										pubkey={product.Creator()}
+										class="inline-block truncate"
+									/>
+								</div>
+							</div>
+						</BadgeMaker>
+					</HoverCard.Trigger>
+					<HoverCard.Content>
+						<ProfileCard pubkey={product.Creator()} />
+					</HoverCard.Content>
+				</HoverCard.Root>
+			</div>
 		</Card.Header>
 
 		{#if $$slots.default}

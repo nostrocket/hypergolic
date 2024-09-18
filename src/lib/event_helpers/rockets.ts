@@ -1047,6 +1047,9 @@ export class Product {
 		}
 		return result;
 	}
+	Creator(): string {
+		return this.Event.author.pubkey;
+	}
 	ID(): string {
 		return this.Event.id;
 	}
