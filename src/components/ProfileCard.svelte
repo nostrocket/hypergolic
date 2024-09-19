@@ -64,7 +64,12 @@
 	<div class="mb-4 flex items-center">
 		<Avatar ndk={$ndk} {pubkey} class="mr-3 h-12 w-12 rounded-full object-cover" />
 		<div>
-			<Name ndk={$ndk} {pubkey} class="text-lg font-semibold text-gray-900 dark:text-white" />
+			<Name
+				npubMaxLength={10}
+				ndk={$ndk}
+				{pubkey}
+				class="text-lg font-semibold text-gray-900 dark:text-white"
+			/>
 			<button
 				on:click={copyPubkey}
 				class="flex cursor-pointer items-center text-sm text-gray-500 transition-colors duration-200 hover:text-blue-500 dark:text-gray-400 dark:hover:text-blue-400"
