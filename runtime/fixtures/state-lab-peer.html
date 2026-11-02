@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Public identity and saved-string test fixture." />
+  <title>State Lab Peer</title>
+  <script type="module" crossorigin>function P(){const t=new Map;function n(u,i){if(t.has(u))throw new Error(`NAP domain "${u}" is already registered`);t.set(u,i)}function r(u){const i=u.type.indexOf(".");if(i<=0)return!1;const a=u.type.slice(0,i),f=t.get(a);return f?(f(u),!0):!1}function o(){return Array.from(t.keys())}return{registerNap:n,dispatch:r,getRegisteredDomains:o}}var E=P(),N=E.registerNap,L="theme";function k(){const t=window;if(!t.napplet?.theme)throw new Error("window.napplet.theme is unavailable -- runtime did not inject this domain");return t.napplet.theme}function R(){return k().get()}function q(t){return k().onChanged(t)}N(L,t=>{});function B(){const t=window;if(!t.napplet)throw new Error("window.napplet is unavailable -- runtime did not inject the napplet namespace");return t.napplet}function s(t){const r=B()[t];if(!r)throw new Error(`window.napplet.${String(t)} is unavailable -- runtime did not inject this domain`);return r}var w={getItem(t){return s("storage").getItem(t)},setItem(t,n){return s("storage").setItem(t,n)},removeItem(t){return s("storage").removeItem(t)},keys(){return s("storage").keys()},instance:{getItem(t){return s("storage").instance.getItem(t)},setItem(t,n){return s("storage").instance.setItem(t,n)},removeItem(t){return s("storage").instance.removeItem(t)},keys(){return s("storage").instance.keys()}}},c={getPublicKey(){return s("identity").getPublicKey()},onChanged(t){return s("identity").onChanged(t)},getRelays(){return s("identity").getRelays()},getProfile(){return s("identity").getProfile()},getFollows(){return s("identity").getFollows()},getList(t){return s("identity").getList(t)},getZaps(){return s("identity").getZaps()},getMutes(){return s("identity").getMutes()},getBlocked(){return s("identity").getBlocked()},getBadges(){return s("identity").getBadges()}};function e(t){const n=document.getElementById(t);if(!n)throw new Error("Missing fixture element: "+t);return n}const O={background:"#140f0b",text:"#f3efeb",primary:"#e8805d"};function v(t){const n=document.documentElement.style;n.setProperty("--bg",t.background),n.setProperty("--text",t.text),n.setProperty("--primary",t.primary);const r=t.background.slice(1),o=r.length===3?[...r].map(i=>i+i).join(""):r,u=[0,2,4].reduce((i,a,f)=>i+parseInt(o.slice(a,a+2),16)*[.2126,.7152,.0722][f],0);n.colorScheme=u>140?"light":"dark"}function C(t){const n=t?.colors;if(!n||![n.background,n.text,n.primary].every(r=>typeof r=="string"&&/^#(?:[a-f\d]{3}|[a-f\d]{6})$/i.test(r))){v(O),e("theme-status").textContent="Local palette · invalid host colors";return}v(n),e("theme-status").textContent="Host colors"}async function S(){let t=!1;try{const n=q(r=>{t=!0,C(r)});window.addEventListener("pagehide",r=>{r.persisted||n.close()})}catch{}try{const n=await R();t||C(n)}catch{t||(e("theme-status").textContent="Local palette · host theme unavailable")}}const m=e("controls"),g=e("public-controls"),y=e("profile-controls"),M=e("key"),j=e("value"),D=e("scope");let l="",p=0,b=!1,d=!1,$=0;function x(t){p++,l=/^[0-9a-f]{64}$/.test(t)?t:"",b=!1,m.disabled=!l,y.disabled=!l,g.disabled=!l,e("public-status").textContent="No public data request yet.",e("public-result").textContent="",e("public-result").dataset.state="idle",e("profile-status").textContent="No profile request yet.",e("profile-result").textContent="",e("profile-result").dataset.state="idle",e("identity").textContent=l,e("identity-status").textContent=l?"Identity connected":"No identity selected",e("result").textContent="",e("result").dataset.state="idle",e("key-list").replaceChildren(),e("status").textContent="No request yet."}async function K(){let t=!1;try{const n=c.onChanged(o=>{d||(t=!0,x(o))});window.addEventListener("pagehide",()=>{d=!0,p++,m.disabled=!0,y.disabled=!0,g.disabled=!0,n.close()});const r=await c.getPublicKey();!t&&!d&&x(r)}catch{!t&&!d&&(m.disabled=!0,e("identity-status").textContent="Open in a shell with identity and storage access")}}async function A(t){if(b||!l||d)return;const n=p,r=D.value==="instance"?w.instance:w,o=M.value,u=j.value;b=!0,m.disabled=!0,e("status").textContent="Waiting for the shell…",e("requests").textContent=String(++$);const i=()=>!d&&n===p;try{if(t==="read"){const a=await r.getItem(o);if(!i())return;e("result").dataset.state=a===null?"missing":"present",e("result").textContent=a??"",e("status").textContent=a===null?"No value saved.":a===""?"Read an empty string.":"Read complete."}else if(t==="keys"){const a=await r.keys();if(!i())return;e("key-list").replaceChildren(...a.map(f=>{const h=document.createElement("li");return h.textContent=f,h})),e("status").textContent=`${a.length} saved keys.`}else{if(t==="write"?await r.setItem(o,u):await r.removeItem(o),!i())return;e("status").textContent=t==="write"?"Write confirmed.":"Remove confirmed.",e("result").dataset.state="idle",e("result").textContent=""}}catch(a){if(!i())return;e("result").dataset.state="error",e("status").textContent="Request failed: "+(a instanceof Error?a.message.slice(0,240):"storage unavailable")}finally{i()&&(b=!1,m.disabled=!l)}}for(const t of["read","write","remove","keys"])e(t).addEventListener("click",()=>{A(t)});e("title").textContent="State Lab Peer";document.title="State Lab Peer";e("lab").dataset.ready="true";K();S();async function F(){if(!l||d||y.disabled)return;const t=p,n=()=>!d&&t===p;y.disabled=!0,e("profile-status").textContent="Reading public profile…";try{const r=await c.getProfile();if(!n())return;e("profile-result").dataset.state=r===null?"missing":"present",e("profile-result").textContent=JSON.stringify(r),e("profile-status").textContent=r===null?"No public profile found.":"Profile read complete."}catch(r){if(!n())return;e("profile-result").dataset.state="error",e("profile-result").textContent="",e("profile-status").textContent="Profile read failed: "+(r instanceof Error?r.message.slice(0,240):"identity unavailable")}finally{n()&&(y.disabled=!l)}}e("profile-read").addEventListener("click",()=>{F()});const I={relays:()=>c.getRelays(),follows:()=>c.getFollows(),mutes:()=>c.getMutes(),badges:()=>c.getBadges(),blocked:()=>c.getBlocked(),zaps:()=>c.getZaps(),list:()=>c.getList(e("list-type").value)};async function T(t){if(!l||d||g.disabled)return;const n=p,r=()=>!d&&n===p;g.disabled=!0,e("public-status").textContent="Reading public "+t+"…",e("public-result").textContent="";try{const o=await I[t]();if(!r())return;e("public-result").dataset.state="present",e("public-result").textContent=JSON.stringify(o),e("public-status").textContent="Public "+t+" read complete."}catch(o){if(!r())return;e("public-result").dataset.state="error",e("public-status").textContent="Public "+t+" read failed: "+(o instanceof Error?o.message.slice(0,240):"identity unavailable")}finally{r()&&(g.disabled=!l)}}for(const t of Object.keys(I))e("public-"+t).addEventListener("click",()=>{T(t)});
+</script>
+  <style>:root{--bg: #140f0b;--text: #f3efeb;--primary: #e8805d;color-scheme:dark;font:16px/1.5 system-ui,sans-serif}*{box-sizing:border-box}html,body,#lab{background:var(--bg);color:var(--text)}body{margin:0}#lab{max-width:44rem;margin-inline:auto;padding:clamp(16px,5vw,32px)}h1{font-size:clamp(32px,8vw,48px);line-height:1.1;margin:8px 0 12px;letter-spacing:-.04em}h2{font-size:19px;margin:0 0 12px}p{margin:8px 0}.eyebrow,legend{font-size:12px;font-weight:700;letter-spacing:.08em}.eyebrow{color:var(--primary)}.meta,footer{color:color-mix(in srgb,var(--text) 68%,var(--bg));font-size:13px}#identity{display:block;font-family:ui-monospace,monospace;font-size:12px;overflow-wrap:anywhere;padding:12px 0}fieldset{min-width:0;border:1px solid color-mix(in srgb,var(--text) 20%,var(--bg));border-radius:16px;padding:16px;margin:20px 0}legend{padding:0 8px}label{display:block;margin-bottom:6px;font-weight:600;font-size:14px}input,textarea,select{display:block;width:100%;min-width:0;margin:0 0 16px;border:1px solid color-mix(in srgb,var(--text) 30%,var(--bg));border-radius:8px;padding:10px;background:color-mix(in srgb,var(--text) 4%,var(--bg));color:var(--text);font:inherit}textarea{resize:vertical}.actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}button{min-height:44px;border:1px solid color-mix(in srgb,var(--text) 30%,var(--bg));border-radius:9px;color:var(--text);background:color-mix(in srgb,var(--text) 7%,var(--bg));font:600 14px system-ui,sans-serif;cursor:pointer}#write{background:var(--primary);color:var(--bg);border-color:var(--primary)}:focus-visible{outline:3px solid var(--primary);outline-offset:3px}fieldset:disabled{opacity:.6}button:disabled{cursor:wait}#result{display:block;white-space:pre-wrap;overflow-wrap:anywhere;max-height:12rem;overflow-y:auto;font-family:ui-monospace,monospace;font-size:14px}#key-list{padding-left:20px;overflow-wrap:anywhere}footer{border-top:1px solid color-mix(in srgb,var(--text) 20%,var(--bg));margin-top:24px;padding-top:16px}#profile-result,#public-result{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}
+</style>
+</head>
+<body>
+<main id="lab" data-testid="lab" data-ready="false">
+  <header>
+    <p class="eyebrow">HYPERGOLIC / TEST 02</p>
+    <h1 id="title">State Lab</h1>
+    <p>Save a trace. Reload. Find it again.</p>
+    <p id="identity-status" data-testid="identity-status" role="status">Connecting…</p>
+    <output id="identity" data-testid="identity"></output>
+  </header>
+  <fieldset id="profile-controls" disabled>
+    <legend>Public profile</legend>
+    <button id="profile-read" data-testid="profile-read" type="button">Read profile</button>
+    <p id="profile-status" data-testid="profile-status" role="status">No profile request yet.</p>
+    <pre id="profile-result" data-testid="profile-result" data-state="idle"></pre>
+  </fieldset>
+  <fieldset id="controls" disabled>
+    <legend>Saved strings</legend>
+    <label for="scope">Save in</label>
+    <select id="scope" data-testid="scope"><option value="shared">All instances of this napplet</option><option value="instance">This instance only</option></select>
+    <label for="key">Key</label>
+    <input id="key" data-testid="key" value="sample" maxlength="256" autocomplete="off" spellcheck="false" />
+    <label for="value">String value</label>
+    <textarea id="value" data-testid="value" rows="3" maxlength="262145" autocomplete="off" spellcheck="false" placeholder="Something you will recognise…"></textarea>
+    <div class="actions">
+      <button id="write" data-testid="write" type="button">Write</button>
+      <button id="read" data-testid="read" type="button">Read</button>
+      <button id="remove" data-testid="remove" type="button">Remove</button>
+      <button id="keys" data-testid="keys" type="button">List keys</button>
+    </div>
+  </fieldset>
+  <section aria-labelledby="result-title">
+    <h2 id="result-title">Result</h2>
+    <p id="status" data-testid="status" role="status">No request yet.</p>
+    <output id="result" data-testid="result" data-state="idle"></output>
+    <ul id="key-list" data-testid="key-list" aria-label="Saved keys"></ul>
+    <p class="meta">Requests <output id="requests" data-testid="requests">0</output></p>
+  </section>
+  <fieldset id="public-controls" disabled>
+    <legend>Public identity data</legend>
+    <p>Mutes and categorized lists require separate shell approval.</p>
+    <div class="actions">
+      <button id="public-relays" type="button">Read relay preferences</button>
+      <button id="public-follows" type="button">Read follows</button>
+      <button id="public-mutes" type="button">Read mutes</button>
+      <button id="public-badges" type="button">Read accepted badges</button>
+      <button id="public-blocked" type="button">Check blocks support</button>
+      <button id="public-zaps" type="button">Check zaps support</button>
+    </div>
+    <label for="list-type">Global list category</label>
+    <select id="list-type"><option value="bookmarks">Bookmarks</option><option value="pins">Pins</option><option value="interests">Interests</option><option value="unsupported">Unsupported category</option></select>
+    <button id="public-list" type="button">Read selected list</button>
+    <p id="public-status" role="status">No public data request yet.</p>
+    <pre id="public-result" data-state="idle"></pre>
+  </fieldset>
+  <footer><p>Storage is separated by identity and napplet. Nothing here is published.</p><p class="meta" id="theme-status" data-testid="theme-status">Local palette</p></footer>
+</main>
+</body>
+</html>

@@ -1,0 +1,30 @@
+{
+  "kind": 35129,
+  "created_at": 1792070028,
+  "tags": [
+    [
+      "d",
+      "approval-lab"
+    ],
+    [
+      "path",
+      "/index.html",
+      "0c1269933e49a9f3e0f797813b8f80d276e3fabf171466fffc0fbe38901b15e2"
+    ],
+    [
+      "x",
+      "047fde2775327d45b3172b42990d4278af6b56080d2e8af544b7d8cdf5cbc99d",
+      "aggregate"
+    ],
+    [
+      "requires",
+      "identity"
+    ],
+    [
+      "requires",
+      "relay"
+    ]
+  ],
+  "content": "",
+  "aggregateHash": "047fde2775327d45b3172b42990d4278af6b56080d2e8af544b7d8cdf5cbc99d"
+}

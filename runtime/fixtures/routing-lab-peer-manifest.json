@@ -1,0 +1,38 @@
+{
+  "kind": 35129,
+  "created_at": 1791107914,
+  "tags": [
+    [
+      "d",
+      "routing-lab-peer"
+    ],
+    [
+      "path",
+      "/index.html",
+      "e52489d7e52c6649b258312efe85d5e5206622551d95de117e0791bcbac7184c"
+    ],
+    [
+      "x",
+      "ca599ba52c91fcf8e5adff7e51312e2bacbda205bca57df613041ca46c2abe7e",
+      "aggregate"
+    ],
+    [
+      "requires",
+      "config"
+    ],
+    [
+      "requires",
+      "inc"
+    ],
+    [
+      "requires",
+      "intent"
+    ],
+    [
+      "requires",
+      "notify"
+    ]
+  ],
+  "content": "",
+  "aggregateHash": "ca599ba52c91fcf8e5adff7e51312e2bacbda205bca57df613041ca46c2abe7e"
+}

@@ -1,0 +1,39 @@
+{
+  "name": "@hypergolic/upload-lab-napplet",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.5",
+  "engines": {
+    "node": "24.20.0"
+  },
+  "napplet": {
+    "dTag": "upload-lab",
+    "title": "Upload Lab",
+    "requires": [
+      "upload"
+    ]
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "type-check": "tsc --noEmit",
+    "test:conformance": "napplet-conformance ./dist",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "dependencies": {
+    "@napplet/sdk": "0.27.2"
+  },
+  "devDependencies": {
+    "@napplet/conformance-cli": "0.2.18",
+    "@napplet/vite-plugin": "0.14.1",
+    "@playwright/test": "1.63.0",
+    "typescript": "6.0.3",
+    "vite": "7.3.7"
+  },
+  "pnpm": {
+    "overrides": {
+      "source-map-js": "1.2.2"
+    }
+  }
+}

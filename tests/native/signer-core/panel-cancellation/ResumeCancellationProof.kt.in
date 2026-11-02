@@ -1,0 +1,46 @@
+package org.nostrocket.hypergolic.signercore
+import kotlinx.coroutines.*
+import kotlin.coroutines.*
+import java.util.ArrayDeque
+private class QueueDispatcher : CoroutineDispatcher() {
+ val tasks=ArrayDeque<Runnable>()
+ override fun dispatch(context:CoroutineContext,block:Runnable) { tasks.add(block) }
+ fun drain() { var n=0; while(tasks.isNotEmpty()) { check(++n<50); tasks.removeFirst().run() } }
+}
+private class OwnedResource { var closes=0; fun close() { closes++ } }
+private class Transfer(private val kind:Int) {
+ lateinit var settle:()->Unit
+ __OPT_IN__
+ suspend fun await(value:OwnedResource?):OwnedResource?=suspendCancellableCoroutine { continuation ->
+  settle={ val key=value
+   when(kind) {
+    0 -> { __IMPORT_STATEMENT__ }
+    else -> { __CONNECTION_STATEMENT__ }
+   }
+  }
+ }
+}
+fun main(args:Array<String>) {
+ var assertions=0
+ fun expect(value:Boolean,label:String="deterministic-owned-resource-contract") { check(value) { label };assertions++ }
+ for(kind in (if(args.isEmpty()) listOf(0,1) else listOf(args[0].toInt()))) {
+  for(timing in listOf("before-resume","after-resume","delivery","null")) {
+   val dispatcher=QueueDispatcher();val scope=CoroutineScope(SupervisorJob()+dispatcher);val transfer=Transfer(kind)
+   val resource=if(timing=="null") null else OwnedResource();var delivered=false;var received:OwnedResource?=null
+   val job=scope.launch { received=transfer.await(resource);delivered=true }
+   dispatcher.drain();expect(!delivered)
+   if(timing=="before-resume") job.cancel()
+   transfer.settle()
+   if(timing=="after-resume") job.cancel()
+   dispatcher.drain()
+   if(timing=="before-resume" || timing=="after-resume") {
+    expect(!delivered);expect(job.isCancelled);expect(resource!!.closes==1,"resource-must-close-"+timing)
+   } else {
+    expect(delivered);expect(received===resource);expect(job.isCompleted)
+    if(resource!=null) { expect(resource.closes==0);received!!.close();expect(resource.closes==1) }
+   }
+   scope.cancel();dispatcher.drain()
+  }
+ }
+ println("{\"status\":\"passed\",\"assertions\":"+assertions+",\"panelStatements\":2,\"coroutinesVersion\":\"1.8.1\",\"deviceAccess\":false,\"scope\":\"exact resume statements with real cancellable dispatch and resource doubles; no Android UI\"}")
+}

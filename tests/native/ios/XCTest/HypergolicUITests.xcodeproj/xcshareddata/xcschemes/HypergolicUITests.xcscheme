@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Scheme LastUpgradeVersion="2660" version="1.3">
+ <BuildAction parallelizeBuildables="NO" buildImplicitDependencies="YES">
+  <BuildActionEntries><BuildActionEntry buildForTesting="YES" buildForRunning="NO" buildForProfiling="NO" buildForArchiving="NO" buildForAnalyzing="YES"><BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="A00000000000000000000002" BuildableName="HypergolicUITests.xctest" BlueprintName="HypergolicUITests" ReferencedContainer="container:HypergolicUITests.xcodeproj"/></BuildActionEntry></BuildActionEntries>
+ </BuildAction>
+ <TestAction buildConfiguration="Debug" shouldUseLaunchSchemeArgsEnv="NO">
+  <Testables><TestableReference skipped="NO" parallelizable="NO"><BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="A00000000000000000000002" BuildableName="HypergolicUITests.xctest" BlueprintName="HypergolicUITests" ReferencedContainer="container:HypergolicUITests.xcodeproj"/></TestableReference></Testables>
+ </TestAction>
+ <LaunchAction buildConfiguration="Debug"/>
+ <ProfileAction buildConfiguration="Release"/>
+ <AnalyzeAction buildConfiguration="Debug"/>
+ <ArchiveAction buildConfiguration="Release" revealArchiveInOrganizer="YES"/>
+</Scheme>

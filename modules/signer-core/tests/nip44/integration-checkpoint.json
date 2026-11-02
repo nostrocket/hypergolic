@@ -1,0 +1,112 @@
+{
+  "status": "integrated-host-verified",
+  "reviewedCandidateManifestSha256": "7a4ae48318e97b40db15d393b32a2498aedcfb6af4bf21144d1e08b09a847e67",
+  "integratedSource": {
+    "shared/hypergolic_signer.c": "7f19a5a4b9d0b23db469a0acba3c3c7d0c9e3d315631dd6c33882bdd74f48a95",
+    "shared/hypergolic_nip44.c": "e07e6aa3b23c2b4ae9994c64829bfe5fd1ca2dd665e7ae726852d0c1dea6e506",
+    "shared/hypergolic_signer_internal.h": "a7d2ad57c767050d6505576727918e2de2b49f22934c6976c3c8600bcf9063ff",
+    "shared/include/hypergolic_signer.h": "390116bdad3a9b915eb4b0f31aaedd07694371ce26dd02c0cb421ad353e3d929",
+    "shared/include/hypergolic_nip44.h": "4136d728e95a2c36b577f33f03c56441d605476ef6b22992bb387dd5491bbe9e",
+    "shared/CMakeLists.txt": "b732b2d3112194982315ca5dc5ca521c32565c54d06bbf0f9435e81c5c7db05d",
+    "HypergolicSignerCore.podspec": "ebda4797ad55c83ea8c96178fce4672b7ef2b993ed8a21bee16778fff36faf7f",
+    "vendor/secp256k1-manifest.json": "07330ce0f4e2f7c6146a81a372bdbd1ca4444e6a215f309827ce3699e08f1de6",
+    "vendor/monocypher-manifest.json": "65be51804c37611f5c05b97b58981f5a4d418c265d53b9a96e449e4f09ef8408",
+    "vendor/monocypher/src/monocypher.c": "57eb914fc88136119bd41655cccb8c250048bf54d470540625186f8ab16f64be",
+    "vendor/monocypher/src/monocypher.h": "c494da712122da7ff679fdcf318a5317e84972b6c950fe9d896212947797facd",
+    "vendor/monocypher/LICENCE.md": "5f8360e4c06ddcc584bdb4b210c6af824c4bb301e6a9a521869b6d90795ca4b3",
+    "android/src/main/assets/notices/monocypher-LICENCE.txt": "5f8360e4c06ddcc584bdb4b210c6af824c4bb301e6a9a521869b6d90795ca4b3",
+    "tests/nip44/nip44_test.c": "16f987d5048edbd3b0f77d2145737810c6f8821a92bf5eeb359aa0433730e4d0"
+  },
+  "checks": {
+    "existingCoreRegressionAssertions": 445,
+    "newPublicPointAssertions": 6,
+    "coreNormalAssertions": 451,
+    "coreAsanUbsanAssertions": 451,
+    "nip44NormalAssertions": 15190,
+    "nip44AsanUbsanAssertions": 15190,
+    "nip44CleanupObservations": 865,
+    "nip44SinkCleanups": 39,
+    "nostrToolsByteInteropLengths": [
+      65535,
+      65536,
+      65537,
+      4202496
+    ],
+    "owningCMakeReleaseHostBuild": "passed",
+    "owningPythonSyntax": "passed",
+    "podspecRubySyntax": "passed",
+    "gitDiffCheck": "passed",
+    "nip44AlgorithmAndHeaderMatchReviewedCandidate": false,
+    "packagedAndroidMonocypherLicenseMatchesOriginal": true,
+    "nip44AlgorithmBodyMatchesPreAbiCheckpoint": true,
+    "nip44ReadOnlySpanApiArgumentCount": 6,
+    "nip44FocusedAislopSourceWarnings": 0,
+    "nip44FocusedAislopOverallScore": 54,
+    "nip44FocusedAislopExit": 1,
+    "nip44FocusedAislopRemainingFindings": [
+      {
+        "file": "package.json",
+        "rule": "security/vulnerable-dependency",
+        "message": "node-forge (high) \u2014 no fix available"
+      },
+      {
+        "file": "package.json",
+        "rule": "security/vulnerable-dependency",
+        "message": "braces (high) \u2014 no fix available"
+      }
+    ]
+  },
+  "nativePlatformEvidence": "The new span ABI requires owning Android/iOS caller rebuild and validation; this checkpoint records host-only evidence and preserves prior native receipts as historical evidence.",
+  "publicPointValidator": "secp256k1_xonly_pubkey_parse on exact native 32-byte input; valid/null/zero/all-ff/off-curve cases executed",
+  "secretBoundary": "Opaque key encrypt/decrypt and synchronous native HMAC/entropy/output callbacks; no scalar/shared-secret or Expo crypto API added",
+  "limits": {
+    "plaintextBytes": 4202496,
+    "rawFrameBytes": 5242951,
+    "base64Bytes": 6990604
+  },
+  "commitOrPushPerformed": false,
+  "apiRefactor": {
+    "previousApprovedCheckpointSha256": "79bd647ff479cd064c434bd506e5200bde0fef27b171d424e5a1f00baeb7d41e",
+    "spanType": "hypergolic_nip44_bytes",
+    "spanFields": {
+      "data": "const unsigned char *",
+      "length": "size_t"
+    },
+    "sixArguments": [
+      "key",
+      "peer_bytes",
+      "input_bytes",
+      "crypto",
+      "sink",
+      "sink_context"
+    ],
+    "ownership": "Borrowed read-only data, passed by value for the synchronous call; no transfer or byte copy",
+    "abiChanged": true,
+    "reviewStatus": "Focused independent follow-up pending",
+    "exactAlgorithmBodyComparison": "Only wrapper signatures and bindings changed; bounds, branches, status, cleanup and all helper bodies unchanged"
+  },
+  "spanRefactorEvidence": {
+    "commands": [
+      "python3 modules/signer-core/tests/run-host.py",
+      "python3 modules/signer-core/tests/run-host.py --sanitize",
+      "python3 modules/signer-core/tests/nip44/run.py",
+      "python3 modules/signer-core/tests/nip44/run.py --sanitize",
+      "node tools/quality/node_modules/aislop/dist/cli.js scan --include modules/signer-core/shared/hypergolic_nip44.c --json"
+    ],
+    "artifactHashes": {
+      "core-normal.log": "a78b54e20b7a8782b3614f06e06945f775fb1351ad0341ddb36d37fc5dc80b5f",
+      "core-sanitize.log": "a78b54e20b7a8782b3614f06e06945f775fb1351ad0341ddb36d37fc5dc80b5f",
+      "nip44-normal.log": "9ea842bb816d4859e9056a192b0f3d3438e97895b0d46759d45011fca00af01b",
+      "nip44-sanitize.log": "851908d1c02f03d95fdf3a46e9cd4f8dba5653f4ba02efcb07d946b9cccebd3f",
+      "cmake-release.log": "5ef8ec50f0c1b8432381fd5b192c08a8060b356031399b3ac503eaffb102c83c",
+      "aislop-nip44.json": "e43c7783ac478f9dd04c11d99b630e0aa72e3b98b7dc796f1cecb50cc0d268e3",
+      "hypergolic_nip44.c.diff": "f8d0ccd3ba71e06b9d17060ec968165900430bea46a19435e58743a273c94973",
+      "hypergolic_nip44.h.diff": "aa41ed3f382a42f06dc97dc462d83604ca9e8d48234341fd9da9fb45d67bbc88",
+      "nip44_test.c.diff": "9193716ca7c2c36e634d4fb1a307adb49391e5cfee41c74a03aeb360df9a01f4"
+    },
+    "allFourCryptoSuitesPassed": true,
+    "independentNostrToolsInteropPassed": true,
+    "qualityConfigurationChanged": false,
+    "findingsSuppressed": false
+  }
+}

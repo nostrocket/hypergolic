@@ -1,0 +1,171 @@
+package org.nostrocket.hypergolic.signercore
+
+import java.io.IOException
+import java.util.concurrent.atomic.AtomicReference
+
+// Explicit synchronous host ports: no Expo/coroutine scheduling, native vault or source registry.
+internal class SourcePort {
+  private val monitor = Any()
+  private var consumed = true
+  var live = true
+  var activeFailure: Exception? = null
+  private fun valid() = live
+  fun active(): Boolean { activeFailure?.let { throw it }; return valid() }
+  __ACTUAL_PERFORM__
+}
+internal class ContinuationPort {
+  var isActive = true
+  var result: String? = null
+  var error: Exception? = null
+  var completions = 0
+  fun resume(value: String) { result = value; completions++ }
+  fun resumeWithException(value: Exception) { error = value; completions++ }
+}
+internal class PendingPort {
+  val epoch = 1
+  var remote: Any? = null
+  var android: Any? = null
+  var authorization: Any? = null
+  var operation: NativeRemoteOperation? = null
+  var androidDispatched = false
+}
+internal class SessionPort {
+  val lock = Any()
+  var error: Exception? = null
+  fun require(epoch: Int, active: () -> Boolean) { error?.let { throw it }; check(epoch == 1 && active()) }
+}
+internal class RecordsPort {
+  var error: Exception? = null
+  fun assertRevision(context: Any, vault: String, revision: Long) {
+    context.hashCode()
+    check(vault == "public-vault" && revision == 1L)
+    error?.let { throw it }
+  }
+}
+internal class CompletedPort {
+  var records = 0
+  var onRecord: () -> Unit = {}
+  fun record(kind: String, token: String, source: SourcePort) {
+    check(kind == "upload" && token == "public-token" && source.live)
+    records++; onRecord()
+  }
+}
+internal class HandoffPort {
+  var completed = 0
+  fun complete(authorization: Any) { authorization.hashCode(); completed++ }
+}
+internal class CompletionBoundary {
+  val continuation = ContinuationPort()
+  val source = SourcePort()
+  val session = SessionPort()
+  val records = RecordsPort()
+  val completedSignings = CompletedPort()
+  val handoffs = HandoffPort()
+  val pending = PendingPort()
+  var signing: PendingPort? = pending
+  val failure = AtomicReference<Exception?>(null)
+  val appContext = Any()
+  val vaultId = "public-vault"
+  val expected = 1L
+  val kind = "upload"
+  val token = "public-token"
+  private fun active() = true
+  fun finish(result: String?) {
+    __ACTUAL_COMPLETED__
+    completed(result)
+  }
+}
+private var assertions = 0
+private var cases = 0
+private val failures = mutableListOf<String>()
+private fun verify(value: Boolean, message: String) { assertions++; if (!value) throw AssertionError(message) }
+private fun test(name: String, action: () -> Unit) {
+  cases++
+  try { action() } catch (failure: Exception) { failures.add("$name: ${failure.message}") }
+  catch (failure: AssertionError) { failures.add("$name: ${failure.message}") }
+}
+private fun boundary(method: String): CompletionBoundary = CompletionBoundary().apply {
+  if (method == "nip46") pending.remote = Any()
+  if (method == "nip55") pending.android = Any()
+}
+private fun uncertain(value: CompletionBoundary) {
+  verify((value.continuation.error as? NativeVault.Error)?.code == "SIGNER_UNCERTAIN", "external authority loss must be uncertain")
+  verify(value.continuation.result == null && value.continuation.completions == 1, "no accepted result escapes")
+  verify(value.handoffs.completed == 0, "handoff not completed after refusal")
+}
+fun main() {
+  for (method in listOf("nip46", "nip55")) {
+    test("$method success", {
+      val b = boundary(method); b.pending.authorization = Any(); b.finish("public-signed-result")
+      verify(b.continuation.result == "public-signed-result" && b.continuation.error == null,"verified result returned")
+      verify(b.completedSignings.records == 1 && b.handoffs.completed == 1 && b.continuation.completions == 1,"single completion")
+    })
+    for (code in listOf("AUTHORIZATION_DENIED", "SIGNER_EXPIRED")) test("$method $code", {
+      val b = boundary(method); b.session.error = NativeVault.Error(code); b.finish("public-signed-result"); uncertain(b)
+      verify(b.completedSignings.records == 0,"denied authority not recorded")
+    })
+    test("$method actual pre-effect require revocation", {
+      val b = boundary(method); b.source.live = false; b.finish("public-signed-result"); uncertain(b)
+      verify(b.completedSignings.records == 0,"pre-effect denial")
+    })
+    test("$method actual post-effect require revocation", {
+      val b = boundary(method); b.completedSignings.onRecord = { b.source.live = false }; b.finish("public-signed-result"); uncertain(b)
+      verify(b.completedSignings.records == 1,"post-effect race actually reached")
+    })
+    for (code in listOf("READBACK_FAILED", "RECOVERY_REQUIRED", "STORAGE_FAILURE", "SIGNER_REJECTED", "SIGNER_RESPONSE_INVALID")) test("$method preserves $code", {
+      val b = boundary(method); val error = NativeVault.Error(code); b.records.error = error; b.finish("public-signed-result")
+      verify(b.continuation.error === error && b.continuation.result == null,"original actionable/peer error identity")
+      verify(b.completedSignings.records == 0 && b.handoffs.completed == 0,"no successful completion")
+    })
+    test("$method active source unrelated IllegalArgumentException", {
+      val b = boundary(method); val error = IllegalArgumentException("public-unrelated"); b.records.error = error; b.finish("public-signed-result")
+      verify(b.source.live && b.continuation.error === error,"active source unrelated error preserved")
+    })
+    test("$method IOException preserved", {
+      val b = boundary(method); val error = IOException("public-storage"); b.records.error = error; b.finish("public-signed-result")
+      verify(b.continuation.error === error,"storage I/O unchanged")
+    })
+  }
+  test("local coded authority denial unchanged", {
+    val b = boundary("local"); val error = NativeVault.Error("AUTHORIZATION_DENIED"); b.session.error = error; b.finish("public-local-result")
+    verify(b.continuation.error === error,"local error identity unchanged")
+  })
+  test("local source require refusal unchanged", {
+    val b = boundary("local"); b.source.live = false; b.finish("public-local-result")
+    verify(b.continuation.error is IllegalArgumentException,"local require type unchanged")
+  })
+  test("unavailable source liveness remains fail closed", {
+    val b = boundary("nip46"); b.source.live = false; b.source.activeFailure = IOException("public-unavailable-state")
+    b.finish("public-signed-result"); uncertain(b)
+    verify(b.completedSignings.records == 0,"unknown liveness cannot accept a result")
+  })
+  test("null explicit peer refusal preserved", {
+    val b = boundary("nip46"); val error = NativeVault.Error("SIGNER_REJECTED"); b.failure.set(error); b.finish(null)
+    verify(b.continuation.error === error && b.completedSignings.records == 0,"null refusal untouched")
+  })
+  test("inactive continuation receives nothing", {
+    val b = boundary("nip55"); b.continuation.isActive = false; b.finish("public-signed-result")
+    verify(b.continuation.completions == 0 && b.completedSignings.records == 0,"inactive continuation untouched")
+  })
+  test("nip55 panel null before dispatch remains denied", {
+    val b = boundary("nip55"); b.finish(null)
+    verify((b.continuation.error as? NativeVault.Error)?.code == "AUTHORIZATION_DENIED", "pre-dispatch remains certain")
+    verify(b.completedSignings.records == 0 && b.continuation.completions == 1, "denied once with no record")
+  })
+  test("nip55 panel null before child failure retains dispatch uncertainty", {
+    val b = boundary("nip55"); b.pending.androidDispatched = true
+    verify(b.failure.get() == null, "child completion deliberately held")
+    b.finish(null); uncertain(b)
+    verify(b.completedSignings.records == 0, "no publication authority recorded")
+  })
+  for (code in listOf("SIGNER_REJECTED", "SIGNER_RESPONSE_INVALID", "READBACK_FAILED", "STORAGE_FAILURE")) test("nip55 dispatched panel preserves explicit $code", {
+    val b = boundary("nip55"); b.pending.androidDispatched = true
+    val error = NativeVault.Error(code); b.failure.set(error); b.finish(null)
+    verify(b.continuation.error === error, "existing explicit outcome preserved")
+    verify(b.completedSignings.records == 0 && b.continuation.completions == 1, "no successful record")
+  })
+  verify(cases == 35,"all cases selected")
+  val rows = failures.joinToString(",") { "\"" + it.replace("\\", "\\\\").replace("\"", "\\\"") + "\"" }
+  println("{\"passed\":${failures.isEmpty()},\"cases\":$cases,\"assertions\":$assertions,\"failures\":[$rows]}")
+  if (failures.isNotEmpty()) kotlin.system.exitProcess(1)
+}

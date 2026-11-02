@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en"><head><meta name="description" content="Per-file upload review and exact-byte fixture."><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Upload Lab</title>  <script type="module" crossorigin>function requireNapplet() {
+  const w = window;
+  if (!w.napplet) {
+    throw new Error("window.napplet is unavailable -- runtime did not inject the napplet namespace");
+  }
+  return w.napplet;
+}
+function requireDomain(domain) {
+  const napplet = requireNapplet();
+  const value = napplet[domain];
+  if (!value) {
+    throw new Error(
+      `window.napplet.${String(domain)} is unavailable -- runtime did not inject this domain`
+    );
+  }
+  return value;
+}
+var upload = {
+  /**
+   * Inspect upload rails and coarse runtime policy limits.
+   * @returns Promise resolving to advisory upload info.
+   */
+  info() {
+    return requireDomain("upload").info();
+  },
+  /**
+   * Upload bytes through the shell's storage pipeline.
+   * @param request  The upload request (Blob/ArrayBuffer bytes + intent)
+   * @returns Promise resolving to the initial upload result
+   */
+  upload(request2) {
+    return requireDomain("upload").upload(request2);
+  },
+  /**
+   * Get the latest known status for a prior upload.
+   * @param uploadId  The shell-generated upload id
+   * @returns Promise resolving to the latest status
+   */
+  status(uploadId2) {
+    return requireDomain("upload").status(uploadId2);
+  },
+  /**
+   * Register for shell-pushed upload status updates.
+   * @param handler  Called with each new UploadStatus
+   * @returns A Subscription with `close()` to stop listening
+   */
+  onStatus(handler) {
+    return requireDomain("upload").onStatus(handler);
+  }
+};
+const originalJpeg = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4QDURXhpZgAATU0AKgAAAAgABAEPAAIAAAATAAAAPgESAAMAAAABAAEAAAEyAAIAAAAUAAAAUoglAAQAAAABAAAAZgAAAABQdWJsaWMgdGVzdCBjYW1lcmEAADIwMjY6MDE6MDIgMDM6MDQ6MDUAAAQAAQACAAAAAk4AAAAAAgAFAAAAAwAAAJwAAwACAAAAAkUAAAAABAAFAAAAAwAAALQAAAAAAAAAAQAAAAEAAAACAAAAAQAAAAMAAAABAAAABAAAAAEAAAAFAAAAAQAAAAYAAAAB/9sAQwACAQEBAQECAQEBAgICAgIEAwICAgIFBAQDBAYFBgYGBQYGBgcJCAYHCQcGBggLCAkKCgoKCgYICwwLCgwJCgoK/9sAQwECAgICAgIFAwMFCgcGBwoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoK/8AAEQgAIABAAwERAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/aAAwDAQACEQMRAD8A+V6/ms/24CgAoAKAPuivw8/44woAKACgD4Xr9wP+xwKACgAoA+6K/Dz/AI4woAKACgD8o6/6oD+/AoAKACgD+iyv+Nc/tgKACgAoA/nTr/soP4nCgAoAKAP6LK/41z+2AoAKACgD/9k=";
+const originalHeic = "data:image/heic;base64,AAAAJGZ0eXBoZWljAAAAAG1pZjFNaVBybWlhZk1pSEJoZWljAAAEF21ldGEAAAAAAAAAIWhkbHIAAAAAAAAAAHBpY3QAAAAAAAAAAAAAAAAAAAAAJGRpbmYAAAAcZHJlZgAAAAAAAAABAAAADHVybCAAAAABAAAADnBpdG0AAAAAAAEAAABhaWluZgAAAAAAAwAAABVpbmZlAgAAAAABAABodmMxAAAAABVpbmZlAgAAAQACAABFeGlmAAAAAClpbmZlAgAAAQADAABtaW1lAGFwcGxpY2F0aW9uL3JkZit4bWwAAAAAKGlyZWYAAAAAAAAADmNkc2MAAgABAAEAAAAOY2RzYwADAAEAAQAAAvVpcHJwAAAC1GlwY28AAAIkY29scnByb2YAAAIYYXBwbAQAAABtbnRyUkdCIFhZWiAH5gABAAEAAAAAAABhY3NwQVBQTAAAAABBUFBMAAAAAAAAAAAAAAAAAAAAAAAA9tYAAQAAAADTLWFwcGwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAApkZXNjAAAA/AAAADBjcHJ0AAABLAAAAFB3dHB0AAABfAAAABRyWFlaAAABkAAAABRnWFlaAAABpAAAABRiWFlaAAABuAAAABRyVFJDAAABzAAAACBjaGFkAAAB7AAAACxiVFJDAAABzAAAACBnVFJDAAABzAAAACBtbHVjAAAAAAAAAAEAAAAMZW5VUwAAABQAAAAcAEQAaQBzAHAAbABhAHkAIABQADNtbHVjAAAAAAAAAAEAAAAMZW5VUwAAADQAAAAcAEMAbwBwAHkAcgBpAGcAaAB0ACAAQQBwAHAAbABlACAASQBuAGMALgAsACAAMgAwADIAMlhZWiAAAAAAAAD21QABAAAAANMsWFlaIAAAAAAAAIPfAAA9v////7tYWVogAAAAAAAASr8AALE3AAAKuVhZWiAAAAAAAAAoOAAAEQsAAMi5cGFyYQAAAAAAAwAAAAJmZgAA8qcAAA1ZAAAT0AAACltzZjMyAAAAAAABDEIAAAXe///zJgAAB5MAAP2Q///7ov///aMAAAPcAADAbgAAAAxjbGxpAMsAQAAAABRpc3BlAAAAAAAAAgAAAAEAAAAACWlyb3QDAAAAEHBpeGkAAAAAAwgICAAAAG9odmNDAQNwAAAAsAAAAAAAP/AA/P34+AAACwOgAAEAF0ABDAH//wNwAAADALAAAAMAAAMAP3AkoQABACFCAQEDcAAAAwCwAAADAAADAD+gBAIBAWIe5FlU3AgIGAKiAAEACUQBwGFyyEBTJAAAABlpcG1hAAAAAAAAAAEAAQaBAgMFhoQAAAA6aWxvYwAAAABEAAADAAEAAAABAAAHigAAAKcAAgAAAAEAAARLAAABAgADAAAAAQAABU0AAAI9AAAAAW1kYXQAAAAAAAAD9gAAAAZFeGlmAABNTQAqAAAACAAFAQ4AAgAAAB8AAABKAQ8AAgAAABMAAABqARIAAwAAAAEABgAAATIAAgAAABQAAAB+iCUABAAAAAEAAACSAAAAAFB1YmxpYyBwaG90byBwaWNrZXIgSEVJQyBwcm9vZgAAUHVibGljIHRlc3QgY2FtZXJhAAAyMDI2OjAxOjAyIDAzOjA0OjA1AAAEAAEAAgAAAAJOAAAAAAIABQAAAAMAAADIAAMAAgAAAAJFAAAAAAQABQAAAAMAAADgAAAAAAAAAAEAAAABAAAADgAAAAEAAADwAAAAZAAAAAQAAAABAAAAIgAAAAEAAAB4AAAAZDx4OnhtcG1ldGEgeG1sbnM6eD0iYWRvYmU6bnM6bWV0YS8iIHg6eG1wdGs9IlhNUCBDb3JlIDYuMC4wIj4KICAgPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4KICAgICAgPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIKICAgICAgICAgICAgeG1sbnM6ZGM9Imh0dHA6Ly9wdXJsLm9yZy9kYy9lbGVtZW50cy8xLjEvIgogICAgICAgICAgICB4bWxuczp4bXA9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC8iPgogICAgICAgICA8ZGM6ZGVzY3JpcHRpb24+CiAgICAgICAgICAgIDxyZGY6QWx0PgogICAgICAgICAgICAgICA8cmRmOmxpIHhtbDpsYW5nPSJ4LWRlZmF1bHQiPlB1YmxpYyBwaG90byBwaWNrZXIgSEVJQyBwcm9vZjwvcmRmOmxpPgogICAgICAgICAgICA8L3JkZjpBbHQ+CiAgICAgICAgIDwvZGM6ZGVzY3JpcHRpb24+CiAgICAgICAgIDx4bXA6TW9kaWZ5RGF0ZT4yMDI2LTAxLTAyVDAzOjA0OjA1PC94bXA6TW9kaWZ5RGF0ZT4KICAgICAgPC9yZGY6RGVzY3JpcHRpb24+CiAgIDwvcmRmOlJERj4KPC94OnhtcG1ldGE+CgAAAKMoAa+INSeaZIUTRoF8//03r//2DvsvxvEPsW/Z6UeyTGwnGifRjW/+cF//4qmNB7q1iMGAPm3F/OOKi/LCnKuBAAAFJCKxYiPtYp4OwcaAAARkCq9eothFG0yGAACagAnca//wEPkfxWEX/Xpt4rX29+CxYfrHzobv9sqQ/OYOgAAAMOADJXcIgCG0oAAR0AW1oAADurwADxgAAAMAAFE/YAd8";
+function element(id) {
+  const value = document.getElementById(id);
+  if (!value) throw Error("Missing upload control");
+  return value;
+}
+const request = element("request"), inspect = element("inspect"), status = element("status"), receipt = element("receipt");
+let uploadId = null, busy = false;
+const encoded = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAADklEQVR4nGP4z8DwHwQBEPgD/U6VwW8AAAAASUVORK5CYII=";
+const bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
+element("preview").src = "data:image/png;base64," + encoded;
+function render(value) {
+  receipt.textContent = JSON.stringify(value, null, 2);
+}
+request.addEventListener("click", () => {
+  if (busy) return;
+  busy = true;
+  request.disabled = true;
+  status.textContent = "Waiting for trusted review…";
+  void upload.upload({ data: new Blob([bytes], { type: "image/png" }), filename: "two-pixels.png", caption: "Generated red and green PNG", noTransform: true, metadata: { fixture: "upload-lab" } }).then((value) => {
+    uploadId = value.uploadId;
+    render(value);
+    status.textContent = "Upload pending approval.";
+  }).catch((error) => {
+    status.textContent = error instanceof Error ? error.message : "Upload request failed.";
+  }).finally(() => {
+    busy = false;
+    request.disabled = false;
+  });
+});
+inspect.addEventListener("click", () => {
+  if (uploadId) void upload.status(uploadId).then(render).catch(() => {
+    status.textContent = "Upload status unavailable.";
+  });
+});
+let subscription = null;
+try {
+  subscription = upload.onStatus((value) => {
+    render(value);
+    status.textContent = "Upload " + value.status + ".";
+  });
+} catch {
+  status.textContent = "Upload status notifications are unavailable in this host.";
+}
+window.addEventListener("pagehide", () => {
+  subscription?.close();
+  bytes.fill(0);
+}, { once: true });
+status.textContent = "Ready to request a PNG upload.";
+const selection = element("selection"), selectedRequest = element("selected-request"), selectedRead = element("selected-read"), selectedStatus = element("selected-status");
+let selected = null;
+async function readSelected() {
+  if (!selected) return;
+  const data = await selected.arrayBuffer();
+  const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", data)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  selectedStatus.textContent = "Selected bytes: " + data.byteLength + "; SHA-256: " + hash + "; type: " + selected.type + "; name: " + selected.name + "; relative path: " + selected.webkitRelativePath;
+}
+selection.addEventListener("change", () => {
+  selected = selection.files?.length === 1 ? selection.files[0] : null;
+  selectedRequest.disabled = selected === null;
+  selectedRead.disabled = selected === null;
+  if (selected) void readSelected().catch(() => {
+    selectedStatus.textContent = "Selected file unavailable.";
+  });
+});
+selectedRead.addEventListener("click", () => {
+  void readSelected().catch(() => {
+    selectedStatus.textContent = "Selected file unavailable.";
+  });
+});
+selectedRequest.addEventListener("click", () => {
+  if (busy || !selected) return;
+  busy = true;
+  selectedRequest.disabled = true;
+  status.textContent = "Waiting for trusted review…";
+  void upload.upload({ data: selected, filename: selected.name, caption: "Selected file", noTransform: true }).then((value) => {
+    uploadId = value.uploadId;
+    render(value);
+    status.textContent = "Upload pending approval.";
+  }).catch((error) => {
+    status.textContent = error instanceof Error ? error.message : "Upload request failed.";
+  }).finally(() => {
+    busy = false;
+    selectedRequest.disabled = selected === null;
+  });
+});
+for (const photo of [{ kind: "JPEG", mime: "image/jpeg", asset: originalJpeg }, { kind: "HEIC", mime: "image/heic", asset: originalHeic }]) {
+  const button = element("original-" + photo.kind.toLowerCase());
+  button.addEventListener("click", () => {
+    if (busy) return;
+    busy = true;
+    button.disabled = true;
+    status.textContent = "Waiting for trusted original-photo review…";
+    const data = Uint8Array.from(atob(photo.asset.slice(photo.asset.indexOf(",") + 1)), (character) => character.charCodeAt(0));
+    void (async () => {
+      const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", data)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+      element("original-status").textContent = "Original " + photo.kind + " input: " + data.byteLength + " bytes; SHA-256: " + hash;
+      const value = await upload.upload({ data: new Blob([data], { type: photo.mime }), filename: "generated-original." + photo.kind.toLowerCase(), caption: "Generated original " + photo.kind, noTransform: true });
+      uploadId = value.uploadId;
+      render(value);
+      status.textContent = "Upload pending approval.";
+    })().catch((error) => {
+      status.textContent = error instanceof Error ? error.message : "Original photo request failed.";
+    }).finally(() => {
+      data.fill(0);
+      busy = false;
+      button.disabled = false;
+    });
+  });
+}
+const largeRequest = element("large-request");
+largeRequest.addEventListener("click", () => {
+  if (busy) return;
+  busy = true;
+  largeRequest.disabled = true;
+  status.textContent = "Waiting for trusted attachment review…";
+  const data = new Uint8Array(4 * 1024 * 1024);
+  data.fill(97);
+  const header = new DataView(data.buffer);
+  const ascii = (offset, value) => {
+    for (let index = 0; index < value.length; index++) data[offset + index] = value.charCodeAt(index);
+  };
+  ascii(0, "RIFF");
+  header.setUint32(4, data.length - 8, true);
+  ascii(8, "WAVE");
+  ascii(12, "fmt ");
+  header.setUint32(16, 16, true);
+  header.setUint16(20, 1, true);
+  header.setUint16(22, 1, true);
+  header.setUint32(24, 8e3, true);
+  header.setUint32(28, 8e3, true);
+  header.setUint16(32, 1, true);
+  header.setUint16(34, 8, true);
+  ascii(36, "data");
+  header.setUint32(40, data.length - 44, true);
+  void upload.upload({ data: new Blob([data], { type: "audio/wav" }), filename: "generated-four-megabytes.wav", caption: "Generated public WAV fixture", noTransform: true }).then((value) => {
+    uploadId = value.uploadId;
+    render(value);
+    status.textContent = "Upload pending approval.";
+  }).catch((error) => {
+    status.textContent = error instanceof Error ? error.message : "Attachment request failed.";
+  }).finally(() => {
+    data.fill(0);
+    busy = false;
+    largeRequest.disabled = false;
+  });
+});
+if (document.body.dataset.uploadQueue === "true") {
+  const attachment = new Blob(["Generated public queue fixture.\n"], { type: "text/plain" });
+  const queued = () => upload.upload({ data: attachment, filename: "generated-queue.txt", noTransform: true });
+  setTimeout(() => {
+    void queued().then((value) => {
+      uploadId = value.uploadId;
+      render(value);
+      return queued().then(() => {
+        status.textContent = "Unexpected second queue admission.";
+      }).catch((error) => {
+        status.textContent = "Queue pending; second request rejected: " + (error instanceof Error ? error.message : "unknown");
+      });
+    }).catch((error) => {
+      status.textContent = "Queue request rejected: " + (error instanceof Error ? error.message : "unknown");
+    });
+  }, 500);
+}
+element("scheduled-request").addEventListener("click", () => {
+  status.textContent = "PNG request scheduled in fifteen seconds.";
+  setTimeout(() => request.click(), 15e3);
+});
+element("info-request").addEventListener("click", () => {
+  void upload.info().then((value) => {
+    element("upload-info").textContent = JSON.stringify(value, null, 2);
+  }).catch(() => {
+    element("upload-info").textContent = "Upload limits unavailable.";
+  });
+});
+</script>
+  <style>html { color-scheme: dark; background: #140f0b; color: #f3efeb; font: 16px system-ui, sans-serif; }
+body { margin: 0; } main { padding: 24px; display: grid; gap: 16px; } h1, p { margin: 0; } p { line-height: 1.5; }
+img { max-width: 100%; image-rendering: pixelated; } button { min-height: 48px; padding: 12px 18px; border: 1px solid #654637; border-radius: 12px; background: #34251d; color: #e8805d; font: inherit; } button:disabled { opacity: .5; } button:focus-visible { outline: 3px solid #e8805d; outline-offset: 3px; } pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+
+p {overflow-wrap: anywhere;}
+</style>
+</head>
+<body data-upload-queue="true"><main><h1>Upload Lab</h1><p>A generated photo with two pixels. Each request opens a separate trusted review.</p><img id="preview" alt="Generated red and green pixels" width="240" height="120"><button id="request" type="button">Request PNG upload</button><button id="scheduled-request" type="button">Schedule PNG request in fifteen seconds</button><label>Select a file<input id="selection" type="file"></label><button id="selected-request" type="button" disabled>Request selected upload</button><button id="selected-read" type="button" disabled>Read selected file</button><p id="selected-status" role="status">No selected file.</p><button id="original-jpeg" type="button">Request original JPEG</button><button id="original-heic" type="button">Request original HEIC</button><p id="original-status" role="status">No original photo requested.</p><button id="large-request" type="button">Request large WAV upload</button><button id="inspect" type="button">Read upload status</button><p id="status" role="status"></p><pre id="receipt"></pre><button id="info-request" type="button">Read upload limits</button><pre id="upload-info"></pre></main></body></html>

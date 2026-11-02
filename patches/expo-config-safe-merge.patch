@@ -1,0 +1,11 @@
+--- a/build/Config.js
++++ b/build/Config.js
+@@ -38,7 +38,7 @@
+   return data;
+ }
+ function _deepmerge() {
+-  const data = _interopRequireDefault(require("deepmerge"));
++  const data = _interopRequireDefault(require("@fastify/deepmerge")({ symbols: true }));
+   _deepmerge = function () {
+     return data;
+   };

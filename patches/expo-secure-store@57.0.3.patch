@@ -1,0 +1,542 @@
+diff --git a/android/src/main/java/expo/modules/securestore/SecureStoreModule.kt b/android/src/main/java/expo/modules/securestore/SecureStoreModule.kt
+--- a/android/src/main/java/expo/modules/securestore/SecureStoreModule.kt
++++ b/android/src/main/java/expo/modules/securestore/SecureStoreModule.kt
+@@ -2,23 +2,19 @@
+ 
+ import android.content.Context
+ import android.content.SharedPreferences
+-import android.preference.PreferenceManager
+ import android.security.keystore.KeyPermanentlyInvalidatedException
+-import android.util.Log
+ import expo.modules.kotlin.exception.CodedException
+ import expo.modules.kotlin.exception.Exceptions
+ import expo.modules.kotlin.functions.Coroutine
+ import expo.modules.kotlin.modules.Module
+ import expo.modules.kotlin.modules.ModuleDefinition
+ import expo.modules.securestore.encryptors.AESEncryptor
+-import expo.modules.securestore.encryptors.HybridAESEncryptor
+ import expo.modules.securestore.encryptors.KeyBasedEncryptor
+ import kotlinx.coroutines.runBlocking
+ import org.json.JSONException
+ import org.json.JSONObject
+ import java.security.GeneralSecurityException
+ import java.security.KeyStore
+-import java.security.KeyStore.PrivateKeyEntry
+ import java.security.KeyStore.SecretKeyEntry
+ import javax.crypto.BadPaddingException
+ 
+@@ -28,7 +24,6 @@
+     get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
+ 
+   private lateinit var keyStore: KeyStore
+-  private lateinit var hybridAESEncryptor: HybridAESEncryptor
+   private lateinit var authenticationHelper: AuthenticationHelper
+ 
+   override fun definition() = ModuleDefinition {
+@@ -36,7 +31,7 @@
+ 
+     AsyncFunction("setValueWithKeyAsync") Coroutine { value: String?, key: String?, options: SecureStoreOptions ->
+       key ?: throw NullKeyException()
+-      return@Coroutine setItemImpl(key, value, options, false)
++      return@Coroutine setItemImpl(key, value, options)
+     }
+ 
+     AsyncFunction("getValueWithKeyAsync") Coroutine { key: String, options: SecureStoreOptions ->
+@@ -46,7 +41,7 @@
+     Function("setValueWithKeySync") { value: String?, key: String?, options: SecureStoreOptions ->
+       key ?: throw NullKeyException()
+       return@Function runBlocking {
+-        return@runBlocking setItemImpl(key, value, options, keyIsInvalidated = false)
++        return@runBlocking setItemImpl(key, value, options)
+       }
+     }
+ 
+@@ -77,7 +72,6 @@
+ 
+     OnCreate {
+       authenticationHelper = AuthenticationHelper(reactContext, appContext.legacyModuleRegistry)
+-      hybridAESEncryptor = HybridAESEncryptor(reactContext, mAESEncryptor)
+ 
+       val keyStore = KeyStore.getInstance(KEYSTORE_PROVIDER)
+       keyStore.load(null)
+@@ -86,14 +80,13 @@
+   }
+ 
+   private suspend fun getItemImpl(key: String, options: SecureStoreOptions): String? {
++    requireConfigAccess(key, options)
+     // We use a SecureStore-specific shared preferences file, which lets us do things like enumerate
+     // its entries or clear all of them
+     val prefs: SharedPreferences = getSharedPreferences()
+     val keychainAwareKey = createKeychainAwareKey(key, options.keychainService)
+     if (prefs.contains(keychainAwareKey)) {
+       return readJSONEncodedItem(key, prefs, options)
+-    } else if (prefs.contains(key)) { // For backwards-compatibility try to read using the old key format
+-      return readJSONEncodedItem(key, prefs, options)
+     }
+     return null
+   }
+@@ -101,23 +94,7 @@
+   private suspend fun readJSONEncodedItem(key: String, prefs: SharedPreferences, options: SecureStoreOptions): String? {
+     val keychainAwareKey = createKeychainAwareKey(key, options.keychainService)
+ 
+-    val legacyEncryptedItemString = prefs.getString(key, null)
+-    val currentEncryptedItemString = prefs.getString(keychainAwareKey, null)
+-    val encryptedItemString = currentEncryptedItemString ?: legacyEncryptedItemString
+-
+-    // It's not possible to efficiently remove all values from older versions of secure-store when an invalidated keychain is deleted.
+-    // In some edge cases it will lead to read errors until the value is removed from the shared preferences
+-    val legacyReadFailedWarning = if (currentEncryptedItemString == null) {
+-      ". This exception occurred when trying to read a value saved with an " +
+-        "older version of `expo-secure-store`. It usually means that the keychain you provided is incorrect, " +
+-        "but it might be raised because the keychain used to decrypt this key has been invalidated and deleted." +
+-        " If you are confident that the keychain you provided is correct and want to avoid this error in the " +
+-        "future you should save a new value under this key or use `deleteItemImpl()` and remove the existing one."
+-    } else {
+-      ""
+-    }
+-
+-    encryptedItemString ?: return null
++    val encryptedItemString = prefs.getString(keychainAwareKey, null) ?: return null
+ 
+     val encryptedItem: JSONObject = try {
+       JSONObject(encryptedItemString)
+@@ -125,47 +102,21 @@
+       throw DecryptException("Could not parse the encrypted JSON item in SecureStore: ${e.message}", key, options.keychainService, e)
+     }
+ 
+-    val scheme = encryptedItem.optString(SCHEME_PROPERTY).takeIf { it.isNotEmpty() }
+-      ?: throw DecryptException("Could not find the encryption scheme used for key: $key", key, options.keychainService)
+-    val requireAuthentication = encryptedItem.optBoolean(AuthenticationHelper.REQUIRE_AUTHENTICATION_PROPERTY, false)
+-    val usesKeystoreSuffix = encryptedItem.optBoolean(USES_KEYSTORE_SUFFIX_PROPERTY, false)
++    if (!NappletConfigPolicy.allowsRecord(
++        encryptedItem.opt(SCHEME_PROPERTY), encryptedItem.opt(KEYSTORE_ALIAS_PROPERTY),
++        encryptedItem.opt(AuthenticationHelper.REQUIRE_AUTHENTICATION_PROPERTY),
++        encryptedItem.opt(USES_KEYSTORE_SUFFIX_PROPERTY))) {
++      throw DecryptException("SecureStore record is outside the napplet configuration format", key, options.keychainService)
++    }
+ 
+     try {
+-      when (scheme) {
+-        AESEncryptor.NAME -> {
+-          val secretKeyEntry = getKeyEntryCompat(SecretKeyEntry::class.java, mAESEncryptor, options, requireAuthentication, usesKeystoreSuffix) ?: run {
+-            Log.w(
+-              TAG,
+-              "An entry was found for key $key under keychain ${options.keychainService}, but there is no corresponding KeyStore key. " +
+-                "This situation occurs when the app is reinstalled. The value will be removed to avoid future errors. Returning null"
+-            )
+-            deleteItemImpl(key, options)
+-            return null
+-          }
+-          return mAESEncryptor.decryptItem(key, encryptedItem, secretKeyEntry, options, authenticationHelper)
+-        }
+-        HybridAESEncryptor.NAME -> {
+-          val privateKeyEntry = getKeyEntryCompat(PrivateKeyEntry::class.java, hybridAESEncryptor, options, requireAuthentication, usesKeystoreSuffix)
+-            ?: return null
+-          return hybridAESEncryptor.decryptItem(key, encryptedItem, privateKeyEntry, options, authenticationHelper)
+-        }
+-        else -> {
+-          throw DecryptException("The item for key $key in SecureStore has an unknown encoding scheme $scheme)", key, options.keychainService)
+-        }
+-      }
++      val secretKeyEntry = getKeyEntry(SecretKeyEntry::class.java, mAESEncryptor, options, false)
++        ?: throw DecryptException("The protected configuration key is missing", key, options.keychainService)
++      return mAESEncryptor.decryptItem(key, encryptedItem, secretKeyEntry, options, authenticationHelper)
+     } catch (e: KeyPermanentlyInvalidatedException) {
+-      Log.w(TAG, "The requested key has been permanently invalidated. Returning null")
+-      return null
++      throw DecryptException("The protected configuration key is unavailable", key, options.keychainService, e)
+     } catch (e: BadPaddingException) {
+-      // The key from the KeyStore is unable to decode the entry. This is because a new key was generated, but the entries are encrypted using the old one.
+-      // This usually means that the user has reinstalled the app. We can safely remove the old value and return null as it's impossible to decrypt it.
+-      Log.w(
+-        TAG,
+-        "Failed to decrypt the entry for $key under keychain ${options.keychainService}. " +
+-          "The entry in shared preferences is out of sync with the keystore. It will be removed, returning null."
+-      )
+-      deleteItemImpl(key, options)
+-      return null
++      throw DecryptException("Could not decrypt the napplet configuration record", key, options.keychainService, e)
+     } catch (e: GeneralSecurityException) {
+       throw (DecryptException(e.message, key, options.keychainService, e))
+     } catch (e: CodedException) {
+@@ -175,7 +126,8 @@
+     }
+   }
+ 
+-  private suspend fun setItemImpl(key: String, value: String?, options: SecureStoreOptions, keyIsInvalidated: Boolean) {
++  private suspend fun setItemImpl(key: String, value: String?, options: SecureStoreOptions) {
++    requireConfigAccess(key, options)
+     val keychainAwareKey = createKeychainAwareKey(key, options.keychainService)
+     val prefs: SharedPreferences = getSharedPreferences()
+ 
+@@ -188,13 +140,6 @@
+     }
+ 
+     try {
+-      if (keyIsInvalidated) {
+-        // Invalidated keys will block writing even though it's not possible to re-validate them
+-        // so we remove them before saving.
+-        val alias = mAESEncryptor.getExtendedKeyStoreAlias(options, options.requireAuthentication)
+-        removeKeyFromKeystore(alias, options.keychainService)
+-      }
+-
+       /* Android API 23+ supports storing symmetric keys in the keystore and on older Android
+        versions we store an asymmetric key pair and use hybrid encryption. We store the scheme we
+        use in the encrypted JSON item so that we know how to decode and decrypt it when reading
+@@ -203,17 +148,11 @@
+       val secretKeyEntry: SecretKeyEntry = getOrCreateKeyEntry(SecretKeyEntry::class.java, mAESEncryptor, options, options.requireAuthentication)
+       val encryptedItem = mAESEncryptor.createEncryptedItem(value, secretKeyEntry, options.requireAuthentication, options.authenticationPrompt, authenticationHelper)
+       encryptedItem.put(SCHEME_PROPERTY, AESEncryptor.NAME)
+-      saveEncryptedItem(encryptedItem, prefs, keychainAwareKey, options.requireAuthentication, options.keychainService)
+-
+-      // If a legacy value exists under this key we remove it to avoid unexpected errors in the future
+-      if (prefs.contains(key)) {
+-        prefs.edit().remove(key).apply()
+-      }
++      if (!saveEncryptedItem(encryptedItem, prefs, keychainAwareKey, false, options.keychainService)) {
++        throw WriteException("Could not commit the napplet configuration record", key, options.keychainService)
++      }
++
+     } catch (e: KeyPermanentlyInvalidatedException) {
+-      if (!keyIsInvalidated) {
+-        Log.w(TAG, "Key has been invalidated, retrying with the key deleted")
+-        return setItemImpl(key, value, options, true)
+-      }
+       throw EncryptException("Encryption Failed. The key $key has been permanently invalidated and cannot be reinitialized", key, options.keychainService, e)
+     } catch (e: GeneralSecurityException) {
+       throw EncryptException(e.message, key, options.keychainService, e)
+@@ -240,69 +179,20 @@
+     return prefs.edit().putString(key, encryptedItemString).commit()
+   }
+ 
++  private fun requireConfigAccess(key: String, options: SecureStoreOptions) {
++    if (!NappletConfigPolicy.allows(key, options.keychainService, options.requireAuthentication,
++        options.authenticationPrompt, options.keychainAccessible, options.accessGroup)) {
++      throw CodedException("SecureStore is restricted to napplet configuration")
++    }
++  }
++
+   private fun deleteItemImpl(key: String, options: SecureStoreOptions) {
+-    val success = removeItem(
+-      getSharedPreferences(),
+-      PreferenceManager.getDefaultSharedPreferences(reactContext),
+-      key,
+-      createKeychainAwareKey(key, options.keychainService)
+-    )
+-
++    requireConfigAccess(key, options)
++    val success = getSharedPreferences().edit()
++      .remove(createKeychainAwareKey(key, options.keychainService)).commit()
+     if (!success) {
+       throw DeleteException("Could not delete the item from SecureStore", key, options.keychainService)
+     }
+-  }
+-
+-  private fun removeKeyFromKeystore(keyStoreAlias: String, keychainService: String) {
+-    keyStore.deleteEntry(keyStoreAlias)
+-    removeAllEntriesUnderKeychainService(keychainService)
+-  }
+-
+-  private fun removeAllEntriesUnderKeychainService(keychainService: String) {
+-    val sharedPreferences = getSharedPreferences()
+-    val allEntries: Map<String, *> = sharedPreferences.all
+-
+-    // In order to avoid decryption failures we need to remove all entries that are using the deleted encryption key
+-    for ((key: String, value) in allEntries) {
+-      val valueString = value as? String ?: continue
+-      val jsonEntry = try {
+-        JSONObject(valueString)
+-      } catch (e: JSONException) {
+-        continue
+-      }
+-
+-      val entryKeychainService = jsonEntry.optString(KEYSTORE_ALIAS_PROPERTY) ?: continue
+-      val requireAuthentication = jsonEntry.optBoolean(AuthenticationHelper.REQUIRE_AUTHENTICATION_PROPERTY, false)
+-
+-      // Entries which don't require authentication use separate keychains which can't be invalidated,
+-      // so we shouldn't delete them.
+-      if (requireAuthentication && keychainService == entryKeychainService) {
+-        sharedPreferences.edit().remove(key).apply()
+-        Log.w(TAG, "Removing entry: $key due to the encryption key being deleted")
+-      }
+-    }
+-  }
+-
+-  /**
+-   * Each key is stored under a keychain service that requires authentication, or one that doesn't
+-   * Keys used to be stored under a single keychain, which led to different behaviour on iOS and Android.
+-   * Because of that we need to check if there are any keys stored with the old secure-store key format.
+-   */
+-  private fun <E : KeyStore.Entry> getLegacyKeyEntry(
+-    keyStoreEntryClass: Class<E>,
+-    encryptor: KeyBasedEncryptor<E>,
+-    options: SecureStoreOptions
+-  ): E? {
+-    val keystoreAlias = encryptor.getKeyStoreAlias(options)
+-    if (!keyStore.containsAlias(encryptor.getKeyStoreAlias(options))) {
+-      return null
+-    }
+-
+-    val entry = keyStore.getEntry(keystoreAlias, null)
+-    if (!keyStoreEntryClass.isInstance(entry)) {
+-      return null
+-    }
+-    return keyStoreEntryClass.cast(entry)
+   }
+ 
+   private fun <E : KeyStore.Entry> getKeyEntry(
+@@ -339,20 +229,6 @@
+     }
+   }
+ 
+-  private fun <E : KeyStore.Entry> getKeyEntryCompat(
+-    keyStoreEntryClass: Class<E>,
+-    encryptor: KeyBasedEncryptor<E>,
+-    options: SecureStoreOptions,
+-    requireAuthentication: Boolean,
+-    usesKeystoreSuffix: Boolean
+-  ): E? {
+-    return if (usesKeystoreSuffix) {
+-      getKeyEntry(keyStoreEntryClass, encryptor, options, requireAuthentication)
+-    } else {
+-      getLegacyKeyEntry(keyStoreEntryClass, encryptor, options)
+-    }
+-  }
+-
+   fun getSharedPreferences(): SharedPreferences {
+     return reactContext.getSharedPreferences(SHARED_PREFERENCES_NAME, Context.MODE_PRIVATE)
+   }
+@@ -378,13 +254,3 @@
+   }
+ }
+ 
+-internal fun removeItem(
+-  prefs: SharedPreferences,
+-  legacyPrefs: SharedPreferences,
+-  key: String,
+-  keychainAwareKey: String
+-): Boolean {
+-  val removedFromPrefs = prefs.edit().remove(keychainAwareKey).remove(key).commit()
+-  val removedFromLegacyPrefs = legacyPrefs.edit().remove(key).commit()
+-  return removedFromPrefs && removedFromLegacyPrefs
+-}
+diff --git a/android/src/main/java/expo/modules/securestore/SecureStoreOptions.kt b/android/src/main/java/expo/modules/securestore/SecureStoreOptions.kt
+--- a/android/src/main/java/expo/modules/securestore/SecureStoreOptions.kt
++++ b/android/src/main/java/expo/modules/securestore/SecureStoreOptions.kt
+@@ -10,5 +10,7 @@
+   // Prompt can't be an empty string
+   @Field var authenticationPrompt: String = " ",
+   @Field var keychainService: String = SecureStoreModule.DEFAULT_KEYSTORE_ALIAS,
+-  @Field var requireAuthentication: Boolean = false
++  @Field var requireAuthentication: Boolean = false,
++  @Field var keychainAccessible: Int = 6,
++  @Field var accessGroup: String? = null
+ ) : Record, Serializable
+diff --git a/android/src/main/java/expo/modules/securestore/NappletConfigPolicy.java b/android/src/main/java/expo/modules/securestore/NappletConfigPolicy.java
+new file mode 100644
+--- /dev/null
++++ b/android/src/main/java/expo/modules/securestore/NappletConfigPolicy.java
+@@ -0,0 +1,26 @@
++package expo.modules.securestore;
++
++/** This app keeps generic SecureStore inaccessible to identity or staging callers. */
++public final class NappletConfigPolicy {
++  public static final String SERVICE = "org.nostrocket.hypergolic.napplet-config.v1";
++  private NappletConfigPolicy() {}
++
++  public static boolean allows(String key, String service, boolean authenticated,
++      String prompt, int accessibility, String accessGroup) {
++    if (!SERVICE.equals(service) || authenticated || !" ".equals(prompt)
++        || accessibility != 6 || accessGroup != null || key == null
++        || key.length() != 70 || !key.startsWith("scope.")) return false;
++    for (int i = 6; i < key.length(); i++) {
++      char c = key.charAt(i);
++      if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
++    }
++    return true;
++  }
++
++  /** Require the modern unauthenticated AES record and exact service metadata.
++   * Missing fields, coerced booleans and legacy aliases fail closed. */
++  public static boolean allowsRecord(Object scheme, Object service, Object authenticated, Object suffix) {
++    return "aes".equals(scheme) && SERVICE.equals(service)
++        && Boolean.FALSE.equals(authenticated) && Boolean.TRUE.equals(suffix);
++  }
++}
+diff --git a/ios/SecureStoreModule.swift b/ios/SecureStoreModule.swift
+--- a/ios/SecureStoreModule.swift
++++ b/ios/SecureStoreModule.swift
+@@ -41,13 +41,11 @@
+     }
+ 
+     AsyncFunction("deleteValueWithKeyAsync") { (key: String, options: SecureStoreOptions) in
+-      let noAuthSearchDictionary = query(with: key, options: options, requireAuthentication: false)
+-      let authSearchDictionary = query(with: key, options: options, requireAuthentication: true)
+-      let legacySearchDictionary = query(with: key, options: options)
+-
+-      SecItemDelete(legacySearchDictionary as CFDictionary)
+-      SecItemDelete(authSearchDictionary as CFDictionary)
+-      SecItemDelete(noAuthSearchDictionary as CFDictionary)
++      try requireConfigAccess(key: key, options: options)
++      let status = SecItemDelete(query(with: key, options: options) as CFDictionary)
++      if status != errSecSuccess && status != errSecItemNotFound {
++        throw KeyChainException(status)
++      }
+     }
+ 
+     Function("canUseBiometricAuthentication") {() -> Bool in
+@@ -67,55 +65,31 @@
+   }
+ 
+   private func get(with key: String, options: SecureStoreOptions) throws -> String? {
++    try requireConfigAccess(key: key, options: options)
+     guard let key = validate(for: key) else {
+       throw InvalidKeyException()
+     }
+ 
+-    if let unauthenticatedItem = try searchKeyChain(with: key, options: options, requireAuthentication: false) {
++    if let unauthenticatedItem = try searchKeyChain(with: key, options: options) {
+       return String(data: unauthenticatedItem, encoding: .utf8)
+-    }
+-
+-    if let authenticatedItem = try searchKeyChain(with: key, options: options, requireAuthentication: true) {
+-      return String(data: authenticatedItem, encoding: .utf8)
+-    }
+-
+-    if let legacyItem = try searchKeyChain(with: key, options: options) {
+-      return String(data: legacyItem, encoding: .utf8)
+     }
+ 
+     return nil
+   }
+ 
+   private func set(value: String, with key: String, options: SecureStoreOptions) throws -> Bool {
+-    var setItemQuery = query(with: key, options: options, requireAuthentication: options.requireAuthentication)
++    try requireConfigAccess(key: key, options: options)
++    var setItemQuery = query(with: key, options: options)
+ 
+     let valueData = value.data(using: .utf8)
+     setItemQuery[kSecValueData as String] = valueData
+ 
+-    let accessibility = attributeWith(options: options)
+-
+-    if !options.requireAuthentication {
+-      setItemQuery[kSecAttrAccessible as String] = accessibility
+-    } else {
+-      guard let _ = Bundle.main.infoDictionary?["NSFaceIDUsageDescription"] as? String else {
+-        throw MissingPlistKeyException()
+-      }
+-
+-      var error: Unmanaged<CFError>? = nil
+-      guard let accessOptions = SecAccessControlCreateWithFlags(kCFAllocatorDefault, accessibility, .biometryCurrentSet, &error) else {
+-        let errorCode = error.map { CFErrorGetCode($0.takeRetainedValue()) }
+-        throw SecAccessControlError(errorCode)
+-      }
+-      setItemQuery[kSecAttrAccessControl as String] = accessOptions
+-    }
++    setItemQuery[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+ 
+     let status = SecItemAdd(setItemQuery as CFDictionary, nil)
+ 
+     switch status {
+     case errSecSuccess:
+-      // On success we want to remove the other key alias and legacy key (if they exist) to avoid conflicts during reads
+-      SecItemDelete(query(with: key, options: options) as CFDictionary)
+-      SecItemDelete(query(with: key, options: options, requireAuthentication: !options.requireAuthentication) as CFDictionary)
+       return true
+     case errSecDuplicateItem:
+       return try update(value: value, with: key, options: options)
+@@ -125,7 +99,7 @@
+   }
+ 
+   private func update(value: String, with key: String, options: SecureStoreOptions) throws -> Bool {
+-    var query = query(with: key, options: options, requireAuthentication: options.requireAuthentication)
++    var query = query(with: key, options: options)
+ 
+     let valueData = value.data(using: .utf8)
+     let updateDictionary = [kSecValueData as String: valueData]
+@@ -143,8 +117,8 @@
+     }
+   }
+ 
+-  private func searchKeyChain(with key: String, options: SecureStoreOptions, requireAuthentication: Bool? = nil) throws -> Data? {
+-    var query = query(with: key, options: options, requireAuthentication: requireAuthentication)
++  private func searchKeyChain(with key: String, options: SecureStoreOptions) throws -> Data? {
++    var query = query(with: key, options: options)
+ 
+     query[kSecMatchLimit as String] = kSecMatchLimitOne
+     query[kSecReturnData as String] = kCFBooleanTrue
+@@ -169,45 +143,26 @@
+     }
+   }
+ 
+-  private func query(with key: String, options: SecureStoreOptions, requireAuthentication: Bool? = nil) -> [String: Any] {
+-    var service = options.keychainService ?? "app"
+-    if let requireAuthentication {
+-      service.append(":\(requireAuthentication ? "auth" : "no-auth")")
++  private func requireConfigAccess(key: String, options: SecureStoreOptions) throws {
++    guard NappletConfigPolicy.allows(key: key, service: options.keychainService,
++        authenticated: options.requireAuthentication, prompt: options.authenticationPrompt,
++        accessibility: options.keychainAccessible.rawValue, accessGroup: options.accessGroup) else {
++      throw InvalidKeyException()
+     }
++  }
+ 
++  private func query(with key: String, options: SecureStoreOptions) -> [String: Any] {
++    let service = NappletConfigPolicy.service + ":no-auth"
+     let encodedKey = Data(key.utf8)
+ 
+-    var query: [String: Any] = [
++    let query: [String: Any] = [
+       kSecClass as String: kSecClassGenericPassword,
+       kSecAttrService as String: service,
+       kSecAttrGeneric as String: encodedKey,
+       kSecAttrAccount as String: encodedKey
+     ]
+ 
+-    if let accessGroup = options.accessGroup {
+-      query[kSecAttrAccessGroup as String] = accessGroup
+-    }
+-
+     return query
+-  }
+-
+-  private func attributeWith(options: SecureStoreOptions) -> CFString {
+-    switch options.keychainAccessible {
+-    case .afterFirstUnlock:
+-      return kSecAttrAccessibleAfterFirstUnlock
+-    case .afterFirstUnlockThisDeviceOnly:
+-      return kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+-    case .always:
+-      return kSecAttrAccessibleAlways
+-    case .whenPasscodeSetThisDeviceOnly:
+-      return kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly
+-    case .whenUnlocked:
+-      return kSecAttrAccessibleWhenUnlocked
+-    case .alwaysThisDeviceOnly:
+-      return kSecAttrAccessibleAlwaysThisDeviceOnly
+-    case .whenUnlockedThisDeviceOnly:
+-      return kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+-    }
+   }
+ 
+   private func validate(for key: String) -> String? {
+diff --git a/ios/NappletConfigPolicy.swift b/ios/NappletConfigPolicy.swift
+new file mode 100644
+--- /dev/null
++++ b/ios/NappletConfigPolicy.swift
+@@ -0,0 +1,14 @@
++import Foundation
++
++/// Restricts this app's SecureStore bridge to its existing configuration namespace.
++enum NappletConfigPolicy {
++  static let service = "org.nostrocket.hypergolic.napplet-config.v1"
++
++  static func allows(key: String, service: String?, authenticated: Bool,
++      prompt: String?, accessibility: Int, accessGroup: String?) -> Bool {
++    let bytes = Array(key.utf8)
++    guard service == self.service, !authenticated, prompt == nil, accessibility == 6,
++        accessGroup == nil, bytes.count == 70, key.hasPrefix("scope.") else { return false }
++    return bytes.dropFirst(6).allSatisfy { (48...57).contains($0) || (97...102).contains($0) }
++  }
++}

@@ -1,0 +1,10 @@
+packages:
+  - .
+minimumReleaseAge: 10080
+trustPolicy: no-downgrade
+onlyBuiltDependencies:
+  - esbuild
+
+# Exact reviewed releases fixing the October 2026 audit findings.
+minimumReleaseAgeExclude:
+  - source-map-js@1.2.2

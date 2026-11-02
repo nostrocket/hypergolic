@@ -1,0 +1,10 @@
+{
+  "name": "@hypergolic/nap-support",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.5",
+  "engines": {"node": "24.20.0"},
+  "napplet": {"dTag": "nap-support", "title": "NAP Support", "requires": ["link"]},
+  "scripts": {"build": "node ../../runtime/tools/build-support-napplet.mjs", "type-check": "pnpm --dir ../.. exec tsc --noEmit -p napplets/nap-support/tsconfig.json"}
+}

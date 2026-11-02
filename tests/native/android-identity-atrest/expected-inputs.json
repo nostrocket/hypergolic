@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "scope": "Reviewed current owning native identity reader and ordinary Expo/JS bootstrap. Pin changes require scope review. No actual device proof.",
+  "secureStoreVersion": "57.0.3",
+  "sources": {
+    "modules/identity-owner/android/src/main/java/org/nostrocket/hypergolic/identityowner/SecureStoreIdentityRecords.java": "b94e0b2071e03aa9e9cd82827f4b0e47130c68f6f0a7a75c20017abfdf9b95c8",
+    "modules/identity-owner/android/src/main/java/org/nostrocket/hypergolic/identityowner/DeletionAuthority.java": "b8a3b1d4ae5236c3388c056806f650faecf56a331cbc4f440b43730a4dae6470",
+    "modules/identity-owner/android/src/main/java/org/nostrocket/hypergolic/identityowner/BackupNsec.java": "52c8a1b9e647add92b762d53a1f401d5e7fa856558fd3b3c91463c5a38ef9ad4",
+    "src/security/identity-vault.ts": "b675170b1bcc420475ee11b6e5f66b30eeb70ea9601a4cd61e5350b113288d25",
+    "src/security/identity-codec.ts": "9337a80200a297868813094a1d1d4fa913fc62b056df13a1ceed90f4350453fc",
+    "src/security/identity-metadata.ts": "361381272013bb69f6704c2f42e1f66bb0ac2532fef31559277e76cff07ee38c",
+    "src/security/android-encrypted-secrets.ts": "42f0f658c1f4b59af0e965ed8b57b5a2d34881a1876e2208806aafdc66fcbb3a",
+    "src/security/trusted-identity-owner.ts": "f9cb12ac65fa419f102a980f8f0fd58f2e3d79dca51bc7d9e362a79b578fe4cd",
+    "src/security/identity-state.ts": "85696279d778144cfbbd0757e9d598e3217a7d62e5dbfb13bdb07c04ffa15e62",
+    "src/App.tsx": "2c326968ab4e9ce38359370ff7e45ea2eaed759e305a17bab9760029b5f08f32",
+    "src/shell/IdentityEntry.tsx": "7b16179977e8f5b378642986c3ad3d114ddde7abafda36495dbb251bfea6e988",
+    "index.ts": "d8c92aa6d3f8c7295aeda4d9dbfd203ec1cbc9a9bfb3b95b8c3ad9b2aca4df3f",
+    "node_modules/expo-secure-store/android/src/main/java/expo/modules/securestore/SecureStoreModule.kt": "72c670b538732977ef132759ce810c5719943ce6082195a58ad5a432d4ac1075",
+    "node_modules/expo-secure-store/android/src/main/java/expo/modules/securestore/encryptors/AESEncryptor.kt": "d3a86de25c64935e84b6999101556b0e9f8bc6c90ce7600c421125b3e18aa3f4",
+    "node_modules/expo-secure-store/android/src/main/java/expo/modules/securestore/SecureStoreOptions.kt": "e41625fc30a92f5f36e0c5c8e2e10c0a81d710f59813f5482dbb64ba9a5a1fdf"
+  }
+}

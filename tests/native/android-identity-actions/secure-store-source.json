@@ -1,0 +1,9 @@
+{
+  "version": "57.0.3",
+  "scope": "Native codec compatibility reviewed against these exact installed SDK sources; update requires review and native proof.",
+  "sources": {
+    "android/src/main/java/expo/modules/securestore/SecureStoreModule.kt": "72c670b538732977ef132759ce810c5719943ce6082195a58ad5a432d4ac1075",
+    "android/src/main/java/expo/modules/securestore/encryptors/AESEncryptor.kt": "d3a86de25c64935e84b6999101556b0e9f8bc6c90ce7600c421125b3e18aa3f4",
+    "android/src/main/java/expo/modules/securestore/SecureStoreOptions.kt": "e41625fc30a92f5f36e0c5c8e2e10c0a81d710f59813f5482dbb64ba9a5a1fdf"
+  }
+}

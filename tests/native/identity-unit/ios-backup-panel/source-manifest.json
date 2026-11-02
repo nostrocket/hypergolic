@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "productionSources": {
+    "modules/identity-store/ios/NativeBackupPanel.swift": "9394f057b5a90f9e6ed4acbc2cbef4468ec81b9046ffe9d1510300b494c908fc",
+    "modules/identity-store/ios/NostrSecretBech32.swift": "24195cd8a4e26922ec48730ccd8f5aca1e5e724a96767d31ed264731ec037821"
+  }
+}

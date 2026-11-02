@@ -1,0 +1,81 @@
+package org.nostrocket.hypergolic.signercore;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public final class AcceptedResultTests {
+  interface Authorization { void awaitResume(String requestId) throws InterruptedException; }
+  static final class ClientBoundary {
+    Authorization authorization;
+    String lastResultId = "public-request";
+    final NativeRemoteOperation operation;
+    ClientBoundary(NativeRemoteOperation operation) { this.operation = operation; }
+    __ACTUAL_ACCEPTED_RESULT__
+  }
+  static int assertions, cases;
+  static final List<String> failures = new ArrayList<>();
+  interface Action { void run() throws Exception; }
+  static void check(boolean value, String message) { assertions++; if (!value) throw new AssertionError(message); }
+  static void test(String name, Action body) {
+    cases++; android.os.SystemClock.now = 100; Thread.interrupted();
+    try { body.run(); } catch (Exception | AssertionError e) { failures.add(name + ": " + e.getMessage()); }
+    finally { Thread.interrupted(); }
+  }
+  static final class Guard implements NativeRemoteOperation.Guard {
+    int checks, executions;
+    public void check() { checks++; }
+    public void execute() { executions++; }
+    public void beforeSigningSend() {}
+  }
+  static RuntimeException denied(ClientBoundary client, String code) {
+    try { client.acceptedResult(); } catch (RuntimeException e) {
+      check(code.equals(e.getMessage()), "expected " + code + ", got " + e.getMessage()); return e;
+    }
+    throw new AssertionError("authority refusal returned success");
+  }
+  public static void main(String[] args) {
+    test("accepted result still waits then executes", () -> {
+      Guard g = new Guard(); ClientBoundary c = new ClientBoundary(new NativeRemoteOperation(1000,g));
+      c.authorization = id -> { check(id.equals("public-request"), "correlated request"); check(g.executions == 0, "resume before execute"); };
+      c.acceptedResult(); check(g.checks == 1 && g.executions == 1, "final execute retained");
+    });
+    for (boolean sent : new boolean[]{false,true}) for (String code : new String[]{"AUTHORIZATION_DENIED","SIGNER_EXPIRED"}) {
+      test((sent ? "post" : "pre") + "-send resume " + code, () -> {
+        Guard g = new Guard(); NativeRemoteOperation o = new NativeRemoteOperation(1000,g);
+        if (sent) { o.signingFrame(); o.beforeSend(); }
+        ClientBoundary c = new ClientBoundary(o); NativeVault.Error failure = new NativeVault.Error(code);
+        c.authorization = id -> { throw failure; }; int executions = g.executions;
+        RuntimeException caught = denied(c, sent ? "SIGNER_UNCERTAIN" : code);
+        check(sent || caught == failure, "certain error identity preserved");
+        check(g.executions == executions, "rejected Resume never executes again");
+      });
+    }
+    for (String code : new String[]{"SIGNER_REJECTED","SIGNER_RESPONSE_INVALID","READBACK_FAILED","RECOVERY_REQUIRED","STORAGE_FAILURE"}) {
+      test("post-send distinct error " + code, () -> {
+        NativeRemoteOperation o = new NativeRemoteOperation(1000,new Guard()); o.signingFrame(); o.beforeSend();
+        ClientBoundary c = new ClientBoundary(o); NativeVault.Error failure = new NativeVault.Error(code);
+        c.authorization = id -> { throw failure; };
+        check(denied(c,code) == failure, "actionable/peer error not remapped");
+      });
+    }
+    for (boolean sent : new boolean[]{false,true}) {
+      test("interruption " + sent, () -> {
+        NativeRemoteOperation o = new NativeRemoteOperation(1000,new Guard());
+        if (sent) { o.signingFrame(); o.beforeSend(); }
+        ClientBoundary c = new ClientBoundary(o); c.authorization = id -> { throw new InterruptedException(); };
+        denied(c,sent ? "SIGNER_UNCERTAIN" : "AUTHORIZATION_DENIED");
+        check(Thread.currentThread().isInterrupted(), "interrupt flag preserved");
+      });
+    }
+    test("unrelated runtime failure preserved", () -> {
+      NativeRemoteOperation o = new NativeRemoteOperation(1000,new Guard()); o.signingFrame(); o.beforeSend();
+      ClientBoundary c = new ClientBoundary(o); IllegalStateException failure = new IllegalStateException("public-unrelated");
+      c.authorization = id -> { throw failure; }; check(denied(c,"public-unrelated") == failure,"no catch-all mapping");
+    });
+    check(cases == 13,"all cases selected");
+    StringBuilder rows = new StringBuilder();
+    for (String failure : failures) { if (rows.length()>0) rows.append(','); rows.append('"').append(failure).append('"'); }
+    System.out.println("{\"passed\":"+failures.isEmpty()+",\"cases\":"+cases+",\"assertions\":"+assertions+",\"failures\":["+rows+"]}");
+    if (!failures.isEmpty()) System.exit(1);
+  }
+}

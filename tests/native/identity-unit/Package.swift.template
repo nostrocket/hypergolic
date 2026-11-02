@@ -1,0 +1,18 @@
+// swift-tools-version: 6.0
+import PackageDescription
+
+let package = Package(
+  name: "HypergolicIdentityNativeTests",
+  platforms: [.macOS(.v15)],
+  targets: [
+    .target(name: "HypergolicIdentityOwner", path: "Sources/IdentityOwner", exclude: [
+      "IdentityOwnerModule.swift", "NativeIdentityOwnerContext.swift", "HypergolicIdentityOwner.podspec",
+    ]),
+    .target(name: "IdentitySecretStore", path: "Sources/IdentityStore", exclude: [
+      "HypergolicIdentityStoreModule.swift", "HypergolicIdentityActionsModule.swift", "HypergolicIdentityStore.podspec",
+      "SystemDeviceAuthentication.swift", "ExpoIdentityRuntimeLifetime.swift", "ApplicationIdentityLifecycle.swift",
+      "NativeBackupPanel.swift",
+    ]),
+    .testTarget(name: "IdentitySecretStoreTests", dependencies: ["IdentitySecretStore", "HypergolicIdentityOwner"], path: "Tests"),
+  ]
+)

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "platform": "android",
+  "scope": "compiler-defined-generated-helper-original",
+  "description": "Original R8 BSD license retained for compiler-defined helper attribution; does not attribute every desugared instruction or clear complete distribution review.",
+  "compiler": {
+    "component": "com.android.tools.build:builder:8.12.0",
+    "filename": "builder-8.12.0.jar",
+    "bytes": 15798444,
+    "sha256": "2763db5ef7236c7109412b125610bc9120ac1a59e2ea4c04746f0299284ed663",
+    "embeddedD8Version": "8.12.14",
+    "upstreamCommit": "4aa08788a4dd8698c9a5ab142f6367ee769069b1"
+  },
+  "original": {
+    "file": "r8-8.12.14-LICENSE.txt",
+    "bytes": 1491,
+    "sha256": "68834f116f8ff545f05d14753357b620748156d60ee36b26beab4cb3f317efe4",
+    "gitBlob": "54a7709f660d3297d387204ac42f1eb2997f7af2",
+    "source": "https://r8.googlesource.com/r8/+/4aa08788a4dd8698c9a5ab142f6367ee769069b1/LICENSE"
+  },
+  "reviewedHelper": "Lcom/android/tools/r8/RecordTag;",
+  "limits": [
+    "ClassLoader origin and complete compiler archive identity are checked on each build.",
+    "The compiler is a build input, not an additional releaseRuntimeClasspath artifact.",
+    "Other generated transformations and complete native/resource attribution remain under review."
+  ]
+}

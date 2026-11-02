@@ -1,0 +1,7 @@
+exclude:
+  - .tools
+  - .codex
+  - android
+  - ios
+ci:
+  failBelow: 100

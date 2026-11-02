@@ -1,0 +1,84 @@
+import { registerRootComponent } from 'expo';
+import * as SQLite from 'expo-sqlite';
+import { useEffect, useSyncExternalStore } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import defaults from '../../src/config/default-relays.json';
+import { loadNativeApprovalPort } from '../../src/runtime/native-approval-port';
+import { loadNativeCapabilityPort } from '../../src/runtime/native-capability-port';
+import { createRuntimeOwner } from '../../src/runtime/runtime-owner';
+import { ApprovalService } from '../../src/security/approval-service';
+import { createApprovalOwner } from '../../src/security/approval-owner';
+import { formatNpub, publicKeyFromNsec } from '../../src/security/identity-crypto';
+import { IdentityTransition } from '../../src/security/identity-transition';
+import { VaultError, type VaultSnapshot } from '../../src/security/identity-vault';
+import type { TrustedIdentityOwner } from '../../src/security/trusted-identity-owner';
+import { assertBundledWorkspace, initialTestWorkspace } from '../../src/shell/fixtures';
+import { IdentityShell } from '../../src/shell/IdentityShell';
+import { openShellDatabase } from '../../src/storage/database';
+
+const PUBLIC_SCALAR_TWO = 'c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5';
+
+// PUBLIC SIMULATOR FIXTURE ONLY: a public-key inventory with no protected identity store or signing path.
+async function openPublicFixture(): Promise<TrustedIdentityOwner> {
+  const fixtureDatabase = await SQLite.openDatabaseAsync('public-approval-fixture.db');
+  await fixtureDatabase.execAsync('CREATE TABLE IF NOT EXISTS fixture (id INTEGER PRIMARY KEY CHECK (id=1), payload TEXT NOT NULL)');
+  const initial: VaultSnapshot = Object.freeze({ vaultId: 'public_approval_fixture', revision: 1,
+    selectedPubkey: PUBLIC_SCALAR_TWO, identities: Object.freeze([Object.freeze({ pubkey: PUBLIC_SCALAR_TWO,
+      addedAt: 1, origin: 'generated' as const, status: 'active' as const })]), pendingDeletion: null });
+  await fixtureDatabase.runAsync('INSERT INTO fixture (id,payload) VALUES (1,?) ON CONFLICT DO NOTHING', JSON.stringify(initial));
+  const rows = await fixtureDatabase.getAllAsync<{ payload: string }>('SELECT payload FROM fixture WHERE id=1');
+  if (rows.length !== 1) throw new Error('PUBLIC_FIXTURE_UNAVAILABLE');
+  let current = Object.freeze(JSON.parse(rows[0]!.payload) as VaultSnapshot);
+  async function select(pubkey: string, add = false): Promise<VaultSnapshot> {
+    const known = current.identities.some(identity => identity.pubkey === pubkey);
+    if (!known && !add) throw new VaultError('NOT_FOUND');
+    const identities = known ? current.identities : Object.freeze([...current.identities,
+      Object.freeze({ pubkey, addedAt: Date.now(), origin: 'imported' as const, status: 'active' as const })]);
+    const next = Object.freeze({ ...current, identities, selectedPubkey: pubkey, revision: current.revision + 1 });
+    await fixtureDatabase.runAsync('UPDATE fixture SET payload=? WHERE id=1', JSON.stringify(next));
+    current = next;
+    return current;
+  }
+  const vault = Object.freeze({ getSnapshot: () => current, select,
+    importNsec: async (input: string) => select(publicKeyFromNsec(input), true) });
+  const database = await openShellDatabase(SQLite, 'ios');
+  const transition = await IdentityTransition.open({ vault, database, publicKeyFromNsec,
+    seed: initialTestWorkspace, assertAvailable: assertBundledWorkspace });
+  const approvals = new ApprovalService(loadNativeApprovalPort(), createApprovalOwner(transition), {
+    sign: async () => { throw new Error('PUBLIC_FIXTURE_SIGNING_UNAVAILABLE'); },
+    publishEvent: async () => { throw new Error('PUBLIC_FIXTURE_PUBLICATION_UNAVAILABLE'); },
+  });
+  const runtime = createRuntimeOwner(database, transition, loadNativeCapabilityPort(),
+    { service: approvals, destinations: Object.freeze([...defaults.networkRelays]) });
+  return Object.freeze({ transition, formatNpub, approvals, runtime });
+}
+
+let state: Readonly<{ owner: TrustedIdentityOwner | null; error: boolean }> = Object.freeze({ owner: null, error: false });
+let started = false;
+const listeners = new Set<() => void>();
+function subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }
+function snapshot() { return state; }
+function start() {
+  if (started) return;
+  started = true;
+  void openPublicFixture().then(owner => {
+    state = Object.freeze({ owner, error: false });
+    for (const listener of listeners) listener();
+  }).catch(() => {
+    state = Object.freeze({ owner: null, error: true });
+    for (const listener of listeners) listener();
+  });
+}
+function ApprovalFixture() {
+  const current = useSyncExternalStore(subscribe, snapshot);
+  useEffect(start, []);
+  return <GestureHandlerRootView style={styles.root}><SafeAreaProvider><View style={styles.root}>
+    <SafeAreaView edges={['top']} style={styles.notice}><Text testID="approval-fixture-label" style={styles.label}>Approval fixture · public scalar 2 · signing unavailable</Text></SafeAreaView>
+    {current.owner ? <IdentityShell owner={current.owner} /> : <Text style={styles.label}>{current.error ? 'Approval fixture unavailable' : 'Opening public approval fixture…'}</Text>}
+  </View></SafeAreaProvider></GestureHandlerRootView>;
+}
+const styles = StyleSheet.create({ root: { flex: 1, backgroundColor: '#140f0b' }, notice: { backgroundColor: '#34251D' },
+  label: { color: '#FFD7B5', textAlign: 'center', fontSize: 12, lineHeight: 18, paddingVertical: 3 } });
+registerRootComponent(ApprovalFixture);

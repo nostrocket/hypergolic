@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "nativeCandidateVerificationSha256": "c2dd48bb1443274b9b6b0595da77885697b65a0e0e9c622cf25d867d67c53a71",
+  "swiftTestFunctions": 60,
+  "swiftCasesIncludingParameterization": 95,
+  "sources": {
+    "modules/identity-owner/ios/IdentityOwnerClaim.swift": "a69c15a20c1d28379fc26394e7c004570ba21a1de396a2cf1bf93aef550f2c23",
+    "modules/identity-owner/ios/IdentityOwnerContextRegistry.swift": "d1c745ad4ca9388ea0bead4c5fcc3ff64d9bf49a8af979b2f8497814a05ec228",
+    "modules/identity-owner/ios/IdentityOwnerModule.swift": "923c26d13ace64a1ed1b506b8e62d033f0c232b2a6e79cdbbbf6e0bf9bea508a",
+    "modules/identity-owner/ios/NativeIdentityOwnerContext.swift": "89110ec102d8c389621a2f6663bdd01b268e7cbd9790b50d15eb15afca53710b",
+    "modules/identity-store/ios/ApplicationIdentityLifecycle.swift": "6ecbdd8b0f57bc9de49b3a4bd82b8d67424f63f970181ac036f40668e71059f4",
+    "modules/identity-store/ios/Contracts.swift": "715f5ce7b1a504853e5a059e6d8b2050e460c7c225047d800d4e21016d45b464",
+    "modules/identity-store/ios/DeletionGrantAuthority.swift": "f9778aadf857bad15cfbdb7092d98b6b438961c0926547a6c9a76c2ab0cbb836",
+    "modules/identity-store/ios/ExcludedAtomicFiles.swift": "8473e7ef83e83618b4e9273ef17e73c737de05f1cc0c39777c68e4aa6da03052",
+    "modules/identity-store/ios/ExpoIdentityRuntimeLifetime.swift": "ed4e3038c66c1a71cf6d037276b6cd9a14702eb498ef610e89a2eb84380ae685",
+    "modules/identity-store/ios/HypergolicIdentityActionsModule.swift": "947dc616c7792c2b59922792eff3f2037183e4cecf7367440adbf3ad76600d3e",
+    "modules/identity-store/ios/HypergolicIdentityStoreModule.swift": "cafe3b740e49bdd9e264cea76a48310afef4a021bc23e25206cde16c64acc784",
+    "modules/identity-store/ios/IdentityActionsBinding.swift": "3f00f8fda2d63bbf7033349fedd328150e78f5f72ba2c945d5e3dced6e521951",
+    "modules/identity-store/ios/IdentityBridgeOwner.swift": "6206a60dd26e94b34a76049737e06bd1f0e803d7f6bdb64e23919291b8fe4e60",
+    "modules/identity-store/ios/IdentityFileStore.swift": "0624eee760bbf8306a883427f8bf5dd6967cd71b1f189ce142846fe6d49be7cb",
+    "modules/identity-store/ios/NativeBackupPanel.swift": "9394f057b5a90f9e6ed4acbc2cbef4468ec81b9046ffe9d1510300b494c908fc",
+    "modules/identity-store/ios/NativeIdentityAuthorizationServices.swift": "e9497f9e94972bf91b2bb7eab8d1d43d4dd9765706aa0313b5347ae12b48fcb7",
+    "modules/identity-store/ios/NativeIdentityRuntimeLease.swift": "1d817b2c7f8946099d9251c5c35083540f2d146968fb86270c950322b6bbd67b",
+    "modules/identity-store/ios/NostrSecretBech32.swift": "24195cd8a4e26922ec48730ccd8f5aca1e5e724a96767d31ed264731ec037821",
+    "modules/identity-store/ios/SystemDeviceAuthentication.swift": "f69883e4fdb03a2301a9af6f3632a072e3232ceefcca122207f6ab33742e18c5",
+    "modules/identity-store/ios/SystemKeychain.swift": "a95ea43438fd9bf54d8987bcd7d245b6b644ae7bf46ceabf87e60c883e4710cf",
+    "modules/identity-store/ios/IdentityStoreAvailability.swift": "29d7cc586326d47a94fc8fa067980db108c59ef00bf48033d4cb83bd1d664530"
+  },
+  "testSourceSha256": {
+    "AtomicFilesTests.swift": "c24fecdc3ac760ab71762da09f426232b0abde9130559831c2c0811930fb7d0c",
+    "BackupAuthorityTests.swift": "cb09bbec3da6b0a4e3f5cc225b36b5796656a6e7acf5a8922ed125fa2d0e71aa",
+    "BridgeTests.swift": "18572134bf63944f7defe6c2842d78ea47b8db469a1626e42253b8a4714159b4",
+    "DeletionAuthorityTests.swift": "9c6b4f3f04e13db0b8445a307b4d0a7e118f6a0ccb840d38ce422fa224e48e17",
+    "StoreTests.swift": "80630b45bd56e1eb405a59b553298b087b79fbaa3339ed7b32d483cc94a19a2f",
+    "TestPorts.swift": "75c9cb91aa8a4d6534ff9b0de411ca2bb87095b0a2a4c1004407ea3b0648457a",
+    "BackupForegroundTests.swift": "4a32413d7e1aada6cf6f86664d572838d6f5fbeff75111eca3e53aa8912a306e"
+  },
+  "scope": "macOS-hosted deterministic native core tests; one-shot claim is admission only, not generic runtime isolation; actual Expo/LAContext/UIKit lifecycle execution is not covered"
+}

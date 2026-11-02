@@ -1,0 +1,44 @@
+{
+  "name": "@hypergolic/runtime-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.5",
+  "engines": {
+    "node": "24.20.0"
+  },
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node tools/build-capability-fixture.mjs && playwright test",
+    "verify": "pnpm typecheck && pnpm build && pnpm test",
+    "preview": "node tools/serve.mjs"
+  },
+  "dependencies": {
+    "@kehto/runtime": "0.22.0",
+    "@kehto/services": "0.20.0",
+    "@kehto/shell": "0.20.0",
+    "@napplet/core": "0.31.1",
+    "@napplet/nap": "0.31.1",
+    "nostr-tools": "2.24.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "typescript": "6.0.3",
+    "vite": "7.3.7"
+  },
+  "pnpm": {
+    "overrides": {
+      "@kehto/acl": "0.18.0",
+      "@kehto/firewall": "0.5.0",
+      "@kehto/runtime": "0.22.0",
+      "@napplet/core": "0.31.1",
+      "@napplet/nap": "0.31.1",
+      "source-map-js": "1.2.2"
+    },
+    "patchedDependencies": {
+      "@kehto/shell@0.20.0": "patches/@kehto__shell@0.20.0.patch",
+      "@kehto/runtime@0.22.0": "patches/@kehto__runtime@0.22.0.patch"
+    }
+  }
+}

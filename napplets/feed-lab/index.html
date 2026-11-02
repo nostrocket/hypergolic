@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Feed Lab</title></head>
+<body><main id="lab" data-testid="lab"><p class="eyebrow">Hypergolic fixture</p><h1>Feed Lab</h1>
+<p>Read signed notes through your shell’s relays.</p>
+<label for="filters">Note filters</label><textarea id="filters" spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off" inputmode="url" rows="4">[{"kinds":[1],"limit":8}]</textarea>
+<div class="actions"><button id="query" type="button">Query notes</button><button id="empty" type="button">Query empty sample</button></div>
+<div class="actions"><button id="subscribe" type="button">Start live feed</button><button id="close" type="button" disabled>Close live feed</button></div>
+<p id="stream-status" aria-live="polite">Live feed closed.</p>
+<label for="draft">Your draft</label><textarea id="draft" spellcheck="false" rows="2" placeholder="Write here while reading…"></textarea>
+<p id="status" role="status" aria-live="polite">Connecting to shell…</p><ol id="events" aria-label="Query results"></ol>
+<fieldset><legend>Selected identity</legend><button id="follows" type="button">Read follows</button>
+<p id="follows-status" aria-live="polite">No follows request yet.</p><pre id="follows-result"></pre></fieldset>
+<fieldset><legend>Outbox routing</legend><label for="outbox-options">Query and live options</label><textarea id="outbox-options" spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off" inputmode="url" rows="2">{}</textarea><button id="outbox-query" type="button">Query author outbox</button><div class="actions"><button id="outbox-event" type="button">Fetch signed event</button><button id="outbox-resolve-read" type="button">Resolve author write relays</button><button id="outbox-resolve-write" type="button">Resolve author inbox relays</button></div><div class="actions"><button id="outbox-start" type="button">Start live outbox</button><button id="outbox-close" type="button" disabled>Close live outbox</button></div><p id="outbox-stream-status" aria-live="polite">Live Outbox closed.</p><p id="outbox-status" aria-live="polite">No Outbox query yet.</p><pre id="outbox-result"></pre></fieldset>
+<fieldset><legend>Publish your draft through Outbox</legend><p>The shell reviews your exact event, destinations and any existing relay list before signing.</p><label for="outbox-publish-options">Publication options</label><textarea id="outbox-publish-options" spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off" inputmode="url" rows="2">{}</textarea><button id="outbox-publish" type="button">Review draft publication</button><p id="outbox-publish-status" role="status" aria-live="polite">No publication requested.</p><pre id="outbox-publish-result"></pre></fieldset>
+</main><script type="module" src="/src/main.ts"></script></body></html>

@@ -1,0 +1,13 @@
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import assert from 'node:assert/strict';
+const require = createRequire(process.argv[2] + '/package.json');
+const { verifyEvent, getEventHash } = require('nostr-tools');
+const event = JSON.parse(readFileSync(process.argv[3], 'utf8'));
+assert.equal(event.content, 'iOS native exact event 🛰️ /\u2028\u2029\n\t');
+assert.equal(event.kind, 1);
+assert.equal(event.created_at, 1791979200);
+assert.deepEqual(event.tags, [['r', 'wss://example.com']]);
+assert.equal(event.id, getEventHash(event));
+assert.equal(verifyEvent(event), true);
+console.log(JSON.stringify({ independentVerifier: 'nostr-tools', assertions: 6, eventId: event.id, pubkey: event.pubkey }));

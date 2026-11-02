@@ -1,0 +1,30 @@
+{
+  "kind": 35129,
+  "created_at": 1790989698,
+  "tags": [
+    [
+      "d",
+      "resource-lab"
+    ],
+    [
+      "path",
+      "/index.html",
+      "6ff9d52c117d030b28a66b3c2a6bc28674aef83a4148412cca3048cb49d8db1e"
+    ],
+    [
+      "x",
+      "27a16dadfdd3768ac305bc05aa4d693fa3fdde429470e83057e3d675105a576f",
+      "aggregate"
+    ],
+    [
+      "requires",
+      "link"
+    ],
+    [
+      "requires",
+      "resource"
+    ]
+  ],
+  "content": "",
+  "aggregateHash": "27a16dadfdd3768ac305bc05aa4d693fa3fdde429470e83057e3d675105a576f"
+}

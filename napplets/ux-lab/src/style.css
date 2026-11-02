@@ -1,0 +1,56 @@
+@layer base, layout, controls;
+@layer base {
+  :root { --bg: #140f0b; --text: #f3efeb; --primary: #e8805d; --surface: color-mix(in srgb, var(--bg), var(--text) 6%); --muted: color-mix(in srgb, var(--text), var(--bg) 25%); --line: color-mix(in srgb, var(--text), var(--bg) 23%); color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); }
+  h1, h2, p { margin: 0; }
+  h1 { font-size: clamp(3rem, 12vw, 5rem); font-weight: 650; line-height: 1; letter-spacing: -.06em; }
+  h1 span { color: var(--primary); }
+  h2 { font-size: 1.12rem; line-height: 1.3; font-weight: 600; letter-spacing: -.025em; }
+  p { color: var(--muted); line-height: 1.5; }
+  button, textarea { font: inherit; }
+  output, .index, .eyebrow, .stamp, .meta, .readout { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  :focus-visible { outline: 3px solid var(--primary); outline-offset: 4px; }
+  [hidden] { display: none !important; }
+}
+@layer layout {
+  main { max-width: 720px; margin: 0 auto; padding: 28px 20px 0; }
+  .intro { padding-bottom: 24px; }
+  .eyebrow { font-size: .7rem; letter-spacing: .1em; color: var(--primary); }
+  .title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 18px 0 14px; }
+  .stamp { border: 1px solid var(--line); padding: 7px; font-size: .6rem; line-height: 1.5; }
+  #ready { font-size: .8rem; margin-top: 16px; color: var(--text); }
+  #ready::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 8px; background: var(--primary); border-radius: 50%; }
+  .meta { font-size: .65rem; margin-top: 5px; overflow-wrap: anywhere; }
+  section { border-top: 1px solid var(--line); padding: 22px 0; }
+  .section-heading { display: flex; gap: 12px; align-items: baseline; margin-bottom: 16px; }
+  .index { color: var(--primary); font-size: .72rem; }
+  .counter-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  #counter { font-size: 3.25rem; letter-spacing: -.05em; font-variant-numeric: tabular-nums; }
+  .field-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: space-between; font-size: .7rem; margin-top: 8px; color: var(--muted); }
+  .mirror { border-left: 2px solid var(--primary); padding-left: 12px; margin-top: 16px; min-height: 24px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .9rem; }
+  .rail { display: flex; gap: 10px; overflow-x: auto; padding: 10px 5px 16px; margin: 8px -5px 0; scrollbar-width: auto; scrollbar-color: var(--primary) var(--surface); }
+  .marker { flex: 0 0 120px; min-height: 136px; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; background: var(--surface); }
+  .marker-number { font-family: ui-monospace, monospace; font-size: 2rem; }
+  .readout { margin-top: 12px; font-size: .72rem; color: var(--muted); }
+  .readout output { color: var(--text); }
+  .vertical-marker { min-height: 210px; border-top: 1px dashed var(--line); margin-top: 22px; padding: 20px 0; display: flex; flex-direction: column; justify-content: space-between; }
+  .marker-heading, .edge-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .vertical-number { font-family: ui-monospace, monospace; font-size: 3rem; color: var(--primary); }
+  footer { padding: 32px 0 40px; border-top: 1px solid var(--line); }
+  footer h2 { margin: 14px 0 10px; font-size: 1.6rem; }
+  footer button { width: 100%; margin: 24px 0 12px; }
+  @media (max-width: 300px) { main { padding-inline: 12px; } .stamp { display: none; } .edge-row button { padding-inline: 8px; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; } }
+}
+@layer controls {
+  button { color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; min-width: 48px; min-height: 48px; padding: 12px 16px; cursor: pointer; touch-action: manipulation; }
+  button:hover { border-color: var(--primary); }
+  button:active { background: color-mix(in srgb, var(--bg), var(--text) 12%); }
+  button[aria-pressed="true"] { border: 2px solid var(--primary); padding: 11px 15px; }
+  #increment { display: flex; align-items: center; gap: 24px; }
+  #increment span { font-size: 1.5rem; color: var(--primary); }
+  label { display: block; font-size: .8rem; margin-bottom: 8px; }
+  textarea { display: block; width: 100%; min-height: 104px; resize: vertical; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 1rem; line-height: 1.5; padding: 12px; }
+  textarea::placeholder { color: var(--muted); opacity: 1; }
+}

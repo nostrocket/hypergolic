@@ -1,0 +1,22 @@
+# name|server-frame-bytes-hex|expected-normalized-events
+plain-text|81026869|TEXT:6869
+one-byte-incremental|81026869|TEXT:6869
+fragmented-with-interleaved-ping|010161890170800162|PING:70;TEXT:6162
+utf8-codepoint-split-across-fragments|0101c38001a9|TEXT:c3a9
+empty-text|8100|TEXT:
+empty-close|8800|CLOSE:1005:
+close-code-and-reason|880403e86f6b|CLOSE:1000:6f6b
+pong|8a027879|PONG:7879
+masked-server-frame|818001020304|ERROR:masked-server-frame
+reserved-bit|c100|ERROR:reserved-bits
+binary-opcode|8200|ERROR:unsupported-opcode
+fragmented-control|0900|ERROR:invalid-control-frame
+oversized-control-header|897e0000|ERROR:invalid-control-frame
+unexpected-continuation|8000|ERROR:unexpected-continuation
+noncanonical-16-bit-length|817e007d|ERROR:noncanonical-length
+advertised-over-limit|817f00000000000103f7|ERROR:frame-too-large
+unsigned-64-bit-overflow|817fffffffffffffffff|ERROR:frame-too-large
+one-byte-close-payload|8801ff|ERROR:invalid-close-payload
+reserved-close-code|880203ed|ERROR:invalid-close-code
+malformed-text-utf8|8102c328|ERROR:invalid-utf8
+malformed-close-reason|880403e8c328|ERROR:invalid-utf8

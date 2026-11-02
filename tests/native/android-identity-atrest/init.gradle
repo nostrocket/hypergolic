@@ -1,0 +1,17 @@
+// Test-only isolated application ID and instrumentation, normal App/index preserved.
+def proofRoot = new File(System.getProperty('hypergolic.storageProofRoot'))
+gradle.beforeProject { project ->
+  if (project.path == ':app') {
+    project.afterEvaluate {
+      project.android.defaultConfig.applicationId = 'org.nostrocket.hypergolic.identitystorageprobe'
+      project.android.defaultConfig.testApplicationId = 'org.nostrocket.hypergolic.identitystorageprobe.test'
+      project.android.defaultConfig.testInstrumentationRunner = 'org.nostrocket.hypergolic.identityowner.StorageFaultInstrumentation'
+      project.android.testBuildType = 'release'
+      project.android.buildTypes.release.signingConfig = project.android.signingConfigs.debug
+      project.android.sourceSets.release.manifest.srcFile(new File(proofRoot, 'ReleaseManifest.xml'))
+      project.android.sourceSets.androidTest.java.srcDir(new File(proofRoot, 'src'))
+      project.android.sourceSets.androidTest.manifest.srcFile(new File(proofRoot, 'AndroidManifest.xml'))
+      project.dependencies.add('androidTestImplementation', project.project(':hypergolic-identity-owner'))
+    }
+  }
+}

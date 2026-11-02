@@ -1,0 +1,12 @@
+packages:
+  - '.'
+minimumReleaseAge: 10080
+# Reviewed security fix for GHSA-vwc7-r8mq-g2x9; no exception for future versions.
+minimumReleaseAgeExclude:
+  - source-map-js@1.2.2
+  - proxy-addr@2.0.8
+  - smol-toml@1.9.0
+  - adm-zip@0.6.1
+trustPolicy: no-downgrade
+onlyBuiltDependencies:
+  - esbuild

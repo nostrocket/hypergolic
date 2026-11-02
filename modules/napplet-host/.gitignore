@@ -1,0 +1,4 @@
+/android/build/
+/android/.gradle/
+/android/src/main/assets/runtime/
+/ios/Resources/runtime/

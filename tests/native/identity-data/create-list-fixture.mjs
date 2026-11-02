@@ -1,0 +1,12 @@
+import {finalizeEvent,getPublicKey} from 'nostr-tools/pure';
+import {writeFile} from 'node:fs/promises';
+const key=n=>{const value=new Uint8Array(32);value[31]=n;return value;};
+const user=getPublicKey(key(1)),issuer=getPublicKey(key(2));
+const sign=(kind,tags,content='',created_at=10,secret=key(1))=>JSON.parse(JSON.stringify(finalizeEvent({kind,tags,content,created_at},secret)));
+const address='30009:'+issuer+':native-list-proof';
+const definition=sign(30009,[['d','native-list-proof'],['name','Accepted <literal> badge'],['description','Public fixture only'],['image','https://unconfigured.example/badge']], '',10,key(2));
+const award=sign(8,[['a',address],['p',user]],'',10,key(2));
+const badAward=sign(8,[['a',address],['p',issuer]],'',11,key(2));
+const events=[sign(10002,[['r','wss://127.0.0.1'],['r','wss://unconfigured.example','read']]),sign(3,[['p',issuer,'wss://unconfigured.example','never returned']]),sign(10000,[['p',issuer],['word','never returned']], 'encrypted private content never returned'),sign(10003,[['e',award.id],['a','30023:'+issuer+':literal']]),sign(10001,[['e',award.id],['a',address]]),sign(10015,[['t','literal <tag>'],['a',address]]),sign(10008,[['a',address],['e',award.id]]),award,definition];
+const expected={relays:{'wss://127.0.0.1':{read:true,write:true},'wss://unconfigured.example':{read:true,write:false}},follows:[issuer],mutes:[issuer],bookmarks:[award.id,'30023:'+issuer+':literal'],pins:[award.id],interests:['literal <tag>',address],badges:[{id:definition.id,awardedBy:issuer,name:'Accepted <literal> badge',description:'Public fixture only',image:'https://unconfigured.example/badge'}]};
+await writeFile(new URL('./public-list-fixture.json',import.meta.url),JSON.stringify({scope:'Deterministic public QA signatures from disposable scalar 1/2. No network publication or real credentials.',user,other:issuer,events,badEvents:[sign(10008,[['a',address],['e',badAward.id]],'',20),badAward,definition],expected},null,2)+'\n');

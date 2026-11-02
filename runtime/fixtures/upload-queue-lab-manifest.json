@@ -1,0 +1,26 @@
+{
+  "kind": 35129,
+  "created_at": 1790859879,
+  "tags": [
+    [
+      "d",
+      "upload-queue-lab"
+    ],
+    [
+      "path",
+      "/index.html",
+      "c1d196a6a4913290a9dcf40adfa216922e21dc86a11d94c8902ec536a0e3dbd9"
+    ],
+    [
+      "x",
+      "945fad95c24b8e5ce032d64110a30d9245e55b0a904742320677713697e05d3a",
+      "aggregate"
+    ],
+    [
+      "requires",
+      "upload"
+    ]
+  ],
+  "content": "",
+  "aggregateHash": "945fad95c24b8e5ce032d64110a30d9245e55b0a904742320677713697e05d3a"
+}

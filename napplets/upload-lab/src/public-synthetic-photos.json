@@ -1,0 +1,17 @@
+{
+  "scope": "Generated public test data only; fake metadata, no personal photos or credentials",
+  "files": [
+    {
+      "file": "public-synthetic-photo.jpeg",
+      "recipe": "jpeg-orientation-1.jpeg",
+      "inputSha256": "01acfc4d71a7a9df8133c631294cf696e378ea62effc731f36774d8f58950f2c",
+      "size": 941
+    },
+    {
+      "file": "public-synthetic-photo.heic",
+      "recipe": "heic-p3-orientation-6.heic",
+      "inputSha256": "482772a141d3808f78506e0ad3ed74b78ff7fe10105f877165394872d77c9b35",
+      "size": 2097
+    }
+  ]
+}

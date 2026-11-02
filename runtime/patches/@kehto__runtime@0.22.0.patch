@@ -1,0 +1,174 @@
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index cbbc6af8b2e2bd23e3c77e05544fbd26edc6db7e..97f7d36d98957580533848f39a1d1d335d71f664 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -680,9 +680,38 @@ interface RuntimeConfigOverrides {
+  * const runtime = createRuntime(hooks);
+  * ```
+  */
++/** Host-selected whole operations. This is not a new NAP wire domain. */
++type HostOperation = 'storage.get' | 'storage.set' | 'storage.remove' | 'storage.keys'
++    | 'relay.publish' | 'relay.publishEncrypted' | 'relay.query' | 'relay.subscribe' | 'relay.close'
++    | 'outbox.publish' | 'outbox.query' | 'outbox.getEvent' | 'outbox.resolveRelays' | 'outbox.subscribe' | 'outbox.close'
++    | 'resource.info' | 'resource.bytes' | 'resource.bytesMany' | 'resource.cancel'
++    | 'upload.info' | 'upload.upload' | 'upload.status'
++    | 'intent.invoke' | 'intent.available' | 'intent.handlers'
++    | 'inc.subscribe' | 'inc.unsubscribe' | 'inc.emit' | 'inc.channel.open' | 'inc.channel.list'
++    | 'inc.channel.emit' | 'inc.channel.broadcast' | 'inc.channel.close'
++    | 'notify.send' | 'notify.dismiss' | 'notify.badge' | 'notify.channel.register' | 'notify.permission.request'
++    | 'config.registerSchema' | 'config.get' | 'config.subscribe' | 'config.unsubscribe' | 'config.openSettings';
++type HostOperationEnvelope = NappletMessage & Readonly<Record<string, unknown>>;
++interface HostOperationContext {
++    /** Source-bound runtime session; never read this authority from the message. */
++    readonly windowId: string;
++    /** Original admitted envelope. Validate the owning operation schema natively. */
++    readonly message: HostOperationEnvelope & { readonly type: HostOperation };
++    /** Canonical NAP reply; suppressed after registry replacement or domain revocation. */
++    readonly send: (message: HostOperationEnvelope) => void;
++}
++type HostOperationOverride = (context: HostOperationContext) => void | Promise<void>;
+ interface RuntimeAdapter {
+     /** Send a NIP-01 message to a napplet by windowId. */
+     sendToNapplet: SendToNapplet;
++    /**
++     * Opt-in whole-operation dispatch after session/domain/ACL/firewall admission.
++     * A selected handler consumes the request, including on failure; no builtin fallback.
++     * Absent handlers preserve existing behavior. Does not advertise or grant domains.
++     * The host must revoke native authority and unregister sessions/sources on teardown.
++     * Native callbacks remain responsible for schema, epoch, deadline and side-effect checks.
++     */
++    operationOverrides?: Readonly<Partial<Record<HostOperation, HostOperationOverride>>>;
+     /**
+      * Determines whether a session-established napplet may invoke a NAP domain.
+      * When omitted, every domain remains eligible for dispatch. Browser shells
+@@ -1593,5 +1622,4 @@ declare function routeServiceMessage(windowId: string, message: NappletMessage,
+  * ```
+  */
+ declare function notifyServiceWindowDestroyed(windowId: string, services: ServiceRegistry): void;
+-
+-export { type AclCheckEvent, type AclChecker, type AclEntryExternal, type AclMutation, type AclMutationObserver, type AclPersistence, type AclStateContainer, type AuthAdapter, type CacheAdapter, type CompatibilityReport, type ConfigAdapter, type ConsentHandler, type ConsentRequest, type CryptoAdapter, type DmAdapter, type EnforceConfig, type EnforceResult, type EventBuffer, type FirewallEvent, type FirewallPersistence, type FirewallStateContainer, type GuidPersistence, type HashVerifierAdapter, type HotkeyAdapter, type IdentityResolver, type ManifestCache, type ManifestCacheEntry, type ManifestPersistence, type NapEnforceConfig, type NappKeyEntry, type NappKeyRegistry, type PendingUpdate, type PendingUpdateNotifier, RING_BUFFER_SIZE, type RelayConfigAdapter, type RelayEventCarrier, type RelayEventResult, type RelayEventSidecar, type RelayPoolAdapter, type RelaySubscriptionHandle, type ReplayDetector, type Runtime, type RuntimeAdapter, type RuntimeConfigOverrides, type SendToNapplet, type ServiceDescriptor, type ServiceHandler, type ServiceInfo, type ServiceRegistry, type ServiceRuntimeContext, type SessionEntry, type SessionRegistry, type ShellSecretPersistence, type Signer, type StatePersistence, type SubscriptionEntry, type VerificationCacheEntry, type WindowManagerAdapter, cleanupNappState, createAclState, createEnforceGate, createEventBuffer, createFirewallState, createManifestCache, createNapEnforceGate, createNappKeyRegistry, createRelayEventResult, createRelayEventResultWithHints, createReplayDetector, createRuntime, createSessionRegistry, formatDenialReason, handleStorageNap, matchesAnyFilter, matchesFilter, notifyServiceWindowDestroyed, relayEventResultFromCarrier, routeServiceMessage };
++export { type HostOperationEnvelope, type HostOperation, type HostOperationContext, type HostOperationOverride, type AclCheckEvent, type AclChecker, type AclEntryExternal, type AclMutation, type AclMutationObserver, type AclPersistence, type AclStateContainer, type AuthAdapter, type CacheAdapter, type CompatibilityReport, type ConfigAdapter, type ConsentHandler, type ConsentRequest, type CryptoAdapter, type DmAdapter, type EnforceConfig, type EnforceResult, type EventBuffer, type FirewallEvent, type FirewallPersistence, type FirewallStateContainer, type GuidPersistence, type HashVerifierAdapter, type HotkeyAdapter, type IdentityResolver, type ManifestCache, type ManifestCacheEntry, type ManifestPersistence, type NapEnforceConfig, type NappKeyEntry, type NappKeyRegistry, type PendingUpdate, type PendingUpdateNotifier, RING_BUFFER_SIZE, type RelayConfigAdapter, type RelayEventCarrier, type RelayEventResult, type RelayEventSidecar, type RelayPoolAdapter, type RelaySubscriptionHandle, type ReplayDetector, type Runtime, type RuntimeAdapter, type RuntimeConfigOverrides, type SendToNapplet, type ServiceDescriptor, type ServiceHandler, type ServiceInfo, type ServiceRegistry, type ServiceRuntimeContext, type SessionEntry, type SessionRegistry, type ShellSecretPersistence, type Signer, type StatePersistence, type SubscriptionEntry, type VerificationCacheEntry, type WindowManagerAdapter, cleanupNappState, createAclState, createEnforceGate, createEventBuffer, createFirewallState, createManifestCache, createNapEnforceGate, createNappKeyRegistry, createRelayEventResult, createRelayEventResultWithHints, createReplayDetector, createRuntime, createSessionRegistry, formatDenialReason, handleStorageNap, matchesAnyFilter, matchesFilter, notifyServiceWindowDestroyed, relayEventResultFromCarrier, routeServiceMessage };
+diff --git a/dist/index.js b/dist/index.js
+index 5e968b83b4df972b40e2f90953fdb6893459acbf..5007c45482f5de3340dc7f65e236e5f02a7203f8 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1842,6 +1842,75 @@ function buildObservation(envelope, windowId, senderCap, sessionRegistry, getFoc
+     now
+   };
+ }
++// Host-only overrides run after the existing domain, ACL and firewall gates.
++const hostOperationNames = new Set([
++  "storage.get", "storage.set", "storage.remove", "storage.keys",
++  "relay.publish", "relay.publishEncrypted", "relay.query", "relay.subscribe", "relay.close",
++  "outbox.publish", "outbox.query", "outbox.getEvent", "outbox.resolveRelays", "outbox.subscribe", "outbox.close",
++  "resource.info", "resource.bytes", "resource.bytesMany", "resource.cancel",
++  "upload.info", "upload.upload", "upload.status",
++  "intent.invoke", "intent.available", "intent.handlers",
++  "inc.subscribe", "inc.unsubscribe", "inc.emit", "inc.channel.open", "inc.channel.list",
++  "inc.channel.emit", "inc.channel.broadcast", "inc.channel.close",
++  "notify.send", "notify.dismiss", "notify.badge", "notify.channel.register", "notify.permission.request",
++  "config.registerSchema", "config.get", "config.subscribe", "config.unsubscribe", "config.openSettings"
++]);
++function getHostOperation(hooks, type) {
++  const operations = hooks.operationOverrides;
++  if (!hostOperationNames.has(type) || !operations || !Object.hasOwn(operations, type)) return;
++  const operation = operations[type];
++  return typeof operation === "function" ? operation : void 0;
++}
++function hostOperationDenial(hooks, envelope, error) {
++  if (!getHostOperation(hooks, envelope.type)) return null;
++  const { type, id, subId } = envelope;
++  if (type.startsWith("intent.")) return createIntentPolicyDenial(envelope);
++  if (type.startsWith("config.")) {
++    if (type === "config.registerSchema") return { type: "config.registerSchema.result", id, ok: false, code: "invalid-schema", error: "Configuration is unavailable." };
++    if (type === "config.get" || type === "config.subscribe") return { type: "config.schemaError", code: "invalid-schema", error: "Configuration is unavailable." };
++    return null;
++  }
++  if (type.startsWith("notify.")) {
++    if (type === "notify.send") return { type: "notify.send.result", id, error };
++    if (type === "notify.permission.request") return { type: "notify.permission.result", id, granted: false };
++    return null;
++  }
++  if (type.startsWith("inc.")) {
++    if (type === "inc.subscribe" || type === "inc.channel.open") return { type: `${type}.result`, id, error };
++    if (type === "inc.channel.list") return { type: `${type}.result`, id, channels: [], error };
++    return null;
++  }
++  if (type.startsWith("upload.")) return { type: `${type}.result`, id, error: error === "operation failed" ? "upload failed" : "policy denied" };
++  if (type.startsWith("resource.")) return type === "resource.cancel" ? null : { type: `${type}.error`, id, error: "blocked-by-policy" };
++  if (["relay.subscribe", "relay.close", "outbox.subscribe", "outbox.close"].includes(type)) {
++    return { type: type.startsWith("outbox.") ? "outbox.closed" : "relay.closed", subId, reason: error };
++  }
++  if (type === "relay.publish" || type === "relay.publishEncrypted" || type === "outbox.publish") {
++    return { type: `${type}.result`, id, ok: false, error };
++  }
++  if (type === "relay.query" || type === "outbox.query") return { type: `${type}.result`, id, events: [], error };
++  return { type: `${type}.result`, id, error };
++}
++function dispatchHostOperation(hooks, sessionRegistry, windowId, envelope) {
++  const operation = getHostOperation(hooks, envelope.type);
++  if (!operation) return false;
++  const entry = sessionRegistry.getEntryByWindowId(windowId);
++  const domain = envelope.type.slice(0, envelope.type.indexOf("."));
++  const send = (reply) => {
++    if (sessionRegistry.getEntryByWindowId(windowId) !== entry) return;
++    if (hooks.isDomainAllowed && !hooks.isDomainAllowed(windowId, domain)) return;
++    hooks.sendToNapplet(windowId, reply);
++  };
++  const failure = hostOperationDenial(hooks, envelope, "operation failed");
++  const fail = () => { if (failure) send(failure); };
++  try {
++    Promise.resolve(operation({ windowId, message: envelope, send })).catch(fail);
++  } catch {
++    fail();
++  }
++  // A selected override owns the operation; it must never fall through to signing.
++  return true;
++}
+ function createFirewallGate(config) {
+   const { firewallState, sessionRegistry, hooks, fireConsent } = config;
+   return function firewallGate(windowId, envelope, senderCap) {
+@@ -1858,7 +1927,8 @@ function createFirewallGate(config) {
+         if (decision === "prompt") fireConsent(windowId, napplet);
+         return "drop";
+       }
+-      const canonicalResult = createCanonicalDomainResult(envelope);
++      const canonicalResult = hostOperationDenial(hooks, envelope, `firewall: ${reason}`)
++        ?? createCanonicalDomainResult(envelope);
+       if (canonicalResult) {
+         hooks.sendToNapplet(windowId, canonicalResult);
+         hooks.onFirewallEvent?.({ windowId, napplet, opClass, decision, action, ruleId, reason, message: envelope });
+@@ -1910,7 +1980,8 @@ function createMessageHandler(hooks, sessionRegistry, enforceNap, dispatchNapEnv
+           hooks.sendToNapplet(windowId, intentDenial);
+           return;
+         }
+-        const canonicalResult = createCanonicalDomainResult(envelope);
++        const canonicalResult = hostOperationDenial(hooks, envelope, formatDenialReason(result.capability))
++          ?? createCanonicalDomainResult(envelope);
+         if (canonicalResult) {
+           hooks.sendToNapplet(windowId, canonicalResult);
+           return;
+@@ -1926,6 +1997,7 @@ function createMessageHandler(hooks, sessionRegistry, enforceNap, dispatchNapEnv
+     }
+     const verdict = firewallGate(windowId, envelope, caps.senderCap);
+     if (verdict === "drop") return;
++    if (dispatchHostOperation(hooks, sessionRegistry, windowId, envelope)) return;
+     dispatchNapEnvelope(windowId, envelope);
+   };
+ }
+@@ -1981,7 +2053,14 @@ function createRuntimeInstance(context) {
+       const domain = message.type.slice(0, dotIndex);
+       try {
+         if (isDomainAllowed && !isDomainAllowed(windowId, domain)) return false;
+-        const { recipientCap } = resolveCapabilitiesNap(message);
++        const { recipientCap: mappedRecipientCap } = resolveCapabilitiesNap(message);
++        // The pinned ACL mapper omits canonical INC pushes. Native INC overrides
++        // retain the built-in INC recipient requirement instead of bypassing ACL.
++        const nativeIncPush = ["inc.event", "inc.channel.event", "inc.channel.opened", "inc.channel.closed"].includes(message.type)
++          && (getHostOperation(hooks, "inc.subscribe") || getHostOperation(hooks, "inc.channel.open"));
++        const nativeNotifyPush = ["notify.controls", "notify.action", "notify.clicked", "notify.dismissed"].includes(message.type)
++          && getHostOperation(hooks, "notify.send");
++        const recipientCap = mappedRecipientCap ?? (nativeIncPush ? "relay:read" : nativeNotifyPush ? "notify:send" : null);
+         if (!recipientCap) return false;
+         if (!aclState.check("", entry.dTag, entry.aggregateHash, recipientCap)) {
+           return false;

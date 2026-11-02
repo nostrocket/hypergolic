@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="A napplet fixture for testing explicit note, profile and relay-list approval." />
+  <title>Approval Lab</title>
+</head>
+<body>
+<main id="lab" data-testid="lab" data-ready="false">
+  <header>
+    <p class="eyebrow">HYPERGOLIC / TEST 03</p>
+    <h1>Approval Lab</h1>
+    <p>Test note, profile and relay-list approval. Review every request.</p>
+    <p id="identity-status" data-testid="identity-status" role="status">Connecting…</p>
+    <output id="identity" data-testid="identity" aria-label="Selected public identity"></output>
+  </header>
+  <fieldset id="controls" disabled>
+    <legend>Test event</legend>
+    <div class="event-kinds" role="group" aria-label="Event type">
+      <label class="kind-choice" for="kind-note"><input id="kind-note" data-testid="kind-note" type="radio" name="event-kind" value="1" checked />Note (kind 1)</label>
+      <label class="kind-choice" for="kind-profile"><input id="kind-profile" data-testid="kind-profile" type="radio" name="event-kind" value="0" />Profile metadata (kind 0)</label>
+      <label class="kind-choice" for="kind-relay-list"><input id="kind-relay-list" data-testid="kind-relay-list" type="radio" name="event-kind" value="10002" />Relay list (kind 10002)</label>
+    </div>
+    <p id="profile-warning" data-testid="profile-warning" class="meta" hidden>Use a development identity. This replaces its profile on accepting relays.</p>
+    <p id="relay-list-warning" data-testid="relay-list-warning" class="meta" hidden>Use a development identity. This replaces its advertised relay list on accepting relays.</p>
+    <div id="content-editor">
+    <label id="content-label" for="content">Note content</label>
+    <textarea id="content" data-testid="content" rows="4" maxlength="65536" autocomplete="off" spellcheck="true">Approval Lab test note</textarea>
+    </div>
+    <div id="relay-list-editor" hidden>
+      <label for="relay-list-tags">Relay tags (JSON array)</label>
+      <p id="relay-list-help" class="meta">Up to 16 r tags with a wss relay URL and optional read or write marker. No marker means both. An empty array clears the advertised list. The shell checks destinations.</p>
+      <textarea id="relay-list-tags" data-testid="relay-list-tags" rows="5" maxlength="40000" autocomplete="off" spellcheck="false" aria-describedby="relay-list-help relay-list-error">[]</textarea>
+      <p id="relay-list-error" data-testid="relay-list-error" role="status" aria-live="polite"></p>
+    </div>
+    <div class="actions">
+      <button id="send" data-testid="send" type="button">Send note</button>
+      <button id="send-three" data-testid="send-three" type="button">Send 3 notes</button>
+      <button id="send-delayed" data-testid="send-delayed" type="button">Send after 5 seconds</button>
+    </div>
+  </fieldset>
+  <section aria-labelledby="results-title">
+    <div class="section-heading">
+      <h2 id="results-title">Requests</h2>
+      <button id="clear" data-testid="clear" class="quiet" type="button">Clear</button>
+    </div>
+    <p id="status" data-testid="status" role="status" aria-live="polite">No request yet.</p>
+    <ol id="results" data-testid="results" aria-live="polite" aria-label="Publication requests"></ol>
+    <p class="meta">Active <output id="pending" data-testid="pending">0</output> / 4 · Created <output id="requests" data-testid="requests">0</output></p>
+  </section>
+  <footer>
+    <p>Every request asks the shell for a separate approval. Failed requests are never retried automatically.</p>
+    <p class="meta" id="theme-status" data-testid="theme-status">Local palette</p>
+  </footer>
+</main>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

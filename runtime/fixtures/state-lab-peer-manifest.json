@@ -1,0 +1,30 @@
+{
+  "kind": 35129,
+  "created_at": 1790945042,
+  "tags": [
+    [
+      "d",
+      "state-lab-peer"
+    ],
+    [
+      "path",
+      "/index.html",
+      "c2155e9d14b555382393422472de801c814878c41dfa7fa812c0e14b4f750dfc"
+    ],
+    [
+      "x",
+      "a2005ccdd7d0018fae17802bcfc6bb5fab48b9050933e5e7683a0e4f06030355",
+      "aggregate"
+    ],
+    [
+      "requires",
+      "identity"
+    ],
+    [
+      "requires",
+      "storage"
+    ]
+  ],
+  "content": "",
+  "aggregateHash": "a2005ccdd7d0018fae17802bcfc6bb5fab48b9050933e5e7683a0e4f06030355"
+}

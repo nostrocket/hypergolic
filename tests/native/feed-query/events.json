@@ -1,0 +1,20 @@
+[
+  {
+    "kind": 1,
+    "content": "Native query acceptance fixture",
+    "created_at": 100,
+    "tags": [],
+    "pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+    "id": "80774c8992738940d6bd9d33de70f50f79e37fa39601c5dc50a3d8cc7a54ff80",
+    "sig": "7b81ceb7e62a48fe1343eb3f5c22cca3ba631e823085ba86d6a3d1ffacfb816d8ff0e01b224c41d3ccb6a8bffe80682f87d6c1ee0d27bed12f20ac67a697d826"
+  },
+  {
+    "kind": 2,
+    "content": "Native query acceptance fixture",
+    "created_at": 100,
+    "tags": [],
+    "pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+    "id": "e3e4beb47e10323b27a7b6ee4458041b3f488aa5a41f0e8a31f2ef4b84b7bb20",
+    "sig": "39f6104b8362dc4040bb5ac3c2917a4d4f702aa265eae543dd56e32d988a67e7f242e8d5d4a009f4e8e131aa2ddaba2ccbe71a3fbd6e6bd773982d68a851efdf"
+  }
+]

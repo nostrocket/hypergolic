@@ -1,0 +1,9 @@
+{
+  "kind": 1,
+  "created_at": 101,
+  "content": "Native stream acceptance after EOSE",
+  "tags": [],
+  "pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+  "id": "ef231daa095377d08132eda7d419ff6d902e21b63751537ba38b53f99e06b404",
+  "sig": "df7d0840c20927b4b995cc701665f1c32feda919a2b6b70177ef11df89af9f2201daf86b4a372aaf65be587495aa4f3acb67b5b78fdc77f3632775af60b256e9"
+}

@@ -1,0 +1,21 @@
+// Test-only packaging. Production sources, plugins and runtime are unchanged.
+def boundaryRoot = new File(System.getProperty('hypergolic.boundaryRoot'))
+gradle.beforeProject { project ->
+  if (project.path == ':app') {
+    project.afterEvaluate {
+      project.android.defaultConfig.applicationId = 'org.nostrocket.hypergolic.androidboundaryprobe'
+      project.android.defaultConfig.testApplicationId = 'org.nostrocket.hypergolic.androidboundaryprobe.test'
+      project.android.defaultConfig.testInstrumentationRunner = 'org.nostrocket.hypergolic.boundary.BoundaryInstrumentation'
+      project.android.testBuildType = 'release'
+      if (System.getProperty('hypergolic.boundaryNetworkControl') == 'true') {
+        project.android.sourceSets.release.manifest.srcFile(new File(boundaryRoot, 'NetworkControlManifest.xml'))
+      }
+      project.android.buildTypes.release.signingConfig = project.android.signingConfigs.debug
+      project.android.sourceSets.androidTest.java.srcDir(new File(boundaryRoot, 'src'))
+      project.android.sourceSets.androidTest.manifest.srcFile(new File(boundaryRoot, 'AndroidManifest.xml'))
+      project.dependencies.add('androidTestImplementation', project.project(':hypergolic-napplet-host'))
+      project.dependencies.add('androidTestImplementation', project.project(':expo-modules-core'))
+      project.dependencies.add('androidTestImplementation', 'androidx.webkit:webkit:1.17.0')
+    }
+  }
+}

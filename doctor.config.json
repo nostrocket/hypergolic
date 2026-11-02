@@ -1,0 +1,5 @@
+{
+  "ignore": {
+    "files": [".codex/**", ".tools/**", "android/**", "ios/**", "tools/quality/node_modules/**"]
+  }
+}

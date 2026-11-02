@@ -1,0 +1,7 @@
+{
+  "server": "https://cdn.hzrd149.com",
+  "relays": [
+    "wss://nos.lol",
+    "wss://relay.damus.io"
+  ]
+}

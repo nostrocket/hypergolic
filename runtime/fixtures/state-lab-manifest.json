@@ -1,0 +1,30 @@
+{
+  "kind": 35129,
+  "created_at": 1790945042,
+  "tags": [
+    [
+      "d",
+      "state-lab"
+    ],
+    [
+      "path",
+      "/index.html",
+      "c69de73de97f476303334676cf74f254050dd8e89a6bb08b21d870fbf0fcb104"
+    ],
+    [
+      "x",
+      "d6e287515470a2a74e50328a31a33f64e1e85adf4f8d5d2d99cce28bdbf7c456",
+      "aggregate"
+    ],
+    [
+      "requires",
+      "identity"
+    ],
+    [
+      "requires",
+      "storage"
+    ]
+  ],
+  "content": "",
+  "aggregateHash": "d6e287515470a2a74e50328a31a33f64e1e85adf4f8d5d2d99cce28bdbf7c456"
+}

@@ -1,0 +1,22 @@
+{
+  "kind": 35129,
+  "created_at": 1791812700,
+  "tags": [
+    [
+      "d",
+      "close-lab"
+    ],
+    [
+      "path",
+      "/index.html",
+      "b57c0dd6a86e9254c268cb72b26c5a8cd43db07906953cac2b959fb4ecb13a91"
+    ],
+    [
+      "x",
+      "4bbc33b8f202b1ae603bf8aa0f5a37acb68470519a58bd0cfeb071b626dc280a",
+      "aggregate"
+    ]
+  ],
+  "content": "",
+  "aggregateHash": "4bbc33b8f202b1ae603bf8aa0f5a37acb68470519a58bd0cfeb071b626dc280a"
+}

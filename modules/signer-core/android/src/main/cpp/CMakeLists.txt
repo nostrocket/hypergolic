@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.22.1)
+project(hypergolic_signer_android LANGUAGES C)
+add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../../../../shared" "${CMAKE_CURRENT_BINARY_DIR}/shared")
+add_library(hypergolic_signer_jni SHARED signer_jni.c)
+target_link_libraries(hypergolic_signer_jni PRIVATE hypergolic_signer)
+target_compile_options(hypergolic_signer_jni PRIVATE -Wall -Wextra -Werror)

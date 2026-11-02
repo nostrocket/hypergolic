@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="A temporary-state fixture for testing napplet input, scrolling and lifecycle." />
+    <title>UX Lab</title>
+  </head>
+  <body>
+    <main id="lab" data-testid="lab" data-ready="false">
+      <header class="intro">
+        <p class="eyebrow">HYPERGOLIC / TEST 01</p>
+        <div class="title-row"><h1>UX Lab<span aria-hidden="true">.</span></h1><span class="stamp">TEMPORARY<br />STATE</span></div>
+        <p>Leave a trace. Switch away. Come back.</p>
+        <p id="ready" role="status" data-testid="ready">Starting…</p>
+        <p class="meta" id="theme-status" data-testid="theme-status">Local palette</p>
+      </header>
+      <section aria-labelledby="counter-title">
+        <div class="section-heading"><span class="index">01</span><h2 id="counter-title">Count a few taps</h2></div>
+        <div class="counter-row"><output id="counter" aria-label="Counter" data-testid="counter">0</output><button id="increment" type="button" data-testid="increment">Add one <span aria-hidden="true">+</span></button></div>
+      </section>
+      <section aria-labelledby="draft-title">
+        <div class="section-heading"><span class="index">02</span><h2 id="draft-title">Leave some text</h2></div>
+        <label for="draft">Your temporary note</label>
+        <textarea id="draft" data-testid="draft" rows="3" maxlength="2000" aria-describedby="draft-help draft-count" placeholder="Something you will recognise…" autocomplete="off" spellcheck="false"></textarea>
+        <div class="field-meta"><p id="draft-help">Kept while this instance stays loaded.</p><output id="draft-count" data-testid="draft-count">0 / 2000</output></div>
+        <p class="mirror" id="draft-mirror" data-testid="draft-mirror">No text yet.</p>
+      </section>
+      <section aria-labelledby="rail-title">
+        <div class="section-heading"><span class="index">03</span><h2 id="rail-title">Scroll sideways</h2></div>
+        <p>Move the strip, then pick a marker.</p>
+        <div class="rail" id="rail" data-testid="rail" tabindex="0" role="region" aria-label="Horizontal marker strip"></div>
+        <p class="readout">Selected <output id="selected" data-testid="selected">None</output><span> · X <output id="scroll-x" data-testid="scroll-x">0</output> px</span></p>
+      </section>
+      <section aria-labelledby="vertical-title">
+        <div class="section-heading"><span class="index">04</span><h2 id="vertical-title">Go a little further</h2></div>
+        <p>These markers make your scroll position easy to recognise. The side buttons also test taps near the content edges.</p>
+        <p class="readout">Last edge tap <output id="edge" data-testid="edge">None</output></p>
+        <div id="markers" data-testid="markers"></div>
+      </section>
+      <footer>
+        <p class="eyebrow">END OF THE STRIP</p>
+        <h2>Back where you left it?</h2>
+        <p>Switching should keep your place. Closing and reopening starts this temporary fixture fresh.</p>
+        <button type="button" id="reset" data-testid="reset">Reset this instance</button>
+        <p class="meta">No saved data. No signing requests.</p>
+      </footer>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

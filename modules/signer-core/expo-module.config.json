@@ -1,0 +1,17 @@
+{
+  "platforms": [
+    "android",
+    "apple"
+  ],
+  "android": {
+    "modules": [
+      "org.nostrocket.hypergolic.signercore.SignerCoreModule"
+    ]
+  },
+  "apple": {
+    "modules": [
+      "HypergolicSignerCoreModule"
+    ],
+    "podspecPath": "HypergolicSignerCore.podspec"
+  }
+}

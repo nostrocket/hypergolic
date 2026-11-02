@@ -1,0 +1,142 @@
+{
+  "name": "hypergolic",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.34.5",
+  "main": "index.ts",
+  "engines": {
+    "node": "24.20.0"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "prebuild:android": "pnpm run runtime:build && expo prebuild --platform android --no-install",
+    "export:android": "pnpm run runtime:build && expo export --platform android",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.tests.json",
+    "doctor:expo": "expo-doctor",
+    "doctor:react": "react-doctor . --no-telemetry --no-supply-chain --yes --blocking warning",
+    "doctor:slop": "node tools/quality/node_modules/aislop/dist/cli.js ci",
+    "quality:install": "pnpm --dir tools/quality install --frozen-lockfile",
+    "audit": "pnpm audit --audit-level=high && pnpm --dir runtime audit --audit-level=high && pnpm --dir tools/quality audit --audit-level=high",
+    "check": "pnpm run typecheck && pnpm run doctor:expo && pnpm run doctor:react && pnpm run doctor:slop && pnpm run audit",
+    "gsd:install": "gsd-core --codex --local",
+    "runtime:install": "pnpm --dir runtime install --frozen-lockfile",
+    "runtime:build": "node scripts/build-runtime.mjs",
+    "runtime:test": "pnpm --dir runtime verify",
+    "test:shell": "node --experimental-strip-types --test src/shell/*.test.ts",
+    "ios": "expo run:ios",
+    "prebuild:ios": "pnpm run runtime:build && expo prebuild --platform ios --no-install",
+    "export:ios": "pnpm run runtime:build && expo export --platform ios",
+    "test:quality": "node --test tests/quality/*.test.mjs",
+    "test:security": "node --experimental-strip-types --test tests/security/*.test.ts && node --test tests/preflight/bootstrap.test.mjs",
+    "test:storage": "node --experimental-strip-types --test tests/storage/*.test.ts",
+    "test:capabilities": "node --experimental-strip-types --test tests/runtime/*.test.ts",
+    "build:tester": "node scripts/build-tester.mjs",
+    "test:tester": "node --test tests/build-tester/*.test.mjs",
+    "test:relay": "node --experimental-strip-types --test tests/relay/relay-service-wire.test.mjs",
+    "test:query": "node --experimental-strip-types --test tests/network/relay-query.test.ts tests/runtime/relay-query-broker.test.ts",
+    "test:subscriptions": "node --experimental-strip-types --test tests/network/relay-subscriptions.test.ts",
+    "test:resources": "node --experimental-strip-types --test tests/network/resource*.test.ts",
+    "test:uploads": "node --experimental-strip-types --test tests/network/upload*.test.ts",
+    "test:uploads:native": "python3 tests/native/upload-authority/run.py",
+    "test:uploads:tls": "python3 tests/native/upload-authority/tls_run.py",
+    "test:identity": "node --experimental-strip-types --test tests/network/identity*.test.ts",
+    "test:links": "node --experimental-strip-types --test tests/network/link*.test.ts",
+    "test:links:native": "python3 tests/native/links/unit.py",
+    "test:routing": "node --experimental-strip-types --test tests/routing/*.test.ts",
+    "test:routing:native": "python3 tests/native/routing/unit.py",
+    "test:presentation": "node --experimental-strip-types --test tests/presentation/*.test.ts",
+    "test:outbox": "node --experimental-strip-types --test tests/outbox/*.test.ts",
+    "test:native-webp": "node scripts/test-native-webp.mjs",
+    "test:native-dav1d": "node scripts/test-native-dav1d.mjs",
+    "test:native-codec-patches": "node --test tests/native/codecs/patch-integration.cjs && ruby tests/native/codecs/patch-hook.rb && ruby tests/native/codecs/notice-packaging.rb",
+    "test:signer": "node --experimental-strip-types --test tests/security/native-signer-contract.test.ts tests/security/native-vault.test.ts tests/security/native-android-signer.test.ts",
+    "test:signer:native": "python3 tests/native/signer-core/run.py"
+  },
+  "dependencies": {
+    "applesauce-core": "6.2.0",
+    "applesauce-relay": "6.2.1",
+    "expo": "57.0.20",
+    "expo-build-properties": "57.0.22",
+    "expo-crypto": "57.0.2",
+    "expo-font": "57.0.4",
+    "expo-image": "57.0.4",
+    "expo-secure-store": "57.0.3",
+    "expo-sqlite": "57.0.2",
+    "expo-system-ui": "57.0.4",
+    "nostr-tools": "2.24.0",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-gesture-handler": "2.32.0",
+    "react-native-reanimated": "4.5.1",
+    "react-native-safe-area-context": "5.7.0",
+    "react-native-worklets": "0.10.1",
+    "rxjs": "7.8.2"
+  },
+  "devDependencies": {
+    "@opengsd/gsd-core": "1.13.0",
+    "@types/node": "26.5.0",
+    "@types/react": "19.2.4",
+    "expo-doctor": "1.20.4",
+    "react-doctor": "0.9.13",
+    "typescript": "6.0.3",
+    "ws": "8.21.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "fast-uri@3.1.7": "3.1.9",
+      "ip-address@10.7.0": "10.7.4",
+      "brace-expansion@5.0.9": "5.0.12",
+      "xcode>uuid": "11.1.1",
+      "source-map-js": "1.2.2",
+      "proxy-addr": "2.0.8",
+      "compression": "1.8.2",
+      "shell-quote@1.10.0": "1.11.0",
+      "@modelcontextprotocol/sdk@1.30.0": "1.32.0",
+      "hono@4": "4.13.11",
+      "zod@4": "4.6.6",
+      "@expo/cli@57.0.22>zod": "4.6.6",
+      "qs@6.16.0": "6.16.1",
+      "body-parser@2.3.0": "2.4.0",
+      "@hono/node-server@2.1.1": "2.1.3",
+      "@opengsd/gsd-core@1.13.0>fallow": "3.34.0",
+      "@expo/config@57.0.9>deepmerge": "-",
+      "@babel/core@7.29.7>semver": "7.8.5",
+      "@babel/helper-compilation-targets@7.29.7>semver": "7.8.5",
+      "@babel/helper-create-class-features-plugin@7.29.7>semver": "7.8.5",
+      "@babel/helper-create-regexp-features-plugin@7.29.7>semver": "7.8.5",
+      "@babel/plugin-transform-runtime@7.29.7>semver": "7.8.5",
+      "babel-plugin-polyfill-corejs2@0.4.17>semver": "7.8.5"
+    },
+    "patchedDependencies": {
+      "node-forge@1.4.0": "patches/node-forge@1.4.0.patch",
+      "braces@3.0.3": "tools/quality/patches/braces@3.0.3.patch",
+      "expo-secure-store@57.0.3": "patches/expo-secure-store@57.0.3.patch",
+      "expo-modules-jsi@57.0.8": "patches/expo-modules-jsi@57.0.8.patch",
+      "@expo/config@57.0.9": "patches/expo-config-safe-merge.patch"
+    },
+    "packageExtensions": {
+      "@expo/config@57.0.9": {
+        "dependencies": {
+          "@fastify/deepmerge": "3.2.4"
+        }
+      }
+    }
+  },
+  "expo": {
+    "autolinking": {
+      "ios": {
+        "buildFromSource": [
+          "^expo-image$",
+          "^expo-secure-store$",
+          "^ExpoSecureStore$"
+        ]
+      },
+      "buildFromSource": [
+        "^expo-secure-store$",
+        "^ExpoSecureStore$"
+      ]
+    }
+  },
+  "license": "MIT"
+}

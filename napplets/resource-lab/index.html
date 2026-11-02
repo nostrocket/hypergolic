@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Resource Lab</title></head>
+<body><main id="lab" data-testid="lab"><p class="eyebrow">Hypergolic fixture</p><h1>Resource Lab</h1><p>Load complete bytes through the shell and inspect the result.</p>
+<section aria-label="External links"><h2>Open an external link</h2>
+<label for="link-url">External HTTPS URL</label><input id="link-url" type="text" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" value="https://example.com/?hypergolic=link-tracer">
+<label for="link-label">Untrusted label hint</label><input id="link-label" type="text" value="Read external page">
+<div class="actions"><button id="open-link" type="button">Open external link</button><button id="link-flood" type="button">Request four links</button></div>
+<p id="link-status" role="status" aria-live="polite">Ready to request a link.</p><pre id="link-result"></pre></section>
+<label for="url">Resource URL</label><input id="url" type="text" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" value="https://www.w3.org/assets/logos/w3c-2025-transitional/w3c-72x48.png">
+<div class="actions"><button id="load" type="button">Load resource</button><button id="cancel" type="button" disabled>Cancel</button><button id="info" type="button">Check support</button><button id="clear" type="button">Release preview</button></div>
+<p id="status" role="status" aria-live="polite">Ready to load.</p><div id="preview"></div><pre id="receipt"></pre>
+<label for="urls">Bulk URLs, one per line</label><textarea id="urls" rows="3">https://www.w3.org/assets/logos/w3c-2025-transitional/w3c-72x48.png
+htree:unsupported
+data:,local-sample</textarea><div class="actions"><button id="many" type="button">Load bulk</button></div>
+<ol id="items"></ol>
+</main><script type="module" src="/src/main.ts"></script></body></html>

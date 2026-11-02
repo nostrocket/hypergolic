@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "minimumIOS": "18.4",
+  "files": {
+    "modules/identity-store/ios/Contracts.swift": "715f5ce7b1a504853e5a059e6d8b2050e460c7c225047d800d4e21016d45b464",
+    "modules/identity-store/ios/ExcludedAtomicFiles.swift": "8473e7ef83e83618b4e9273ef17e73c737de05f1cc0c39777c68e4aa6da03052"
+  }
+}

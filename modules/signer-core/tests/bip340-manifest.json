@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/bitcoin/bips",
+  "commit": "927b6de9915c9262615a6399de51b200f81e5aa4",
+  "path": "bip-0340/test-vectors.csv",
+  "sha256": "34c9d1d9c3a88d524bc80778540dc43f8306ec249a7485293063c376db851c2d",
+  "license": "BIP-340 is CC0; see https://github.com/bitcoin/bips/blob/927b6de9915c9262615a6399de51b200f81e5aa4/bip-0340.mediawiki",
+  "coverage": "All 19 upstream verification vectors; shared production wrapper verifies 15 fixed 32-byte digest rows and signs 4 secret-bearing fixed digest rows. Variable message length is not exposed by shared wrapper."
+}

@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en"><head><meta name="description" content="Bounded complete resource byte and playback fixture."><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Resource Lab</title>  <script type="module" crossorigin>function requireNapplet() {
+  const w = window;
+  if (!w.napplet) {
+    throw new Error("window.napplet is unavailable -- runtime did not inject the napplet namespace");
+  }
+  return w.napplet;
+}
+function requireDomain(domain) {
+  const napplet = requireNapplet();
+  const value = napplet[domain];
+  if (!value) {
+    throw new Error(
+      `window.napplet.${String(domain)} is unavailable -- runtime did not inject this domain`
+    );
+  }
+  return value;
+}
+var resource = {
+  /**
+   * Inspect resource schemes and coarse runtime policy limits.
+   * @returns Promise resolving to advisory resource info.
+   */
+  info() {
+    return requireDomain("resource").info();
+  },
+  /**
+   * Fetch bytes for a URL through the shell's resource pipeline.
+   * @param url  URL identifying the resource (any registered scheme).
+   * @returns Promise resolving to the fetched bytes as a Blob.
+   */
+  bytes(url, opts) {
+    return requireDomain("resource").bytes(url, opts);
+  },
+  /**
+   * Fetch bytes for many URLs through one shell envelope.
+   * @param urls  Non-empty URL list.
+   * @param opts  Optional AbortController signal.
+   * @returns Promise resolving to ordered per-URL result items.
+   */
+  bytesMany(urls2, opts) {
+    return requireDomain("resource").bytesMany(urls2, opts);
+  },
+  /**
+   * Fetch bytes and return a managed object URL handle.
+   * Call `revoke()` to release the underlying Blob URL.
+   * @param url  URL identifying the resource.
+   * @returns Synchronous handle `{ url, revoke }`.
+   */
+  bytesAsObjectURL(url) {
+    return requireDomain("resource").bytesAsObjectURL(url);
+  }
+};
+var link = {
+  /**
+   * Request that the shell open an external URL for the user.
+   * @param url      Absolute URL to open
+   * @param options  Optional prompt/display hints
+   * @returns Promise resolving to the shell's open/deny status
+   */
+  open(url, options) {
+    return requireDomain("link").open(url, options);
+  }
+};
+function element(id) {
+  const node = document.getElementById(id);
+  if (!node) throw Error("Missing resource control");
+  return node;
+}
+const lab = element("lab"), status = element("status"), receipt = element("receipt"), preview = element("preview"), items = element("items");
+const input = element("url"), urls = element("urls");
+const load = element("load"), many = element("many"), cancel = element("cancel");
+let pending = null, revision = 0, disposed = false;
+const releases = /* @__PURE__ */ new Set();
+async function holdObjectURL(blob, assignSource) {
+  let close;
+  const released = new Promise((resolve) => {
+    close = resolve;
+  });
+  const url = URL.createObjectURL(blob);
+  releases.add(close);
+  try {
+    assignSource(url);
+    await released;
+  } finally {
+    URL.revokeObjectURL(url);
+    releases.delete(close);
+  }
+}
+function ownSource(blob, target) {
+  void holdObjectURL(blob, (url) => {
+    if (target instanceof HTMLAnchorElement) target.href = url;
+    else target.src = url;
+  }).catch(() => {
+    if (!disposed) status.textContent = "Preview unavailable.";
+  });
+}
+function release() {
+  for (const media of preview.querySelectorAll("audio,video")) media.pause();
+  preview.replaceChildren();
+  items.replaceChildren();
+  for (const close of releases) close();
+  releases.clear();
+}
+function controls() {
+  load.disabled = many.disabled = pending !== null || disposed;
+  cancel.disabled = pending === null;
+}
+async function hash(blob) {
+  return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer())), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+async function render(blob, target) {
+  if (!(blob instanceof Blob)) throw Error("Host did not deliver a Blob");
+  if (blob.type.startsWith("image/")) {
+    const image = document.createElement("img");
+    image.alt = "Loaded resource";
+    ownSource(blob, image);
+    target.append(image);
+    await image.decode();
+    lab.dataset.rendered = `${image.naturalWidth}x${image.naturalHeight}`;
+  } else if (blob.type.startsWith("audio/") || blob.type.startsWith("video/")) {
+    const media = document.createElement(blob.type.startsWith("audio/") ? "audio" : "video");
+    media.controls = true;
+    media.preload = "metadata";
+    media.setAttribute("playsinline", "");
+    ownSource(blob, media);
+    target.append(media);
+    const control = document.createElement("button");
+    control.type = "button";
+    control.textContent = "Play resource";
+    control.id = "play-resource";
+    control.addEventListener("click", () => {
+      void media.play().catch(() => {
+        status.textContent = "Playback unavailable.";
+      });
+    });
+    const state = document.createElement("p");
+    state.id = "media-state";
+    state.setAttribute("role", "status");
+    target.prepend(control, state);
+    const report = () => {
+      state.textContent = `Media ${media.paused ? "paused" : "playing"} at ${media.currentTime.toFixed(3)} s`;
+      lab.dataset.playback = media.currentTime.toFixed(3);
+    };
+    media.addEventListener("timeupdate", report);
+    media.addEventListener("loadedmetadata", report);
+    media.addEventListener("pause", report);
+    media.addEventListener("play", report);
+    media.addEventListener("pause", () => {
+      lab.dataset.paused = "true";
+    });
+    media.addEventListener("play", () => {
+      lab.dataset.paused = "false";
+    });
+  } else {
+    const link2 = document.createElement("a");
+    link2.textContent = `Attachment: ${blob.type}, ${blob.size} bytes`;
+    ownSource(blob, link2);
+    link2.download = "resource";
+    target.append(link2);
+  }
+}
+async function run(bulk) {
+  if (pending || disposed) return;
+  const controller = new AbortController(), current = ++revision;
+  pending = controller;
+  controls();
+  release();
+  receipt.textContent = "";
+  lab.dataset.state = "loading";
+  status.textContent = "Loading…";
+  const active = () => {
+    if (disposed || current !== revision || controller.signal.aborted) throw Error("Cancelled");
+  };
+  try {
+    if (bulk) {
+      const result = await resource.bytesMany(urls.value.split("\n").filter(Boolean), { signal: controller.signal });
+      active();
+      const rows = await Promise.all(result.map(async (item) => {
+        const row = document.createElement("li");
+        row.textContent = item.ok ? `${item.url}: ${item.blob.type}, ${item.blob.size} bytes` : `${item.url}: ${item.error}`;
+        if (item.ok) {
+          row.dataset.hash = await hash(item.blob);
+          row.textContent += `; SHA-256 ${row.dataset.hash}`;
+        }
+        active();
+        return row;
+      }));
+      active();
+      items.append(...rows);
+      status.textContent = `${result.length} bulk results.`;
+    } else {
+      const blob = await resource.bytes(input.value, { signal: controller.signal });
+      active();
+      const sha256 = await hash(blob);
+      active();
+      receipt.textContent = `${blob.type}
+${blob.size} bytes
+SHA-256 ${sha256}`;
+      lab.dataset.hash = sha256;
+      lab.dataset.bytes = String(blob.size);
+      lab.dataset.mime = blob.type;
+      await render(blob, preview);
+      active();
+      status.textContent = "Resource loaded.";
+    }
+    lab.dataset.state = "loaded";
+  } catch (error) {
+    if (current === revision && !disposed) {
+      release();
+      lab.dataset.state = "error";
+      status.textContent = controller.signal.aborted ? "Load cancelled." : `Load failed: ${error instanceof Error ? error.message : "unavailable"}`;
+    }
+  } finally {
+    if (pending === controller) pending = null;
+    controls();
+  }
+}
+load.addEventListener("click", () => {
+  void run(false);
+});
+many.addEventListener("click", () => {
+  void run(true);
+});
+cancel.addEventListener("click", () => {
+  pending?.abort();
+});
+element("clear").addEventListener("click", () => {
+  revision++;
+  pending?.abort();
+  release();
+  receipt.textContent = "";
+  status.textContent = "Preview released.";
+});
+element("info").addEventListener("click", () => {
+  void resource.info().then((info) => {
+    if (!disposed) receipt.textContent = JSON.stringify(info, null, 2);
+  }).catch(() => {
+    if (!disposed) status.textContent = "Support unavailable.";
+  });
+});
+window.addEventListener("pagehide", () => {
+  disposed = true;
+  revision++;
+  pending?.abort();
+  release();
+  controls();
+}, { once: true });
+lab.dataset.ready = "true";
+controls();
+const linkInput = element("link-url"), linkLabel = element("link-label");
+const linkStatus = element("link-status"), linkResult = element("link-result"), linkButton = element("open-link");
+let linkRevision = 0;
+async function openLink() {
+  const current = ++linkRevision;
+  linkButton.disabled = true;
+  linkResult.textContent = "";
+  linkStatus.textContent = "Waiting for shell approval…";
+  try {
+    const result = await link.open(linkInput.value, { label: linkLabel.value });
+    if (disposed || current !== linkRevision) return;
+    linkResult.textContent = JSON.stringify(result);
+    lab.dataset.linkResult = JSON.stringify(result);
+    linkStatus.textContent = result.status === "opened" ? "Link handed to your device." : "Link opening denied.";
+  } catch {
+    if (!disposed && current === linkRevision) linkStatus.textContent = "Link request unavailable.";
+  } finally {
+    if (!disposed && current === linkRevision) linkButton.disabled = false;
+  }
+}
+linkButton.addEventListener("click", () => {
+  void openLink();
+});
+element("link-flood").addEventListener("click", () => {
+  const current = ++linkRevision;
+  void Promise.all(Array.from({ length: 4 }, () => link.open(linkInput.value))).then((results) => {
+    if (!disposed && current === linkRevision) {
+      linkResult.textContent = JSON.stringify(results);
+      lab.dataset.linkResult = JSON.stringify(results);
+      linkStatus.textContent = "Four link requests settled.";
+    }
+  }).catch(() => {
+    if (!disposed && current === linkRevision) linkStatus.textContent = "Link request unavailable.";
+  });
+});
+</script>
+  <style>*{box-sizing:border-box}html{color-scheme:dark}body{margin:0;background:#140f0b;color:#f3efeb;font:16px/1.5 system-ui,sans-serif}main{max-width:42rem;margin:auto;padding:24px 20px 80px}h1{font-size:34px;line-height:1.1;margin:8px 0 18px}.eyebrow{color:#e8805d;font-size:12px;text-transform:uppercase;letter-spacing:.12em}label{display:block;margin:24px 0 8px;font-weight:600}textarea{display:block;width:100%;min-height:120px;resize:vertical;background:#241b14;color:inherit;border:1px solid #655143;border-radius:8px;padding:12px;font:16px/1.5 ui-monospace,monospace}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}button{min-height:48px;border:1px solid #e8805d;border-radius:8px;background:#e8805d;color:#21150e;font:inherit;padding:10px 14px;cursor:pointer}button:disabled{opacity:.5;cursor:default}button:focus-visible,textarea:focus-visible{outline:3px solid #fff;outline-offset:3px}#status{min-height:48px}ol{list-style:none;padding:0}li{overflow-wrap:anywhere;padding:14px 0;border-top:1px solid #655143}li p{white-space:pre-wrap;overflow-wrap:anywhere}code{display:block;color:#c7b6a7;font-size:11px;overflow-wrap:anywhere}[data-state=error] #status{color:#ffaf9b}
+
+input{width:100%;min-height:48px;background:#241b14;color:inherit;border:1px solid #655143;border-radius:8px;padding:12px;font:16px ui-monospace,monospace}input:focus-visible{outline:3px solid white;outline-offset:3px}#preview img,#preview video{display:block;max-width:100%;max-height:260px}audio{width:100%}#receipt{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 ui-monospace,monospace;color:#c7b6a7}
+</style>
+</head>
+<body><main id="lab" data-testid="lab"><p class="eyebrow">Hypergolic fixture</p><h1>Resource Lab</h1><p>Load complete bytes through the shell and inspect the result.</p>
+<section aria-label="External links"><h2>Open an external link</h2>
+<label for="link-url">External HTTPS URL</label><input id="link-url" type="text" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" value="https://example.com/?hypergolic=link-tracer">
+<label for="link-label">Untrusted label hint</label><input id="link-label" type="text" value="Read external page">
+<div class="actions"><button id="open-link" type="button">Open external link</button><button id="link-flood" type="button">Request four links</button></div>
+<p id="link-status" role="status" aria-live="polite">Ready to request a link.</p><pre id="link-result"></pre></section>
+<label for="url">Resource URL</label><input id="url" type="text" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" value="https://www.w3.org/assets/logos/w3c-2025-transitional/w3c-72x48.png">
+<div class="actions"><button id="load" type="button">Load resource</button><button id="cancel" type="button" disabled>Cancel</button><button id="info" type="button">Check support</button><button id="clear" type="button">Release preview</button></div>
+<p id="status" role="status" aria-live="polite">Ready to load.</p><div id="preview"></div><pre id="receipt"></pre>
+<label for="urls">Bulk URLs, one per line</label><textarea id="urls" rows="3">https://www.w3.org/assets/logos/w3c-2025-transitional/w3c-72x48.png
+htree:unsupported
+data:,local-sample</textarea><div class="actions"><button id="many" type="button">Load bulk</button></div>
+<ol id="items"></ol>
+</main></body></html>

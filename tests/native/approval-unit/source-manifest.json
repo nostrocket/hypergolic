@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "productionSources": {
+    "modules/napplet-host/ios/NativeApprovalAuthority.swift": "fb7d946e3d7c1b27326084df090fbb4a64e120b34bbe73a2af46301cf3a6c7b0"
+  },
+  "testSources": {
+    "Tests/NativeApprovalAuthorityTests.swift": "d31e0a043b3ab3233a0951f33188d840cd2cc7d9f5df1f2158ddf88af69aedf7"
+  },
+  "harnessFiles": {
+    "README.md": "ddc8ff927ae1b2db4c082bf75cf9e0b89586bacba3ca967da781d20d6d432d73",
+    "Package.swift.template": "035a51f62312609a4ff1ece06cd7ab15fa9cff96d78921b8b8f5988a11c57c58",
+    "runner.py": "5683231ea801c11df671eb6548a2e7bc3f7c3957760a8f35915b92f034d61e34"
+  }
+}

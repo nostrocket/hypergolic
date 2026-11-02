@@ -1,0 +1,15 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'org.nostrocket.hypergolic.identityowner'
+version = '0.0.0'
+expoModule { canBePublished false }
+android {
+  namespace 'org.nostrocket.hypergolic.identityowner'
+  defaultConfig { versionCode 1; versionName '0.0.0' }
+}
+
+// Use the application's pinned React Android API for exact JS-thread and lifecycle checks.
+dependencies { implementation 'com.facebook.react:react-android' }

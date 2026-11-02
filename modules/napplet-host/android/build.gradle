@@ -1,0 +1,119 @@
+import groovy.json.JsonOutput
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'org.nostrocket.hypergolic.host'
+version = '0.0.0'
+expoModule { canBePublished false }
+android {
+  namespace 'org.nostrocket.hypergolic.host'
+  buildFeatures { buildConfig true }
+  defaultConfig {
+    versionCode 1; versionName '0.0.0'
+    buildConfigField 'boolean', 'UPLOAD_NETWORK_PROOF', providers.gradleProperty('hypergolicUploadProof').getOrElse('false') == 'true' ? 'true' : 'false'
+  }
+}
+dependencies {
+  implementation 'androidx.webkit:webkit:1.17.0'
+  implementation 'com.facebook.react:react-android'
+}
+
+def archiveNoticeInventory = layout.buildDirectory.file('notice-review/selected-artifacts.json')
+def compilerNoticeInventory = layout.buildDirectory.file('notice-review/selected-compiler.json')
+gradle.projectsEvaluated {
+  def appProject = rootProject.project(':app')
+  def artifacts = appProject.configurations.getByName('releaseRuntimeClasspath').incoming.artifactView {
+    componentFilter { id -> id instanceof ModuleComponentIdentifier }
+  }.artifacts
+  def capture = appProject.tasks.register('writeHypergolicNoticeInventory') {
+    inputs.files(artifacts.artifactFiles)
+    outputs.file(archiveNoticeInventory)
+    outputs.upToDateWhen { false }
+    doLast {
+      def output = archiveNoticeInventory.get().asFile
+      output.parentFile.mkdirs()
+      output.text = JsonOutput.toJson(artifacts.artifacts.collect { artifact ->
+        def component = artifact.id.componentIdentifier.displayName
+        def natives = []
+        if (component.startsWith('com.facebook.fresco:') && artifact.file.name.endsWith('.aar')) {
+          new java.util.zip.ZipFile(artifact.file).withCloseable { archive ->
+            archive.entries().findAll { entry -> entry.name.startsWith('jni/arm64-v8a/') && entry.name.endsWith('.so') }.each { entry ->
+              def bytes = archive.getInputStream(entry).withCloseable { stream -> stream.bytes }
+              def hash = java.security.MessageDigest.getInstance('SHA-256').digest(bytes).encodeHex().toString()
+              natives.add([entry: entry.name, bytes: bytes.length, sha256: hash])
+            }
+          }
+        }
+        [component: component, file: artifact.file.absolutePath, nativeEntries: natives]
+      })
+    }
+  }
+  def appPlugin = appProject.plugins.findPlugin('com.android.application')
+  def d8 = appPlugin.class.classLoader.loadClass('com.android.tools.r8.D8')
+  def d8Location = d8.protectionDomain.codeSource.location
+  def compilerFile = new File(d8Location.toURI())
+  def buildscriptArtifacts = rootProject.buildscript.configurations.getByName('classpath').incoming.artifactView {
+    componentFilter { id -> id instanceof ModuleComponentIdentifier }
+  }.artifacts
+  def compilerCapture = rootProject.tasks.register('writeHypergolicCompilerNoticeInventory') {
+    inputs.file(compilerFile)
+    outputs.file(compilerNoticeInventory)
+    outputs.upToDateWhen { false }
+    doLast {
+      def owners = buildscriptArtifacts.artifacts.findAll { artifact -> artifact.file == compilerFile }
+      if (owners.size() != 1) throw new GradleException('D8 compiler origin has no unique buildscript artifact')
+      def artifact = owners.first()
+      def output = compilerNoticeInventory.get().asFile
+      output.parentFile.mkdirs()
+      def version = new Properties()
+      new java.util.zip.ZipFile(compilerFile).withCloseable { archive ->
+        def entry = archive.getEntry('r8-version.properties')
+        if (entry == null) throw new GradleException('D8 compiler version properties missing')
+        archive.getInputStream(entry).withCloseable { stream -> version.load(stream) }
+      }
+      output.text = JsonOutput.toJson([component: artifact.id.componentIdentifier.displayName,
+        file: artifact.file.absolutePath, d8CodeSource: d8Location.toString(),
+        embeddedD8Version: version.getProperty('version.version'), upstreamCommit: version.getProperty('version.sha')])
+    }
+  }
+  tasks.named('preBuild').configure { dependsOn(capture, compilerCapture) }
+}
+
+// Packaged trusted-host assets must come from the separately locked web build.
+tasks.named('preBuild').configure {
+  doFirst {
+    providers.exec {
+      workingDir project.projectDir
+      commandLine 'node', file('NativeDependencyNotices.cjs').absolutePath,
+        file('src/main/assets/notices').absolutePath,
+        file('../../..').absolutePath
+    }.result.get()
+    def inventoryFile = archiveNoticeInventory.get().asFile
+    providers.exec {
+      workingDir project.projectDir
+      commandLine 'node', file('ArchiveDependencyNotices.cjs').absolutePath,
+        file('src/main/assets/archive-notices').absolutePath, inventoryFile.absolutePath
+    }.result.get()
+    providers.exec {
+      workingDir project.projectDir
+      commandLine 'node', file('CompilerDependencyNotices.cjs').absolutePath,
+        file('src/main/assets/compiler-notices').absolutePath, compilerNoticeInventory.get().asFile.absolutePath
+    }.result.get()
+    providers.exec {
+      workingDir project.projectDir
+      commandLine 'node', file('CppDependencyNotices.cjs').absolutePath,
+        file('src/main/assets/cpp-notices').absolutePath,
+        rootProject.findProject(':app').android.ndkDirectory.absolutePath,
+        file('src/main/assets/notices').absolutePath
+    }.result.get()
+    for (name in ['index.html', 'host.js']) {
+      if (!file("src/main/assets/runtime/$name").isFile()) {
+        throw new GradleException("Missing trusted runtime asset $name. Run pnpm run runtime:build first.")
+      }
+    }
+  }
+}

@@ -1,0 +1,155 @@
+package org.nostrocket.hypergolic.signercore
+
+import android.os.SystemClock
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
+
+// Controller/OS ports only. The ticket, awaitResume, state, execute and captured bodies are production bytes.
+internal class HandoffBoundary {
+  val owner = Any()
+  val current = AtomicReference<Authorization?>(null)
+  var foreground = true
+  var deviceUnlocked = true
+  var offers = 0
+  val main = MainPort()
+  private fun isForeground() = foreground
+  private fun unlocked() = deviceUnlocked
+  interface AwaitPort { fun awaitResume(requestId: String) }
+  class Checks {
+    var capturedLive = true
+    var executionLive = true
+    fun captured() = capturedLive
+    fun live() = executionLive
+  }
+  class SourcePort {
+    var held = true
+    var resumed = true
+    fun handoffActive() = held
+    fun resumedHandoff() = resumed
+  }
+  sealed class Binding {
+    class Signing(val source: SourcePort) : Binding()
+  }
+  class MainPort {
+    @Volatile var posts = 0
+    val posted = CountDownLatch(1)
+    private val queued = AtomicReference<(() -> Unit)?>(null)
+    fun post(action: () -> Unit) { posts++; check(queued.compareAndSet(null,action)); posted.countDown() }
+    fun pump() { checkNotNull(queued.getAndSet(null)).invoke() }
+  }
+  inner class Authorization : AwaitPort {
+    val deadline = 1000L
+    val binding = Binding.Signing(SourcePort()) as Binding
+    val checks = Checks()
+    var locked = false
+    var ticket: NativeHandoffTicket? = NativeHandoffTicket(owner,this,7,deadline,"public-request")
+    __ACTUAL_CAPTURED__
+    __ACTUAL_STATE__
+    __ACTUAL_EXECUTE__
+    __ACTUAL_AWAIT_RESUME__
+  }
+  fun offerResume(value: Authorization) {
+    offers++
+    check(current.get() === value)
+    check(value.ticket!!.resume(owner,value,SystemClock.elapsedRealtime()))
+  }
+  fun authorization(): Authorization = Authorization().also { current.set(it) }
+}
+private var handoffCases = 0
+private var handoffAssertions = 0
+private val handoffFailures = mutableListOf<String>()
+private fun verifyHandoff(value: Boolean, message: String) { handoffAssertions++; if (!value) throw AssertionError(message) }
+private fun handoffTest(name: String, body: () -> Unit) {
+  handoffCases++; SystemClock.now = 100; SystemClock.reads = 0; SystemClock.beforeRead = null
+  try { body() } catch (failure: Exception) { handoffFailures.add("$name: ${failure.message}") }
+  catch (failure: AssertionError) { handoffFailures.add("$name: ${failure.message}") }
+  finally { SystemClock.beforeRead = null }
+}
+private fun denied(h: HandoffBoundary, a: HandoffBoundary.Authorization, id: String = "public-request", code: String = "AUTHORIZATION_DENIED") {
+  try { a.awaitResume(id); throw AssertionError("authority refusal returned successfully") }
+  catch (error: NativeVault.Error) { verifyHandoff(error.code == code,"expected $code, got ${error.code}") }
+  verifyHandoff(h.offers == 0 && h.main.posts == 0,"failure never offers Resume")
+}
+fun main() {
+  handoffTest("cancelled ticket", {
+    val h = HandoffBoundary(); val a = h.authorization(); a.ticket!!.cancel(); denied(h,a)
+  })
+  handoffTest("exact deadline ticket expiry", {
+    val h = HandoffBoundary(); val a = h.authorization(); SystemClock.now = a.deadline; denied(h,a)
+  })
+  handoffTest("replaced current preserves replacement", {
+    val h = HandoffBoundary(); val old = h.authorization(); val replacement = h.authorization(); denied(h,old)
+    verifyHandoff(h.current.get() === replacement && replacement.state() == "pending","replacement stays current/live")
+    verifyHandoff(old.ticket!!.state(h.owner,old,100) == "pending","classification does not mutate the old ticket")
+    verifyHandoff(replacement.ticket!!.verifiedResult(h.owner,replacement,"public-request",100),"replacement result remains unconsumed")
+  })
+  handoffTest("expiry after initial pending observation", {
+    val h = HandoffBoundary(); val a = h.authorization()
+    SystemClock.beforeRead = Runnable { if (SystemClock.reads == 3) SystemClock.now = a.deadline }
+    denied(h,a); verifyHandoff(SystemClock.reads >= 3,"reached verification clock read")
+  })
+  handoffTest("cancel after initial pending observation", {
+    val h = HandoffBoundary(); val a = h.authorization()
+    SystemClock.beforeRead = Runnable { if (SystemClock.reads == 3) a.ticket!!.cancel() }
+    denied(h,a); verifyHandoff(SystemClock.reads >= 3,"reached verification boundary")
+  })
+  handoffTest("captured authority lost before failed verification", {
+    val h = HandoffBoundary(); val a = h.authorization()
+    SystemClock.beforeRead = Runnable { if (SystemClock.reads == 3) a.checks.capturedLive = false }
+    denied(h,a,"wrong-id"); verifyHandoff(!a.checks.capturedLive,"loss occurs after initial pending observation")
+  })
+  handoffTest("live wrong ID remains invalid", {
+    val h = HandoffBoundary(); val a = h.authorization(); denied(h,a,"wrong-id","SIGNER_RESPONSE_INVALID")
+    verifyHandoff(a.state() == "pending","live wrong-ID ticket not cancelled")
+    verifyHandoff(a.ticket!!.verifiedResult(h.owner,a,"public-request",100),"wrong ID did not consume correlation")
+  })
+  handoffTest("live duplicate verified result remains invalid", {
+    val h = HandoffBoundary(); val a = h.authorization()
+    verifyHandoff(a.ticket!!.verifiedResult(h.owner,a,"public-request",100),"first result verified")
+    denied(h,a,code="SIGNER_RESPONSE_INVALID"); verifyHandoff(a.state() == "pending","duplicate remains live correlation error")
+  })
+  handoffTest("correct pending result and Resume", {
+    val h = HandoffBoundary(); val a = h.authorization(); a.ticket!!.background(); a.ticket!!.foreground()
+    val failure = AtomicReference<Throwable?>(null)
+    val worker = Thread { try { a.awaitResume("public-request") } catch (error: Throwable) { failure.set(error) } }
+    worker.start()
+    try {
+      verifyHandoff(h.main.posted.await(1,TimeUnit.SECONDS),"Resume callback queued")
+      verifyHandoff(h.offers == 0 && a.state() == "pending","no Resume before explicit pump")
+      h.main.pump(); worker.join(2000)
+      verifyHandoff(!worker.isAlive && failure.get() == null,"await finishes after actual ticket Resume")
+    } finally { if (worker.isAlive) { worker.interrupt(); worker.join(1000) } }
+    verifyHandoff(h.offers == 1 && h.main.posts == 1 && a.state() == "resumed","one matching Resume")
+  })
+  handoffTest("already resumed still executes", {
+    val h = HandoffBoundary(); val a = h.authorization(); a.ticket!!.background(); a.ticket!!.foreground()
+    verifyHandoff(a.ticket!!.verifiedResult(h.owner,a,"public-request",100) && a.ticket!!.resume(h.owner,a,100),"live resumed setup")
+    a.awaitResume("later-correlated-rpc")
+    verifyHandoff(h.offers == 0 && h.main.posts == 0 && a.execute(),"existing resumed execution path retained")
+  })
+  handoffTest("already resumed still requires foreground", {
+    val h = HandoffBoundary(); val a = h.authorization(); a.ticket!!.background(); a.ticket!!.foreground()
+    verifyHandoff(a.ticket!!.verifiedResult(h.owner,a,"public-request",100) && a.ticket!!.resume(h.owner,a,100),"live resumed setup")
+    h.foreground = false; denied(h,a)
+  })
+  handoffTest("ticket-null behavior unchanged", {
+    val h = HandoffBoundary(); val a = h.authorization(); a.ticket = null; a.awaitResume("public-request")
+    verifyHandoff(h.offers == 0 && h.main.posts == 0,"no ticket offers no Resume")
+  })
+  handoffTest("captured authority already unavailable", {
+    val h = HandoffBoundary(); val a = h.authorization(); a.checks.capturedLive = false
+    try { a.awaitResume("public-request"); throw AssertionError("revoked source returned success") }
+    catch (error: NativeVault.Error) { verifyHandoff(error.code == "AUTHORIZATION_DENIED","unavailable source execution stays denied") }
+    verifyHandoff(h.main.posts == 1 && h.offers == 0,"queued UI work is not accepted execution")
+  })
+  handoffTest("resumed source execution guard retained", {
+    val h = HandoffBoundary(); val a = h.authorization(); a.ticket!!.background(); a.ticket!!.foreground()
+    verifyHandoff(a.ticket!!.verifiedResult(h.owner,a,"public-request",100) && a.ticket!!.resume(h.owner,a,100),"live resumed setup")
+    (a.binding as HandoffBoundary.Binding.Signing).source.resumed = false; denied(h,a)
+  })
+  verifyHandoff(handoffCases == 14,"all handoff cases selected")
+  val rows = handoffFailures.joinToString(",") { "\"" + it.replace("\\", "\\\\").replace("\"", "\\\"") + "\"" }
+  println("{\"passed\":${handoffFailures.isEmpty()},\"cases\":$handoffCases,\"assertions\":$handoffAssertions,\"failures\":[$rows]}")
+  if (handoffFailures.isNotEmpty()) kotlin.system.exitProcess(1)
+}

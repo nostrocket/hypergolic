@@ -1,0 +1,5 @@
+# operation|input-base64|mask-hex|expected-frame-base64
+text-req|WyJSRVEiLCJhYmMiLHt9XQ==|01020304|gZABAgMEWiBRQVAgLyZgYGAmLXl+WQ==
+pong|AQID|05060708|ioMFBgcIBAQE
+close|MTAwMHxieWU=|01010101|iIUBAQEBAuljeGQ=
+empty-text||00000000|gYAAAAAA

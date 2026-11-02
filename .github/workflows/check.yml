@@ -1,0 +1,208 @@
+name: Check
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            tools/quality/pnpm-lock.yaml
+            runtime/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run runtime:install
+      - run: pnpm run quality:install
+      - run: pnpm run check
+  shared-behavior:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            runtime/pnpm-lock.yaml
+            tools/quality/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run runtime:install
+      - run: pnpm run quality:install
+      - name: Shared behavioral and packaging regressions
+        run: |
+          pnpm run test:shell
+          pnpm run test:security
+          pnpm run test:storage
+          pnpm run test:capabilities
+          pnpm run test:relay
+          pnpm run test:query
+          pnpm run test:subscriptions
+          pnpm run test:resources
+          pnpm run test:uploads
+          pnpm run test:identity
+          pnpm run test:links
+          pnpm run test:routing
+          pnpm run test:presentation
+          pnpm run test:outbox
+          pnpm run test:quality
+          pnpm run test:tester
+      - name: Native harness regressions without device dispatch
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/native -p 'test_*.py'
+  exports:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [android, ios]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            runtime/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run runtime:install
+      - run: pnpm run export:${{ matrix.platform }}
+        env:
+          EXPO_NO_TELEMETRY: '1'
+  android:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '17.0.20+101'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run runtime:install
+      - run: pnpm run prebuild:android
+        env:
+          EXPO_NO_TELEMETRY: '1'
+      - name: Build unsigned native runtime proof
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: hypergolic-unsigned-runtime-proof
+          path: android/app/build/outputs/apk/release/*-unsigned.apk
+          if-no-files-found: error
+  napplet-labs:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - fixture: ux-lab
+            browser: true
+          - fixture: state-lab
+            browser: true
+          - fixture: approval-lab
+            browser: true
+          - fixture: feed-lab
+            browser: true
+          - fixture: resource-lab
+            browser: false
+          - fixture: upload-lab
+            browser: false
+          - fixture: routing-lab
+            browser: false
+    defaults:
+      run:
+        working-directory: napplets/${{ matrix.fixture }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: napplets/${{ matrix.fixture }}/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm type-check
+      - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium webkit
+      - if: matrix.browser
+        run: pnpm test
+      - run: pnpm test:conformance
+      - run: pnpm audit --audit-level=high
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always() && matrix.browser
+        with:
+          name: ${{ matrix.fixture }}-browser-evidence
+          path: napplets/${{ matrix.fixture }}/test-results/
+          if-no-files-found: warn
+
+  runtime-host:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: runtime
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: runtime/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium webkit
+      - run: pnpm verify
+      - run: pnpm audit --audit-level=high
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: runtime-host-browser-evidence
+          path: runtime/test-results/
+          if-no-files-found: warn
+
+  ios-compile:
+    runs-on: xcode-27
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
+      EXPO_NO_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            runtime/pnpm-lock.yaml
+      - name: Verify selected Apple toolchain
+        run: |
+          test "$(xcodebuild -version | head -n 1)" = 'Xcode 27.1'
+          test "$(xcrun --sdk iphoneos --show-sdk-version)" = '27.1'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run runtime:install
+      - run: pnpm run prebuild:ios
+      - run: pod install
+        working-directory: ios
+      - name: Compile unsigned iPhoneOS Release
+        run: >-
+          xcodebuild -workspace ios/Hypergolic.xcworkspace -scheme Hypergolic
+          -configuration Release -sdk iphoneos -destination 'generic/platform=iOS'
+          -derivedDataPath "$RUNNER_TEMP/hypergolic-ios-build"
+          CODE_SIGNING_ALLOWED=NO build

@@ -1,0 +1,42 @@
+{
+  "upstreamFix": "https://github.com/videolan/dav1d/commit/2b475307dc11be9a1c3cc4358102c76a7f386a51",
+  "wrapperCommit": "0143c7ca8cf62ddc844031e1f3a661c99d086432",
+  "owningSourceCommit": "676a864a11af2c0522e1f992e770589543894686",
+  "scope": "Released tile-offset overflow fix backported to dav1d1.2.0; version remains truthful. No complete decoder audit claim.",
+  "files": [
+    {
+      "path": "libdav1d/dav1d/src/decode.c",
+      "beforeSha256": "459d6ec01128a682a8c9e7aa126d6e44b2df7518c8fdd7d42821ed4b11beb3b4",
+      "afterSha256": "2eba2cd083ffde843c23bcf7bcc59a21d74d8811ec4df1c0b3b6f4597fbbe7be",
+      "replacements": [
+        {
+          "before": "                       const int tile_start_off)",
+          "after": "                       const unsigned tile_start_off)"
+        },
+        {
+          "before": "    if (c->n_fc > 1) {\n        int tile_idx = 0;",
+          "after": "    if (c->n_fc > 1) {\n        const unsigned sb_step4 = f->sb_step * 4;\n        int tile_idx = 0;"
+        },
+        {
+          "before": "            int row_off = f->frame_hdr->tiling.row_start_sb[tile_row] *\n                          f->sb_step * 4 * f->sb128w * 128;\n            int b_diff = (f->frame_hdr->tiling.row_start_sb[tile_row + 1] -\n                          f->frame_hdr->tiling.row_start_sb[tile_row]) * f->sb_step * 4;",
+          "after": "            const unsigned row_off = f->frame_hdr->tiling.row_start_sb[tile_row] *\n                                     sb_step4 * f->sb128w * 128;\n            const unsigned b_diff = (f->frame_hdr->tiling.row_start_sb[tile_row + 1] -\n                                     f->frame_hdr->tiling.row_start_sb[tile_row]) * sb_step4;"
+        },
+        {
+          "before": "                    f->frame_hdr->tiling.col_start_sb[tile_col] * f->sb_step * 4;",
+          "after": "                    f->frame_hdr->tiling.col_start_sb[tile_col] * sb_step4;"
+        }
+      ]
+    },
+    {
+      "path": "libdav1d/dav1d/src/internal.h",
+      "beforeSha256": "9157eaca72cb8f08f25d8631b526f93693c7c38a5d437600855376e705c7f679",
+      "afterSha256": "feefb413b29f673358d7bd79c2e72c86e1074a94e668a042d079b637d00cac48",
+      "replacements": [
+        {
+          "before": "        int *tile_start_off;",
+          "after": "        unsigned *tile_start_off;"
+        }
+      ]
+    }
+  ]
+}

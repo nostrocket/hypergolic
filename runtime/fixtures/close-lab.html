@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Close Lab</title>
+<style>body{margin:0;padding:24px;background:#140f0b;color:#f3efeb;font:17px system-ui}textarea,button,select{font:inherit;margin:12px 0;padding:12px;max-width:100%;box-sizing:border-box}textarea{display:block;width:100%;min-height:140px}button{background:#e8805d;border:0;border-radius:12px}label,output{display:block}p{line-height:1.5}</style></head>
+<body><h1>Close Lab</h1><p>Type a temporary draft, then close this napplet from the overview. An empty draft is clean; text is unsaved.</p>
+<label for="draft">Temporary draft</label><textarea id="draft" maxlength="2000"></textarea><button id="reset">Clear draft</button>
+<label for="mode">Close response</label><select id="mode"><option value="auto">Based on draft</option><option value="unknown">Unknown</option><option value="silent">No reply</option></select><output id="state">Clean</output>
+<script>
+(()=>{const draft=document.getElementById('draft'),mode=document.getElementById('mode'),state=document.getElementById('state');
+const render=()=>{state.textContent=draft.value?'Unsaved':'Clean';};draft.addEventListener('input',render);document.getElementById('reset').addEventListener('click',()=>{draft.value='';render();});
+window.addEventListener('message',event=>{const m=event.data;if(!event.isTrusted||event.source!==window.parent||!m||Object.keys(m).length!==2||m.type!=='hypergolic.closeCheck'||typeof m.id!=='string'||!/^[A-Za-z0-9_-]{1,80}$/.test(m.id)||mode.value==='silent')return;
+window.parent.postMessage({type:'hypergolic.closeCheck.result',id:m.id,state:mode.value==='unknown'?'unknown':draft.value?'dirty':'clean'},'*');});window.parent.postMessage({type:'shell.ready'},'*');})();
+</script></body></html>

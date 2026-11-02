@@ -1,0 +1,2988 @@
+{
+  "schemaVersion": 1,
+  "status": "open",
+  "snapshotDate": "2026-11-02",
+  "scope": "Combined final Phase 2.11 + Phase 3 acceptance; MVP through Outbox, native local signing, NIP-46 on both hosts and Android NIP-55.",
+  "excluded": [
+    "Value transfers, zaps, Value Lab and CAP-13 (Phase 4)",
+    "Incoming signer-provider services",
+    "Public app-store publication"
+  ],
+  "baseline": {
+    "source": {
+      "sha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+      "description": "Original Phase 2.11 matrix bytes are privately preserved; this digest identifies the inherited snapshot without requiring a private path."
+    },
+    "legacyRows": 61,
+    "legacyRowsPassedOnBothPlatforms": 8,
+    "legacyRowsOpen": 53,
+    "platformStatusCounts": {
+      "passed": 17,
+      "partial": 73,
+      "not-run": 32
+    },
+    "phase3RequirementStatusSource": {
+      "sha256": "86a194c5ba1de3790f7521c922be5e94cde1b9fdd56c0b79136af6e535a76f15",
+      "description": "Source requirements ledger snapshot, privately preserved."
+    },
+    "phase3Complete": [
+      "EXT-09"
+    ],
+    "newPassingClaims": 0
+  },
+  "policy": [
+    "status and inheritedStatus preserve historical coverage. campaignStatus alone records the combined final campaign; every applicable platform starts not-run, including rows with historical passes. No current campaign pass is inferred.",
+    "Inherited platform status values are exact historical snapshots, not validation against the current code candidate. Keep earlier failures and narrower successes separately.",
+    "Run case steps on each listed platform. Each requirement also requires its row-specific requiredEvidence; passing a shared case does not automatically pass every mapped row.",
+    "During development use simulator/emulator checks where faithful; name the missing capability before a targeted physical check. Final sign-off needs ordinary standalone Android+iOS journeys on final artifact hashes.",
+    "Run embedded and verified-published variants for all applicable capability groups. Every signing route runs with local and NIP-46 on both platforms and NIP-55 on Android.",
+    "No fallback, automatic resend, deadline reset or unsupported-operation authority may be inferred. Unknown remains unknown until independently reconciled.",
+    "Normal final quality requires React Doctor and aislop both 100/100; historical exception wording is retained only as history and does not waive the current gate.",
+    "No new final pass follows from this planning artifact. Preserve detailed original evidence and limitations before retiring any legacy matrix."
+  ],
+  "evidenceRecord": {
+    "requiredFields": [
+      "run alias",
+      "case IDs and requirement IDs",
+      "UTC start/end and monotonic clock domain for deadline assertions",
+      "source tree digest plus commit and dirty state",
+      "Android/iOS platform, OS and runtime version using neutral target aliases",
+      "artifact/signing identity digest",
+      "fixture/spec refs and hashes",
+      "method and exact public account alias",
+      "preconditions and steps actually executed",
+      "expected and actual outcomes",
+      "independent event/byte/frame/count verification",
+      "result: passed/partial/failed/not-run/not-applicable",
+      "limitations, unresolved side effects and cleanup result"
+    ],
+    "privacy": "Public evidence uses portable repository-relative paths and retired disposable public test data. Never commit device IDs, private vault references, credentials, callback tokens, raw nsec, raw operational logs or personal paths. Retain sensitive originals outside the public artifact; publish only reviewed summaries/digests."
+  },
+  "testCases": [
+    {
+      "id": "T01",
+      "title": "Header, identity and theme",
+      "requirements": [
+        "UX-01",
+        "UX-02"
+      ],
+      "platforms": [
+        "android-physical",
+        "ios-physical"
+      ],
+      "steps": [
+        "Cold-launch and inspect the expanded shelf header; open UX Lab and another napplet to inspect the compact focused header. Exercise the All napplets spark, focused-title menu and identity Settings control; copy the full public npub from Settings.",
+        "Use two disposable accounts with valid, missing and broken profile images; switch and cold-launch each. Change system light/dark appearance."
+      ],
+      "expected": [
+        "Expanded shelf header uses a 32-point noninteractive logo and short selected npub. The focused header uses a 24-point All napplets spark in a 44-point control, plain centered title opening the menu, and avatar Settings with the full npub accessibility label. Settings/copy/focused title agree with the selected account/view. Reconcile this current source-backed compact profile with the preserved historical UX-01 wording before a final campaign pass.",
+        "A valid profile image appears; otherwise the same account gets the same local fallback, with no stale previous-account image. Theme remains readable."
+      ],
+      "evidence": [
+        "Screenshots and accessibility tree for each profile state; exact public npub comparison; copy result; before/after restart."
+      ],
+      "variants": []
+    },
+    {
+      "id": "T02",
+      "title": "Workspace navigation and retained views",
+      "requirements": [
+        "UX-03",
+        "UX-04",
+        "UX-05",
+        "UX-06",
+        "UX-08",
+        "UX-09"
+      ],
+      "platforms": [
+        "android-physical",
+        "ios-physical"
+      ],
+      "steps": [
+        "Open three UX/State Lab instances in order. Enter distinct unsent text/counter values and vertical/horizontal scroll markers. Navigate previous/next with real handle drags and tap each handle for overview.",
+        "Release a short drag early; drag at both ends; interact with near-edge guest controls. Select each overview card and open a fourth view.",
+        "Save State Lab data; close/reopen it. Close all views; cold-launch. Repeat cold launch with multiple saved views and a selected last view."
+      ],
+      "expected": [
+        "Opening order is stable; new views append; focus never reorders. No wrap, false navigation or lost live text/scroll position. Drag follows input and short cancellation returns.",
+        "Two-column overview has correct transition geometry and selected view. Close keeps saved data, leaves overview, and last close yields accessible Open napplet/settings.",
+        "Restart preserves deliberate empty state or order, verified version and last selected view; other views reload lazily. Unsaved process-death recovery is not required."
+      ],
+      "evidence": [
+        "Actual input/transition recording; accessibility order and visible scroll markers; saved-value readback; pre/post cold-launch snapshots."
+      ],
+      "variants": []
+    },
+    {
+      "id": "T03",
+      "title": "Clean, dirty and unknown close",
+      "requirements": [
+        "UX-07",
+        "SIGN-04"
+      ],
+      "platforms": [
+        "android-physical",
+        "ios-physical"
+      ],
+      "steps": [
+        "Use the selected dirty-state contract to prepare clean, dirty and unknown sessions; arm a pending approval in each. Swipe its overview card upward.",
+        "Choose default Keep open, then repeat and choose Close anyway. Send a late callback and reopen the napplet."
+      ],
+      "expected": [
+        "Clean closes directly; dirty/unknown warn with Keep open as default. Cancellation preserves the session; accepted close tears it down.",
+        "Old pending/approved authority is revoked and cannot be replayed after reopen; new work requires a fresh request/review."
+      ],
+      "evidence": [
+        "Trusted warning screenshots; exact session IDs represented by neutral aliases; native cancellation/sign counters and independent network counts."
+      ],
+      "variants": []
+    },
+    {
+      "id": "T04",
+      "title": "Input, accessibility and motion",
+      "requirements": [
+        "UX-10",
+        "OB-10",
+        "EXT-08"
+      ],
+      "platforms": [
+        "android-physical",
+        "ios-physical"
+      ],
+      "steps": [
+        "With the OS keyboard open, edit long JSON and navigate focused view, overview, Settings, review and results using Android Back or iOS dismiss/navigation.",
+        "Enable large text, TalkBack/VoiceOver and OS reduced motion. Traverse controls, reject and approve distinct requests, and inspect long event/list/destination/result data."
+      ],
+      "expected": [
+        "Controls stay reachable and readable without hidden next actions; focus returns sensibly; Android Back and iOS gestures obey review/queue policy.",
+        "Accessible names identify action/account/requester; keyboard and edge gestures do not conflict. Reduced motion changes transitions without breaking navigation. Primary/list receipts and unknown outcomes stay distinguishable."
+      ],
+      "evidence": [
+        "OS setting witness; actual key/gesture and focus recording; screen-reader traversal; full review and receipt captures with safe public fixtures."
+      ],
+      "variants": []
+    },
+    {
+      "id": "T05",
+      "title": "Native identity creation, import and storage",
+      "requirements": [
+        "ID-01",
+        "ID-02",
+        "ID-03",
+        "EXT-01",
+        "EXT-02"
+      ],
+      "platforms": [
+        "android-physical",
+        "ios-physical"
+      ],
+      "steps": [
+        "On a fresh disposable app profile, cold-launch and independently compare the derived public npub; repeat process death/reboot and restore.",
+        "Import valid nsec through native trusted Settings; test cancel, malformed/out-of-range input and authentication denial. Retain and select the previous account; cold-launch both.",
+        "Inject missing/corrupt/tampered storage, unavailable protection and read/write failures using the owning test harness. Inspect native/JS/guest surfaces, backup configuration and sanitized artifacts.",
+        "On physical targets, lock/background during native vault, import and backup access; test unavailable protected data, screenshot/recording and OS task-preview capture on protected surfaces without retaining any raw secret.",
+        "Exercise actual supported OS backup and device-transfer transport with disposable profiles; inspect what is restored/copied and compare native secret/identity protection. Configuration exclusion alone is insufficient."
+      ],
+      "expected": [
+        "Exactly one local account is created on first launch without requiring an external signer. The same account survives restart; a failed read never silently creates a replacement.",
+        "Secrets are created/imported/read/signed only in native ownership; encrypted persistence and native protection fail closed; import cancellation preserves state.",
+        "No raw secret crosses Expo/React/guest storage or public logs/artifacts; automatic backup exclusion and at-rest integrity are verified. Simulator storage doubles do not establish physical protection.",
+        "Native authentication, protected-data availability and capture policy match the selected platform design; denied/late access cannot expose secrets or revive a cancelled owner. Record each demonstrated protection and limitation separately.",
+        "Real backup/device-transfer behavior honors the selected exclusion/protection design; failures never create or expose a replacement identity."
+      ],
+      "evidence": [
+        "Public identity equality; owning native failure results; encrypted-record/config inspection; bridge-surface review; sanitized absence checks and physical protection evidence.",
+        "Physical lock/authentication/capture observations with no secret-bearing image or raw key in the evidence.",
+        "Actual backup/transfer transport observations, restored-record/protection checks and sanitized guest/shared/React persistence, heap, log/crash failure-surface inspection."
+      ],
+      "variants": []
+    },
+    {
+      "id": "T06",
+      "title": "Backup and account deletion",
+      "requirements": [
+        "ID-05",
+        "ID-06",
+        "EXT-02"
+      ],
+      "platforms": [
+        "android-physical",
+        "ios-physical"
+      ],
+      "steps": [
+        "Explain manual nsec backup, then test native device authentication success/cancel/unavailable/late completion; compare reimported public identity without recording the secret.",
+        "Try deleting the only account. Add another account, then test delete cancel, auth failure and success; cold-launch the survivor. Keep a surviving napplet with an unsaved live draft during successful deletion and verify its session/draft continues before testing cold survivor persistence."
+      ],
+      "expected": [
+        "Backup reveals only after valid current native authentication; cancellation/expiry/failure exports nothing and cannot extend the absolute deadline.",
+        "Last-account deletion is unavailable; confirmed authenticated deletion removes only the intended encrypted record and revokes its sessions. Surviving account remains usable. Successful deletion preserves the survivor's currently loaded session and live draft; cold identity continuity alone does not prove that behavior."
+      ],
+      "evidence": [
+        "Native authentication/expiry result and zero-export counter; public reimport comparison; encrypted-record presence/absence; survivor restart. Physical authentication is required."
+      ],
+      "variants": []
+    },
+    {
+      "id": "T07",
+      "title": "Account and publisher isolation",
+      "requirements": [
+        "ID-04",
+        "STATE-01",
+        "EXT-03",
+        "EXT-07"
+      ],
+      "platforms": [
+        "android-physical",
+        "ios-physical"
+      ],
+      "steps": [
+        "With three sessions and pending approval/upload/stream/channel work, begin an account switch and cancel it. Verify all original registrations and values still work.",
+        "Confirm the switch. Exercise late callbacks and replay from the old identity, then switch back and cold-launch.",
+        "Write distinct State Lab values under account A/B, publisher A/B and stable app ID A/B. Update the same verified app version; also try a publisher collision.",
+        "Exercise State storage quota/type errors and forged caller-supplied namespaces, with valid same-scope positive controls before and after denial."
+      ],
+      "expected": [
+        "Cancelled switch preserves original sessions, configuration and routing. Confirmed switch warns once, revokes old work and restarts all sessions under one selected account.",
+        "No old request/result crosses accounts. Storage is scoped by selected account + verified publisher + stable app identity; valid same-app updates retain data; other scopes cannot read it.",
+        "Quota/type/namespace faults return canonical errors without cross-scope reads, writes, partial corruption or guest-selected namespaces."
+      ],
+      "evidence": [
+        "Scope/value cross-product; cancelled/confirmed switch input; stale reply/sign/send counters; exact restored data and public account snapshots."
+      ],
+      "variants": []
+    },
+    {
+      "id": "T08",
+      "title": "Trusted review and serialized queue",
+      "requirements": [
+        "SIGN-01",
+        "SIGN-02",
+        "SIGN-03",
+        "SIGN-05",
+        "EXT-01"
+      ],
+      "platforms": [
+        "android-physical",
+        "ios-physical"
+      ],
+      "steps": [
+        "Submit one note and another supported kind, then three queued requests across focused/unfocused sessions. Inspect full canonical event, requester/publisher/version, account and selected signer before Approve once or Reject.",
+        "Dismiss/back/swipe the current review. Focus another view and let its delayed request arrive; return and explicitly resume the queue.",
+        "Mutate, reorder, duplicate and replay request/session/version/account payloads before and after review.",
+        "For verified-published relay publication, leave review pending beyond 30 seconds but within the native approval deadline, then resolve it once. Require the original SDK request/result and no premature client failure or retransmission; the 660-second response budget must not extend native approval authority."
+      ],
+      "expected": [
+        "Every supported publication uses one exact native-owned, one-use approval; no Approve all or silent route. Dismiss rejects current and pauses the remainder.",
+        "Unfocused requests wait without stealing focus; overview indicates pending work. Only explicit resume proceeds.",
+        "Approved bytes/account/source/generation/version remain immutable across asynchronous signing. Forged or stale inputs cannot sign."
+      ],
+      "evidence": [
+        "Complete native review; queue order/focus recording; independent canonical event ID and Schnorr verification; native one-use/sign counters."
+      ],
+      "variants": []
+    },
+    {
+      "id": "T09",
+      "title": "Publication outcomes and authority races",
+      "requirements": [
+        "SIGN-04",
+        "SIGN-06",
+        "EXT-07"
+      ],
+      "platforms": [
+        "android-physical",
+        "ios-physical"
+      ],
+      "steps": [
+        "Approve, reject, cancel and expire a request before signing; then interrupt at pending, native signing, dispatch, sent-awaiting-reply and receipt boundaries.",
+        "At each boundary background/lock/return, close/switch/update the view, change account/method/relay, revoke/disconnect and kill/restart the process. Deliver late/duplicate replies.",
+        "Retry only by explicit fresh request/review after reconciling any possible prior side effect."
+      ],
+      "expected": [
+        "Pre-dispatch denial produces zero signing/emission when independently measured. Old authority never revives after lifecycle changes.",
+        "Possible dispatch/signing with no verified final outcome stays uncertain; cancellation is not proof of no effect. No automatic retry, local fallback, reapproval reuse or deadline reset occurs."
+      ],
+      "evidence": [
+        "Native operation/epoch/signature/dispatch counters; controlled receiver frames and event validation; independent receipts/readback; original failure and uncertainty records."
+      ],
+      "variants": [
+        "Run local and NIP-46 on Android+iOS; run NIP-55 on Android. Repeat publication, Outbox and Blossom route boundaries."
+      ]
+    },
+    {
+      "id": "T10",
+      "title": "Verified loading, access and update",
+      "requirements": [
+        "LOAD-01",
+        "LOAD-02",
+        "LOAD-03",
+        "CAP-01",
+        "OB-09"
+      ],
+      "platforms": [
+        "android-physical",
+        "ios-physical"
+      ],
+      "steps": [
+        "Open exact signed artifacts from two controlled publishers through ordinary Settings. Review publisher, signed event/version and requested/available capabilities; decline, then accept fresh consent.",
+        "Try malformed identifiers, wrong kind/publisher, bad signature/hash, missing/oversized resources and unsupported or ungranted operations; observe guest execution markers.",
+        "Offer valid v2 and invalid/rollback updates while v1 has unsaved data and pending work. Decline, then accept explicit verified update; cold-launch and revoke access."
+      ],
+      "expected": [
+        "Only verified exact bytes execute after explicit access review. Unsupported groups are truthfully reported under the selected tolerant-admission policy and receive no native authority.",
+        "No unrelated fallback code or invented wire field is used. Decline preserves v1/data; accepted update pins v2, follows dirty-state policy and revokes old authority; cold launch restores the exact pinned version."
+      ],
+      "evidence": [
+        "Publisher/event/hash/fixture parity; first-open/update/revoke input and code marker; original SDK operation errors; pinned version after restart."
+      ],
+      "variants": []
+    },
+    {
+      "id": "T11",
+      "title": "Relay settings, queries and streams",
+      "requirements": [
+        "RELAY-01",
+        "RELAY-02",
+        "CAP-02",
+        "CAP-03",
+        "OB-08"
+      ],
+      "platforms": [
+        "android-physical",
+        "ios-physical"
+      ],
+      "steps": [
+        "Inspect separate startup Network and Lookup lists. Add/edit/remove/restore defaults explicitly; reject invalid URLs and cold-launch the saved selection.",
+        "Query controlled signed event sets and empty EOSE. Exercise bounded filters/destinations/results, denial, required authentication, reject/offline/timeout and revoked owner.",
+        "Open/close caller-owned streams. Send duplicates/flood, disconnect/reconnect, background/return; switch/close/update/account-change while callbacks are pending. Test fresh/stale/corrupt/cross-account cache and foreground refresh."
+      ],
+      "expected": [
+        "Roles remain distinct; defaults seed only first use and restore only by explicit action. Empty success differs from incomplete/failure.",
+        "Selected authentication obeys the pinned contract and explicit approval policy. Streams respect bounds and selected reconnect policy; close/revocation prevents stale delivery.",
+        "Cache freshness and incomplete results remain truthful across cold restart/account changes; public follows never silently change routing."
+      ],
+      "evidence": [
+        "Exact role/destination list; independent relay frames/EOSE/event verification; bounded queue counters; close and restart snapshots; no stale callback evidence."
+      ],
+      "variants": []
+    },
+    {
+      "id": "T12",
+      "title": "Resource bytes and private handles",
+      "requirements": [
+        "CAP-04",
+        "SEC-03"
+      ],
+      "platforms": [
+        "android-physical",
+        "ios-physical"
+      ],
+      "steps": [
+        "Request each selected resource scheme with known image/audio/video bytes; compare full returned bytes/hash and actual native rendering/playback.",
+        "Try forbidden destinations/redirects, MIME mismatch, oversize/truncated data, cancellation, cache reuse and stale/cross-session handles; close/update/change account and terminate the content process."
+      ],
+      "expected": [
+        "Only selected bounded destinations/content types return verified complete bytes. Cancelled/revoked resources stop; private handles cannot outlive or cross their owning session/account.",
+        "Navigation/renderer/resource failure tears down authority and subscriptions; reload never inherits privilege."
+      ],
+      "evidence": [
+        "Independent served-byte/hash ledger; native rendering/playback; denied destination receiver counts; handle lifetime and cleanup observations."
+      ],
+      "variants": []
+    },
+    {
+      "id": "T13",
+      "title": "Upload preparation, approval and recovery",
+      "requirements": [
+        "CAP-05",
+        "EXT-05",
+        "EXT-07"
+      ],
+      "platforms": [
+        "android-physical",
+        "ios-physical"
+      ],
+      "steps": [
+        "Pick prepared photos and unchanged attachments. Cancel/revoke the picker recipient; then inspect exact preview, MIME, size, prepared bytes/hash, destination and requester before file approval and native signing consent.",
+        "Perform one selected Blossom upload with local and NIP-46 signing; on Android repeat with NIP-55. Independently verify authorization event, exact uploaded bytes and SDK receipt.",
+        "Exercise denial, expired grants, changed bytes/destination, bounded queues, partial transfer, disconnect/restart and uncertain server outcome. Reconcile by selected recovery path before explicit retry."
+      ],
+      "expected": [
+        "Native preparation precedes guest handoff; approval and exact-file PUT permit bind the actual prepared/original hash, account/source/version and destination. No guest MIME/name can choose sanitation policy.",
+        "No signing capture/claim precedes file approval; late/cancelled authority cannot PUT. Possible sent bytes remain uncertain across restart without duplicate resend.",
+        "Native server confirmation, provider readback and durable storage/enforcement are separately evidenced."
+      ],
+      "evidence": [
+        "Picker/preview/input record; native file/sign/PUT counters; independent server authorization and payload hash; SDK result; durable uncertainty record/restart reconciliation."
+      ],
+      "variants": []
+    },
+    {
+      "id": "T14",
+      "title": "Public identity reads",
+      "requirements": [
+        "CAP-06"
+      ],
+      "platforms": [
+        "android-physical",
+        "ios-physical"
+      ],
+      "steps": [
+        "Read selected profile, relays, follows, mutes, global lists and accepted badges through genuine State/Feed SDK calls using two accounts and known signed records.",
+        "Exercise missing/invalid/stale/corrupt records, freshness/refresh, persisted grants/revoke, delayed delivery, publisher collision and cold restart."
+      ],
+      "expected": [
+        "Only validated selected public data is returned with canonical missing/error forms and truthful freshness. Grants/results remain source/account scoped; revocation drops queued results.",
+        "Separate list review obeys selected policy; reading follows does not alter relay routing."
+      ],
+      "evidence": [
+        "Independent signed source records; typed SDK outputs; selected grant review; cross-account/publisher negative controls and restart."
+      ],
+      "variants": []
+    },
+    {
+      "id": "T15",
+      "title": "External links",
+      "requirements": [
+        "CAP-07"
+      ],
+      "platforms": [
+        "android-physical",
+        "ios-physical"
+      ],
+      "steps": [
+        "Deliberately open each selected external-link scheme through Resource Lab and native review/control.",
+        "Try forbidden schemes/embedded credentials, automatic/flood requests, revoked source, denied consent, missing handler and an external-app/browser return."
+      ],
+      "expected": [
+        "Only deliberate permitted links reach the OS with the exact approved URL; native policy and bounds hold. Denial/missing handler return truthful errors and preserve owner/session authority."
+      ],
+      "evidence": [
+        "Actual native handoff/return; external receiver exact URL; denied handoff counts and genuine SDK error."
+      ],
+      "variants": []
+    },
+    {
+      "id": "T16",
+      "title": "Intent dispatch and channels",
+      "requirements": [
+        "CAP-08",
+        "CAP-09"
+      ],
+      "platforms": [
+        "android-physical",
+        "ios-physical"
+      ],
+      "steps": [
+        "Use two verified Routing Lab identities and a collision publisher. Query handlers, choose a target, exercise absent/ambiguous targets, first-open consent/decline and exact payload delivery.",
+        "Open symmetric INC channels; inject forged sender, foreign channel/request ID, replay, flood and malformed payloads; close/replace a target and change account during delayed delivery."
+      ],
+      "expected": [
+        "Handler selection and payload follow verified target and selected contract; decline/cancel creates no target authority.",
+        "Sender/recipient/account/correlation are native-bound; stale/forged traffic fails closed without breaking a valid positive-control message."
+      ],
+      "evidence": [
+        "Trusted handler review; genuine SDK payloads; target receiver counters; independent scope/correlation checks and late-delivery denials."
+      ],
+      "variants": []
+    },
+    {
+      "id": "T17",
+      "title": "Notifications and configuration",
+      "requirements": [
+        "CAP-10",
+        "CAP-11"
+      ],
+      "platforms": [
+        "android-physical",
+        "ios-physical"
+      ],
+      "steps": [
+        "Register selected schemas; test valid/default/depth/type/secret values, Save/cancel/clear, invalid registration ACK + error push, incompatible update/removal and cold restart.",
+        "Use same app ID under another publisher/account and peer app; cancel account switching, then confirm switching and restore. Deliver delayed save/subscription/permission reads after revoke/close/update.",
+        "Request hostile and normal notifications in focused/unfocused views; test source/global concurrency limits, dismiss/action ownership, expiry with delayed permission reads, restart and grant revoke."
+      ],
+      "expected": [
+        "Values/schema/grants are scoped and durable; masked secrets stay masked; invalid schema cannot overwrite values. Cancelled switch preserves registrations; actual change revokes them; removed schema purges orphaned values.",
+        "Notifications are attributed, bounded, dismissible shell UI; lifetime begins at admission, capacity rechecks after asynchronous permission, and actions cannot focus a foreign/replaced owner. No OS push claim."
+      ],
+      "evidence": [
+        "Exact SDK ACK/error/value/subscription output; masked UI and cold read; identity/publisher cross-product; controlled-clock/native capacity and queued-revoke evidence."
+      ],
+      "variants": []
+    },
+    {
+      "id": "T18",
+      "title": "Outbox destinations and receipts",
+      "requirements": [
+        "CAP-12",
+        "OB-01",
+        "OB-02",
+        "OB-03"
+      ],
+      "platforms": [
+        "android-physical",
+        "ios-physical"
+      ],
+      "steps": [
+        "Using a protected disposable account, seed an exact signed kind-10002 list; publish one harmless primary through genuine Feed Lab SDK. Review full immutable primary/list union and exact signed list.",
+        "Test own-list fanout, explicit-only/toOutbox:false, duplicate required inboxes, all-required success and required rejected/unknown/cancelled target despite unrelated ACKs.",
+        "Test missing required inbox, union/frame overflow and ancillary-list failure. Independently observe each approved destination and verify exact primary/list events."
+      ],
+      "expected": [
+        "One new primary signature and unchanged existing signed list go only to approved destinations. Primary/list receipts remain separate; ancillary failure preserves primary success.",
+        "Every required target must succeed; unrelated ACK cannot make primary successful. toOutbox:false omits own discovery/list only. Invalid required routing fails before review/sign/send."
+      ],
+      "evidence": [
+        "Complete review/event hash; native signature/frame counts; controlled relay frames/receipts; independent exact signed stored-event readback. ACK and later storage remain separate."
+      ],
+      "variants": []
+    },
+    {
+      "id": "T19",
+      "title": "Outbox frozen review, native faults and races",
+      "requirements": [
+        "OB-04",
+        "OB-05",
+        "OB-06",
+        "OB-07"
+      ],
+      "platforms": [
+        "android-physical",
+        "ios-physical"
+      ],
+      "steps": [
+        "Expire routing metadata and refresh before review; fail refresh; remove own list and inspect labelled Network fallback. Mutate routing/settings/metadata while review is pending.",
+        "Inject wrong source/domain/view/account/generation, foreign event/ACK ID, replay, late/concurrent callbacks and malformed payloads; retain a valid concurrent positive control.",
+        "Drive controlled accept/reject/AUTH/disconnect/accept-close/missing/foreign/malformed ACK, deadline, slow/flood/backpressure and primary/list/required partial fanout. Interrupt at review/sign/send/receipt with the T09 lifecycle variants."
+      ],
+      "expected": [
+        "Review freezes exact targets/event; stale required refresh failure refuses publication; later settings do not alter approval.",
+        "Native owner binding, bounded slots/timers/frames and correlation fail closed. Unknown-after-send differs from cancelled-before-send; lifecycle revocation cannot revive old authority."
+      ],
+      "evidence": [
+        "Ordinary app-UID/Expo/guest/protected signer composition; independent receiver exact frames and zero-emission proof where asserted; native zero-sign counters; race/timer/slot recovery; original failures retained."
+      ],
+      "variants": []
+    },
+    {
+      "id": "T20",
+      "title": "Sandbox and capability failures",
+      "requirements": [
+        "SEC-01",
+        "SEC-02",
+        "SEC-03",
+        "CAP-01",
+        "EXT-09"
+      ],
+      "platforms": [
+        "android-physical",
+        "ios-physical"
+      ],
+      "steps": [
+        "Through malicious public-API fixtures send forged sibling/frame/main-frame messages, stale generation, malformed/oversized envelopes and ungranted operations.",
+        "Probe guest parent/native APIs, storage/secret access, fetch/XHR/WS/forms/images/navigation/popups/downloads and file/content URLs using a controlled receiver. Include independently observable DNS, UDP and public-HTTPS escape probes; local HTTP/TCP-only controls cannot establish all-origin egress denial.",
+        "Terminate/reload/navigate the content process and exhaust selected resource/session/queue limits. Inspect packaged bridge/manifest/service/URL registration for incoming signer-provider exposure."
+      ],
+      "expected": [
+        "Only the trusted bundled host and exact verified native sender acquire scoped authority. Guests get no generic native bridge, secret, unrestricted network or signing/encryption API.",
+        "Failure tears down authority and stale callbacks; unsupported capability use returns honest denial. Phase 3 remains outgoing signer-client only; incoming signer services are absent."
+      ],
+      "evidence": [
+        "Native adversarial checks and ordinary malicious guest results on each host; independent receiver escape counts; current package/bridge/service inspection; positive controls.",
+        "Reachable independent DNS/UDP/public-HTTPS receiver observations, with unrestricted positive controls, plus navigation/download/file/content probes and owning Expo/published composition."
+      ],
+      "variants": []
+    },
+    {
+      "id": "T21",
+      "title": "Same-account signing methods and continuity",
+      "requirements": [
+        "EXT-03",
+        "EXT-07"
+      ],
+      "platforms": [
+        "android-physical",
+        "ios-physical"
+      ],
+      "steps": [
+        "Attach local and remote methods for the same npub; select one explicitly. Write State Lab data, change method, close/reopen and cold-launch. Keep another npub saved as a negative control.",
+        "Fail remote preflight, pre-dispatch and post-possible-dispatch while local remains attached. Then explicitly choose local and submit a fresh approved request.",
+        "Refresh relays and disconnect offline; cold-launch again, observing saved account/data, selected unavailable/no-method state and absence of pending replay."
+      ],
+      "expected": [
+        "There is one account per npub; method changes preserve same-account data and do not select another account. No automatic fallback/retry occurs, even with local attached.",
+        "Explicit local selection can sign fresh work. Disconnect revokes remote credentials/authority but retains the account/data; restart preserves truthful no-method/unavailable state."
+      ],
+      "evidence": [
+        "Public account/method snapshots and exact State values before/after restart; controlled signer/local counters; encrypted credential presence/absence and pending-operation count."
+      ],
+      "variants": []
+    },
+    {
+      "id": "T22",
+      "title": "NIP-46 connection, correlation and browser Resume",
+      "requirements": [
+        "EXT-04",
+        "EXT-07",
+        "EXT-08"
+      ],
+      "platforms": [
+        "android-physical",
+        "ios-physical"
+      ],
+      "steps": [
+        "Connect a controlled signer through native Settings, confirm exact candidate public account, peer and selected normalized relay list; test decline, relay refresh and cold restart.",
+        "Exercise connection and signing authentication URLs: open the permitted browser, return without authenticating, then complete authentication and explicitly press native Resume. Test malformed/forbidden URL, cancel, background/lock and expiry.",
+        "Use wrong peer/author/request ID/account, invalid event hash/signature/content, duplicate/late encrypted reply, replay, response after relay change and exhausted original deadline. Repeat with a pinned independent real NIP-46 implementation."
+      ],
+      "expected": [
+        "Credentials remain bounded/native-owned; authenticated peer/request/account correlation and exact signed event validation precede use. Browser return alone never releases a result.",
+        "Resume is explicit and revalidates original owner, generation, one-use ticket and absolute deadline. Repeated Resume/generation cannot extend time or resend. Possible signing dispatch plus later denial/expiry remains SIGNER_UNCERTAIN.",
+        "Controlled-peer tests and independent signer interoperability are reported separately; neither proves unrelated routes or physical protection."
+      ],
+      "evidence": [
+        "Native Settings/review/Close/Resume input; controlled peer RPC/auth/sign counts and exact response verification; monotonic deadline ledger within one clock domain; independent real-signer version/ref."
+      ],
+      "variants": []
+    },
+    {
+      "id": "T23",
+      "title": "All selected signing routes",
+      "requirements": [
+        "EXT-05",
+        "EXT-08"
+      ],
+      "platforms": [
+        "android-physical",
+        "ios-physical"
+      ],
+      "steps": [
+        "For local and NIP-46 on each host, approve one exact note, another supported update, Outbox primary + existing-list fanout and Blossom file authorization through ordinary app/public SDK paths.",
+        "On Android repeat all routes with NIP-55. For every route also reject/cancel and deliver a late response using T09; verify native file approval precedes signing for uploads."
+      ],
+      "expected": [
+        "Every selected route uses the explicitly chosen method and identical exact native approval binding; returned event matches account, canonical hash, signature, kind, tags and content.",
+        "Independent destinations observe approved exact events/bytes only; unknown side effects remain unresolved until reconciled. UI/SDK completion, ACK, retrieval, new forwarding and controlled receiver consumption remain separate facts."
+      ],
+      "evidence": [
+        "Route x platform x method ledger; full trusted review and SDK completion; native signature/dispatch counts; independent cryptography, relay/file receiver and readback."
+      ],
+      "variants": []
+    },
+    {
+      "id": "T24",
+      "title": "Android NIP-55 and real signer",
+      "requirements": [
+        "EXT-06",
+        "EXT-07",
+        "EXT-08"
+      ],
+      "platforms": [
+        "android-physical"
+      ],
+      "steps": [
+        "On Android select the explicit signer package/certificate and candidate public account. Exercise public-key and exact event-sign requests with explicit external-app return and native Resume.",
+        "Test wrong/missing/changed package or certificate, absent handler, wrong Activity/result/request/account, cancellation, duplicate/late result, corrupted signature/hash and redundant result fields that do or do not match.",
+        "Repeat exact content/signature/publication and disconnect/cold restore with pinned real Amber; submit once and independently count each request/signature/publication."
+      ],
+      "expected": [
+        "Only the explicitly bound provider and matching one-use Activity result can complete. Redundant fields are accepted only if exactly consistent. No silent signer substitution/local fallback occurs.",
+        "Possible provider dispatch followed by cancel/expiry/invalid result preserves uncertainty and original deadline. Exact-text or one-submit failures remain failed even if a valid event exists."
+      ],
+      "evidence": [
+        "Android actual handoff/input and package/certificate binding; native controller/result counts; real-Amber version, canonical signed event/readback and exact content/count comparisons."
+      ],
+      "variants": [
+        "Android only. iOS: not-applicable by platform contract, never counted as a passing NIP-55 test."
+      ]
+    },
+    {
+      "id": "T25",
+      "title": "Fixture parity and whole-app published journey",
+      "requirements": [
+        "FIX-01",
+        "FIX-02",
+        "FIX-03",
+        "CAP-14",
+        "OB-09"
+      ],
+      "platforms": [
+        "android-physical",
+        "ios-physical"
+      ],
+      "steps": [
+        "Build/verify UX, State, Approval, Feed, Resource, Upload and Routing fixture variants with genuine SDKs and stable visible identifiers; seal embedded/published byte hashes and signed publisher/version manifests.",
+        "From ordinary standalone Android/iOS run UX -> State -> Approval, then every capability case in this matrix through embedded and verified-published routes. Use disposable run accounts distinct from the release publisher, retained through restart.",
+        "Repeat a declared compatible third-party napplet sample, explicit update/restart and cross-account/publisher isolation. Reconcile each named requirement and retained failed result."
+      ],
+      "expected": [
+        "The published product executes the exact reviewed fixture bytes after normal consent, without fixture signing/storage/approval bypass. A compatibility sample claims only exercised granted operations.",
+        "Both hosts complete each applicable group on final source-bound artifacts; shared/browser/simulator/packaging evidence alone never closes native final acceptance. Value/zaps and Value Lab are excluded."
+      ],
+      "evidence": [
+        "Fixture/version/spec/source/artifact hashes; independent manifest/content retrieval; input and expected/actual records; every row-to-run mapping and unresolved gap."
+      ],
+      "variants": []
+    },
+    {
+      "id": "T26",
+      "title": "Final quality, packages, notices and cleanup",
+      "requirements": [
+        "BUILD-01",
+        "BUILD-02",
+        "BUILD-03",
+        "OB-11",
+        "EXT-08"
+      ],
+      "platforms": [
+        "android-physical",
+        "ios-physical"
+      ],
+      "steps": [
+        "On the final candidate run the documented pinned checks and affected native suites; retain complete React Doctor and aislop reports. Inspect compatible dependency/protocol refs, locked patches and the complete actual delivered dependency/notice inventory.",
+        "Produce current locally signed standalone Android/iOS artifacts through documented native build/export instructions. Inspect identity/certificate, permissions, entitlements, backup/debug/network policy, packaged notices and runtime/source hashes.",
+        "Install/update without clearing retained data and cold-launch without Metro. Run final journeys; reconcile pending jobs/unknown side effects, remove only exact test-owned apps/runners/files, and verify retained app/data and before/after inventories. Record branch/status and preserve concurrent changes; source publication remains separately authorized."
+      ],
+      "expected": [
+        "Both quality scores are 100/100 with findings fixed, no suppression/hidden advisories; incomplete/denied scans stay open. All applicable notices include required original license/NOTICE texts and match the delivered packages.",
+        "Build/signing/notice checks, physical security, ordinary runtime and full acceptance each have their own evidence. Build success is not acceptance.",
+        "Temporary ownership is exact; no test launcher/process remains and retained app data survives. No source remote/push mutation is inferred from acceptance work."
+      ],
+      "evidence": [
+        "Complete quality/audit/compatibility reports; source/artifact seals; package/config/notice diff; no-Metro cold-launch input; exact cleanup and retained-account/data comparison."
+      ],
+      "variants": []
+    }
+  ],
+  "rows": [
+    {
+      "id": "UX-01",
+      "requirement": "Minimal header, supplied 32dp square logo without tap action, focused napplet name, avatar + shortened selected npub opening trusted settings",
+      "requiredEvidence": "Screenshot and accessibility tree on target phone; actual tap opens settings; full npub copies correctly; focused napplet fills remaining space",
+      "phase": "2.11",
+      "testCases": [
+        "T01"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "passed",
+          "inheritedStatus": "passed",
+          "inheritedEvidenceCount": 3,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "passed",
+          "inheritedStatus": "passed",
+          "inheritedEvidenceCount": 3,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "UX-01",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Historical UX-01 text specifies a 32dp logo without tap action. The current approved compact header source uses a 24-point All napplets control, while the expanded shelf retains a noninteractive 32-point logo. Preserve that historical record and explicitly reconcile the current acceptance profile; do not apply its old no-action rule to focused mode or infer a current pass."
+      ]
+    },
+    {
+      "id": "UX-02",
+      "requirement": "Profile avatar when available; deterministic local fallback otherwise",
+      "requiredEvidence": "Two controlled identities, valid/missing/broken profile image cases; avatar and short/full keys match after switch and restart",
+      "phase": "2.11",
+      "testCases": [
+        "T01"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "passed",
+          "inheritedStatus": "passed",
+          "inheritedEvidenceCount": 6,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "passed",
+          "inheritedStatus": "passed",
+          "inheritedEvidenceCount": 5,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "UX-02",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete the entire named row and its case variants on the final artifact. Existing historical passes and separate narrower successes require applicability review; no new final campaign result is asserted."
+      ]
+    },
+    {
+      "id": "UX-03",
+      "requirement": "Multiple loaded napplets, stable opening order/new appended, focus does not reorder",
+      "requiredEvidence": "At least three UX instances with distinct values; list order assertions after navigation/open/close",
+      "phase": "2.11",
+      "testCases": [
+        "T02"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "passed",
+          "inheritedStatus": "passed",
+          "inheritedEvidenceCount": 3,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "passed",
+          "inheritedStatus": "passed",
+          "inheritedEvidenceCount": 3,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "UX-03",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete the entire named row and its case variants on the final artifact. Existing historical passes and separate narrower successes require applicability review; no new final campaign result is asserted."
+      ]
+    },
+    {
+      "id": "UX-04",
+      "requirement": "Inset thumb-height handles: left inward previous/right inward next; follow drag; cancel early; resistance at ends, no wrap",
+      "requiredEvidence": "Actual touch input and frame/video observations at both ends and middle; early-release return; no false switch while using near-edge fixture controls",
+      "phase": "2.11",
+      "testCases": [
+        "T02"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "passed",
+          "inheritedStatus": "passed",
+          "inheritedEvidenceCount": 6,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "passed",
+          "inheritedStatus": "passed",
+          "inheritedEvidenceCount": 6,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "UX-04",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete the entire named row and its case variants on the final artifact. Existing historical passes and separate narrower successes require applicability review; no new final campaign result is asserted."
+      ]
+    },
+    {
+      "id": "UX-05",
+      "requirement": "Tap either handle -> zoom to two-column overview; card tap zooms into focused app, including at ends",
+      "requiredEvidence": "Phone screenshots and transition recording establishing focused view-to-card geometry in both directions, plus reduced-motion behavior",
+      "phase": "2.11",
+      "testCases": [
+        "T02"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 23,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "passed",
+          "inheritedStatus": "passed",
+          "inheritedEvidenceCount": 11,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "UX-05",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Unexplained first-tap/Settings input misses are unresolved. Later successful repeats or rejected injection observations do not establish a product fix/shared cause. Revalidate first/middle/last overview, both handles and normal/reduced-motion interaction; sparse frames cannot prove exact pacing or zero intermediate layouts."
+      ]
+    },
+    {
+      "id": "UX-06",
+      "requirement": "Live switching retains unsent input and both scroll positions",
+      "requiredEvidence": "Fill/counter/scroll three fixtures; switch through all; independently observe exact values and visible markers on return",
+      "phase": "2.11",
+      "testCases": [
+        "T02"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "passed",
+          "inheritedStatus": "passed",
+          "inheritedEvidenceCount": 2,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "passed",
+          "inheritedStatus": "passed",
+          "inheritedEvidenceCount": 4,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "UX-06",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete the entire named row and its case variants on the final artifact. Existing historical passes and separate narrower successes require applicability review; no new final campaign result is asserted."
+      ]
+    },
+    {
+      "id": "UX-07",
+      "requirement": "Upward card swipe closes; clean closes without prompt; unsaved/unknown warns Keep open(default)/Close anyway",
+      "requiredEvidence": "Clean/dirty/unknown cases via selected contract; cancel preserves session; accepted close tears it down and cancels approvals; no guessed dirty-state NAP",
+      "phase": "2.11",
+      "testCases": [
+        "T03"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 1,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 2,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "UX-07",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete clean/dirty/unknown close-check behavior through native signed published routes, survivor saved/live data, complete order/empty inventory, closed-target absence and cold restoration; subsets do not cover all neighbors/endpoints."
+      ]
+    },
+    {
+      "id": "UX-08",
+      "requirement": "Closing preserves saved data, remains in overview; last close -> quiet empty view with Open napplet/settings",
+      "requiredEvidence": "Close/reopen State Lab and inspect saved values; close last and verify accessible identity and existing Open napplet settings flow",
+      "phase": "2.11",
+      "testCases": [
+        "T02"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "passed",
+          "inheritedStatus": "passed",
+          "inheritedEvidenceCount": 10,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "passed",
+          "inheritedStatus": "passed",
+          "inheritedEvidenceCount": 4,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "UX-08",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete the entire named row and its case variants on the final artifact. Existing historical passes and separate narrower successes require applicability review; no new final campaign result is asserted."
+      ]
+    },
+    {
+      "id": "UX-09",
+      "requirement": "Ordinary restart restores order, last active verified view; lazy reload others; deliberate empty survives restart",
+      "requiredEvidence": "Force-stop/relaunch with same identity/data; compare order/focus/version/empty state; do not claim unsaved draft process-death recovery",
+      "phase": "2.11",
+      "testCases": [
+        "T02"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "passed",
+          "inheritedStatus": "passed",
+          "inheritedEvidenceCount": 10,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "passed",
+          "inheritedStatus": "passed",
+          "inheritedEvidenceCount": 12,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "UX-09",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete the entire named row and its case variants on the final artifact. Existing historical passes and separate narrower successes require applicability review; no new final campaign result is asserted."
+      ]
+    },
+    {
+      "id": "UX-10",
+      "requirement": "Keyboard, Back, accessibility and motion tuning",
+      "requiredEvidence": "Real keyboard entry/occlusion, focus restoration, screen-reader controls and Back from focused/settings/overview/approval; phone conflict observations",
+      "phase": "2.11",
+      "testCases": [
+        "T04"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 3,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 21,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "UX-10",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Actual screen-reader touch/traversal/speech and platform escape/Back remain required; accessibility trees alone cannot pass this. Revalidate current reserved Resume footer bounds and guest input, rather than using earlier queue/layout evidence. Preserve unresolved automation-versus-interaction failures without asserting a product cause."
+      ]
+    },
+    {
+      "id": "ID-01",
+      "requirement": "First launch creates and securely persists one key without onboarding/external signer; subsequent launches reuse",
+      "requiredEvidence": "Fresh disposable app profile; independent npub derivation; repeated process/reboot reuse; failure-injection proves failed read never creates replacement",
+      "phase": "2.11",
+      "testCases": [
+        "T05"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 7,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 9,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "ID-01",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Require physical device reboot and whole owning Expo/bootstrap failed-read/no-replacement proof; separate native Keychain/bridge probes do not prove the complete startup path or zero generator calls."
+      ]
+    },
+    {
+      "id": "ID-02",
+      "requirement": "Authenticated encrypted storage with native key protection; no secret leaks or automatic backup",
+      "requiredEvidence": "Native code/config inspection, at-rest ciphertext/tamper tests, backup exclusion, secret absence in WebView/React persistence/logs/crash artifacts, controlled failure paths",
+      "phase": "2.11",
+      "testCases": [
+        "T05"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 3,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 4,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "ID-02",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Require lock/unlock, reboot and real backup/device-transfer transport. Verify complete secret absence across guest/shared/React persistence, heap/log/crash artifacts and failure surfaces, plus owning Expo/native composition on both hosts; backup configuration or separate signed probes alone are insufficient."
+      ]
+    },
+    {
+      "id": "ID-03",
+      "requirement": "Trusted-settings nsec import validates, selects and persists; previous keys remain encrypted/selectable",
+      "requiredEvidence": "Valid/cancelled/malformed/out-of-range import tests; same npub after restart; switching back works; hex import not required",
+      "phase": "2.11",
+      "testCases": [
+        "T05"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 2,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 1,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "ID-03",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete protected at-rest inspection and full valid/cancelled/malformed/out-of-range/duplicate import scope. Masking and public restart continuity do not establish complete native protection."
+      ]
+    },
+    {
+      "id": "ID-04",
+      "requirement": "One identity across every loaded napplet; switch confirms once, warns unsaved loss, cancels all old requests/restarts sessions",
+      "requiredEvidence": "Three sessions + pending approval, cancel-switch preservation, confirm-switch isolation, stale callback/replay rejection and no old event under new identity",
+      "phase": "2.11",
+      "testCases": [
+        "T07"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 4,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 2,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "ID-04",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Require owning native stale-callback/replay/old-event counters and zero-effect evidence on both platforms. Bounded relay absence is not zero signing/emission."
+      ]
+    },
+    {
+      "id": "ID-05",
+      "requirement": "Optional manual nsec backup after explanation/device auth; no export on cancel/failure",
+      "requiredEvidence": "Native auth success/cancel/unavailable cases, exact exported/imported public identity comparison, secret handling observations without recording raw key",
+      "phase": "2.11",
+      "testCases": [
+        "T06"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 3,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 7,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "ID-05",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete real authentication success/cancel/failure/unavailable, exact manual backup/reimport public identity comparison, background/capture/secret handling. Never retain the raw private key; inaccessible ordinary-Release storage does not prove unchanged ciphertext."
+      ]
+    },
+    {
+      "id": "ID-06",
+      "requirement": "Deletion separate/explicit/device-authenticated; another saved identity required",
+      "requiredEvidence": "Delete cancel/failure/success tests, last-identity action unavailable, ciphertext removed and surviving identity/session behavior correct",
+      "phase": "2.11",
+      "testCases": [
+        "T06"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 3,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 11,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "ID-06",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete sole-account restriction, actual authentication cancel/failure/success, exact target ciphertext removal and surviving live napplet/session/draft after successful deletion, then cold sole-survivor continuity. Metadata equality, failed biometric attempts, uninstall and cold npub persistence do not establish deletion, full rollback or Keychain erasure."
+      ]
+    },
+    {
+      "id": "STATE-01",
+      "requirement": "User + verified publisher + stable napplet storage scope; same verified app versions retain data",
+      "requiredEvidence": "State Lab A/B d-tags, publisher A/B, identity A/B cross-product; update/reopen comparisons, quota/type errors, no namespace supplied by untrusted caller",
+      "phase": "2.11",
+      "testCases": [
+        "T07"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 4,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 6,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "STATE-01",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Require full account x verified publisher x stable app d-tag cross-product, verified-published version/update comparisons, quota/type errors and untrusted namespace faults. Separate instances and cold continuity cover only their named scopes."
+      ]
+    },
+    {
+      "id": "SIGN-01",
+      "requirement": "Every supported update explicitly approved in trusted sheet",
+      "requiredEvidence": "At least note and another supported kind, full action/content/napplet/publisher/identity plus exact expandable event; Approve once/Reject; no silent route",
+      "phase": "2.11",
+      "testCases": [
+        "T08"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 8,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 10,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "SIGN-01",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Cover every supported update route and expanded full-event visual review, exact request/session/version/key binding, mutation/reorder/duplicate/replay, denied native signer/effect counters, controlled receipt faults and interrupted/in-flight boundaries."
+      ]
+    },
+    {
+      "id": "SIGN-02",
+      "requirement": "One request at a time, no Approve all; dismiss rejects current and pauses remainder",
+      "requiredEvidence": "Multiple requests same/different sessions; actual dismissal/back/swipe behavior; only deliberate resume shows next",
+      "phase": "2.11",
+      "testCases": [
+        "T08"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 7,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 26,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "SIGN-02",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Actual current Resume footer placement and guest-control interaction need new runtime evidence on both hosts; earlier queue/dismissal successes bind older placement. Keep all signing/security/expiry/effect/accessibility gaps separate."
+      ]
+    },
+    {
+      "id": "SIGN-03",
+      "requirement": "Background/unfocused requests wait for focus and overview indicates pending",
+      "requiredEvidence": "Arm delayed Approval Lab request, switch before emission, prove no signing/dialog theft, focus/review afterward",
+      "phase": "2.11",
+      "testCases": [
+        "T08"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 12,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "SIGN-03",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Delayed unfocused UI/approval absence is not an independent native signing-effect counter; require the same original request and every named focus/badge/queue behavior on both hosts."
+      ]
+    },
+    {
+      "id": "SIGN-04",
+      "requirement": "Cancel on close, identity change or process termination; never replay approvals",
+      "requiredEvidence": "Pending/current/in-flight race tests and restart fresh-request requirement; bound queue/expiry/resource handling and deterministic native cancellation errors",
+      "phase": "2.11",
+      "testCases": [
+        "T03",
+        "T09"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 7,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "SIGN-04",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Pending process-death coverage does not close current/in-flight close, identity changes, expiry/resource limits or exact native cancellation and signer/frame counters."
+      ]
+    },
+    {
+      "id": "SIGN-05",
+      "requirement": "Exact approval payload bound through asynchronous signing/publication",
+      "requiredEvidence": "Mutate/reorder/duplicate/replay submissions, request ID/session/version/key binding; independently verify event ID/signature/tags/content/pubkey and relay receipt",
+      "phase": "2.11",
+      "testCases": [
+        "T08"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 8,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 10,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "SIGN-05",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Immutable positive events alone are partial: complete mutation/reorder/duplicate/replay, exact request/session/version/key, in-flight revocation and owning native counters."
+      ]
+    },
+    {
+      "id": "SIGN-06",
+      "requirement": "Denial prevents signing/publication; clear network outcomes",
+      "requiredEvidence": "Independent local relay counts/logs for approve, reject, delay, disconnect, timeout/interrupted or partial publication; UI must not report unobserved success",
+      "phase": "2.11",
+      "testCases": [
+        "T09"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 5,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 10,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "SIGN-06",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Independent native signing-effect counters are required for denial and interrupted/in-flight cancellation. Zero observed relay frames cannot prove zero signatures."
+      ]
+    },
+    {
+      "id": "LOAD-01",
+      "requirement": "Settings accepts chosen published link; manifests/signatures/content hashes verified before execute",
+      "requiredEvidence": "Valid supported identifier; malformed/wrong-kind/wrong-publisher/missing/tampered/oversized artifacts rejected before code marker; no fallback to unrelated code",
+      "phase": "2.11",
+      "testCases": [
+        "T10"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 5,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "LOAD-01",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Require wrong-publisher and tampered/oversized artifact rejection, no guest code marker and no unrelated fallback; invalid identifier checks alone do not close loader security."
+      ]
+    },
+    {
+      "id": "LOAD-02",
+      "requirement": "Any compatible publisher after first-open publisher/access confirmation",
+      "requiredEvidence": "Two controlled publishers; cancel prevents execution; unknown/denied/unsupported capability handling; verification not displayed as personal trust",
+      "phase": "2.11",
+      "testCases": [
+        "T10"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 5,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "LOAD-02",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Require fresh consent/cancel, two controlled publishers, exact access warning/grant intersection and unknown/denied/unavailable operation handling; remembered grants do not establish fresh consent."
+      ]
+    },
+    {
+      "id": "LOAD-03",
+      "requirement": "Version pin until explicit verified update, respecting unsaved/session rules",
+      "requiredEvidence": "Serve old/new valid versions and invalid update; no silent replacement, cancellation keeps current, accepted update storage continuity, revoked pending old requests",
+      "phase": "2.11",
+      "testCases": [
+        "T10"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 5,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "LOAD-03",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Require actual old/new valid and invalid update, decline/accept, storage continuity and old pending-request revocation; cold pinned continuity does not establish update acceptance."
+      ]
+    },
+    {
+      "id": "RELAY-01",
+      "requirement": "RocketShell startup network and lookup roles, editable persisted lists",
+      "requiredEvidence": "Exact default arrays, distinct roles, first-run seed only, edit/remove/add/restart, invalid URLs, restore defaults only via explicit action; explicit defaults form the baseline; automatic NIP-65 routing is separately required by CAP-12",
+      "phase": "2.11",
+      "testCases": [
+        "T11"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "passed",
+          "inheritedStatus": "passed",
+          "inheritedEvidenceCount": 17,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "passed",
+          "inheritedStatus": "passed",
+          "inheritedEvidenceCount": 10,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "RELAY-01",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete the entire named row and its case variants on the final artifact. Existing historical passes and separate narrower successes require applicability review; no new final campaign result is asserted."
+      ]
+    },
+    {
+      "id": "RELAY-02",
+      "requirement": "Required relay authentication/errors handled",
+      "requiredEvidence": "Detect selected service auth requirements; native NIP-42 only if needed and consistent with explicit v1 approval; offline/reject/timeout UI observed",
+      "phase": "2.11",
+      "testCases": [
+        "T11"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "RELAY-02",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete the entire named row and its case variants on the final artifact. Existing historical passes and separate narrower successes require applicability review; no new final campaign result is asserted."
+      ]
+    },
+    {
+      "id": "SEC-01",
+      "requirement": "Trusted bundled Kehto host, verified untrusted sandbox, source-window/native sender binding",
+      "requiredEvidence": "Pin selected contracts; native tests forged sibling/frame/main-frame messages, navigation generation/stale sessions, ungranted operation and malformed/oversized envelopes",
+      "phase": "2.11",
+      "testCases": [
+        "T20"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 4,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 6,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "SEC-01",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Require normal owning Expo permission/dispatch, every domain, protected signer/storage authority, concurrent malicious source forgery, real lifecycle/lock/death and published composition. Different renderer handles are not OS process IDs."
+      ]
+    },
+    {
+      "id": "SEC-02",
+      "requirement": "No private key, generic native bridge or unrestricted network from napplet",
+      "requiredEvidence": "Native malicious fixtures probe parent/native APIs, origin/storage, fetch/XHR/WS/forms/images/navigation/popups/downloads/file/content URLs; external receiver confirms blocked escapes",
+      "phase": "2.11",
+      "testCases": [
+        "T20"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 4,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 6,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "SEC-02",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Require protected-key absence, complete navigation/download/file/content/all-origin escapes including independently observed DNS/UDP/public-HTTPS, owning Expo authorization/dispatch and published parity. LAN HTTP/TCP or privileged injected controls alone cannot pass this row."
+      ]
+    },
+    {
+      "id": "SEC-03",
+      "requirement": "Navigation/content-process/resource failures fail closed",
+      "requiredEvidence": "Renderer termination/reload, redirect/navigation attempts, cleanup/subscription teardown, queue/byte/session limits; no inherited privilege after failure",
+      "phase": "2.11",
+      "testCases": [
+        "T12",
+        "T20"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 4,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 6,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "SEC-03",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Require complete resource/redirect/reload/subscription/session-limit teardown, real OS lifecycle and owning app/published cleanup. Test-only renderer-kill/queue primitives are narrower than the full composition."
+      ]
+    },
+    {
+      "id": "FIX-01",
+      "requirement": "UX Lab -> State Lab -> Approval Lab, controlled local relay, stable UI identifiers",
+      "requiredEvidence": "All fixtures build/conform; tests use public napplet APIs and user-visible shell controls, no privileged fixture approval/storage bypass",
+      "phase": "2.11",
+      "testCases": [
+        "T25"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "FIX-01",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete the entire named row and its case variants on the final artifact. Existing historical passes and separate narrower successes require applicability review; no new final campaign result is asserted."
+      ]
+    },
+    {
+      "id": "FIX-02",
+      "requirement": "Same fixture bytes embedded and published under designated project key",
+      "requiredEvidence": "Artifact hash parity, signed release metadata/publisher plus real Nostr/Blossom retrieval; repeat representative behavior through published route",
+      "phase": "2.11",
+      "testCases": [
+        "T25"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 7,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "FIX-02",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete final embedded/published byte/hash parity and full operation/lifecycle coverage, including published Outbox; locally supplied signed bytes are not public publication."
+      ]
+    },
+    {
+      "id": "FIX-03",
+      "requirement": "Disposable run identities separate from release publisher, retained across restart",
+      "requiredEvidence": "Evidence records public test IDs + fixture versions/hashes; reset only between independent runs; project key never used for routine generated events",
+      "phase": "2.11",
+      "testCases": [
+        "T25"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 2,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "FIX-03",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Retained development identity and bundled protected explicit-only publication are partial; final published-product routing/lifecycle/fault coverage and publisher/run-identity separation remain required."
+      ]
+    },
+    {
+      "id": "BUILD-01",
+      "requirement": "Pinned compatible dependencies/protocols/licenses, checks + native build",
+      "requiredEvidence": "Lockfiles/ref inventory and scope-limited conformance; typecheck, React Doctor 100/100, aislop 100/100, audit, fixture verify, Android Gradle and iOS Xcode build/export from current state; no finding suppression",
+      "phase": "2.11",
+      "testCases": [
+        "T26"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 9,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "BUILD-01",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Require current compatible release-age dependencies, all delivered native/static/resource/runtime attribution, selected protocol conformance, complete numeric quality/audit and current native products. Historic patch exceptions or narrower packaging cannot waive the final strict gates."
+      ]
+    },
+    {
+      "id": "BUILD-02",
+      "requirement": "Locally built standalone Android APK and iOS app, installed/cold-launched without Metro/Expo hosted services",
+      "requiredEvidence": "Current Android/iOS payload, signing/provisioning, hash and permissions inspection; no-Metro launch and full journey on both platforms; retained commands, exact device/OS, artifact and failures",
+      "phase": "2.11",
+      "testCases": [
+        "T26"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 8,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 10,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "BUILD-02",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete both-platform current payload/permission/entitlement/signing inspection, source/artifact/installed-product evidence where obtainable and full no-Metro native journeys. Local product seals or installation receipts are not installed executable-byte equality; disclose limits."
+      ]
+    },
+    {
+      "id": "BUILD-03",
+      "requirement": "Preserve current branch/checkout until ready; owner handles new remote/push",
+      "requiredEvidence": "Final branch/remotes/status prove no source remote mutation/push; coherent local commits preserve pre-existing edits",
+      "phase": "2.11",
+      "testCases": [
+        "T26"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "BUILD-03",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete the entire named row and its case variants on the final artifact. Existing historical passes and separate narrower successes require applicability review; no new final campaign result is asserted."
+      ]
+    },
+    {
+      "id": "CAP-01",
+      "requirement": "Pinned operation profiles and truthful compatibility/admission; verified napplets launch after review with supported requested domains only; unavailable domains are reported and their operations remain unavailable; no invented wire fields or full-support claim from admission alone",
+      "requiredEvidence": "Pinned operation/profile references; physical exact manifest/support review, tolerant verified launch with unavailable warning, supported grant intersection and original-SDK unavailable/denied operation outcomes; signature/hash and per-operation authority remain enforced.",
+      "phase": "2.11",
+      "testCases": [
+        "T10",
+        "T20"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 7,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "CAP-01",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "API unavailability alone is not native wire rejection; complete exact manifest/support review, fresh unavailable warning, grant intersection and operation/profile authority checks."
+      ]
+    },
+    {
+      "id": "CAP-02",
+      "requirement": "Query expected valid events with bounded filters/destinations/results; distinguish empty success from failure; verify EOSE, timeout, denial and revoked owner",
+      "requiredEvidence": "Query expected valid events with bounded filters/destinations/results; distinguish empty success from failure; verify EOSE, timeout, denial and revoked owner",
+      "phase": "2.11",
+      "testCases": [
+        "T11"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 6,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 2,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "CAP-02",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete bounds/destinations/denial/timeout/revocation and full readable signed events through published Android/iOS. Actual public read/display is not socket/zero-effect proof."
+      ]
+    },
+    {
+      "id": "CAP-03",
+      "requirement": "Subscribe/close with caller-owned IDs, bounded buffering, selected reconnect/background behavior and no stale delivery after close/identity change",
+      "requiredEvidence": "Subscribe/close with caller-owned IDs, bounded buffering, selected reconnect/background behavior and no stale delivery after close/identity change",
+      "phase": "2.11",
+      "testCases": [
+        "T11"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 4,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 5,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "CAP-03",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete caller-ID/buffer/destination/denial/timeout, native socket close/reconnect and no background emission with counters, owner/account/update revocation, duplicate/flood/backpressure and full published parity. Stable displayed IDs cannot prove zero transport effects."
+      ]
+    },
+    {
+      "id": "CAP-04",
+      "requirement": "Selected resource schemes deliver verified expected bytes/rendering; destination, MIME, size, cancellation, cache and handle lifetime tests",
+      "requiredEvidence": "Selected resource schemes deliver verified expected bytes/rendering; destination, MIME, size, cancellation, cache and handle lifetime tests",
+      "phase": "2.11",
+      "testCases": [
+        "T12"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 3,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 3,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "CAP-04",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete Blossom/Nostr/settings/cache, cancellation/private handles, DNS/TLS/redirect/size/MIME/flood/quota, native stale effects, account/replacement and active-player close/process-death. Brief background pause does not prove indefinite silence or zero effects; explicit release before cold launch does not prove live-player process-death cleanup."
+      ]
+    },
+    {
+      "id": "CAP-05",
+      "requirement": "Selected upload protocols send only approved bytes/destination; independent hash/receipt, cancellation, interruption and unknown-outcome handling",
+      "requiredEvidence": "Selected upload protocols send only approved bytes/destination; independent hash/receipt, cancellation, interruption and unknown-outcome handling",
+      "phase": "2.11",
+      "testCases": [
+        "T13"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 4,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 9,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "CAP-05",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete system photo/file selection/sanitation/fidelity, unchanged attachments, active switching/background, queues/interruption/recovery faults, stale native zero effects, account/replacement and published parity. Existing provider bytes, socket progress or stale transfer observations cannot establish new storage attribution, raw descriptor or active navigation."
+      ]
+    },
+    {
+      "id": "CAP-06",
+      "requirement": "Selected identity reads return validated profile/relay/public social data with canonical missing/error behavior, freshness and account isolation",
+      "requiredEvidence": "Selected identity reads return validated profile/relay/public social data with canonical missing/error behavior, freshness and account isolation",
+      "phase": "2.11",
+      "testCases": [
+        "T14"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "CAP-06",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete the entire named row and its case variants on the final artifact. Existing historical passes and separate narrower successes require applicability review; no new final campaign result is asserted."
+      ]
+    },
+    {
+      "id": "CAP-07",
+      "requirement": "Deliberate permitted external links open through native controls; forbidden schemes, floods, denial and missing handler are tested",
+      "requiredEvidence": "Deliberate permitted external links open through native controls; forbidden schemes, floods, denial and missing handler are tested",
+      "phase": "2.11",
+      "testCases": [
+        "T15"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 1,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "CAP-07",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete forbidden-URL/rate/native stale-callback, close/replacement/account/concurrent-modal, missing-handler and published/physical parity. OS opened receipt is handoff, not page loading."
+      ]
+    },
+    {
+      "id": "CAP-08",
+      "requirement": "Intent dispatch resolves authorized verified targets and exact payloads; handler choice, absent target, first-open consent and cancellation tested",
+      "requiredEvidence": "Intent dispatch resolves authorized verified targets and exact payloads; handler choice, absent target, first-open consent and cancellation tested",
+      "phase": "2.11",
+      "testCases": [
+        "T16"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 1,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "CAP-08",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Require verified handler success/chooser/cancel/defaults, cold closed-handler readiness, exact target payload and first-open/update/published parity; missing-handler denial alone is partial."
+      ]
+    },
+    {
+      "id": "CAP-09",
+      "requirement": "INC preserves sender/recipient identity and correlation; forged sender, replay, flood, closed/replaced target and cross-account traffic denied",
+      "requiredEvidence": "INC preserves sender/recipient identity and correlation; forged sender, replay, flood, closed/replaced target and cross-account traffic denied",
+      "phase": "2.11",
+      "testCases": [
+        "T16"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 2,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "CAP-09",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete native enqueue ordering, publisher/account/replaced-target isolation, flood/backpressure/expiry/replay/concurrent-modal and published parity. Symmetric SDK messages do not prove OS-suspended zero emission or native zero effects."
+      ]
+    },
+    {
+      "id": "CAP-10",
+      "requirement": "Shell-rendered notifications are attributed, bounded and dismissible; focus/action ownership and hostile content tested; no assumed OS push",
+      "requiredEvidence": "Shell-rendered notifications are attributed, bounded and dismissible; focus/action ownership and hostile content tested; no assumed OS push",
+      "phase": "2.11",
+      "testCases": [
+        "T17"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 26,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 6,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "CAP-10",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Require named-channel/full identity/publisher/app/version isolation, in-flight replacement/account races, hostile/action/priority/flood/expiry, native stale/zero effects, modal/keyboard/Back, screen-reader/reduced-motion/minimum-platform and external published parity. Guest accessibility loss is not a product accessibility pass."
+      ]
+    },
+    {
+      "id": "CAP-11",
+      "requirement": "Declarative config validates selected schema features, persists by owner, notifies the live app and handles restart/incompatible updates safely",
+      "requiredEvidence": "Declarative config validates selected schema features, persists by owner, notifies the live app and handles restart/incompatible updates safely",
+      "phase": "2.11",
+      "testCases": [
+        "T17"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 30,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 3,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "CAP-11",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete config request/storage/focus/subscription faults and races; secret set/cancel/clear/purge; account/publisher/app/version/update isolation; external relay/HTTPS published execution and full modal/accessibility across both physical hosts. Local source injection does not establish remote publication."
+      ]
+    },
+    {
+      "id": "CAP-12",
+      "requirement": "Outbox resolves and routes using selected NIP-65 cache/fallback rules; independent relay destinations and fixed-before-approval writes verified",
+      "requiredEvidence": "Outbox resolves and routes using selected NIP-65 cache/fallback rules; independent relay destinations and fixed-before-approval writes verified",
+      "phase": "2.11",
+      "testCases": [
+        "T18"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 9,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 6,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "CAP-12",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete all routing/cache refresh/stale/corrupt/cross-account/cold, stream/lifecycle/fault and published parity. A repaired upgrade-metadata case or default route review cannot explain every historical timeout."
+      ]
+    },
+    {
+      "id": "CAP-14",
+      "requirement": "All MVP groups (excluding Value Lab) pass embedded and verified-published journeys on standalone Android/iOS; current physical-device evidence, real compatibility sample, update/restart/isolation, and React Doctor/aislop 100/100",
+      "requiredEvidence": "All MVP groups (excluding Value Lab) pass embedded and verified-published journeys on standalone Android/iOS; current physical-device evidence, real compatibility sample, update/restart/isolation, and React Doctor/aislop 100/100",
+      "phase": "2.11",
+      "testCases": [
+        "T25"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "CAP-14",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete the entire named row and its case variants on the final artifact. Existing historical passes and separate narrower successes require applicability review; no new final campaign result is asserted."
+      ]
+    },
+    {
+      "id": "OB-01",
+      "requirement": "Physical protected publication",
+      "requiredEvidence": "Standalone physical Android and iPhone: ordinary entry, persisted disposable identity after cold launch, exact native review, protected primary signature, public WSS ACK and independently verified exact event/template/ID",
+      "phase": "2.11",
+      "testCases": [
+        "T18"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 2,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 2,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "OB-01",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Require selected protected account cold restoration and complete final signed published-product publication; existing subsets do not supply a native signer-count assertion."
+      ]
+    },
+    {
+      "id": "OB-02",
+      "requirement": "Primary and existing-list fanout",
+      "requiredEvidence": "Both hosts review the full immutable union and exact existing signed kind10002; one new primary signature, approved targets only, distinct primary/list receipts, ancillary failure preserves primary success",
+      "phase": "2.11",
+      "testCases": [
+        "T18"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 3,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "OB-02",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Require one-primary-signature counters, approved-only frames, ancillary failure preserving primary acceptance, complete event/list pixels and both-host published parity. ACK does not establish later storage at every relay."
+      ]
+    },
+    {
+      "id": "OB-03",
+      "requirement": "Required inbox delivery and omission",
+      "requiredEvidence": "All-required success; rejected/unknown/cancelled required target makes primary fail despite unrelated ACK; dedup, missing required inbox and union/frame overflow deny before review/sign/send; toOutbox:false omits own discovery/list only",
+      "phase": "2.11",
+      "testCases": [
+        "T18"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 3,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "OB-03",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Require all-required success, controlled rejected/unknown/cancelled distinctions with frames/effects, and missing-required/union/frame-overflow pre-review/sign/send denial. A native cancelled-before-send receipt is not independent zero-frame proof."
+      ]
+    },
+    {
+      "id": "OB-04",
+      "requirement": "Frozen approval and stale metadata",
+      "requiredEvidence": "Expired publication cache refreshes before review; stale publication refuses when refresh fails; missing-own Network fallback is labelled; mutate/change relay settings or refresh while review is pending without changing approved targets/event",
+      "phase": "2.11",
+      "testCases": [
+        "T19"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "OB-04",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete the entire named row and its case variants on the final artifact. Existing historical passes and separate narrower successes require applicability review; no new final campaign result is asserted."
+      ]
+    },
+    {
+      "id": "OB-05",
+      "requirement": "Native authority and correlation",
+      "requiredEvidence": "Wrong source/domain/view/identity/generation, foreign event/ACK ID, replay and malformed payload fail closed, including concurrent wrong-view and late callback probes",
+      "phase": "2.11",
+      "testCases": [
+        "T19"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 8,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 3,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "OB-05",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Require ordinary installed app-UID/Expo/guest/protected-signer/source/domain/view composition, complete wrong-owner/generation/account, concurrent/late callbacks, Android suspend/OS lifecycle, native zero signing/emission, public DNS/policy and published parity. Standalone shell-UID/pre-signed TLS primitives are narrower."
+      ]
+    },
+    {
+      "id": "OB-06",
+      "requirement": "Complete native receipt faults",
+      "requiredEvidence": "Controlled accept/reject/auth-required/disconnect/accept-then-close/missing/foreign/malformed ACK, deadline, slow/flood/backpressure and partial fanout; keep unknown distinct from cancelled-before-send; independently observe exact frames and zero emission where claimed",
+      "phase": "2.11",
+      "testCases": [
+        "T19"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 2,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 3,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "OB-06",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Require ordinary app/guest/protected signer, complete primary/list/required partial fanout, OS suspend/lifecycle/races, slow/flood/timeout, zero-sign counters and public-policy/cross-platform published parity; controlled pre-signed routes do not supply these."
+      ]
+    },
+    {
+      "id": "OB-07",
+      "requirement": "Complete publication lifecycle",
+      "requiredEvidence": "Rejection, background/return, loaded-view switch, close, verified update, identity change and process death at pending/signing/send/receipt boundaries; old authority never revives and retry needs a fresh review; deterministic observations distinguish race outcomes",
+      "phase": "2.11",
+      "testCases": [
+        "T19"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 3,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "OB-07",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete verified update and approved/in-flight signing/send/receipt races through published routes; pending review/cold identity subsets and bounded relay absence do not establish full lifecycle or native zero effects."
+      ]
+    },
+    {
+      "id": "OB-08",
+      "requirement": "Read/stream and cache regression",
+      "requiredEvidence": "Fresh/stale/corrupt/cross-identity/cold cache, disjoint role routing, sustained live delivery, duplicate/flood, foreground refresh, close/update/identity revoke and truthful incomplete results through the final published product",
+      "phase": "2.11",
+      "testCases": [
+        "T11"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "OB-08",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete the entire named row and its case variants on the final artifact. Existing historical passes and separate narrower successes require applicability review; no new final campaign result is asserted."
+      ]
+    },
+    {
+      "id": "OB-09",
+      "requirement": "Ordinary signed published admission",
+      "requiredEvidence": "Real verified Feed Lab manifest and exact fixture bytes; relay/outbox grant dependency, first-open consent/revoke, unsupported-operation denial, original SDK reads/streams/publication, pinned update and restart; selected real napplet compatibility",
+      "phase": "2.11",
+      "testCases": [
+        "T10",
+        "T25"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 2,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "OB-09",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete final published Outbox, every fixture/operation/lifecycle and fresh grant dependencies. Preserve earlier title/verifier failures separately from later saved-session query evidence."
+      ]
+    },
+    {
+      "id": "OB-10",
+      "requirement": "Review and result usability",
+      "requiredEvidence": "Physical keyboard/Back/focus/screen-reader and reduced-motion checks; exact destinations and signed list remain readable; complete SDK JSON never hides the next action; receipt groups and uncertainty stay distinguishable",
+      "phase": "2.11",
+      "testCases": [
+        "T04"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 3,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "OB-10",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete keyboard/Back/focus/screen-reader/reduced-motion and full signed-list/event/result usability on both hosts; scrolled-tail images need complementary full input evidence and unexplained first-press misses remain unresolved."
+      ]
+    },
+    {
+      "id": "OB-11",
+      "requirement": "Ordinary packaging and final quality",
+      "requiredEvidence": "Current Android/iOS exports, prebuilds, native standalone packages, provisioned physical installation/cold launch without Metro; permissions/signing/config inspection and affected regressions; full React Doctor/aislop 100/100 or only the exact explicitly approved exception while applicable",
+      "phase": "2.11",
+      "testCases": [
+        "T26"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "partial",
+          "inheritedStatus": "partial",
+          "inheritedEvidenceCount": 4,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "not-run",
+          "inheritedStatus": "not-run",
+          "inheritedEvidenceCount": 0,
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "history": {
+        "sourceSha256": "d13880826a631ffefcf1e7f3acf3a36eb3add65ea3e8bd769c9f4527b53c22c0",
+        "rowId": "OB-11",
+        "detail": "Original evidence, verified scope, limitations and failed receipts are privately preserved under this archival digest; the public constraints below remain acceptance requirements."
+      },
+      "remainingConstraints": [
+        "Complete all current packaging/physical parity and strict complete quality reports. Historical blocked score requests, advisories, patch mismatches and uninstalled ready products remain historical limitations, not current final acceptance."
+      ]
+    },
+    {
+      "id": "EXT-01",
+      "requirement": "Native-only secret creation, import, storage access and signing; native-owned, one-use approval bound to the exact event",
+      "phase": "3",
+      "requirementStatus": "in progress",
+      "testCases": [
+        "T05",
+        "T08"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "not-run",
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "statusMeaning": "No combined final-campaign result added; existing scoped evidence remains in the signing documents. EXT-09 completion describes the outgoing-only architecture boundary, not incoming-service delivery or a new device pass."
+    },
+    {
+      "id": "EXT-02",
+      "requirement": "Native persistence/import survives restart and fails closed on corruption; pre-release account preservation waived by owner on 14 October",
+      "phase": "3",
+      "requirementStatus": "in progress",
+      "testCases": [
+        "T05",
+        "T06"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "not-run",
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "statusMeaning": "No combined final-campaign result added; existing scoped evidence remains in the signing documents. EXT-09 completion describes the outgoing-only architecture boundary, not incoming-service delivery or a new device pass."
+    },
+    {
+      "id": "EXT-03",
+      "requirement": "One npub account with explicit signing-method choice and no automatic fallback",
+      "phase": "3",
+      "requirementStatus": "in progress",
+      "testCases": [
+        "T07",
+        "T21"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "not-run",
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "statusMeaning": "No combined final-campaign result added; existing scoped evidence remains in the signing documents. EXT-09 completion describes the outgoing-only architecture boundary, not incoming-service delivery or a new device pass."
+    },
+    {
+      "id": "EXT-04",
+      "requirement": "Bounded native-owned NIP-46 connection credentials and authenticated peer/request correlation",
+      "phase": "3",
+      "requirementStatus": "in progress",
+      "testCases": [
+        "T22"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "not-run",
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "statusMeaning": "No combined final-campaign result added; existing scoped evidence remains in the signing documents. EXT-09 completion describes the outgoing-only architecture boundary, not incoming-service delivery or a new device pass."
+    },
+    {
+      "id": "EXT-05",
+      "requirement": "External signing covers existing approved publication, Outbox and Blossom authorization routes",
+      "phase": "3",
+      "requirementStatus": "in progress",
+      "testCases": [
+        "T13",
+        "T23"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "not-run",
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "statusMeaning": "No combined final-campaign result added; existing scoped evidence remains in the signing documents. EXT-09 completion describes the outgoing-only architecture boundary, not incoming-service delivery or a new device pass."
+    },
+    {
+      "id": "EXT-06",
+      "requirement": "Explicit Android NIP-55 signer binding and verified Activity-result handling",
+      "phase": "3",
+      "requirementStatus": "in progress",
+      "testCases": [
+        "T24"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "not-applicable",
+          "reason": "NIP-55 is Android-only; this is not a pass.",
+          "campaignStatus": "not-applicable"
+        }
+      },
+      "statusMeaning": "No combined final-campaign result added; existing scoped evidence remains in the signing documents. EXT-09 completion describes the outgoing-only architecture boundary, not incoming-service delivery or a new device pass."
+    },
+    {
+      "id": "EXT-07",
+      "requirement": "Cancellation, handoff, restart, revocation and unknown outcomes preserve exact authority",
+      "phase": "3",
+      "requirementStatus": "in progress",
+      "testCases": [
+        "T07",
+        "T09",
+        "T13",
+        "T21",
+        "T22",
+        "T24"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "not-run",
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "statusMeaning": "No combined final-campaign result added; existing scoped evidence remains in the signing documents. EXT-09 completion describes the outgoing-only architecture boundary, not incoming-service delivery or a new device pass."
+    },
+    {
+      "id": "EXT-08",
+      "requirement": "Source-bound native, adversarial, interoperability and quality evidence",
+      "phase": "3",
+      "requirementStatus": "in progress",
+      "testCases": [
+        "T04",
+        "T22",
+        "T23",
+        "T24",
+        "T26"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "not-run",
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "statusMeaning": "No combined final-campaign result added; existing scoped evidence remains in the signing documents. EXT-09 completion describes the outgoing-only architecture boundary, not incoming-service delivery or a new device pass."
+    },
+    {
+      "id": "EXT-09",
+      "requirement": "Future signer-provider architecture without exposing incoming signer services in Phase 3",
+      "phase": "3",
+      "requirementStatus": "complete",
+      "testCases": [
+        "T20"
+      ],
+      "platforms": {
+        "android-physical": {
+          "status": "not-run",
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        },
+        "ios-physical": {
+          "status": "not-run",
+          "newEvidence": [],
+          "campaignStatus": "not-run"
+        }
+      },
+      "statusMeaning": "No combined final-campaign result added; existing scoped evidence remains in the signing documents. EXT-09 completion describes the outgoing-only architecture boundary, not incoming-service delivery or a new device pass."
+    }
+  ]
+}

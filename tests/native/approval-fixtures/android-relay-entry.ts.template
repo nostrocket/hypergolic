@@ -1,0 +1,36 @@
+import { registerRootComponent } from 'expo';
+import { createElement } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import App from '../src/App';
+
+const relayPaths: Readonly<Record<string, string>> = {
+  'wss://relay.damus.io/': '/relay.damus.io',
+  'wss://nos.lol/': '/nos.lol',
+  'wss://bucket.coracle.social/': '/bucket.coracle.social',
+};
+const port = Number(process.env.EXPO_PUBLIC_APPROVAL_RELAY_PORT);
+const Base = globalThis.WebSocket;
+if (!Base || !Number.isSafeInteger(port) || port < 1 || port > 65_535) {
+  throw new Error('Approval relay proof requires EXPO_PUBLIC_APPROVAL_RELAY_PORT on loopback');
+}
+
+/** Test-only entry: deny every non-reviewed destination before the application registers. */
+class LoopbackWebSocket extends Base {
+  constructor(url: string | URL, protocols?: string | string[]) {
+    const path = relayPaths[new URL(String(url)).href];
+    if (!path) throw new Error('Approval relay proof denied an unreviewed WebSocket destination');
+    super(`ws://127.0.0.1:${port}${path}`, protocols);
+  }
+}
+globalThis.WebSocket = LoopbackWebSocket;
+function LocalProofApp() {
+  return createElement(View, { style: styles.root }, createElement(App), createElement(Text, {
+    accessibilityLiveRegion: 'polite', style: styles.banner,
+  }, 'Local relay proof'));
+}
+registerRootComponent(LocalProofApp);
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+  banner: { position: 'absolute', right: 10, top: 8, borderRadius: 8, backgroundColor: '#140f0b', color: '#f3efeb', fontSize: 11, paddingHorizontal: 8, paddingVertical: 4 },
+});

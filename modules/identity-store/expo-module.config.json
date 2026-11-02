@@ -1,0 +1,1 @@
+{"platforms":["apple"],"apple":{"modules":["HypergolicIdentityStoreModule","HypergolicIdentityActionsModule"],"podspecPath":"ios/HypergolicIdentityStore.podspec"}}

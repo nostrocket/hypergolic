@@ -1,0 +1,63 @@
+{
+  "status": "staged-unintegrated",
+  "sourceCheckoutMutated": false,
+  "sourceBase": {
+    "shared/hypergolic_signer.c": "f0b26aed1096beb2ffa978cbce23c91e648fc11f2f1bcf89adc75cdc78877a9d",
+    "shared/include/hypergolic_signer.h": "4eae71503cfaa31db24dfe96bab6120bd46e6a22d52a378f95bae78bd0484565",
+    "shared/CMakeLists.txt": "42c32cd33e59f919c2d765fda3f4ddd1aa7bf7974cc938accd9d74c23d76ff5d",
+    "vendor/secp256k1-manifest.json": "0cedef2968a5bdc76d0c269f9860a9f4ce275ab073b0b784c6cc9d6bbbdeac33"
+  },
+  "files": {
+    "shared/hypergolic_signer.c": "5226da9e0c361851800dd91623b4648e62d72ecc8be8642e97e64f8c09221f67",
+    "shared/hypergolic_nip44.c": "a3afcc4cf3873f6e51df38fa6882a0d7bb6e695a580cb417fab85e43299401eb",
+    "shared/hypergolic_signer_internal.h": "a7d2ad57c767050d6505576727918e2de2b49f22934c6976c3c8600bcf9063ff",
+    "shared/include/hypergolic_nip44.h": "4d932f03afbb7ca9e1d8dbe9cecb31f5eb7baa8194e0e0d5d9dfdb336386373d",
+    "README.md": "a56192256203195194899036e212cac08c523450951531ad34274a097ef72cc1",
+    "tests/run.py": "32082c3bb868d0096a8d6a793c30858ea99c459bc720c812bd73e949b43ee2e8",
+    "tests/generate.py": "ede788709fba62fd31ce0f72a86a3b3c8bdc7bf19ad2d873433cdd1885ab6c7a",
+    "tests/nip44_test.c": "1a3bf125a0ac40f8d30c90a8d00049fa57f43d32a864640f133e3cf10f6284d8",
+    "tests/independent.cjs": "65c0b5c3fc6442035eeed61c083921960a80bf08b8bd59cc09b1ab49bd6744f1",
+    "tests/authenticated-invalid.json": "cdb7c40155039f0b8e4802d1e9d7ad07038ae079aebc949d8635fa5f63d65b70",
+    "nip44-spec.md": "b5f89374e4e1dbdee7881e8573b4313b6a89430a9c8d518471599ae0660cf0e2",
+    "nip44.vectors.json": "269ed0f69e4c192512cc779e78c555090cebc7c785b609e338a62afc3ce25040",
+    "monocypher-manifest.json": "65be51804c37611f5c05b97b58981f5a4d418c265d53b9a96e449e4f09ef8408"
+  },
+  "productionCompileChanges": [
+    "ENABLE_MODULE_ECDH=1",
+    "shared/hypergolic_nip44.c",
+    "vendor/monocypher/src/monocypher.c",
+    "vendor/monocypher/src include path"
+  ],
+  "limits": {
+    "plaintext": 4202496,
+    "rawFrame": 5242951,
+    "base64": 6990604
+  },
+  "tests": {
+    "normalAssertions": 15190,
+    "asanUbsanAssertions": 15190,
+    "cleanupObservations": 865,
+    "sinkCleanups": 39,
+    "conversationVectors": 35,
+    "messageKeyVectors": 32,
+    "paddingVectors": 24,
+    "encryptDecryptVectors": 10,
+    "longMessageVectors": 3,
+    "invalidConversationVectors": 8,
+    "invalidDecryptVectors": 12,
+    "extendedPrefixHashVectors": 3,
+    "independentAuthenticatedNegatives": 4,
+    "interopLengths": [
+      65535,
+      65536,
+      65537,
+      4202496
+    ]
+  },
+  "evidenceLimits": [
+    "Host source/vector/cleanup evidence only",
+    "Native platform adapters not compiled/executed",
+    "NIP01 prevalidation is caller invariant",
+    "No independent security audit"
+  ]
+}

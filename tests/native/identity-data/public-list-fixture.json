@@ -1,0 +1,278 @@
+{
+  "scope": "Deterministic public QA signatures from disposable scalar 1/2. No network publication or real credentials.",
+  "user": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+  "other": "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
+  "events": [
+    {
+      "kind": 10002,
+      "tags": [
+        [
+          "r",
+          "wss://127.0.0.1"
+        ],
+        [
+          "r",
+          "wss://unconfigured.example",
+          "read"
+        ]
+      ],
+      "content": "",
+      "created_at": 10,
+      "pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+      "id": "736e7147e340685621949d0f6ae5fb02f8a949742d8738be23ec1ef7108f38cb",
+      "sig": "c7bc4b8538c2324e8437e074d3ef36cafd47d47f974e49cd83179be004cbfdd772e8ae807c9264e56317cb56bd8e4e33fb6002b574fad66307ea97bfb73fe603"
+    },
+    {
+      "kind": 3,
+      "tags": [
+        [
+          "p",
+          "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
+          "wss://unconfigured.example",
+          "never returned"
+        ]
+      ],
+      "content": "",
+      "created_at": 10,
+      "pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+      "id": "db09c2403a160ee38f2597bd2af030c65377dae5b2add53f0d43031a111323b8",
+      "sig": "252f4639832b89d5e89b4330364a15c3c5c61b29a054c2b328e5365caa6a589d3aef5274c1b889aba975f71556885e526035c9021b3916a73380d6eb6232a248"
+    },
+    {
+      "kind": 10000,
+      "tags": [
+        [
+          "p",
+          "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"
+        ],
+        [
+          "word",
+          "never returned"
+        ]
+      ],
+      "content": "encrypted private content never returned",
+      "created_at": 10,
+      "pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+      "id": "5ed9bd2a505f2c02fa369aa516fdfc9ba112a4234a0cf4bc9941cc234d811468",
+      "sig": "6ca518c270fbf5af1e2e90b83e2ed055d0c2fe11a3b62f81dbc3fa5a40c6606e65d84270617342f14eeba3b4d337a8ba18fe048bcf184cfcceab50ccedbdfec8"
+    },
+    {
+      "kind": 10003,
+      "tags": [
+        [
+          "e",
+          "ff7b10b0ded73e0f4f77d527c594b085345329b51b349e54c1cda200089e558b"
+        ],
+        [
+          "a",
+          "30023:c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5:literal"
+        ]
+      ],
+      "content": "",
+      "created_at": 10,
+      "pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+      "id": "9b318efb4bd552dd90dc50468e98970484f482d55e91ae0274c4d7935590074d",
+      "sig": "e516ef948bd272305be1d80465ec42d69138534769fad453245580e0a014d5672cddb59407cda9321ac18c74f09b4eef02bf4bd8eac503a5b9e5684ac8413c39"
+    },
+    {
+      "kind": 10001,
+      "tags": [
+        [
+          "e",
+          "ff7b10b0ded73e0f4f77d527c594b085345329b51b349e54c1cda200089e558b"
+        ],
+        [
+          "a",
+          "30009:c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5:native-list-proof"
+        ]
+      ],
+      "content": "",
+      "created_at": 10,
+      "pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+      "id": "00b12ad88706e18be67839f11251a7e2cc3753a474497234d181ca64a308ecd8",
+      "sig": "6417e4c2772f44ef52d2b96a9bf7753e529540469b9575fa6a290dd43f898b157ee57fa5a7cf26f7b985c1ea2a981c2a96f876ad52f57212980b2359fa84bc23"
+    },
+    {
+      "kind": 10015,
+      "tags": [
+        [
+          "t",
+          "literal <tag>"
+        ],
+        [
+          "a",
+          "30009:c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5:native-list-proof"
+        ]
+      ],
+      "content": "",
+      "created_at": 10,
+      "pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+      "id": "63723f69d388031530cb17d2953e3fe8b68d2adbfc8e8a4cd28ad7c36f1e7918",
+      "sig": "83f0623b6e74092ff2551532f0dbf8f4021c56f0b3c4bc8a497d49a937fd2281d8ab41423e7a046b7e03ba4af5b4b4909fd1d87c75e163fe0d71059e48d4cec8"
+    },
+    {
+      "kind": 10008,
+      "tags": [
+        [
+          "a",
+          "30009:c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5:native-list-proof"
+        ],
+        [
+          "e",
+          "ff7b10b0ded73e0f4f77d527c594b085345329b51b349e54c1cda200089e558b"
+        ]
+      ],
+      "content": "",
+      "created_at": 10,
+      "pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+      "id": "587f27ce1d59ca5fb559c7feddf75b9d421536081f1088caa251721b1de01cb3",
+      "sig": "a435e886bf2b80b2a6ab63ac341af204af0fc36c6bd8e3fc1aa6d9b6e4a3bca620fac7b8c831ce910cb54d4b741edbe796c4245240fb38729544f66a96121825"
+    },
+    {
+      "kind": 8,
+      "tags": [
+        [
+          "a",
+          "30009:c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5:native-list-proof"
+        ],
+        [
+          "p",
+          "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+        ]
+      ],
+      "content": "",
+      "created_at": 10,
+      "pubkey": "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
+      "id": "ff7b10b0ded73e0f4f77d527c594b085345329b51b349e54c1cda200089e558b",
+      "sig": "bd53355ab0c87ece32619c5e21d5ea5b1b1f04d4f7aafa8aab1675197db7a5e2683281338736b1b259bbb89a48d03fedbd9b7b08506ae4af205fedbcc800b7d1"
+    },
+    {
+      "kind": 30009,
+      "tags": [
+        [
+          "d",
+          "native-list-proof"
+        ],
+        [
+          "name",
+          "Accepted <literal> badge"
+        ],
+        [
+          "description",
+          "Public fixture only"
+        ],
+        [
+          "image",
+          "https://unconfigured.example/badge"
+        ]
+      ],
+      "content": "",
+      "created_at": 10,
+      "pubkey": "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
+      "id": "90d7745e5f3935c7123f419cf098c194831a16947065df655493109d465abeb1",
+      "sig": "960fb6507b0247fbffb50f2fc280e735f527c14bf55a741589ef83ce0266c8c9d032b5ddea00eddc9cafb36f5989c7366a6f5c89b2ba23cde811d3fd5afea8e6"
+    }
+  ],
+  "badEvents": [
+    {
+      "kind": 10008,
+      "tags": [
+        [
+          "a",
+          "30009:c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5:native-list-proof"
+        ],
+        [
+          "e",
+          "7002fd3152bc61cfbe1c9943455eda1bd5e9a2adeefdec7ff616230ab32daacc"
+        ]
+      ],
+      "content": "",
+      "created_at": 20,
+      "pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+      "id": "ecbb40ef97d90662c18e13a2ceaf6c5fb156f25de25ab0b4c2277e60c1a9baeb",
+      "sig": "9979120b622c385c59c1b0b6a685c55457630ed45d19037b4bd70252422ec5bd56070462fe2b4ab86179c731f8c68d37006cf50088544d01157710c4ac5d91e5"
+    },
+    {
+      "kind": 8,
+      "tags": [
+        [
+          "a",
+          "30009:c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5:native-list-proof"
+        ],
+        [
+          "p",
+          "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"
+        ]
+      ],
+      "content": "",
+      "created_at": 11,
+      "pubkey": "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
+      "id": "7002fd3152bc61cfbe1c9943455eda1bd5e9a2adeefdec7ff616230ab32daacc",
+      "sig": "2e3acaf7f8fc209ec671ee201606dde3349a71215e5b4da45cf572c99e9f92aef0c479aa27e0f44cf984fdefb8adc44e81d9f183b53d5395e4a7f4f4bcf6d307"
+    },
+    {
+      "kind": 30009,
+      "tags": [
+        [
+          "d",
+          "native-list-proof"
+        ],
+        [
+          "name",
+          "Accepted <literal> badge"
+        ],
+        [
+          "description",
+          "Public fixture only"
+        ],
+        [
+          "image",
+          "https://unconfigured.example/badge"
+        ]
+      ],
+      "content": "",
+      "created_at": 10,
+      "pubkey": "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
+      "id": "90d7745e5f3935c7123f419cf098c194831a16947065df655493109d465abeb1",
+      "sig": "960fb6507b0247fbffb50f2fc280e735f527c14bf55a741589ef83ce0266c8c9d032b5ddea00eddc9cafb36f5989c7366a6f5c89b2ba23cde811d3fd5afea8e6"
+    }
+  ],
+  "expected": {
+    "relays": {
+      "wss://127.0.0.1": {
+        "read": true,
+        "write": true
+      },
+      "wss://unconfigured.example": {
+        "read": true,
+        "write": false
+      }
+    },
+    "follows": [
+      "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"
+    ],
+    "mutes": [
+      "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"
+    ],
+    "bookmarks": [
+      "ff7b10b0ded73e0f4f77d527c594b085345329b51b349e54c1cda200089e558b",
+      "30023:c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5:literal"
+    ],
+    "pins": [
+      "ff7b10b0ded73e0f4f77d527c594b085345329b51b349e54c1cda200089e558b"
+    ],
+    "interests": [
+      "literal <tag>",
+      "30009:c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5:native-list-proof"
+    ],
+    "badges": [
+      {
+        "id": "90d7745e5f3935c7123f419cf098c194831a16947065df655493109d465abeb1",
+        "awardedBy": "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
+        "name": "Accepted <literal> badge",
+        "description": "Public fixture only",
+        "image": "https://unconfigured.example/badge"
+      }
+    ]
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "snapshot": "{\"registration\":{\"user\":\"5cbdf0646e5db4eaa398f365f2ea7a0e3d419b7e0330e39ce92bddedcac4f9bc\",\"domains\":[\"relay\",\"outbox\"]},\"request\":\"{\\\"type\\\":\\\"outbox.publish\\\",\\\"id\\\":\\\"native-outbox-publication\\\",\\\"event\\\":{\\\"kind\\\":1,\\\"content\\\":\\\"Native fixture 🌱 / \\\\\\\"quoted\\\\\\\"\\\\n\\\\u0001\\\",\\\"tags\\\":[[\\\"p\\\",\\\"recipient\\\"],[\\\"test\\\",\\\"slash/\\\",\\\"\\\\\\\\\\\"]],\\\"created_at\\\":1791158400}}\"}",
+  "plan": {
+    "requestId": "native-outbox-publication",
+    "event": {
+      "event": {
+        "kind": 1,
+        "content": "Native fixture 🌱 / \"quoted\"\n\u0001",
+        "tags": [
+          [
+            "p",
+            "recipient"
+          ],
+          [
+            "test",
+            "slash/",
+            "\\"
+          ]
+        ],
+        "created_at": 1791158400
+      },
+      "selectedPubkey": "5cbdf0646e5db4eaa398f365f2ea7a0e3d419b7e0330e39ce92bddedcac4f9bc",
+      "destinations": [
+        "wss://relay.damus.io/",
+        "wss://nos.lol/"
+      ],
+      "hash": "c3e4b5aeb06cdef971a0d50e8bde6c9b7ebf159ec6fe3c7be775e4ad5afd8052"
+    },
+    "destinations": [
+      {
+        "relay": "wss://relay.damus.io/",
+        "sources": [
+          {
+            "kind": "explicit"
+          }
+        ]
+      },
+      {
+        "relay": "wss://nos.lol/",
+        "sources": [
+          {
+            "kind": "explicit"
+          }
+        ]
+      }
+    ],
+    "requiredInboxes": [],
+    "ownSource": "nip65",
+    "ancillary": {
+      "kind": 10002,
+      "content": "",
+      "tags": [
+        [
+          "r",
+          "wss://relay.damus.io",
+          "write"
+        ]
+      ],
+      "created_at": 1791158399,
+      "pubkey": "5cbdf0646e5db4eaa398f365f2ea7a0e3d419b7e0330e39ce92bddedcac4f9bc",
+      "id": "08c2eb5221bd757c501aa3bf8845ecbd8b560f8dfd73537c8f69fac156d93da7",
+      "sig": "eabb700e7f9fdfa48f8a9cbf3841a322ecb6ae50880f214a01572ef251fe7a7d8f4b63aa853932b95c201e9f455eb1f3f9c9868531ac36bd8dd7b2efb4c6a2d7"
+    }
+  },
+  "primary": {
+    "kind": 1,
+    "content": "Native fixture 🌱 / \"quoted\"\n\u0001",
+    "tags": [
+      [
+        "p",
+        "recipient"
+      ],
+      [
+        "test",
+        "slash/",
+        "\\"
+      ]
+    ],
+    "created_at": 1791158400,
+    "pubkey": "5cbdf0646e5db4eaa398f365f2ea7a0e3d419b7e0330e39ce92bddedcac4f9bc",
+    "id": "c3e4b5aeb06cdef971a0d50e8bde6c9b7ebf159ec6fe3c7be775e4ad5afd8052",
+    "sig": "9b128ba8c0874aa5cf594c49fc4b8f7f94e105affa129d17b703b0117a7a514b8d79085135d881a0bd4effd47c9c29317b3a9a4d11097a6bd5555ae826820d96"
+  },
+  "list": {
+    "kind": 10002,
+    "content": "",
+    "tags": [
+      [
+        "r",
+        "wss://relay.damus.io",
+        "write"
+      ]
+    ],
+    "created_at": 1791158399,
+    "pubkey": "5cbdf0646e5db4eaa398f365f2ea7a0e3d419b7e0330e39ce92bddedcac4f9bc",
+    "id": "08c2eb5221bd757c501aa3bf8845ecbd8b560f8dfd73537c8f69fac156d93da7",
+    "sig": "eabb700e7f9fdfa48f8a9cbf3841a322ecb6ae50880f214a01572ef251fe7a7d8f4b63aa853932b95c201e9f455eb1f3f9c9868531ac36bd8dd7b2efb4c6a2d7"
+  }
+}
