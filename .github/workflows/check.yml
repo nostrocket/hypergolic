@@ -164,7 +164,11 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
-          cache-dependency-path: runtime/pnpm-lock.yaml
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            runtime/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: .
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium webkit
       - run: pnpm verify
