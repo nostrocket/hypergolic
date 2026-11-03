@@ -24,9 +24,11 @@ inside its prebuilt binaries.
 
 For [Android NDK r27b](https://github.com/android/ndk/releases/tag/r27b)
 (`27.1.12297006`), the official `darwin-x86_64` and `linux-x86_64` archives
-contain identical bytes for all seven reviewed inputs and 1,009 compiled headers.
-The C++ guard maps the host directory and verifies those files against the same
-SHA-256 hashes. A different NDK revision or host layout requires a new review.
+contain identical bytes for all seven reviewed inputs and 1,021 compiled headers.
+These include the system and Clang headers used by the arm64 signer’s C/JNI build.
+CI reads the NDK selected by that build from its CMake cache. The notice guard
+checks both host layouts against the same SHA-256 hashes. A different NDK
+revision or host layout requires a new review.
 
 ## Runtime attribution
 

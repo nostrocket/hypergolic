@@ -168,6 +168,12 @@ test('ambiguous Darwin plus Linux prebuilt layouts reject', () => fixture((direc
   fs.mkdirSync(path.join(copy, 'toolchains/llvm/prebuilt', other));
   assert.throws(() => verify(directory, copy, rootNotices), /exactly one reviewed prebuilt host/);
 }));
+test('changed Linux UAPI header used by the native signer rejects', () => fixture((directory, temporary) => {
+  const copy = fixtureNdk(temporary);
+  const header = `toolchains/llvm/prebuilt/${manifest.ndkProfile.host}/sysroot/usr/include/linux/openat2.h`;
+  fs.appendFileSync(ndkInput(copy, header), 'changed');
+  assert.throws(() => verify(directory, copy, rootNotices), /reviewed NDK input changed/);
+}));
 test('changed recorded review host cannot relabel its pinned inputs', () => fixture(directory => {
   editManifest(directory, data => { data.ndkProfile.host = 'linux-x86_64'; });
   assert.throws(() => verify(directory, ndk, rootNotices), /reviewed NDK host binding changed/);

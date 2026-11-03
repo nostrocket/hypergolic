@@ -1095,14 +1095,26 @@
       "toolchains/llvm/prebuilt/darwin-x86_64/lib/clang/18/include/arm_bf16.h": "87f7bc1cb7aa53a85347bd4e1855cccd45599408bb106e66515519c1033a6a3d",
       "toolchains/llvm/prebuilt/darwin-x86_64/lib/clang/18/include/arm_vector_types.h": "cd1ca50913b2595e28c33f5f90aa1ef00a7f293097fb80a8451fa1b621c86a59",
       "toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/android/trace.h": "8b4af25ee7cdfcb78b7385acc0f8423ec7a257c16b4a9c02ef7dd1a2868b281d",
-      "toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/android/asset_manager.h": "012037df871214da4e161d258a6f9e7a7a4db98ccce8b0f0588c489835f71584"
+      "toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/android/asset_manager.h": "012037df871214da4e161d258a6f9e7a7a4db98ccce8b0f0588c489835f71584",
+      "toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/fcntl.h": "3e0e891735353f47be85b14f8ee549b42cef4b4c3282395ecc0cbccf2a8f993c",
+      "toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/linux/fadvise.h": "5a5e324e4e160bccaebb6e5c44a53c815a4de67e7d9be1e8d0e9eb74c2eddc66",
+      "toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/linux/falloc.h": "90a25a4e086eb9b293df72796da8261aa2ad77a503e1ca9a09b6ed626fdbd850",
+      "toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/linux/fcntl.h": "21ce1e24e5774fcd09e74be221d7c4409dbaef727f1f5c38b898a29aca4859ee",
+      "toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/aarch64-linux-android/asm/fcntl.h": "033e0650290b368ffa97c2f72c1fa670b17462a29cda067bc8cc95423d1e117d",
+      "toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/asm-generic/fcntl.h": "0344cc9d595fd81deb2c0bdce745c189448f7955ffc0618ffc7be20bbfd4b509",
+      "toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/flock64.h": "b6371314ff455d52bb5587503b4844c7b83a54544d7b99a3c2a6db6eafe352ca",
+      "toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/flock.h": "1fbe0cc416c6b6d3bb7f42a020ac5479ab1971287949dfcc8c4501166a31e096",
+      "toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/linux/openat2.h": "047165d4eaf160cc0ed9ac013f97c9f85fba15a0dc8dd5ddfa4f5c035d147288",
+      "toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/linux/stat.h": "e9be8e5c21606640e2106ab264508b807d4db11296e5a7ff418dc59fff97d4e5",
+      "toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/linux/uio.h": "c53cb9258ea6382b7c34e6bea8b0a1d69cbf85ff6143dd522b1799bfea2fa8bf",
+      "toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/fortify/fcntl.h": "2c4f5858d7dc0a21811b0f694371a66335bf6989130b8826a6359cd3d2168377"
     },
     "aggregateSha256": "cbe3237be53c0a819f8df6aac5358fdee848eee3b6571b4e2ca20767ebd7465e",
     "headerReview": {
       "libcxx": 895,
-      "system": 92,
+      "system": 104,
       "clang": 22,
-      "total": 1009
+      "total": 1021
     }
   },
   "reviewedLocalNativeLibraries": [

@@ -101,8 +101,21 @@ jobs:
       - name: Build unsigned native runtime proof
         working-directory: android
         run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
-      - name: Test the NDK notice verifier
-        run: HYPERGOLIC_NOTICE_NDK="$ANDROID_HOME/ndk/27.1.12297006" node --test tests/native/codecs/cpp-notices.cjs
+      - name: Verify the NDK used to compile the native signer
+        shell: bash
+        run: |
+          shopt -s nullglob
+          caches=(modules/signer-core/android/.cxx/RelWithDebInfo/*/arm64-v8a/CMakeCache.txt)
+          if [[ ${#caches[@]} != 1 ]]; then
+            echo 'Expected one arm64 release CMake cache for the native signer.' >&2
+            exit 1
+          fi
+          ndk=$(sed -n 's/^CMAKE_ANDROID_NDK:[^=]*=//p' "${caches[0]}")
+          if [[ ! "$ndk" -ef "$ANDROID_HOME/ndk/27.1.12297006" ]]; then
+            echo 'The native signer did not compile with the reviewed Android NDK.' >&2
+            exit 1
+          fi
+          HYPERGOLIC_NOTICE_NDK="$ndk" node --test tests/native/codecs/cpp-notices.cjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: hypergolic-unsigned-runtime-proof
