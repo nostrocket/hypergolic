@@ -111,7 +111,8 @@ jobs:
             exit 1
           fi
           ndk=$(sed -n 's/^CMAKE_ANDROID_NDK:[^=]*=//p' "${caches[0]}")
-          if [[ ! "$ndk" -ef "$ANDROID_HOME/ndk/27.1.12297006" ]]; then
+          if [[ $(grep -c '^CMAKE_ANDROID_NDK:' "${caches[0]}") != 1 ||
+                ! "$ndk" -ef "$ANDROID_HOME/ndk/27.1.12297006" ]]; then
             echo 'The native signer did not compile with the reviewed Android NDK.' >&2
             exit 1
           fi
