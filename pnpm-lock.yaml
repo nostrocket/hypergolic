@@ -28,6 +28,7 @@ overrides:
   '@babel/helper-create-regexp-features-plugin@7.29.7>semver': 7.8.5
   '@babel/plugin-transform-runtime@7.29.7>semver': 7.8.5
   babel-plugin-polyfill-corejs2@0.4.17>semver: 7.8.5
+  node-forge: 1.4.2
 
 packageExtensionsChecksum: sha256-c7NSKVMI+i6jA8yCPudnPEMJJoB2KjgeK5W/Kah+yfw=
 
@@ -44,9 +45,6 @@ patchedDependencies:
   expo-secure-store@57.0.3:
     hash: 8a2e949f800a6e2608f147733f934c54d390e528ab813c1daf8eb7b3879fea63
     path: patches/expo-secure-store@57.0.3.patch
-  node-forge@1.4.0:
-    hash: 0169a20d1e125a82cafab56e53fa41e0c6caf2148dca29511c251d6411dc632a
-    path: patches/node-forge@1.4.0.patch
 
 importers:
 
@@ -2941,8 +2939,8 @@ packages:
     resolution: {integrity: sha512-NMPBRMJgiQHjbd8phG3Vebdx4kZ1H121rbl5IkMqeOsahptB9BKo/d7oJ3zTXqTgagn2bWlNSXkh0QUGM31RYg==}
     engines: {node: '>=18'}
 
-  node-forge@1.4.0:
-    resolution: {integrity: sha512-LarFH0+6VfriEhqMMcLX2F7SwSXeWwnEAJEsYm5QKWchiVYVvJyV9v7UDvUv+w5HO23ZpQTXDv/GxdDdMyOuoQ==}
+  node-forge@1.4.2:
+    resolution: {integrity: sha512-rRtAR5XLJ8gCKd9du4qrKAsgCG1ObGP4gLeNJMa4vYSeq4bmBMOJk5IHkrviBV0q7uoAJlVd8HEQYQSVUb4FGQ==}
     engines: {node: '>= 6.13.0'}
 
   node-int64@0.4.0:
@@ -4336,7 +4334,7 @@ snapshots:
       glob: 13.0.6
       lan-network: 0.2.1
       multitars: 1.0.2
-      node-forge: 1.4.0(patch_hash=0169a20d1e125a82cafab56e53fa41e0c6caf2148dca29511c251d6411dc632a)
+      node-forge: 1.4.2
       npm-package-arg: 11.0.3
       ora: 3.4.0
       picomatch: 4.0.7
@@ -4372,7 +4370,7 @@ snapshots:
 
   '@expo/code-signing-certificates@0.0.6':
     dependencies:
-      node-forge: 1.4.0(patch_hash=0169a20d1e125a82cafab56e53fa41e0c6caf2148dca29511c251d6411dc632a)
+      node-forge: 1.4.2
 
   '@expo/config-plugins@57.0.9(typescript@6.0.3)':
     dependencies:
@@ -6767,7 +6765,7 @@ snapshots:
     dependencies:
       content-type: 2.1.0
 
-  node-forge@1.4.0(patch_hash=0169a20d1e125a82cafab56e53fa41e0c6caf2148dca29511c251d6411dc632a): {}
+  node-forge@1.4.2: {}
 
   node-int64@0.4.0: {}
 

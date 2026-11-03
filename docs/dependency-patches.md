@@ -11,7 +11,6 @@ or suppressing a finding is not remediation.
 
 | Package | Change and boundary | Owning checks |
 | --- | --- | --- |
-| `node-forge@1.4.0` | [RSA patch](../patches/node-forge@1.4.0.patch) rejects unconsumed nested DigestAlgorithm children. It is a local mitigation for GHSA-86w9-cpqp-85rv; the installed package remains 1.4.0 and can still be reported by audits. | `pnpm run test:quality` checks malformed signatures, positive forms and actual Expo consumers. |
 | `braces@3.0.3` | [Depth guard](../tools/quality/patches/braces@3.0.3.patch) bounds parsing and AST traversal to 256 levels. Unusually deep patterns throw `RangeError`; callers must handle invalid patterns. The root and quality tool use the same patch. | `pnpm run test:quality` checks both installed consumers, hostile nesting and normal glob behavior. |
 | `@expo/config@57.0.9` | [Merge replacement](../patches/expo-config-safe-merge.patch) uses `@fastify/deepmerge@3.2.4` with enumerable symbols, removing `deepmerge`. It preserves tested arrays, undefined updates, plugin order and cloning; it drops prototype-related keys and materializes sparse holes as undefined. This is scoped compatibility, not equivalence for every input. | Installed-consumer cases in `pnpm run test:quality`; both native prebuilds. |
 | `expo-modules-jsi@57.0.8` | [Swift interface patch](../patches/expo-modules-jsi@57.0.8.patch) extends the existing sanitizer to remove the internal `__ObjC::` extension spelling emitted with Swift 6.4. | Sanitizer regressions in `pnpm run test:quality`; ordinary iPhoneOS compilation. |
@@ -27,9 +26,16 @@ checks when updating it.
 
 Root overrides pin compatible security or tooling updates for fast-uri,
 ip-address, brace-expansion, source-map-js, proxy-addr, compression, shell-quote,
-MCP SDK, Hono, Zod, qs, body-parser, Hono's Node server, Fallow and xcode's uuid.
+MCP SDK, Hono, Zod, qs, body-parser, Hono's Node server, Fallow, xcode's uuid and
+node-forge.
 The manifests are the version authority. Runtime and lab projects have separate
 lockfiles and pins; review all ten installed projects when auditing the repository.
+
+Expo CLI and its certificate library use `node-forge@1.4.2`. It rejects malformed
+RSA DigestInfo encodings and restores PEM Buffer input, which regressed in 1.4.1.
+`pnpm run test:quality` checks the encodings against OpenSSL and exercises the
+Expo certificate APIs and CLI parser with disposable certificates.
+[Upstream changelog](https://github.com/digitalbazaar/forge/blob/v1.4.2/CHANGELOG.md).
 
 Two substitutions cross the consumers' declared major ranges and need their
 specific compatibility checks:
@@ -68,10 +74,8 @@ export is insufficient.
 
 Final acceptance requires React Doctor and aislop at 100/100 and complete
 unsuppressed dependency audits. A clean diagnostic run with a null score is not a
-numeric pass. Historical narrow Forge/braces exceptions supported earlier scoped
-work; they do not close the current whole-app quality gate. The pinned Forge
-finding and final reports still require closeout. Recheck advisory metadata before
-describing a finding or upstream fix as current.
+numeric pass. Recheck advisory metadata before describing a finding or upstream
+fix as current.
 
 Replace a local mitigation when an eligible upstream release covers its behavior.
 Verify the archive, installed consumer resolution, original notice bytes, positive

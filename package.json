@@ -106,10 +106,10 @@
       "@babel/helper-create-class-features-plugin@7.29.7>semver": "7.8.5",
       "@babel/helper-create-regexp-features-plugin@7.29.7>semver": "7.8.5",
       "@babel/plugin-transform-runtime@7.29.7>semver": "7.8.5",
-      "babel-plugin-polyfill-corejs2@0.4.17>semver": "7.8.5"
+      "babel-plugin-polyfill-corejs2@0.4.17>semver": "7.8.5",
+      "node-forge": "1.4.2"
     },
     "patchedDependencies": {
-      "node-forge@1.4.0": "patches/node-forge@1.4.0.patch",
       "braces@3.0.3": "tools/quality/patches/braces@3.0.3.patch",
       "expo-secure-store@57.0.3": "patches/expo-secure-store@57.0.3.patch",
       "expo-modules-jsi@57.0.8": "patches/expo-modules-jsi@57.0.8.patch",
