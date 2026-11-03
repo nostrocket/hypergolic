@@ -1,4 +1,4 @@
-name: Check
+name: CI
 on:
   push:
   pull_request:
@@ -8,6 +8,9 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-24.04
+    outputs:
+      aislop: ${{ steps.scores.outputs.aislop }}
+      react-doctor: ${{ steps.scores.outputs.react-doctor }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
@@ -21,8 +24,29 @@ jobs:
             runtime/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm run runtime:install
-      - run: pnpm run quality:install
-      - run: pnpm run check
+      - id: dependencies
+        run: pnpm run quality:install
+      - run: pnpm run typecheck
+      - name: Check Expo SDK compatibility
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: pnpm run doctor:expo
+      - name: Score the full source and audit every lockfile
+        id: scores
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: node scripts/run-quality.mjs "$GITHUB_WORKSPACE" "$RUNNER_TEMP/quality.json"
+
+  quality-scores:
+    needs: quality
+    if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    name: ${{ github.event_name }} ${{ github.ref_name }} scores / AISlop ${{ needs.quality.outputs.aislop || 'unavailable' }} / React Doctor ${{ needs.quality.outputs.react-doctor || 'unavailable' }}
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Require the quality gate to pass
+        env:
+          QUALITY: ${{ needs.quality.result }}
+        run: test "$QUALITY" = success
+
   shared-behavior:
     runs-on: ubuntu-24.04
     steps:
@@ -195,6 +219,19 @@ jobs:
           name: runtime-host-browser-evidence
           path: runtime/test-results/
           if-no-files-found: warn
+
+  tests:
+    needs: [shared-behavior, napplet-labs, runtime-host]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Require all test jobs to pass
+        env:
+          SHARED: ${{ needs.shared-behavior.result }}
+          LABS: ${{ needs.napplet-labs.result }}
+          RUNTIME: ${{ needs.runtime-host.result }}
+        run: test "$SHARED" = success && test "$LABS" = success && test "$RUNTIME" = success
 
   ios-compile:
     runs-on: xcode-27

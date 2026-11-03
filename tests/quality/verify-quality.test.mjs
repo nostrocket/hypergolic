@@ -4,7 +4,7 @@ import { mkdtemp, writeFile, rm, symlink } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
-import { POLICY, commands, digest, snapshot, slopTestFiles, verifyBundle } from '../../scripts/verify-quality.mjs';
+import { POLICY, badgeScore, commands, digest, snapshot, slopTestFiles, verifyBundle } from '../../scripts/verify-quality.mjs';
 
 // Deliberately synthetic JSON fixtures exercise validation, never real score evidence.
 function fixture() {
@@ -61,6 +61,22 @@ function editReport(bundle, index, edit) {
 test('accepts complete synthetic RN full-scan receipts, without demanding Swift/architecture engines', () => {
   const { inputs, bundle, now } = fixture();
   assert.equal(verifyBundle(bundle, inputs, now).ok, true);
+});
+
+test('badges report a complete below-target measurement while the quality gate still fails', () => {
+  const { inputs, bundle, now } = fixture();
+  editReport(bundle, 1, report => { report.score = 99; });
+  bundle.runs[1].exitCode = 1;
+  assert.equal(badgeScore(bundle.runs[0], inputs), '100/100');
+  assert.equal(badgeScore(bundle.runs[1], inputs), '99/100');
+  assert.throws(() => verifyBundle(bundle, inputs, now));
+});
+
+test('badges withhold incomplete scores and perfect scores with unresolved findings', () => {
+  const { inputs, bundle } = fixture();
+  editReport(bundle, 0, report => { report.diagnostics.push({ severity: 'warning' }); });
+  editReport(bundle, 1, report => { report.score = 99; report.engines.security.skipped = true; });
+  for (const run of bundle.runs.slice(0, 2)) assert.equal(badgeScore(run, inputs), 'unavailable');
 });
 
 const doctorRejections = [

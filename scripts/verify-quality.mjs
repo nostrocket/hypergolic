@@ -141,7 +141,12 @@ export function slopTestFiles(files) {
   });
 }
 
-export function verifyDoctor(report, inputs) {
+function score(value) {
+  assert(Number.isInteger(value) && value >= 0 && value <= 100, 'Missing or invalid numeric score');
+  return value;
+}
+
+function doctorScore(report, inputs) {
   same(report.schemaVersion, 3, 'React Doctor JSON schema mismatch');
   same(report.version, POLICY.doctor, 'React Doctor version mismatch');
   same(report.ok, true, 'React Doctor scan failed');
@@ -152,7 +157,6 @@ export function verifyDoctor(report, inputs) {
   same(report.reactDetected, true, 'React runtime was not detected');
   assert(!report.baseline && !report.baselineDegraded, 'Baseline reports are not full-source evidence');
   empty(report.skippedProjects ?? [], 'React Doctor skipped projects');
-  empty(report.diagnostics, 'React Doctor diagnostics must be empty, including informational findings');
   assert(Array.isArray(report.projects) && report.projects.length > 0, 'React Doctor has no project results');
   const seen = new Set();
   let nativeRoot = false;
@@ -164,10 +168,9 @@ export function verifyDoctor(report, inputs) {
     same(project.packageRoot, project.directory, 'React Doctor package binding mismatch');
     same(project.project?.rootDirectory, project.directory, 'React Doctor project root mismatch');
     if (project.directory === inputs.source.root) nativeRoot = project.project.hasReactNativeWorkspace === true;
-    same(project.score?.score, 100, 'Every React Doctor project needs an actual numeric score of 100');
+    score(project.score?.score);
     assert(typeof project.score.label === 'string' && project.score.label.length > 0, 'Missing React Doctor score label');
     same(project.complete, true, 'React Doctor project scan incomplete');
-    empty(project.diagnostics, 'React Doctor project has diagnostics');
     empty(project.skippedChecks, 'React Doctor checks were skipped');
     same(project.skippedCheckReasons ?? {}, {}, 'React Doctor partial/failed check reasons exist');
     assert(Array.isArray(project.analyzedFiles) && positive(project.analyzedFileCount), 'Missing analyzed source inventory');
@@ -183,17 +186,25 @@ export function verifyDoctor(report, inputs) {
   }
   assert(nativeRoot, 'Full root React Native project result required');
   same(sorted(new Set(analyzed)), inputs.doctorFiles, 'React Doctor analyzed source set differs from current full inventory');
+  return score(report.summary?.score);
+}
+
+export function verifyDoctor(report, inputs) {
+  same(doctorScore(report, inputs), 100, 'React Doctor summary numeric score must be 100');
+  empty(report.diagnostics, 'React Doctor diagnostics must be empty, including informational findings');
+  for (const project of report.projects) {
+    same(project.score.score, 100, 'Every React Doctor project needs an actual numeric score of 100');
+    empty(project.diagnostics, 'React Doctor project has diagnostics');
+  }
   for (const field of ['errorCount', 'warningCount', 'affectedFileCount', 'totalDiagnosticCount']) {
     zero(report.summary?.[field], `React Doctor summary ${field} is not zero`);
   }
-  same(report.summary.score, 100, 'React Doctor summary numeric score must be 100');
 }
 
-export function verifyAislop(report, inputs) {
+function aislopScore(report, inputs) {
   same(report.schemaVersion, '1', 'aislop JSON schema mismatch');
   same(report.cliVersion, POLICY.aislop, 'aislop CLI version mismatch');
   same(report.version, POLICY.aislop, 'aislop version mismatch');
-  same(report.score, 100, 'aislop actual numeric score must be 100');
   same(report.scoreable, true, 'aislop scan is not scoreable');
   same(report.coverage?.scoreable, true, 'aislop coverage is not scoreable');
   assert(positive(report.coverage.supportedFiles), 'aislop analyzed no supported files');
@@ -204,10 +215,16 @@ export function verifyAislop(report, inputs) {
   same(sorted(Object.keys(report.engines ?? {})), sorted(POLICY.engines), 'aislop applicable engine missing or unexpected');
   for (const engine of POLICY.engines) {
     same(report.engines[engine].skipped, false, `aislop ${engine} skipped`);
-    zero(report.engines[engine].issues, `aislop ${engine} has findings`);
     assert(Number.isFinite(report.engines[engine].elapsed) && report.engines[engine].elapsed >= 0,
       `aislop ${engine} lacks completion timing`);
   }
+  assert(!report.diagnostics.some(row => row.rule === 'security/dependency-audit-skipped'), 'aislop dependency audit skipped');
+  return score(report.score);
+}
+
+export function verifyAislop(report, inputs) {
+  same(aislopScore(report, inputs), 100, 'aislop actual numeric score must be 100');
+  for (const engine of POLICY.engines) zero(report.engines[engine].issues, `aislop ${engine} has findings`);
   empty(report.diagnostics, 'aislop diagnostics must be empty, including audit-skipped info');
   empty(report.findingAssessment?.rows, 'aislop assessment has findings');
   for (const counts of [report.findingAssessment.byKind, report.findingAssessment.byConfidence]) {
@@ -215,6 +232,24 @@ export function verifyAislop(report, inputs) {
     for (const value of Object.values(counts)) zero(value, 'aislop assessment count is not zero');
   }
   for (const field of ['errors', 'warnings', 'fixable']) zero(report.summary[field], `aislop ${field} is not zero`);
+}
+
+export function badgeScore(run, inputs) {
+  try {
+    assert([0, 1].includes(run.exitCode) && run.signal === null && run.timedOut === false, 'Scan did not finish');
+    const report = JSON.parse(run.stdout);
+    const doctor = run.command.id === 'react-doctor';
+    assert(doctor || run.command.id === 'aislop', 'Unknown scoring tool');
+    const measured = doctor ? doctorScore(report, inputs) : aislopScore(report, inputs);
+    if (measured === 100) {
+      same(run.exitCode, 0, 'Perfect score requires a successful scan');
+      if (doctor) verifyDoctor(report, inputs);
+      else verifyAislop(report, inputs);
+    }
+    return `${measured}/100`;
+  } catch {
+    return 'unavailable';
+  }
 }
 
 export function verifyAudit(report) {
@@ -230,6 +265,11 @@ export function verifyAudit(report) {
   for (const value of Object.values(vulnerabilities)) zero(value, 'Unexpected nonzero audit severity');
 }
 
+export function freshScans(bundle, now = Date.now()) {
+  return Number.isFinite(bundle.startedAt) && Number.isFinite(bundle.finishedAt) &&
+    bundle.startedAt <= bundle.finishedAt && bundle.finishedAt <= now && now - bundle.startedAt <= POLICY.maxAgeMs;
+}
+
 export function verifyBundle(bundle, inputs, now = Date.now()) {
   same(bundle.schemaVersion, 1, 'Quality evidence schema mismatch');
   same(bundle.policy, POLICY, 'Quality scope/policy mismatch');
@@ -240,9 +280,7 @@ export function verifyBundle(bundle, inputs, now = Date.now()) {
   same(bundle.versions, inputs.versions, 'Installed quality tool binding mismatch');
   same(bundle.doctorFiles, inputs.doctorFiles, 'Recorded React Doctor input coverage changed');
   same(bundle.slopCoverage, inputs.slopCoverage, 'Recorded aislop input coverage changed');
-  assert(Number.isFinite(bundle.startedAt) && Number.isFinite(bundle.finishedAt) &&
-    bundle.startedAt <= bundle.finishedAt && bundle.finishedAt <= now &&
-    now - bundle.startedAt <= POLICY.maxAgeMs, 'Quality evidence is stale or has invalid timestamps');
+  assert(freshScans(bundle, now), 'Quality evidence is stale or has invalid timestamps');
   const expected = commands(inputs.source.root, inputs.auditDirectories);
   assert(Array.isArray(bundle.runs), 'Quality process receipts missing');
   same(bundle.runs.map(run => run.command.id), expected.map(command => command.id), 'Missing, reordered, or unexpected scans/audits');

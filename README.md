@@ -6,6 +6,13 @@
 
 <p align="center">A native home for Nostr napplets.</p>
 
+<p align="center">
+  <a href="https://github.com/nostrocket/hypergolic/actions/workflows/check.yml?query=branch%3Amain+event%3Apush"><img alt="CI" src="https://github.com/nostrocket/hypergolic/actions/workflows/check.yml/badge.svg?branch=main&amp;event=push"></a>
+  <a href="https://github.com/nostrocket/hypergolic/actions/workflows/check.yml?query=branch%3Amain+event%3Apush"><img alt="Tests" src="https://img.shields.io/github/check-runs/nostrocket/hypergolic/main?nameFilter=tests&amp;label=Tests"></a>
+  <a href="https://github.com/nostrocket/hypergolic/actions/workflows/check.yml?query=branch%3Amain+event%3Apush"><img alt="AISlop score" src="https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fapi.github.com%2Frepos%2Fnostrocket%2Fhypergolic%2Fcommits%2Fmain%2Fcheck-runs%3Fapp_id%3D15368%26per_page%3D100&amp;search=%22name%22%5Cs*%3A%5Cs*%22push%20main%20scores%20%2F%20AISlop%20(100%2F100%7C%5B0-9%5D%7B1%2C2%7D%2F100%7Cunavailable)%20%2F%20React%20Doctor%20(100%2F100%7C%5B0-9%5D%7B1%2C2%7D%2F100%7Cunavailable)%22&amp;replace=%241&amp;label=AISlop"></a>
+  <a href="https://github.com/nostrocket/hypergolic/actions/workflows/check.yml?query=branch%3Amain+event%3Apush"><img alt="React Doctor score" src="https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fapi.github.com%2Frepos%2Fnostrocket%2Fhypergolic%2Fcommits%2Fmain%2Fcheck-runs%3Fapp_id%3D15368%26per_page%3D100&amp;search=%22name%22%5Cs*%3A%5Cs*%22push%20main%20scores%20%2F%20AISlop%20(100%2F100%7C%5B0-9%5D%7B1%2C2%7D%2F100%7Cunavailable)%20%2F%20React%20Doctor%20(100%2F100%7C%5B0-9%5D%7B1%2C2%7D%2F100%7Cunavailable)%22&amp;replace=%242&amp;label=React%20Doctor"></a>
+</p>
+
 Hypergolic is an Android and iOS shell for small web applications called
 **napplets**. It brings them into one workspace while keeping identity selection,
 permissions, event approval and native operations in the shell.

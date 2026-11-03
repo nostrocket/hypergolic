@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { POLICY, commands, digest, inspectInputs, snapshot, verifyBundle } from './verify-quality.mjs';
+import { POLICY, badgeScore, commands, digest, freshScans, inspectInputs, snapshot, verifyBundle } from './verify-quality.mjs';
 
 function run(command) {
   return new Promise(resolve => {
     const startedAt = Date.now();
     const env = { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1' };
+    delete env.GITHUB_OUTPUT;
     for (const [key, value] of Object.entries(command.env ?? {})) {
       if (value === null) delete env[key];
       else env[key] = value;
@@ -61,6 +62,13 @@ try {
   bundle.outputSha256 = (await snapshot(inputs.source.root)).sha256;
   await mkdir(path.dirname(destination), { recursive: true });
   await writeFile(destination, `${JSON.stringify(bundle, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
+  const current = bundle.inputSha256 === bundle.outputSha256 && freshScans(bundle);
+  const scores = bundle.runs.slice(0, 2).map(run => {
+    const measured = current ? badgeScore(run, inputs) : 'unavailable';
+    return `${run.command.id}=${measured}\n`;
+  }).join('');
+  process.stdout.write(scores);
+  if (process.env.GITHUB_OUTPUT) await appendFile(process.env.GITHUB_OUTPUT, scores);
   process.stdout.write(`${JSON.stringify(verifyBundle(bundle, inputs), null, 2)}\n`);
 } catch (error) {
   process.stderr.write(`Quality gate failed: ${error.message}\n`);

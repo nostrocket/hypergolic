@@ -179,6 +179,19 @@ exports, compiles unsigned Android and iPhoneOS Release products, and checks the
 runtime plus all seven independently locked labs. Browser and conformance coverage
 vary by lab; see their manifests.
 
+The README’s Tests badge combines the shared, runtime and seven lab jobs on
+`main`. The score badges read a completed measurement for that commit from
+the public Actions checks. The linked run lists each measurement and rerun. A
+complete scan can report a score below 100. An incomplete scan shows
+`unavailable`. CI requires both scores to reach 100, zero findings and a clean
+audit for every lockfile. To run the same scans locally after installing the
+root, runtime and quality dependencies, use a fresh evidence file outside the
+checkout.
+
+```sh
+node scripts/run-quality.mjs "$PWD" "$(mktemp -d)/quality.json"
+```
+
 The iOS compile selects the `xcode-27` preview runner and verifies Xcode 27.1 and
 SDK 27.1 before compiling the unsigned iPhoneOS Release build. Final iOS
 acceptance also requires the signed-device journeys in the [test plan](testing.md).
