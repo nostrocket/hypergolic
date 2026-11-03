@@ -728,9 +728,9 @@
       "sha256": "4400108e485ed844925af134579fa248d17ecf8618d7f3b33ccd876d2ddd7ff0"
     },
     {
-      "component": "com.facebook.hermes:hermes-android:260318099.0.4",
-      "filename": "hermes-android-260318099.0.4-release.aar",
-      "sha256": "3e79e1232d198aed2d984cc6d9cb8a4f7eb1f94defd4391aef24eb89016579d8"
+      "component": "com.facebook.hermes:hermes-android:260318099.0.5",
+      "filename": "hermes-android-260318099.0.5-release.aar",
+      "sha256": "1c171d2ace4057127a91ee543c3fd17206fce5053c2ea85aa9376473f1e200eb"
     },
     {
       "component": "com.facebook.infer.annotation:infer-annotation:0.18.0",
@@ -738,9 +738,9 @@
       "sha256": "caefba935643dc962758a760f1627a402215af034d96c0f484d63b7fddca992f"
     },
     {
-      "component": "com.facebook.react:react-android:0.88.0",
-      "filename": "react-android-0.88.0-release.aar",
-      "sha256": "a3356d9cd061fd866b51fea296e2562357c7a12886c0b73c4076ddd9f7471099"
+      "component": "com.facebook.react:react-android:0.88.1",
+      "filename": "react-android-0.88.1-release.aar",
+      "sha256": "74db2cd99de245e56b2779b581fc4586fef2fd630ce5940cacfe7eb8cfd42b2c"
     },
     {
       "component": "com.facebook.soloader:annotation:0.12.1",
@@ -1045,9 +1045,9 @@
       "tag": "boost-1.83.0",
       "resolvedCommit": "564e2ac16907019696cdaba8a93e3588ec596062",
       "owningArtifact": {
-        "component": "com.facebook.react:react-android:0.88.0",
-        "filename": "react-android-0.88.0-release.aar",
-        "sha256": "a3356d9cd061fd866b51fea296e2562357c7a12886c0b73c4076ddd9f7471099"
+        "component": "com.facebook.react:react-android:0.88.1",
+        "filename": "react-android-0.88.1-release.aar",
+        "sha256": "74db2cd99de245e56b2779b581fc4586fef2fd630ce5940cacfe7eb8cfd42b2c"
       },
       "rootOriginals": [
         {
@@ -3595,9 +3595,9 @@
       "tag": "v1.1.6",
       "resolvedCommit": "361924fb61c043627d4179e941a102d543f6efa0",
       "owningArtifact": {
-        "component": "com.facebook.react:react-android:0.88.0",
-        "filename": "react-android-0.88.0-release.aar",
-        "sha256": "a3356d9cd061fd866b51fea296e2562357c7a12886c0b73c4076ddd9f7471099"
+        "component": "com.facebook.react:react-android:0.88.1",
+        "filename": "react-android-0.88.1-release.aar",
+        "sha256": "74db2cd99de245e56b2779b581fc4586fef2fd630ce5940cacfe7eb8cfd42b2c"
       },
       "rootOriginals": [
         {
@@ -3672,9 +3672,9 @@
       "tag": "v8.0.0",
       "resolvedCommit": "77cc847c842c49e7e3477c1e95da2b6540166d66",
       "owningArtifact": {
-        "component": "com.facebook.react:react-android:0.88.0",
-        "filename": "react-android-0.88.0-release.aar",
-        "sha256": "a3356d9cd061fd866b51fea296e2562357c7a12886c0b73c4076ddd9f7471099"
+        "component": "com.facebook.react:react-android:0.88.1",
+        "filename": "react-android-0.88.1-release.aar",
+        "sha256": "74db2cd99de245e56b2779b581fc4586fef2fd630ce5940cacfe7eb8cfd42b2c"
       },
       "rootOriginals": [
         {
@@ -3817,6 +3817,14 @@
           "sha256": "5c8a1545a4f71326dc02ee1e754809bbcee5cdc23f4157e8ced76dad84d792fc",
           "immutableUpstreamPaths": [
             "cxx/fbjni/ByteBuffer.h"
+          ],
+          "provenance": "immutable-upstream-blob"
+        },
+        {
+          "entry": "prefab/modules/fbjni/include/fbjni/NativeRunnable.h",
+          "sha256": "308095fe2414c828f6ea6d860a733ef18e44f8741588f5b22473d892dc304d51",
+          "immutableUpstreamPaths": [
+            "cxx/fbjni/NativeRunnable.h"
           ],
           "provenance": "immutable-upstream-blob"
         },
@@ -4036,9 +4044,9 @@
       "tag": "12.1.0",
       "resolvedCommit": "407c905e45ad75fc29bf0f9bb7c5c2fd3475976f",
       "owningArtifact": {
-        "component": "com.facebook.react:react-android:0.88.0",
-        "filename": "react-android-0.88.0-release.aar",
-        "sha256": "a3356d9cd061fd866b51fea296e2562357c7a12886c0b73c4076ddd9f7471099"
+        "component": "com.facebook.react:react-android:0.88.1",
+        "filename": "react-android-0.88.1-release.aar",
+        "sha256": "74db2cd99de245e56b2779b581fc4586fef2fd630ce5940cacfe7eb8cfd42b2c"
       },
       "rootOriginals": [
         {
@@ -4079,9 +4087,9 @@
       "tag": "v2024.11.18.00",
       "resolvedCommit": "0660ead5b610047a279cc291129e98e3f2a1fc37",
       "owningArtifact": {
-        "component": "com.facebook.react:react-android:0.88.0",
-        "filename": "react-android-0.88.0-release.aar",
-        "sha256": "a3356d9cd061fd866b51fea296e2562357c7a12886c0b73c4076ddd9f7471099"
+        "component": "com.facebook.react:react-android:0.88.1",
+        "filename": "react-android-0.88.1-release.aar",
+        "sha256": "74db2cd99de245e56b2779b581fc4586fef2fd630ce5940cacfe7eb8cfd42b2c"
       },
       "rootOriginals": [
         {
@@ -4906,9 +4914,9 @@
       "tag": "v0.3.5",
       "resolvedCommit": "a6a166db069520dbbd653c97c2e5b12e08a8bb26",
       "owningArtifact": {
-        "component": "com.facebook.react:react-android:0.88.0",
-        "filename": "react-android-0.88.0-release.aar",
-        "sha256": "a3356d9cd061fd866b51fea296e2562357c7a12886c0b73c4076ddd9f7471099"
+        "component": "com.facebook.react:react-android:0.88.1",
+        "filename": "react-android-0.88.1-release.aar",
+        "sha256": "74db2cd99de245e56b2779b581fc4586fef2fd630ce5940cacfe7eb8cfd42b2c"
       },
       "rootOriginals": [
         {
@@ -4984,21 +4992,21 @@
     {
       "group": "hermes",
       "repo": "facebook/hermes",
-      "tag": "hermes-v260318099.0.4",
-      "resolvedCommit": "d412d3bd851278712c20cca25d094e32641a0465",
+      "tag": "hermes-v260318099.0.5",
+      "resolvedCommit": "9a115f15785851f4ff2747ebb090ddd066fc8ad2",
       "owningArtifact": {
-        "component": "com.facebook.hermes:hermes-android:260318099.0.4",
-        "filename": "hermes-android-260318099.0.4-release.aar",
-        "sha256": "3e79e1232d198aed2d984cc6d9cb8a4f7eb1f94defd4391aef24eb89016579d8"
+        "component": "com.facebook.hermes:hermes-android:260318099.0.5",
+        "filename": "hermes-android-260318099.0.5-release.aar",
+        "sha256": "1c171d2ace4057127a91ee543c3fd17206fce5053c2ea85aa9376473f1e200eb"
       },
       "rootOriginals": [
         {
           "file": "LICENSE",
           "bytes": 1088,
           "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",
-          "source": "https://raw.githubusercontent.com/facebook/hermes/d412d3bd851278712c20cca25d094e32641a0465/LICENSE",
+          "source": "https://raw.githubusercontent.com/facebook/hermes/9a115f15785851f4ff2747ebb090ddd066fc8ad2/LICENSE",
           "original": {
-            "file": "js-react-native-0.88.0-LICENSE.txt",
+            "file": "js-react-native-0.88.1-LICENSE.txt",
             "location": "main-javascript",
             "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
           }
@@ -5075,21 +5083,21 @@
     {
       "group": "react-native",
       "repo": "facebook/react-native",
-      "tag": "v0.88.0",
-      "resolvedCommit": "5c35c82cf7dd322bf94d47501508c3de975c077b",
+      "tag": "v0.88.1",
+      "resolvedCommit": "c30b7f86850d47422637a64c70508e7411dbd8ea",
       "owningArtifact": {
-        "component": "com.facebook.react:react-android:0.88.0",
-        "filename": "react-android-0.88.0-release.aar",
-        "sha256": "a3356d9cd061fd866b51fea296e2562357c7a12886c0b73c4076ddd9f7471099"
+        "component": "com.facebook.react:react-android:0.88.1",
+        "filename": "react-android-0.88.1-release.aar",
+        "sha256": "74db2cd99de245e56b2779b581fc4586fef2fd630ce5940cacfe7eb8cfd42b2c"
       },
       "rootOriginals": [
         {
           "file": "LICENSE",
           "bytes": 1088,
           "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",
-          "source": "https://raw.githubusercontent.com/facebook/react-native/5c35c82cf7dd322bf94d47501508c3de975c077b/LICENSE",
+          "source": "https://raw.githubusercontent.com/facebook/react-native/c30b7f86850d47422637a64c70508e7411dbd8ea/LICENSE",
           "original": {
-            "file": "js-react-native-0.88.0-LICENSE.txt",
+            "file": "js-react-native-0.88.1-LICENSE.txt",
             "location": "main-javascript",
             "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
           }
@@ -5098,9 +5106,9 @@
           "file": "packages/react-native/LICENSE",
           "bytes": 1088,
           "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",
-          "source": "https://raw.githubusercontent.com/facebook/react-native/5c35c82cf7dd322bf94d47501508c3de975c077b/packages/react-native/LICENSE",
+          "source": "https://raw.githubusercontent.com/facebook/react-native/c30b7f86850d47422637a64c70508e7411dbd8ea/packages/react-native/LICENSE",
           "original": {
-            "file": "js-react-native-0.88.0-LICENSE.txt",
+            "file": "js-react-native-0.88.1-LICENSE.txt",
             "location": "main-javascript",
             "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
           }
@@ -5118,7 +5126,7 @@
         },
         {
           "entry": "prefab/modules/jsi/include/jsi/decorator.h",
-          "sha256": "155fa250fc68b7e9e3d17a7d75f3760a6bd103af8ecc4352ac4d59e3a91d0613",
+          "sha256": "43884b1e1d24b7fdaa1b499d422159976b35d78799db76b5e42895493bec7884",
           "immutableUpstreamPaths": [
             "packages/react-native/ReactCommon/jsi/jsi/decorator.h"
           ],
@@ -5299,6 +5307,14 @@
           "provenance": "immutable-upstream-blob"
         },
         {
+          "entry": "prefab/modules/reactnative/include/react/common/mapbuffer/JReadableMapBuffer.h",
+          "sha256": "b63739d035b63df31e9e614ca9731dfb76c9e053ec3e64edb0291e203604c4d0",
+          "immutableUpstreamPaths": [
+            "packages/react-native/ReactAndroid/src/main/jni/react/mapbuffer/react/common/mapbuffer/JReadableMapBuffer.h"
+          ],
+          "provenance": "immutable-upstream-blob"
+        },
+        {
           "entry": "prefab/modules/reactnative/include/react/cxxstableapi/UmbrellaGuard.h",
           "sha256": "339317b1411d3368575f24ec2b71db5d30c079e4db7a849d0da6094e6d30520e",
           "immutableUpstreamPaths": [
@@ -5351,6 +5367,14 @@
           "sha256": "91e613e469bedc333b253791b6b3a8be2d7976bc946eaf94ee922c2688ffcfcf",
           "immutableUpstreamPaths": [
             "packages/react-native/ReactAndroid/src/main/jni/react/fabric/ComponentFactory.h"
+          ],
+          "provenance": "immutable-upstream-blob"
+        },
+        {
+          "entry": "prefab/modules/reactnative/include/react/fabric/CoreComponentsRegistry.h",
+          "sha256": "68f4c2eb5b9de0527166fb9335180686d4485f2c9a0ce53067ffebf1e9e3c4b4",
+          "immutableUpstreamPaths": [
+            "packages/react-native/ReactAndroid/src/main/jni/react/fabric/CoreComponentsRegistry.h"
           ],
           "provenance": "immutable-upstream-blob"
         },
@@ -7238,42 +7262,43 @@
     }
   ],
   "prefabReview": {
-    "compiledHeaderCount": 723,
-    "immutableUpstreamHeaderCount": 720,
+    "compiledHeaderCount": 726,
+    "immutableUpstreamHeaderCount": 723,
     "verifiedGeneratedHeaderCount": 3,
     "scope": "Exact current production ARM64 RelWithDebInfo object and precompiled-header include union, matched to selected AAR entries and immutable upstream/version/generation bytes. Not all available AAR headers, full static-library/transitive source provenance, a binary rebuild, other ABIs or physical acceptance.",
     "sourceMetadata": [
       {
         "upstreamPath": "packages/react-native/gradle/libs.versions.toml",
-        "source": "https://raw.githubusercontent.com/facebook/react-native/5c35c82cf7dd322bf94d47501508c3de975c077b/packages/react-native/gradle/libs.versions.toml",
+        "source": "https://raw.githubusercontent.com/facebook/react-native/c30b7f86850d47422637a64c70508e7411dbd8ea/packages/react-native/gradle/libs.versions.toml",
         "sha256": "2d8189b893ec8179a8f27b0ecb2b946799d72bb7ad5c3d8584c18edd7483e933",
         "matchesInstalled": true
       },
       {
         "upstreamPath": "packages/react-native/sdks/.hermesv1version",
-        "source": "https://raw.githubusercontent.com/facebook/react-native/5c35c82cf7dd322bf94d47501508c3de975c077b/packages/react-native/sdks/.hermesv1version",
-        "sha256": "6ff53de6fc143f0b9532b95b55f116fa9adf70455f917c7ec101a2c742daaff0",
+        "source": "https://raw.githubusercontent.com/facebook/react-native/c30b7f86850d47422637a64c70508e7411dbd8ea/packages/react-native/sdks/.hermesv1version",
+        "sha256": "463236e697985ff0c8bbea7b072c34bb9b77098dad54796ef78179cf7f4b6bf8",
         "matchesInstalled": true,
-        "scope": "SDK declaration is hermes-v260318099.0.2; selected runtime artifact is 260318099.0.4 and is independently pinned to its own tag/commit below."
+        "scope": "SDK declaration is hermes-v260318099.0.5; selected runtime artifact is 260318099.0.5 and is independently pinned to its own immutable tag/commit."
       },
       {
         "upstreamPath": "packages/gradle-plugin/react-native-gradle-plugin/src/main/kotlin/com/facebook/react/tasks/internal/PrepareGlogTask.kt",
-        "source": "https://raw.githubusercontent.com/facebook/react-native/5c35c82cf7dd322bf94d47501508c3de975c077b/packages/gradle-plugin/react-native-gradle-plugin/src/main/kotlin/com/facebook/react/tasks/internal/PrepareGlogTask.kt",
+        "source": "https://raw.githubusercontent.com/facebook/react-native/c30b7f86850d47422637a64c70508e7411dbd8ea/packages/gradle-plugin/react-native-gradle-plugin/src/main/kotlin/com/facebook/react/tasks/internal/PrepareGlogTask.kt",
         "sha256": "49833b5f17f6f13559df39622a685c7e8a84643ef3382dd1313e0f8f5d9b5a3d",
         "matchesInstalled": true
       }
     ],
     "selectedHermesSource": {
       "repo": "facebook/hermes",
-      "tag": "hermes-v260318099.0.4",
-      "resolvedCommit": "d412d3bd851278712c20cca25d094e32641a0465",
+      "tag": "hermes-v260318099.0.5",
+      "resolvedCommit": "9a115f15785851f4ff2747ebb090ddd066fc8ad2",
       "tagObjectChain": [
         {
           "type": "commit",
-          "sha": "d412d3bd851278712c20cca25d094e32641a0465"
+          "sha": "9a115f15785851f4ff2747ebb090ddd066fc8ad2"
         }
       ],
-      "source": "https://api.github.com/repos/facebook/hermes/git/ref/tags/hermes-v260318099.0.4"
+      "source": "https://api.github.com/repos/facebook/hermes/git/ref/tags/hermes-v260318099.0.5",
+      "selectedArtifactVersion": "260318099.0.5"
     },
     "generationEvidence": {
       "glog": {
@@ -7316,13 +7341,13 @@
         "libraryName": "FBReactNativeSpec",
         "platform": "android",
         "codegenPackage": "@react-native/codegen",
-        "codegenVersion": "0.88.0",
-        "publishedIntegrity": "sha512-SAGg+XfzsrPiYTscbKa9bo2/H2ei2TjyxW8RTMq2Ps661kRK3AnmpMGVfrEFshEMr3FGEbuQIvj86X98kaXlRA==",
+        "codegenVersion": "0.88.1",
+        "publishedIntegrity": "sha512-URPgPhnsxqeQSLyTRVzhZZ8iNXtZdR1Jop6lqaQacymvl3byghXisNIRR1YyG6PbXUfzPan5Jmz/kPhUUsZ2Yw==",
         "compiledGeneratorSha256": "5f822bebec6d3a18ad58bf2445ea34752268f76eb7f3aa608e7c9b8b03632d11",
         "compiledCombinerSha256": "5fb1f5620b52a10530ecc6a336a8c3fe0db994b666401d17775cc1c3c466e4da",
         "schemaSha256": "b8e6e5421c005337e2915a7bc4de1d2826d1e3a87df8b3357acc420a776059ac",
         "headerSha256": "65fe23f3964d93d815bd35d32c82c1b5c6afb5ad0253dbba2a4e1ff0ba7c41cd",
-        "immutableSchemaSourceCommit": "5c35c82cf7dd322bf94d47501508c3de975c077b",
+        "immutableSchemaSourceCommit": "c30b7f86850d47422637a64c70508e7411dbd8ea",
         "immutableSchemaSourceCount": 80,
         "immutableSchemaSourceSha256": {
           "src/private/animated/NativeAnimatedHelper.js": "e431a4b40387635d2c844a435c039f9567613fd97d3397db1944f591ba3aebc9",
@@ -7409,13 +7434,6 @@
         "scope": "Published installed generator bytes and 80 immutable SDK input files reproduce exact selected AAR header; compiled generator package itself was not rebuilt."
       }
     },
-    "productionCoverage": {
-      "abi": "arm64-v8a",
-      "buildType": "RelWithDebInfo",
-      "ordinaryObjectRecords": 274,
-      "precompiledHeaderRecords": 3,
-      "scope": "All six selected production CMake target dependency records, including PCH transitive closures; normal preBuild guards executed. Records remained unchanged after the preliminary normal app assemble."
-    },
     "newOwnerSources": [
       {
         "repo": "expo/kolibri",
@@ -7429,7 +7447,14 @@
         ],
         "source": "https://api.github.com/repos/expo/kolibri/git/ref/tags/v0.2.3"
       }
-    ]
+    ],
+    "productionCoverage": {
+      "abi": "arm64-v8a",
+      "buildType": "RelWithDebInfo",
+      "ordinaryObjectRecords": 329,
+      "precompiledHeaderRecords": 3,
+      "scope": "All six selected production CMake owner dependency records, including source-built Expo Core and JSI and PCH transitive closures; normal preBuild guards executed."
+    }
   },
   "prebuiltBindings": [
     {
@@ -7495,7 +7520,7 @@
       "originals": [
         {
           "location": "main-javascript",
-          "file": "js-react-native-0.88.0-LICENSE.txt",
+          "file": "js-react-native-0.88.1-LICENSE.txt",
           "sourcePath": "LICENSE",
           "bytes": 1088,
           "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",

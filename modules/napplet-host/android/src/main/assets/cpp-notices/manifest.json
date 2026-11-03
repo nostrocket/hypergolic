@@ -1126,7 +1126,9 @@
     "libreanimated.so",
     "libworklets.so",
     "libexpo-modules-worklets.so",
-    "libexpo-modules-v2.so"
+    "libexpo-modules-v2.so",
+    "libexpo-modules-core.so",
+    "libexpo-modules-jsi.so"
   ],
   "rootNoticeBindings": [
     {
@@ -1155,9 +1157,9 @@
     },
     {
       "component": "react-native",
-      "version": "0.88.0",
+      "version": "0.88.1",
       "files": [
-        "js-react-native-0.88.0-LICENSE.txt"
+        "js-react-native-0.88.1-LICENSE.txt"
       ],
       "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
     },
@@ -1190,7 +1192,7 @@
     "NDK host profile changes require review. Other ABIs and native/prefab/header third-party material remain open.",
     "Upstream credits are supplemental attribution at the recorded base revision; downstream contributor completeness is not asserted.",
     "The additional 114 system/Clang compiler headers and complete original aggregates match bounded official Google release ZIP entry captures. ZIP CRC/size/ETag and installed SHA comparisons do not verify the whole 836151734-byte archive cryptographic digest.",
-    "The SDK58 ARM64 review observes 1,021 compiled NDK headers including PCH dependencies; the guarded union retains one previously reviewed unused stack header, totaling 1,022. Local C++ outputs are distinct from the packaged upstream Expo core/JSI prebuilts; the source guard does not attest final APK contents or prebuilt binary source completeness."
+    "The React Native 0.88.1 ARM64 review observes 1,021 compiled NDK headers including PCH dependencies; the guarded union retains one previously reviewed unused stack header, totaling 1,022. Expo Core and JSI are locally source-built under the unchanged exact-version guard; the source guard does not attest final APK contents or complete static/transitive attribution."
   ],
   "aggregateOriginals": [
     {

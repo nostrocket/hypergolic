@@ -9,7 +9,7 @@ changes in app configuration, config plugins and modules.
 | Component | Repository pin or requirement |
 | --- | --- |
 | Node / pnpm | 24.20.0 / 10.34.5 |
-| Expo / React Native / React | 58.0.19 / 0.88.0 / 19.3.0 |
+| Expo / React Native / React | 58.0.19 / 0.88.1 / 19.3.0 |
 | Java | Temurin 17.0.20.1+1; CI notation `17.0.20+101` |
 | Android SDK / Build Tools | Compile API 37 with 37.0.0, target API 36 |
 | Gradle / Android Gradle Plugin | 9.4.1 / 9.2.1 |
