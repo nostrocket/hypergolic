@@ -74,6 +74,16 @@ async function openPublished(page: Page, mode: Mode = 'normal', extraQuery = '')
   await page.goto(`/assets/runtime/index.html?sessionId=${generation}&source=published${extraQuery}`);
 }
 
+// Navigation can finish before verified artifact bytes mount the guest.
+async function publishedGuest(page: Page) {
+  await expect(page.frameLocator('#napplet').getByTestId('lab')).toHaveAttribute('data-ready', 'true');
+  const frameElement = await page.locator('#napplet').elementHandle();
+  const guest = await frameElement?.contentFrame();
+  if (!guest) throw new Error('Missing published napplet frame');
+  await guest.evaluate(async () => { await (window as any).napplet.shell.ready(); });
+  return guest;
+}
+
 // Calculated in Node to keep browser fixture setup simple and deterministic.
 const awaitHashVersionPlaceholder = digest(`${'f'.repeat(64)} /index.html\n`);
 
@@ -114,8 +124,7 @@ test('published napplet streams verified bytes, gets theme only, and runs in an 
     sandbox: frame.getAttribute('sandbox'), src: frame.getAttribute('src'),
   }));
   expect(result).toEqual({ sandbox: 'allow-scripts', src: null });
-  const guest = page.frames().find(frame => frame.parentFrame() === page.mainFrame());
-  if (!guest) throw new Error('Missing published napplet frame');
+  const guest = await publishedGuest(page);
   const domains = await guest.evaluate(() => ({
     theme: (window as any).napplet.shell.supports('theme'),
     relay: (window as any).napplet.shell.supports('relay'),
@@ -135,8 +144,7 @@ test('published napplet streams verified bytes, gets theme only, and runs in an 
 test('published runtime exposes only the bounded native-declared domains', async ({ page }) => {
   await openPublished(page, 'relay-domain');
   await expect(page.locator('#napplet')).toHaveCount(1);
-  const guest = page.frames().find(frame => frame.parentFrame() === page.mainFrame());
-  if (!guest) throw new Error('Missing published napplet frame');
+  const guest = await publishedGuest(page);
   await expect.poll(() => guest.evaluate(() => (window as any).napplet.shell.supports('relay'))).toBe(true);
   expect(await guest.evaluate(() => (window as any).napplet.shell.supports('storage'))).toBe(false);
 });
@@ -155,7 +163,7 @@ for (const mode of ['bad-hash', 'malformed-base64', 'replayed-sequence', 'unknow
 test('trusted media prelude preserves the leading CSP in a valid attributed uppercase published head',async({page})=>{
   await openPublished(page,'attributed-head');
   await expect(page.frameLocator('#napplet').getByTestId('lab')).toHaveAttribute('data-ready','true');
-  const guest=page.frames().find(frame=>frame.parentFrame()===page.mainFrame())!;
+  const guest = await publishedGuest(page);
   expect(await guest.evaluate(()=>document.head.firstElementChild?.getAttribute('http-equiv'))).toBe('Content-Security-Policy');
 });
 
@@ -163,7 +171,7 @@ for (const mode of ['upload-domain', 'all-domains'] as const) {
   test(`published ${mode} preserves native-declared access through artifact verification`, async ({page}) => {
     await openPublished(page, mode);
     await expect.poll(() => page.evaluate(() => (window as any).__publishedTest.diagnostics)).toEqual([{type: 'ready', sessionId: generation}]);
-    const guest = page.frames().find(frame => frame.parentFrame() === page.mainFrame())!;
+    const guest = await publishedGuest(page);
     await expect.poll(() => guest.evaluate(() => (window as any).napplet.shell.supports('upload'))).toBe(true);
     expect(await guest.evaluate(() => (window as any).napplet.shell.supports('resource'))).toBe(mode === 'all-domains');
     expect(await guest.evaluate(() => (window as any).napplet.shell.supports('link'))).toBe(mode === 'all-domains');
@@ -175,7 +183,7 @@ for (const mode of ['upload-domain', 'all-domains'] as const) {
 
 test('verified-byte published runtime exposes Outbox only from native grants and carries real SDK read/publication rejection', async ({page}) => {
   await openPublished(page, 'outbox-domain');
-  const guest = page.frames().find(frame => frame.parentFrame() === page.mainFrame())!;
+  const guest = await publishedGuest(page);
   await expect.poll(() => guest.evaluate(() => (window as any).napplet.shell.supports('outbox'))).toBe(true);
   expect(await guest.evaluate(() => (window as any).napplet.outbox.query({kinds: [1], limit: 0}))).toMatchObject({type: 'outbox.query.result', events: []});
   expect(await guest.evaluate(() => (window as any).napplet.outbox.publish({kind: 1, created_at: 1_800_000_000, tags: [], content: 'published admission fixture'}, {toOutbox: false, relays: ['wss://relay.example.org']}))).toMatchObject({type: 'outbox.publish.result', ok: false, error: 'user rejected'});
@@ -191,7 +199,7 @@ test('URL parameters cannot grant published Outbox or bypass the exact native ar
 });
 test('an Outbox-only native grant neither exposes usable Outbox nor acquires relay authority', async ({page}) => {
   await openPublished(page, 'outbox-only'); await expect(page.locator('#napplet')).toHaveCount(1);
-  const guest = page.frames().find(frame => frame.parentFrame() === page.mainFrame())!;
+  const guest = await publishedGuest(page);
   await expect.poll(() => guest.evaluate(() => (window as any).napplet.shell.supports('outbox'))).toBe(false);
   expect(await guest.evaluate(() => (window as any).napplet.shell.supports('relay'))).toBe(false);
   await guest.evaluate(() => {parent.postMessage({type: 'outbox.query', id: 'missing-relay', filters: [{kinds: [1], limit: 0}]}, '*');});
