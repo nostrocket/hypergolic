@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZV8AAAAASUVORK5CYII=';
+const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=';
 // Native-port double: genuine packaged SDK, Kehto, private adapter and DOM, without native DNS/TLS proof.
 async function open(page: import('@playwright/test').Page, mode = 'image') {
   let payload = png;

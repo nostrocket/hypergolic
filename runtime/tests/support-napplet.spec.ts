@@ -7,8 +7,7 @@ test('bundled Support napplet reads live report, filters, expands and has no fil
     (window as any).HypergolicHost = {postMessage: () => undefined};
   });
   await page.goto('/assets/runtime/index.html?sessionId=support-test&fixture=nap-support');
-  const frame = page.frames().find(value => value.parentFrame());
-  if (!frame) throw new Error('Missing support frame');
+  const frame = page.frameLocator('#napplet');
   await expect(frame.locator('#host')).toContainText('Hypergolic');
   await expect(frame.locator('#naps > li')).toHaveCount(35);
   await expect(frame.locator('li[data-domain="fs"] .support')).toHaveText('✕Unavailable');
@@ -24,13 +23,13 @@ test('bundled Support napplet reads live report, filters, expands and has no fil
   await frame.locator('summary').click();
   await expect(frame.locator('details')).toHaveAttribute('open', '');
   await expect(frame.locator('.detail')).toContainText('b640cf337c0481f0f9a0216c00843f797a5c6df6');
-  await page.screenshot({path: `/tmp/hg-nap-availability-fix/fs-${testInfo.project.name}.png`});
+  await page.screenshot({path: testInfo.outputPath('fs.png')});
   await frame.getByLabel('Find a NAP').fill('');
   await frame.getByRole('button', {name: 'Available', exact: true}).click();
   await expect(frame.locator('li[data-domain="fs"]')).toHaveCount(0);
   await frame.getByRole('button', {name: 'All', exact: true}).click();
-  await page.screenshot({path: `/tmp/hg-nap-availability-fix/catalogue-${testInfo.project.name}.png`});
-  const result = await frame.evaluate(async () => {
+  await page.screenshot({path: testInfo.outputPath('catalogue.png')});
+  const result = await frame.locator('body').evaluate(async () => {
     const target = window as any;
     await target.napplet.shell.ready();
     return {fs: target.napplet.shell.supports('fs'), media: target.napplet.shell.supports('media'),
