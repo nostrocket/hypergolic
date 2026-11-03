@@ -22,6 +22,12 @@ those checks with a filename search or edit a manifest merely to make a changed
 dependency pass. A package's declared license does not enumerate every component
 inside its prebuilt binaries.
 
+For [Android NDK r27b](https://github.com/android/ndk/releases/tag/r27b)
+(`27.1.12297006`), the official `darwin-x86_64` and `linux-x86_64` archives
+contain identical bytes for all seven reviewed inputs and 1,009 compiled headers.
+The C++ guard maps the host directory and verifies those files against the same
+SHA-256 hashes. A different NDK revision or host layout requires a new review.
+
 ## Runtime attribution
 
 The trusted host includes Kehto ACL, firewall, runtime, services and shell,

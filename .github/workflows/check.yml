@@ -101,6 +101,8 @@ jobs:
       - name: Build unsigned native runtime proof
         working-directory: android
         run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
+      - name: Test the NDK notice verifier
+        run: HYPERGOLIC_NOTICE_NDK="$ANDROID_HOME/ndk/27.1.12297006" node --test tests/native/codecs/cpp-notices.cjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: hypergolic-unsigned-runtime-proof

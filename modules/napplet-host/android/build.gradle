@@ -103,13 +103,17 @@ tasks.named('preBuild').configure {
       commandLine 'node', file('CompilerDependencyNotices.cjs').absolutePath,
         file('src/main/assets/compiler-notices').absolutePath, compilerNoticeInventory.get().asFile.absolutePath
     }.result.get()
-    providers.exec {
+    def cppCheck = providers.exec {
       workingDir project.projectDir
       commandLine 'node', file('CppDependencyNotices.cjs').absolutePath,
         file('src/main/assets/cpp-notices').absolutePath,
         rootProject.findProject(':app').android.ndkDirectory.absolutePath,
         file('src/main/assets/notices').absolutePath
-    }.result.get()
+      ignoreExitValue = true
+    }
+    if (cppCheck.result.get().exitValue != 0) {
+      throw new GradleException("Android C++ notice verification failed: ${cppCheck.standardError.asText.get().trim().take(2048)}")
+    }
     for (name in ['index.html', 'host.js']) {
       if (!file("src/main/assets/runtime/$name").isFile()) {
         throw new GradleException("Missing trusted runtime asset $name. Run pnpm run runtime:build first.")

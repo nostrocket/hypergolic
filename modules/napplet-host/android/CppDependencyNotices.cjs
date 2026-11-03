@@ -5,10 +5,35 @@ const path = require('node:path');
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 function safeRelative(name) {
   if (typeof name !== 'string' || !name || path.isAbsolute(name) ||
-      name.includes('\\') || name.split('/').some(part => part === '..' || !part)) {
+      name.includes('\\') || name.split('/').some(part => part === '.' || part === '..' || !part)) {
     throw new Error('Unsafe Android C++ notice input');
   }
   return name;
+}
+// The reviewed Linux and Darwin r27b archives share every pinned input.
+function ndkReader(ndkDirectory, profile) {
+  const reviewedHost = 'darwin-x86_64';
+  if (profile.host !== reviewedHost) throw new Error('Android C++ reviewed NDK host binding changed');
+  const prebuilt = 'toolchains/llvm/prebuilt/';
+  const hosts = fs.readdirSync(path.join(ndkDirectory, prebuilt), { withFileTypes: true })
+    .filter(entry => entry.isDirectory() || entry.isSymbolicLink());
+  if (hosts.length !== 1 || !hosts[0].isDirectory() || ![reviewedHost, 'linux-x86_64'].includes(hosts[0].name)) {
+    throw new Error('Android C++ NDK requires exactly one reviewed prebuilt host: darwin-x86_64 or linux-x86_64');
+  }
+  const reviewedBase = prebuilt + reviewedHost + '/';
+  const actualBase = prebuilt + hosts[0].name + '/';
+  return name => {
+    safeRelative(name);
+    if (name.startsWith(prebuilt) && !name.startsWith(reviewedBase)) {
+      throw new Error('Android C++ reviewed NDK input host binding changed');
+    }
+    const actual = name.startsWith(reviewedBase) ? actualBase + name.slice(reviewedBase.length) : name;
+    try {
+      return fs.readFileSync(path.join(ndkDirectory, actual));
+    } catch (error) {
+      throw new Error(`Android C++ reviewed NDK input unavailable: ${actual} (${error.code ?? 'read failed'})`);
+    }
+  };
 }
 function verify(directory, ndkDirectory, rootNoticeDirectory) {
   const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'manifest.json'), 'utf8'));
@@ -34,14 +59,14 @@ function verify(directory, ndkDirectory, rootNoticeDirectory) {
   if (!properties.split(/\r?\n/).some(line => line.trim() === `Pkg.Revision = ${profile.version}`)) {
     throw new Error('Android C++ NDK version changed; refresh the notice review');
   }
+  const readNdk = ndkReader(ndkDirectory, profile);
   for (const [name, expected] of Object.entries({ ...profile.inputs, ...profile.compilerHeaders })) {
-    safeRelative(name);
-    if (sha256(fs.readFileSync(path.join(ndkDirectory, name))) !== expected) {
+    if (sha256(readNdk(name)) !== expected) {
       throw new Error(`Android C++ reviewed NDK input changed: ${name}`);
     }
   }
-  verifyAggregateOriginals(manifest, directory, ndkDirectory, names);
-  const aggregate = fs.readFileSync(path.join(ndkDirectory, 'NOTICE.toolchain'));
+  verifyAggregateOriginals(manifest, directory, names, readNdk);
+  const aggregate = readNdk('NOTICE.toolchain');
   if (sha256(aggregate) !== profile.aggregateSha256) throw new Error('Android C++ aggregate notice changed');
   for (const binding of manifest.noticeBindings) {
     if (!names.includes(binding.file) || !names.includes(binding.creditsFile) ||
@@ -62,7 +87,7 @@ function verify(directory, ndkDirectory, rootNoticeDirectory) {
     }
   }
 }
-function verifyAggregateOriginals(manifest, directory, ndkDirectory, names) {
+function verifyAggregateOriginals(manifest, directory, names, readNdk) {
   const profile = manifest.ndkProfile;
   const base = `toolchains/llvm/prebuilt/${profile.host}`;
   const required = ['NOTICE.toolchain', `${base}/sysroot/NOTICE`].sort();
@@ -73,7 +98,7 @@ function verifyAggregateOriginals(manifest, directory, ndkDirectory, names) {
   for (const binding of manifest.aggregateOriginals) {
     safeRelative(binding.source);
     if (!names.includes(binding.file) || profile.inputs[binding.source] !== binding.sourceSha256 ||
-        !fs.readFileSync(path.join(ndkDirectory, binding.source))
+        !readNdk(binding.source)
           .equals(fs.readFileSync(path.join(directory, binding.file)))) {
       throw new Error('Android NDK complete aggregate original binding changed');
     }
@@ -87,7 +112,7 @@ function verifyAggregateOriginals(manifest, directory, ndkDirectory, names) {
       embedded.aggregateByteStart < 0 || embedded.aggregateByteStart >= embedded.aggregateByteEndExclusive ||
       embedded.aggregateByteEndExclusive > aggregateBytes.length ||
       !aggregateBytes.subarray(embedded.aggregateByteStart, embedded.aggregateByteEndExclusive)
-        .equals(fs.readFileSync(path.join(ndkDirectory, embedded.source)))) {
+        .equals(readNdk(embedded.source))) {
     throw new Error('Android NDK embedded toolchain original binding changed');
   }
   const headers = Object.keys(profile.compilerHeaders);
@@ -106,5 +131,11 @@ function verifyAggregateOriginals(manifest, directory, ndkDirectory, names) {
 module.exports = { verify };
 if (require.main === module) {
   if (process.argv.length !== 5) throw new Error('Expected C++ notice, NDK and package notice directories');
-  verify(...process.argv.slice(2));
+  try { verify(...process.argv.slice(2)); }
+  catch (error) {
+    let message = String(error.message ?? 'verification failed');
+    for (const directory of process.argv.slice(2)) message = message.replaceAll(directory, '<input-directory>');
+    console.error(`Android C++ notice guard failed: ${message.slice(0, 1024)}`);
+    process.exitCode = 1;
+  }
 }
