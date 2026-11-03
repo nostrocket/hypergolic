@@ -11,7 +11,7 @@ changes in app configuration, config plugins and modules.
 | Node / pnpm | 24.20.0 / 10.34.5 |
 | Expo / React Native / React | 57.0.20 / 0.86.3 / 19.2.3 |
 | Java | Temurin 17.0.20.1+1; CI notation `17.0.20+101` |
-| Android SDK / Build Tools | API 36 / 36.0.0 |
+| Android SDK / Build Tools | API 36 / 36.0.0 (app) and 35.0.0 (Gesture Handler) |
 | Android NDK / CMake | 27.1.12297006 / 3.22.1 |
 | iOS | Mac with full Xcode and CocoaPods; deployment target iOS 18.4 |
 
@@ -180,6 +180,5 @@ runtime plus all seven independently locked labs. Browser and conformance covera
 vary by lab; see their manifests.
 
 The iOS compile selects the `xcode-27` preview runner and verifies Xcode 27.1 and
-SDK 27.1 before building. This hosted configuration has not yet run for this
-repository. Keep the local iPhoneOS compile and final signed-device acceptance as
-separate gates; neither an iOS export nor a hosted compile replaces them.
+SDK 27.1 before compiling the unsigned iPhoneOS Release build. Final iOS
+acceptance also requires the signed-device journeys in the [test plan](testing.md).
