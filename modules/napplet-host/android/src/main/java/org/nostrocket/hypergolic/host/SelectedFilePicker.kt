@@ -109,7 +109,8 @@ internal object SelectedFilePicker {
         if (power == null || !power.isInteractive) {cancel(); return@postDelayed}
         if (Build.VERSION.SDK_INT >= 32) {
           val manager = entry.activity.getSystemService(ActivityManager::class.java)
-          val task = manager?.appTasks?.map {it.taskInfo}?.singleOrNull {it.taskId == entry.activity.taskId}
+          val task = manager?.appTasks?.map { it.taskInfo }?.requireNoNulls()
+            ?.singleOrNull { it.taskId == entry.activity.taskId }
           if (task == null || !task.isVisible) {cancel(); return@postDelayed}
         }
         watchTask(entry)

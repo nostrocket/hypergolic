@@ -24,7 +24,9 @@ inside its prebuilt binaries.
 
 For [Android NDK r27b](https://github.com/android/ndk/releases/tag/r27b)
 (`27.1.12297006`), the official `darwin-x86_64` and `linux-x86_64` archives
-contain identical bytes for all seven reviewed inputs and 1,021 compiled headers.
+contain identical bytes for all seven reviewed inputs and 1,022 pinned headers.
+The current SDK58 ARM64 compile uses 1,021 of these, including PCH dependencies;
+the guard also retains the previously reviewed `stack` header.
 These include the system and Clang headers used by the arm64 signer’s C/JNI build.
 CI reads the NDK selected by that build from its CMake cache. The notice guard
 checks both host layouts against the same SHA-256 hashes. A different NDK

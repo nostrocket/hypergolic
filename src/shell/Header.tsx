@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, type ViewInstance } from 'react-native';
 import { ShellPressable as Pressable } from './ShellPressable';
 import { Image, type ImageProps } from 'expo-image';
 import { useState, type Ref } from 'react';
@@ -8,7 +8,7 @@ import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 export interface ShellIdentity { npub: string; avatar?: ImageProps['source']; avatarKey?: string }
 interface Props {
   title: string; identity?: ShellIdentity; compact?: boolean; disabled?: boolean;
-  onSettings(): void; onOverview?(): void; onMenu?(): void; menuAnchor?: Ref<View>;
+  onSettings(): void; onOverview?(): void; onMenu?(): void; menuAnchor?: Ref<ViewInstance>;
 }
 
 function Avatar({ identity }: { identity: ShellIdentity }) {

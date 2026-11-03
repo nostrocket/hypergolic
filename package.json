@@ -10,7 +10,7 @@
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
-    "prebuild:android": "pnpm run runtime:build && expo prebuild --platform android --no-install",
+    "prebuild:android": "pnpm run runtime:build && expo prebuild --platform android --no-install --template ./node_modules/expo/template.tgz",
     "export:android": "pnpm run runtime:build && expo export --platform android",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.tests.json",
     "doctor:expo": "expo-doctor",
@@ -25,7 +25,7 @@
     "runtime:test": "pnpm --dir runtime verify",
     "test:shell": "node --experimental-strip-types --test src/shell/*.test.ts",
     "ios": "expo run:ios",
-    "prebuild:ios": "pnpm run runtime:build && expo prebuild --platform ios --no-install",
+    "prebuild:ios": "pnpm run runtime:build && expo prebuild --platform ios --no-install --template ./node_modules/expo/template.tgz",
     "export:ios": "pnpm run runtime:build && expo export --platform ios",
     "test:quality": "node --test tests/quality/*.test.mjs",
     "test:security": "node --experimental-strip-types --test tests/security/*.test.ts && node --test tests/preflight/bootstrap.test.mjs",
@@ -54,29 +54,30 @@
     "test:signer:native": "python3 tests/native/signer-core/run.py"
   },
   "dependencies": {
+    "@expo/dom-webview": "58.0.2",
     "applesauce-core": "6.2.0",
     "applesauce-relay": "6.2.1",
-    "expo": "57.0.20",
-    "expo-build-properties": "57.0.22",
-    "expo-crypto": "57.0.2",
-    "expo-font": "57.0.4",
-    "expo-image": "57.0.4",
-    "expo-secure-store": "57.0.3",
-    "expo-sqlite": "57.0.2",
-    "expo-system-ui": "57.0.4",
+    "expo": "58.0.19",
+    "expo-build-properties": "58.0.11",
+    "expo-crypto": "58.0.7",
+    "expo-font": "58.0.10",
+    "expo-image": "58.0.17",
+    "expo-secure-store": "58.0.2",
+    "expo-sqlite": "58.0.14",
+    "expo-system-ui": "58.0.6",
     "nostr-tools": "2.24.0",
-    "react": "19.2.3",
-    "react-native": "0.86.3",
-    "react-native-gesture-handler": "2.32.0",
-    "react-native-reanimated": "4.5.1",
-    "react-native-safe-area-context": "5.7.0",
-    "react-native-worklets": "0.10.1",
+    "react": "19.3.0",
+    "react-native": "0.88.0",
+    "react-native-gesture-handler": "3.3.0",
+    "react-native-reanimated": "4.7.1",
+    "react-native-safe-area-context": "5.10.1",
+    "react-native-worklets": "0.13.0",
     "rxjs": "7.8.2"
   },
   "devDependencies": {
     "@opengsd/gsd-core": "1.13.0",
     "@types/node": "26.5.0",
-    "@types/react": "19.2.4",
+    "@types/react": "19.3.0",
     "expo-doctor": "1.20.4",
     "react-doctor": "0.9.13",
     "typescript": "6.0.3",
@@ -95,28 +96,27 @@
       "@modelcontextprotocol/sdk@1.30.0": "1.32.0",
       "hono@4": "4.13.11",
       "zod@4": "4.6.6",
-      "@expo/cli@57.0.22>zod": "4.6.6",
       "qs@6.16.0": "6.16.1",
       "body-parser@2.3.0": "2.4.0",
       "@hono/node-server@2.1.1": "2.1.3",
       "@opengsd/gsd-core@1.13.0>fallow": "3.34.0",
-      "@expo/config@57.0.9>deepmerge": "-",
       "@babel/core@7.29.7>semver": "7.8.5",
       "@babel/helper-compilation-targets@7.29.7>semver": "7.8.5",
       "@babel/helper-create-class-features-plugin@7.29.7>semver": "7.8.5",
       "@babel/helper-create-regexp-features-plugin@7.29.7>semver": "7.8.5",
       "@babel/plugin-transform-runtime@7.29.7>semver": "7.8.5",
       "babel-plugin-polyfill-corejs2@0.4.17>semver": "7.8.5",
+      "@expo/config@58.0.8>deepmerge": "-",
+      "@expo/cli@58.1.15>zod": "4.6.6",
       "node-forge": "1.4.2"
     },
     "patchedDependencies": {
       "braces@3.0.3": "tools/quality/patches/braces@3.0.3.patch",
-      "expo-secure-store@57.0.3": "patches/expo-secure-store@57.0.3.patch",
-      "expo-modules-jsi@57.0.8": "patches/expo-modules-jsi@57.0.8.patch",
-      "@expo/config@57.0.9": "patches/expo-config-safe-merge.patch"
+      "expo-secure-store@58.0.2": "patches/expo-secure-store@58.0.2.patch",
+      "@expo/config@58.0.8": "patches/expo-config-safe-merge-58.patch"
     },
     "packageExtensions": {
-      "@expo/config@57.0.9": {
+      "@expo/config@58.0.8": {
         "dependencies": {
           "@fastify/deepmerge": "3.2.4"
         }

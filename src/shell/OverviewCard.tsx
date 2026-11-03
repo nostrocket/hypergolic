@@ -1,8 +1,8 @@
 import { FrameCorners } from './FrameCorners';
 import { useCallback } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, type ViewInstance } from 'react-native';
 import { ShellPressable as Pressable } from './ShellPressable';
-import { Gesture, GestureDetector, type NativeGesture, type GestureTouchEvent, type GestureStateManager } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, type GestureTouchEvent, type LegacyGestureStateManager as GestureStateManager } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 import { clamp, shouldCloseCard, wantsCardClose, type Drag, type Rect, type CardMeasurement } from './motion';
@@ -19,12 +19,12 @@ interface Props {
   pending: boolean;
   swipeId: SharedValue<string | null>;
   swipeY: SharedValue<number>;
-  scrollGesture: NativeGesture;
+  scrollGesture: ReturnType<typeof Gesture.Native>;
   onFocus: (id: string) => void;
   onClose: (id: string) => void;
   onDragEnd: (id: string, close: boolean) => void;
   onMeasure: (id: string, measurement: CardMeasurement) => void;
-  setRef: (id: string, view: View | null) => void;
+  setRef: (id: string, view: ViewInstance | null) => void;
 }
 
 export function OverviewCard({ session, rect, captionHeight, busy, selected, pending, swipeId, swipeY, scrollGesture, onFocus, onClose, onDragEnd, onMeasure, setRef }: Props) {

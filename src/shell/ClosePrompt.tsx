@@ -1,14 +1,14 @@
 import { TrustedBand } from './TrustedBand';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRef } from 'react';
-import { AccessibilityInfo, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Modal, ScrollView, StyleSheet, Text, View, type ViewInstance } from 'react-native';
 import { ShellPressable as Pressable } from './ShellPressable';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 
 interface Props { title: string | null; onKeepOpen: () => void; onClose: () => void; onDismiss: () => void }
 export function ClosePrompt({ title, onKeepOpen, onClose, onDismiss }: Props) {
   const { styles } = useShellStyles(createStyles);
-  const keep = useRef<View>(null);
+  const keep = useRef<ViewInstance>(null);
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={title !== null} transparent animationType="none" onRequestClose={onKeepOpen} onDismiss={onDismiss} onShow={() => {

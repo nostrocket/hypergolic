@@ -1,7 +1,7 @@
 import { TrustedBand } from './TrustedBand';
 import {OutboxReview} from './OutboxReview';
 import { useRef, useState } from 'react';
-import { AccessibilityInfo, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Modal, ScrollView, StyleSheet, Text, View, type ViewInstance } from 'react-native';
 import { ShellPressable as Pressable } from './ShellPressable';
 import { formatNpub } from '../security/public-identity.ts';
 import type { ApprovalItem } from '../security/approval-service.ts';
@@ -22,7 +22,7 @@ function requestedKind(kind: number): string { return kind === 1 ? 'Note' : `Eve
 
 function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismiss }: Omit<ApprovalSheetProps, 'item'> & { item: ApprovalItem }) {
   const { styles } = useShellStyles(createStyles);
-  const approve = useRef<View>(null);
+  const approve = useRef<ViewInstance>(null);
   const [details, setDetails] = useState(false);
   const insets = useSafeAreaInsets();
   const publisherNpub = formatNpub(item.origin.publisher);

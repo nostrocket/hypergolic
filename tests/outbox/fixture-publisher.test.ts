@@ -199,3 +199,18 @@ test('fixture Settings remount synchronizes current foreground state before prep
   assert.equal(service.getSnapshot().phase, 'failed');
   assert.equal(state.signUploads, 0); assert.equal(state.puts, 0);
 });
+
+
+for (const appState of [null, undefined, 'unrecognized-native-state']) {
+  test(`unknown RN state ${String(appState)} prevents fixture preparation until active`, async () => {
+    const { service, state } = setup();
+    updateFixturePublisherAppState(service, 'active');
+    updateFixturePublisherAppState(service, appState);
+    await service.prepare('feed-lab', server, relays);
+    assert.equal(service.getSnapshot().phase, 'failed');
+    assert.equal(state.signUploads, 0); assert.equal(state.puts, 0);
+    updateFixturePublisherAppState(service, 'active');
+    await service.prepare('feed-lab', server, relays);
+    assert.equal(service.getSnapshot().phase, 'upload-review');
+  });
+}

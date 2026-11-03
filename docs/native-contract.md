@@ -81,7 +81,7 @@ authorize native effects or establish authoritative saved data.
 
 | Component | Selection |
 | --- | --- |
-| Expo / React Native | 57.0.20 / 0.86.3 |
+| Expo / React Native | 58.0.19 / 0.88.0 |
 | AndroidX WebKit | 1.17.0, with runtime feature detection |
 | Kehto shell / runtime / services | 0.20.0 / 0.22.0 / 0.20.0 |
 | Kehto ACL / firewall | 0.18.0 / 0.5.0 |

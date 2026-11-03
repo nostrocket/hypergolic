@@ -1,23 +1,26 @@
 {
   "package": "expo-secure-store",
-  "version": "57.0.3",
-  "upstreamGitHead": "b76ecf192c5325793bcea31dd9bb8efd91f9ad7f",
+  "version": "58.0.2",
+  "upstreamGitHead": "1c3458414038427eb5f14b085477fac3dce0b69f",
   "original": {
-    "android/src/main/java/expo/modules/securestore/SecureStoreModule.kt": "72c670b538732977ef132759ce810c5719943ce6082195a58ad5a432d4ac1075",
-    "android/src/main/java/expo/modules/securestore/SecureStoreOptions.kt": "e41625fc30a92f5f36e0c5c8e2e10c0a81d710f59813f5482dbb64ba9a5a1fdf",
-    "ios/SecureStoreModule.swift": "971774ffbd6f3351c28bd7487184e74ae12edca1c20d9e52709d4b154746c741"
+    "android/src/main/java/expo/modules/securestore/SecureStoreModule.kt": "2c1f4172b3779de3e65052ecd0ce61ffef311565052a3fb5d0956c11f26f0deb",
+    "android/src/main/java/expo/modules/securestore/SecureStoreOptions.kt": "24d147420924f504f97aaf912cfca23a9f02aeeb2b5c5ff8b848a76693eb284c",
+    "ios/SecureStoreModule.swift": "5249d51f096a3d4ee3a536d855588c3bafde8e35408fb5d3c47c155faebe5dd7"
   },
   "patched": {
-    "android/src/main/java/expo/modules/securestore/SecureStoreModule.kt": "4d11c4f1f9ef89be3fb7a18a639a9287b3cb3f3ea98d7d116a864637f1298604",
-    "android/src/main/java/expo/modules/securestore/SecureStoreOptions.kt": "1ce4aff32e5ce0469b4c034d0320cfd3ba9398480c5da8ca8d1ed295befdb055",
-    "android/src/main/java/expo/modules/securestore/NappletConfigPolicy.java": "2f3954c7ad742855b2be5573e2578928dc179cb5193433f91850ab48cddaa429",
-    "ios/SecureStoreModule.swift": "6e4164d812a401640c00251cf6ef43fa5bcca51cda6d7c29bfad468493412628",
+    "android/src/main/java/expo/modules/securestore/SecureStoreModule.kt": "284044f69eb62f9d9af1a1280af63c2803050fc8bddc7c7dacb0b8651ae8b9d6",
+    "android/src/main/java/expo/modules/securestore/SecureStoreOptions.kt": "8715a6d879699f01ead8af615b0fa514561ef4dbe87243c18d35eccfabb66a84",
+    "android/src/main/java/expo/modules/securestore/NappletConfigPolicy.java": "e782a4b05b808f784ba89ca40e590318d4e010c240fd03008630fc311b15fadf",
+    "ios/SecureStoreModule.swift": "5ce220afeecac73ad24e0f8bf9c5156a08b067060f17c390b48d6a4bbd2d7180",
     "ios/NappletConfigPolicy.swift": "392b27f2840571804cca4d7c31959b8781e0524d1e658015d011279db7423c53"
   },
-  "patchSha256": "8a2e949f800a6e2608f147733f934c54d390e528ab813c1daf8eb7b3879fea63",
+  "patchSha256": "d82c16f5c16a19e5294400cdf1ae5b572506e22a449bf7eea00eb08a63eebb82",
   "dependencies": {
-    "ios/SecureStoreOptions.swift": "e129ad027fcdbdfdb3c5d0420a26a62def8da60e48801994c67a76da15865135",
+    "ios/SecureStoreOptions.swift": "de90c5464c3ff121f1e3f0e6f47e98075774c4b11b505543b2167ab9b8512d5c",
     "ios/SecureStoreAccessible.swift": "297a7c7b31c2d4273c406506e1c0be7dcd20ef8ecc2d64fdba9314c31046c0e8",
-    "android/src/main/java/expo/modules/securestore/encryptors/AESEncryptor.kt": "d3a86de25c64935e84b6999101556b0e9f8bc6c90ce7600c421125b3e18aa3f4"
-  }
+    "android/src/main/java/expo/modules/securestore/encryptors/AESEncryptor.kt": "40d0f6d800718537c85bda8be145ba02f7e4321d23bddad6417b901e13b94daa"
+  },
+  "upstreamGitHeadSource": "official npm provenance resolvedDependencies; attestation retrieved, signature not independently verified",
+  "upstreamPackageJsonSha256": "810fd562270182b7497ef1045a7a09a038861f7733e2967e165aa686bbad34e6",
+  "publishedIntegrity": "sha512-VupWWEuQF6IiQ06McSymtn7/tehs8ifThhFwAU4UK8poomZcaa2S0UVt/y7G2XozBdkI3xpiPSx+r0pS2zsuYQ=="
 }

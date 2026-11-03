@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { AccessibilityInfo, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, ScrollView, StyleSheet, Text, View, type ViewInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FrameCorners } from './FrameCorners';
 import { ShellPressable } from './ShellPressable';
@@ -14,7 +14,7 @@ interface Props {
 export function WorkspaceMenu({ title, disabled, onDismiss, onOverview, onSettings, onClose }: Props) {
   const { styles } = useShellStyles(createStyles);
   const insets = useSafeAreaInsets();
-  const done = useRef<View>(null);
+  const done = useRef<ViewInstance>(null);
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       done.current?.focus();

@@ -9,16 +9,16 @@ changes in app configuration, config plugins and modules.
 | Component | Repository pin or requirement |
 | --- | --- |
 | Node / pnpm | 24.20.0 / 10.34.5 |
-| Expo / React Native / React | 57.0.20 / 0.86.3 / 19.2.3 |
+| Expo / React Native / React | 58.0.19 / 0.88.0 / 19.3.0 |
 | Java | Temurin 17.0.20.1+1; CI notation `17.0.20+101` |
-| Android SDK / Build Tools | API 36 / 36.0.0 (app) and 35.0.0 (Gesture Handler) |
+| Android SDK / Build Tools | Compile API 37 with 37.0.0, target API 36 |
+| Gradle / Android Gradle Plugin | 9.4.1 / 9.2.1 |
 | Android NDK / CMake | 27.1.12297006 / 3.22.1 |
 | iOS | Mac with full Xcode and CocoaPods; deployment target iOS 18.4 |
 
 The manifests, lockfiles and config plugins own package and native dependency
-versions. Current native compilation uses Xcode 27.1; toolchain availability does
-not establish device compatibility. Local `.tools/` helpers are optional, ignored and not part of a fresh
-clone. Configure `JAVA_HOME`, `ANDROID_HOME` and `PATH` for your installed tools.
+versions. CI uses Xcode 27.1. Local `.tools/` helpers are optional and absent from
+a fresh clone. Configure `JAVA_HOME`, `ANDROID_HOME` and `PATH` for your installed tools.
 
 ## Install
 
@@ -137,7 +137,9 @@ results do not close full native device acceptance.
 
 ## Tester APK command
 
-On macOS or Linux, use an existing signing keystore outside this checkout:
+On macOS or Linux, install Android Build Tools 36.0.0 alongside 37.0.0. The
+tester command uses 36.0.0 for alignment, signing and verification. Supply an
+existing signing keystore outside this checkout:
 
 ```sh
 export HYPERGOLIC_KEYSTORE_PATH="/absolute/private/path/hypergolic-tester.jks"

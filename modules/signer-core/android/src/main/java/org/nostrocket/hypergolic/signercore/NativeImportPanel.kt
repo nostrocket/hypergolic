@@ -69,7 +69,7 @@ internal class NativeImportPanel {
         }
         dialog.setOnDismissListener(null)
         dialog.dismiss()
-        if (continuation.isActive) continuation.resume(key, onCancellation = { key?.close() }) else key?.close()
+        if (continuation.isActive) continuation.resume(key, onCancellation = { _, value, _ -> value?.close() }) else key?.close()
       }
       expire = Runnable { finish(null) }
       poll = Runnable {
@@ -94,7 +94,7 @@ internal class NativeImportPanel {
           try {
             val value = entry.text ?: throw IllegalArgumentException()
             chars = CharArray(value.length)
-            value.getChars(0, value.length, chars, 0)
+            for (index in chars.indices) chars[index] = value[index]
             scalar = try {
               NativeKeyEncoding.decode(chars)
             } catch (_: IllegalArgumentException) {

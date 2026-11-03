@@ -1,11 +1,13 @@
 # SecureStore configuration boundary
 
-The pinned `expo-secure-store@57.0.3` patch restricts its native data exports to
+The pinned `expo-secure-store@58.0.2` patch restricts its native data exports to
 `org.nostrocket.hypergolic.napplet-config.v1` and exact lowercase `scope.<64hex>` keys.
 Both synchronous get/set and asynchronous get/set/delete use the same native gate.
 Authentication, access groups, prompts and unsafe accessibility settings are denied.
 The accepted accessibility value is `WHEN_UNLOCKED_THIS_DEVICE_ONLY` (6). Android's
-upstream default prompt is one blank space; iOS accepts only an absent prompt.
+upstream default prompt is one blank space; iOS accepts only an absent prompt. Android requires the default confirmation option;
+false is rejected. Missing iOS accessibility is rejected, and updates retain the
+fixed device-only accessibility.
 
 Android reads only the current prefixed record and its modern unauthenticated AES
 alias. Record metadata must contain the exact service and actual Boolean values
@@ -24,8 +26,10 @@ not add ownership isolation to configuration calls: the existing trusted config
 broker still owns user/publisher/app/version scoping. Native identity access belongs
 to the signer/vault authority. No identity operation can use this configuration API.
 
-The source manifest pins the installed package's upstream Git head, original native
-source, unchanged policy dependencies, resulting patched files and patch bytes.
+The source manifest pins the installed package metadata, published archive integrity,
+source revision reported by npm provenance, original native source, policy dependencies,
+resulting patched files and patch bytes. The provenance statement was retrieved; its
+signature has not been independently verified.
 The patch is app-specific and must not be published as a general SecureStore fix.
 
 ```sh
@@ -46,7 +50,7 @@ bridge registration, OS encryption, hardware protection or device restart.
 The patch is registered in `pnpm.patchedDependencies`:
 
 ```json
-"expo-secure-store@57.0.3": "patches/expo-secure-store@57.0.3.patch"
+"expo-secure-store@58.0.2": "patches/expo-secure-store@58.0.2.patch"
 ```
 
 Preserve existing entries. Force the module to compile from patched source using
@@ -61,7 +65,7 @@ append both SecureStore patterns there as well because platform options replace
 the root list. Keep its existing `^expo-image$` entry. Android matches Gradle project names with a full regex;
 iOS matches the npm package or pod name. This is required even if a current local
 Android build already selects source. A precompiled AAR/XCFramework cannot include
-the new policy. The installed Expo autolinking 57.0.12 implements these selectors.
+the new policy. The installed Expo autolinking 58.0.15 implements these selectors.
 After coordinating active build jobs, regenerate the lock and install the patch:
 
 ```sh

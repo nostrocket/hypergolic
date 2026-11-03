@@ -1,9 +1,9 @@
 import { useShellStyles, type ShellPalette } from './theme';
 import { forwardRef, useState } from 'react';
-import { Pressable, StyleSheet, View, type PressableProps } from 'react-native';
+import { Pressable, StyleSheet, type PressableProps, type ViewInstance } from 'react-native';
 
 /** Shared native feedback also covers disabled controls and keyboard focus. */
-export const ShellPressable = forwardRef<View, PressableProps>(function ShellPressable({ style, disabled, accessibilityState, onFocus, onBlur, ...props }, ref) {
+export const ShellPressable = forwardRef<ViewInstance, PressableProps>(function ShellPressable({ style, disabled, accessibilityState, onFocus, onBlur, ...props }, ref) {
   const [focused, setFocused] = useState(false);
   const { styles } = useShellStyles(createStyles);
   return <Pressable {...props} ref={ref} disabled={disabled} accessibilityState={{ ...accessibilityState, disabled: disabled ?? accessibilityState?.disabled }}

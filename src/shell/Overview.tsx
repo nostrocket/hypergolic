@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef } from 'react';
-import { AccessibilityInfo, FlatList, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, FlatList, StyleSheet, Text, View, type TextInstance, type ViewInstance } from 'react-native';
 import { ShellPressable as Pressable } from './ShellPressable';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedScrollHandler, useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
@@ -27,7 +27,7 @@ interface Props {
   onDragEnd: (id: string, close: boolean) => void;
   onMeasure: (id: string, measurement: CardMeasurement) => void;
 }
-function focusView(view: View | Text | null | undefined) {
+function focusView(view: ViewInstance | TextInstance | null | undefined) {
   if (!view) return;
   view.focus();
   AccessibilityInfo.sendAccessibilityEvent(view, 'focus');
@@ -38,10 +38,10 @@ const sessionKey = (session: NappletDescriptor): string => session.id;
 export const Overview = forwardRef<OverviewHandle, Props>(function Overview({ sessions, geometry, size, visible, busy, focusedId, progress, scrollY, swipeId, swipeY, pending, onFocus, onClose, onOpen, onDragEnd, onMeasure }, ref) {
   const { styles } = useShellStyles(createStyles);
   const scroll = useRef<FlatList<NappletDescriptor>>(null);
-  const heading = useRef<Text>(null);
-  const cardRefs = useRef(new Map<string, View>());
+  const heading = useRef<TextInstance>(null);
+  const cardRefs = useRef(new Map<string, ViewInstance>());
   const scrollGesture = useMemo(() => Gesture.Native(), []);
-  const setCardRef = useCallback((id: string, view: View | null) => {
+  const setCardRef = useCallback((id: string, view: ViewInstance | null) => {
     if (view) cardRefs.current.set(id, view); else cardRefs.current.delete(id);
   }, []);
   useImperativeHandle(ref, () => ({
@@ -77,7 +77,7 @@ export const Overview = forwardRef<OverviewHandle, Props>(function Overview({ se
         ListHeaderComponent={sessions.length > 0 ? <View style={[styles.headingRow, { height: headerHeight }]}>
           <Text ref={heading} accessibilityRole="header" style={styles.heading}>Your napplets</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Open napplet" testID="overview-open" onPress={onOpen} style={styles.open}><Text style={styles.openText}>+ Open</Text></Pressable>
-        </View> : null}
+        </View> : undefined}
         ListEmptyComponent={<View style={[styles.empty, { paddingTop: Math.min(size.height * 0.42, 260) }]}><Text style={styles.emptyLabel}>Your space</Text>
           <Text accessibilityRole="header" style={styles.emptyTitle}>A place for{'\n'}your napplets.</Text>
           <Text style={styles.emptyDetail}>Open a Nostr app with its address. Your identity stays with Hypergolic.</Text>

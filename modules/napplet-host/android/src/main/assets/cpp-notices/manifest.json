@@ -1107,70 +1107,73 @@
       "toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/linux/openat2.h": "047165d4eaf160cc0ed9ac013f97c9f85fba15a0dc8dd5ddfa4f5c035d147288",
       "toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/linux/stat.h": "e9be8e5c21606640e2106ab264508b807d4db11296e5a7ff418dc59fff97d4e5",
       "toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/linux/uio.h": "c53cb9258ea6382b7c34e6bea8b0a1d69cbf85ff6143dd522b1799bfea2fa8bf",
-      "toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/fortify/fcntl.h": "2c4f5858d7dc0a21811b0f694371a66335bf6989130b8826a6359cd3d2168377"
+      "toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/fortify/fcntl.h": "2c4f5858d7dc0a21811b0f694371a66335bf6989130b8826a6359cd3d2168377",
+      "toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/c++/v1/future": "5c3252a6e9192d7f228468fbf5e702b45264985e4f19fadff265ed82fe6bc24e"
     },
     "aggregateSha256": "cbe3237be53c0a819f8df6aac5358fdee848eee3b6571b4e2ca20767ebd7465e",
     "headerReview": {
-      "libcxx": 895,
+      "libcxx": 896,
       "system": 104,
       "clang": 22,
-      "total": 1021
+      "total": 1022
     }
   },
   "reviewedLocalNativeLibraries": [
     "libappmodules.so",
+    "libreact_codegen_rngesturehandler_codegen.so",
     "libreact_codegen_safeareacontext.so",
-    "libexpo-modules-core.so",
     "libgesturehandler.so",
     "libreanimated.so",
-    "libworklets.so"
+    "libworklets.so",
+    "libexpo-modules-worklets.so",
+    "libexpo-modules-v2.so"
   ],
   "rootNoticeBindings": [
     {
       "component": "react-native-gesture-handler",
-      "version": "2.32.0",
+      "version": "3.3.0",
       "files": [
-        "js-react-native-gesture-handler-2.32.0-LICENSE.txt"
+        "js-react-native-gesture-handler-3.3.0-LICENSE.txt"
       ],
       "sha256": "f1ae22eddd3a96c3b7b8a494ef03749ae6a1e19574bacc9c195d83c916de09e2"
     },
     {
       "component": "react-native-reanimated",
-      "version": "4.5.1",
+      "version": "4.7.1",
       "files": [
-        "js-react-native-reanimated-4.5.1-LICENSE.txt"
+        "js-react-native-reanimated-4.7.1-LICENSE.txt"
       ],
       "sha256": "f1ae22eddd3a96c3b7b8a494ef03749ae6a1e19574bacc9c195d83c916de09e2"
     },
     {
       "component": "react-native-worklets",
-      "version": "0.10.1",
+      "version": "0.13.0",
       "files": [
-        "js-react-native-worklets-0.10.1-LICENSE.txt"
+        "js-react-native-worklets-0.13.0-LICENSE.txt"
       ],
       "sha256": "92c22d327a6644efda43527bfa6f136f4382359f40bc288eda0764f67be9c269"
     },
     {
       "component": "react-native",
-      "version": "0.86.3",
+      "version": "0.88.0",
       "files": [
-        "js-react-native-0.86.3-LICENSE.txt"
+        "js-react-native-0.88.0-LICENSE.txt"
       ],
       "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
     },
     {
       "component": "react-native-safe-area-context",
-      "version": "5.7.0",
+      "version": "5.10.1",
       "files": [
-        "js-react-native-safe-area-context-5.7.0-LICENSE.txt"
+        "js-react-native-safe-area-context-5.10.1-LICENSE.txt"
       ],
       "sha256": "f5c7a4d527258e11fdfe3d84eb73cd14fe6d64224ef051e59f6ee21fe378800c"
     },
     {
       "component": "expo-modules-core",
-      "version": "57.0.16",
+      "version": "58.0.26",
       "files": [
-        "js-expo-modules-core-57.0.16-LICENSE.txt"
+        "js-expo-modules-core-58.0.26-LICENSE.txt"
       ],
       "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4"
     }
@@ -1186,7 +1189,8 @@
     "Source/header hashes and owning commands are a dated review, not a complete original build attestation.",
     "NDK host profile changes require review. Other ABIs and native/prefab/header third-party material remain open.",
     "Upstream credits are supplemental attribution at the recorded base revision; downstream contributor completeness is not asserted.",
-    "The additional 114 system/Clang compiler headers and complete original aggregates match bounded official Google release ZIP entry captures. ZIP CRC/size/ETag and installed SHA comparisons do not verify the whole 836151734-byte archive cryptographic digest."
+    "The additional 114 system/Clang compiler headers and complete original aggregates match bounded official Google release ZIP entry captures. ZIP CRC/size/ETag and installed SHA comparisons do not verify the whole 836151734-byte archive cryptographic digest.",
+    "The SDK58 ARM64 review observes 1,021 compiled NDK headers including PCH dependencies; the guarded union retains one previously reviewed unused stack header, totaling 1,022. Local C++ outputs are distinct from the packaged upstream Expo core/JSI prebuilts; the source guard does not attest final APK contents or prebuilt binary source completeness."
   ],
   "aggregateOriginals": [
     {

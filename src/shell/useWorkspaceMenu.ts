@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { AccessibilityInfo, Keyboard, View } from 'react-native';
+import { AccessibilityInfo, Keyboard, type ViewInstance } from 'react-native';
 import type { NappletDescriptor } from './workspace';
 
 interface Availability {
@@ -11,7 +11,7 @@ interface Availability {
 /** Menu state belongs to the focused session and never survives a focus change. */
 export function useWorkspaceMenu(focused: NappletDescriptor | undefined, overview: boolean, availability: Availability) {
   const [id, setId] = useState<string | null>(null);
-  const anchor = useRef<View>(null);
+  const anchor = useRef<ViewInstance>(null);
   const session = !overview && focused?.id === id ? focused : undefined;
   const visible = session !== undefined;
   if (id !== null && !visible) setId(null);

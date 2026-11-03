@@ -199,3 +199,11 @@ test('local C++ package original hash remains enforced', () => fixture((director
   fs.appendFileSync(path.join(copy, manifest.rootNoticeBindings[0].files[0]), 'changed');
   assert.throws(() => verify(directory, ndk, copy), /local C\+\+ package original changed/);
 }));
+
+test('changed future header used by Worklets rejects', () => fixture((directory, temporary) => {
+  const copy = fixtureNdk(temporary);
+  const header = `toolchains/llvm/prebuilt/${manifest.ndkProfile.host}/sysroot/usr/include/c++/v1/future`;
+  assert.ok(manifest.ndkProfile.compilerHeaders[header], 'Reviewed future header must be pinned');
+  fs.appendFileSync(ndkInput(copy, header), 'changed');
+  assert.throws(() => verify(directory, copy, rootNotices), /reviewed NDK input changed/);
+}));

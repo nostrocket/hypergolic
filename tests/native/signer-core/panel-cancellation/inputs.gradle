@@ -1,0 +1,24 @@
+import groovy.json.JsonOutput
+
+// Read the actual production Kotlin task and release graph; request no compile task.
+gradle.projectsEvaluated {
+  def owner = gradle.rootProject.findProject(':hypergolic-signer-core')
+  if (owner == null) return // Included Gradle plugin builds do not own the signer.
+  owner.tasks.register('reportPanelProofInputs') {
+    doLast {
+      def task = owner.tasks.named('compileReleaseKotlin').get()
+      // This accessor is bound to the reviewed Kotlin 2.2.10 task implementation.
+      def compiler = task.property('defaultCompilerClasspath$kotlin_gradle_plugin_common')
+      def components = owner.configurations.getByName('releaseCompileClasspath').incoming.resolutionResult
+        .allComponents.collect { it.moduleVersion }.findAll {
+          it != null && it.group in ['org.jetbrains.kotlin', 'org.jetbrains.kotlinx']
+        }.collect { [group:it.group, name:it.name, version:it.version] }
+      def result = [compilerClasspath:compiler.files.collect { it.absolutePath }.sort(),
+        libraries:task.libraries.files.findAll {
+          it.name.startsWith('kotlin-stdlib-') || it.name.startsWith('kotlinx-coroutines-core-jvm-') ||
+          it.name.startsWith('annotations-')
+        }.collect { it.absolutePath }.sort(), releaseComponents:components]
+      println 'PANEL_PROOF_INPUTS=' + JsonOutput.toJson(result)
+    }
+  }
+}

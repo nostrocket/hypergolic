@@ -274,3 +274,21 @@ for (const action of ['close', 'revision', 'query-error', 'native-revoke', 'seco
     assert.equal(publication, 0); assert.equal(service.getSnapshot().pending, 0);
   });
 }
+
+
+for (const state of [null, undefined, 'unrecognized-native-state']) {
+  test(`unknown RN app state ${String(state)} revokes approved signing before late completion`, async () => {
+    const native = new Native(); native.issue('one'); const delayed = deferred<unknown>();
+    let publications = 0; let signal: AbortSignal | undefined;
+    const service = make(native, {
+      sign: async (_snapshot, execution) => { signal = execution.signal; return delayed.promise; },
+      publishEvent: async () => { publications++; return []; },
+    });
+    const pending = service.approve(current(service, 'one'));
+    updateApprovalAppState(service, state); assert.equal(signal!.aborted, true);
+    updateApprovalAppState(service, 'active'); service.resume();
+    delayed.resolve({}); await assert.rejects(pending);
+    assert.equal(publications, 0); assert.equal(native.cancelled, 1);
+    assert.deepEqual(native.responses, [null]);
+  });
+}

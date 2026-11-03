@@ -16,13 +16,13 @@ import tempfile
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 PACKAGE = ROOT / 'node_modules/expo-secure-store'
-PATCH = ROOT / 'patches/expo-secure-store@57.0.3.patch'
+PATCH = ROOT / 'patches/expo-secure-store@58.0.2.patch'
 manifest = json.loads((HERE / 'source-manifest.json').read_text())
 sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
 def run(command, **options):
     subprocess.run([str(arg) for arg in command], check=True, **options)
 metadata = json.loads((PACKAGE / 'package.json').read_text())
-if metadata['version'] != manifest['version'] or metadata['gitHead'] != manifest['upstreamGitHead']:
+if metadata['version'] != manifest['version'] or sha(PACKAGE / 'package.json') != manifest['upstreamPackageJsonSha256']:
     raise SystemExit('SecureStore package provenance differs from pin')
 if sha(PATCH) != manifest['patchSha256']:
     raise SystemExit('SecureStore patch differs from reviewed hash')

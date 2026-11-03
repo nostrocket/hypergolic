@@ -12,9 +12,8 @@ or suppressing a finding is not remediation.
 | Package | Change and boundary | Owning checks |
 | --- | --- | --- |
 | `braces@3.0.3` | [Depth guard](../tools/quality/patches/braces@3.0.3.patch) bounds parsing and AST traversal to 256 levels. Unusually deep patterns throw `RangeError`; callers must handle invalid patterns. The root and quality tool use the same patch. | `pnpm run test:quality` checks both installed consumers, hostile nesting and normal glob behavior. |
-| `@expo/config@57.0.9` | [Merge replacement](../patches/expo-config-safe-merge.patch) uses `@fastify/deepmerge@3.2.4` with enumerable symbols, removing `deepmerge`. It preserves tested arrays, undefined updates, plugin order and cloning; it drops prototype-related keys and materializes sparse holes as undefined. This is scoped compatibility, not equivalence for every input. | Installed-consumer cases in `pnpm run test:quality`; both native prebuilds. |
-| `expo-modules-jsi@57.0.8` | [Swift interface patch](../patches/expo-modules-jsi@57.0.8.patch) extends the existing sanitizer to remove the internal `__ObjC::` extension spelling emitted with Swift 6.4. | Sanitizer regressions in `pnpm run test:quality`; ordinary iPhoneOS compilation. |
-| `expo-secure-store@57.0.3` | [Configuration-only native gate](../patches/expo-secure-store@57.0.3.patch) restricts every data export to the exact napplet-config service, keys and options. Identity records and legacy addresses cannot be read, written, deleted or migrated through that bridge. Both platforms must build this module from source. | [SecureStore boundary](../tests/native/securestore-config/README.md); native bridge tests on both platforms. |
+| `@expo/config@58.0.8` | [Merge replacement](../patches/expo-config-safe-merge-58.patch) uses `@fastify/deepmerge@3.2.4` with enumerable symbols, removing `deepmerge`. It preserves tested arrays, SDK 58 updates-array deduplication, undefined updates, plugin order and cloning; it drops prototype-related keys and materializes sparse holes as undefined. This is scoped compatibility, not equivalence for every input. | Installed-consumer cases in `pnpm run test:quality`; both native prebuilds. |
+| `expo-secure-store@58.0.2` | [Configuration-only native gate](../patches/expo-secure-store@58.0.2.patch) restricts every data export to the exact napplet-config service, keys and options. Identity records and legacy addresses cannot be read, written, deleted or migrated through that bridge. Android also rejects a false confirmation option; iOS rejects missing accessibility and updates only to the fixed device-only accessibility. Both platforms must build this module from source. | [SecureStore boundary](../tests/native/securestore-config/README.md); native bridge tests on both platforms. |
 | `@kehto/runtime@0.22.0`, `@kehto/shell@0.20.0` | [Runtime patches](../runtime/patches/) supply the selected native adapter, secure randomness and capability behavior. Configuration replies with an ID are correlated responses; only no-ID values reach subscription listeners. Existing ACL, source and session checks remain required. | `pnpm run runtime:test`; [runtime contracts](../runtime/README.md). |
 
 The SecureStore patch is app-specific. It does not turn the generic configuration
@@ -40,7 +39,7 @@ Expo certificate APIs and CLI parser with disposable certificates.
 Two substitutions cross the consumers' declared major ranges and need their
 specific compatibility checks:
 
-- `@expo/cli@57.0.22>zod` selects 4.6.6 for the CLI's actual schemas and MCP
+- `@expo/cli@58.1.15>zod` selects 4.6.6 for the CLI's actual schemas and MCP
   integration. Diagnostic structures differ from Zod 3, non-JSON Infinity is
   rejected, and one advertised outer schema differs. Runtime stripping and
   strict nested parameters remain required. This does not establish general
@@ -50,9 +49,9 @@ specific compatibility checks:
   actual-consumer and Expo/Metro/Worklets checks; do not generalize the override
   to every SemVer 6 caller.
 
-`expo-build-properties@57.0.22` leaves scene support unspecified so the tracked
-scene-lifecycle plugin remains in control. Native generation and CocoaPods must
-retain the configured architecture and source-build options.
+The tracked scene-lifecycle plugin configures the single iOS scene in the Expo
+template. Keep the native source-build settings in `app.json` when updating
+Expo or regenerating the CocoaPods project.
 
 ## Native codec patches and provenance
 
@@ -74,8 +73,9 @@ export is insufficient.
 
 Final acceptance requires React Doctor and aislop at 100/100 and complete
 unsuppressed dependency audits. A clean diagnostic run with a null score is not a
-numeric pass. Recheck advisory metadata before describing a finding or upstream
-fix as current.
+numeric pass. Historical narrow Forge/braces exceptions supported earlier scoped
+work; they do not close the current whole-app quality gate. Remaining dependency findings and final reports still require closeout. Recheck advisory metadata before
+describing a finding or upstream fix as current.
 
 Replace a local mitigation when an eligible upstream release covers its behavior.
 Verify the archive, installed consumer resolution, original notice bytes, positive

@@ -1,5 +1,5 @@
 import type { Ref } from 'react';
-import { StatusBar, type View } from 'react-native';
+import { StatusBar, type ViewInstance } from 'react-native';
 import { Header, type ShellIdentity } from './Header';
 import type { NappletDescriptor } from './workspace';
 import { useShellStyles } from './theme';
@@ -7,7 +7,7 @@ import { useShellStyles } from './theme';
 const noStyles = () => ({});
 export function WorkspaceHeader({ overview, focused, identity, disabled, menuAnchor, onSettings, onOverview, onMenu }: {
   overview: boolean; focused: NappletDescriptor | undefined; identity?: ShellIdentity; disabled: boolean;
-  menuAnchor: Ref<View>; onSettings(): void; onOverview(): void; onMenu(): void;
+  menuAnchor: Ref<ViewInstance>; onSettings(): void; onOverview(): void; onMenu(): void;
 }) {
   const { isDark } = useShellStyles(noStyles);
   const compact = !overview && focused !== undefined;

@@ -1,0 +1,16 @@
+--- a/build/Config.js
++++ b/build/Config.js
+@@ -75,7 +75,12 @@
+     return data;
+ }
+ function _deepmerge() {
+-    const data = /*#__PURE__*/ _interop_require_default(require("deepmerge"));
++    const createMerge = require("@fastify/deepmerge");
++    const merge = createMerge({ symbols: true });
++    const data = /*#__PURE__*/ _interop_require_default((target, source, options) =>
++        options?.arrayMerge
++            ? createMerge({ symbols: true, mergeArray: () => options.arrayMerge })(target, source)
++            : merge(target, source));
+     _deepmerge = function() {
+         return data;
+     };

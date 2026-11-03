@@ -38,7 +38,7 @@ export function NotificationSettings({service}: {service: NotificationSettingsSe
     <Modal visible={opened} transparent animationType="fade" onRequestClose={() => setOpened(false)}><View style={styles.backdrop}><FlatList data={state.rows} contentContainerStyle={styles.sheet} keyExtractor={row => JSON.stringify([row.publisher, row.appId, row.channel])}
       ListHeaderComponent={<Text accessibilityRole="header" style={styles.heading}>Notification permissions</Text>}
       ListFooterComponent={<View style={styles.group}>{state.status !== '' && <Text testID="notify-settings-status" accessibilityLiveRegion="polite" style={styles.detail}>{state.status}</Text>}<Pressable testID="notify-permissions-close" accessibilityRole="button" onPress={() => setOpened(false)} style={styles.button}><Text style={styles.action}>Done</Text></Pressable></View>}
-      ListEmptyComponent={!state.busy ? <Text testID="notify-permissions-empty" style={styles.detail}>No saved notification permissions for this identity.</Text> : null}
+      ListEmptyComponent={!state.busy ? <Text testID="notify-permissions-empty" style={styles.detail}>No saved notification permissions for this identity.</Text> : undefined}
       renderItem={renderPermission}/>
     </View></Modal>
   </View>;

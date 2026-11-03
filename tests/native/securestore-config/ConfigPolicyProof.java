@@ -16,6 +16,8 @@ public final class ConfigPolicyProof {
       return;
     }
     check(accepts(KEY, NappletConfigPolicy.SERVICE, false, " ", 6, null));
+    check(NappletConfigPolicy.allows(KEY, NappletConfigPolicy.SERVICE, false, " ", 6, null, true));
+    check(!NappletConfigPolicy.allows(KEY, NappletConfigPolicy.SERVICE, false, " ", 6, null, false));
     for (String key : new String[]{"inventory", "secret.a", "stage.a", "scope.", KEY + "a", KEY.substring(1), KEY.toUpperCase(), KEY + "\n", KEY.replace('a', 'g'), "scope." + "é".repeat(64), " " + KEY, null})
       check(!accepts(key, NappletConfigPolicy.SERVICE, false, " ", 6, null));
     for (String service : new String[]{"app", "key_v1", "org.nostrocket.hypergolic.identity.v1", NappletConfigPolicy.SERVICE + ":no-auth", NappletConfigPolicy.SERVICE + ":auth", "", null})

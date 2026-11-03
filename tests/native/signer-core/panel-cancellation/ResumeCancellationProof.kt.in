@@ -42,5 +42,5 @@ fun main(args:Array<String>) {
    scope.cancel();dispatcher.drain()
   }
  }
- println("{\"status\":\"passed\",\"assertions\":"+assertions+",\"panelStatements\":2,\"coroutinesVersion\":\"1.8.1\",\"deviceAccess\":false,\"scope\":\"exact resume statements with real cancellable dispatch and resource doubles; no Android UI\"}")
+ println("{\"status\":\"passed\",\"assertions\":"+assertions+",\"panelStatements\":2,\"coroutinesVersion\":\"__COROUTINES_VERSION__\",\"deviceAccess\":false,\"scope\":\"exact resume statements with real cancellable dispatch and resource doubles; no Android UI\"}")
 }

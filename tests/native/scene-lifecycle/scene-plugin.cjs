@@ -181,3 +181,35 @@ test('unsupported language, edited generated blocks and extra React startups fai
   await assert.rejects(transform(result.replace('window.windowScene = scene', 'window.windowScene = nil')), /integration changed/);
   await assert.rejects(transform(result + '\nfactory.startReactNative('), /one React runtime/);
 });
+
+
+const template58 = (template.slice(0, template.indexOf('  // Linking API')) + '}\n\n' + template.slice(template.indexOf('class ReactNativeDelegate:')))
+  .replace('class AppDelegate: ExpoAppDelegate {', 'class AppDelegate: ExpoAppDelegate, ExpoReactNativeFactoryProvider {')
+  .replace(/#if os\(iOS\) \|\| os\(tvOS\)[\s\S]*?#endif/, '    // The window is created and React Native is started by `SceneDelegate` under the\n    // scene-based life cycle (required by the iOS 27 SDK).');
+test('SDK58 scene template keeps one retained runtime and routes warm links through Expo scene APIs', async () => {
+  const result = await transform(template58);
+  assert.equal(await transform(result), result);
+  assert.equal(count(result, 'factory.startReactNative('), 1);
+  assert(result.includes('class HypergolicSceneDelegate: ExpoAppSceneDelegate'));
+  assert(result.includes('connectedScene == nil || connectedScene === scene'));
+  assert(result.includes('window.windowScene = scene'));
+  assert(result.includes('if reconnecting {'));
+  assert(result.includes('super.scene(scene, openURLContexts: connectionOptions.urlContexts)'));
+  assert(result.includes('super.scene(scene, continue: activity)'));
+  assert(!result.includes('func forwardSceneURLs'));
+  assert(!result.includes('RCTLinkingManager.application'));
+  for (const name of ['DidBecomeActive', 'WillResignActive', 'DidEnterBackground', 'WillEnterForeground'])
+    assert.equal(count(result, `super.scene${name}(scene)`), 1);
+  assert(result.includes('completionHandler(false)'));
+  await assert.rejects(transform(result.replace('super.sceneDidBecomeActive(scene)', 'return')), /integration changed/);
+});
+test('SDK58 default plist accepts identical cross-realm values and rejects unknown scene fields', async () => {
+  const vm = require('node:vm');
+  const manifest = vm.runInNewContext(`({ UIApplicationSupportsMultipleScenes: false, UISceneConfigurations: {
+    UIWindowSceneSessionRoleApplication: [{ UISceneConfigurationName: 'Default Configuration',
+      UISceneDelegateClassName: '$(PRODUCT_MODULE_NAME).SceneDelegate' }] } })`);
+  const result = await apply('infoPlist', { UIApplicationSceneManifest: manifest });
+  assert.equal(result.UIApplicationSceneManifest.UIApplicationSupportsMultipleScenes, false);
+  manifest.UISceneConfigurations.UIWindowSceneSessionRoleApplication[0].UISceneClassName = 'UnexpectedScene';
+  await assert.rejects(apply('infoPlist', { UIApplicationSceneManifest: manifest }), /conflicts/);
+});

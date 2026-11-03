@@ -166,3 +166,15 @@ test("enumerable symbols survive and sparse array normalization preserves serial
 		});
 	});
 });
+
+
+test("SDK58 updates arrays deduplicate while retaining the safe merge boundary", async () => {
+  await fixture({ updates: { assetPatternsToBeBundled: ["assets/a", "assets/b"], extra: null } }, async directory => {
+    const payload = JSON.parse('{"__proto__":{"mergeSentinel":true}}');
+    const result = await merge(directory, { updates: { assetPatternsToBeBundled: ["assets/b", "assets/c"], extra: payload } });
+    assert.deepEqual(result.config.updates.assetPatternsToBeBundled, ["assets/a", "assets/b", "assets/c"]);
+    assert.equal(result.config.updates.extra.mergeSentinel, undefined);
+    assert.equal(Object.getPrototypeOf(result.config.updates.extra), Object.prototype);
+    assert.equal({}.mergeSentinel, undefined);
+  });
+});

@@ -7,7 +7,7 @@ import { publishedSettingsActions } from './published-settings-actions';
 import { ShellBackdrop } from './ShellBackdrop';
 import {useCloseChecks} from './useCloseChecks';
 import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
-import { AccessibilityInfo, Keyboard, Modal, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Keyboard, Modal, StyleSheet, Text, View, type ViewInstance } from 'react-native';
 import { ShellPressable as Pressable } from './ShellPressable';
 import { cancelAnimation, Easing, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
@@ -262,7 +262,7 @@ function confirmWorkspaceNappletClose({ closingId, current, onBeforeClose, runti
 
 function ShellSettings({ settings, blocked, identity, SettingsContent, publishedSessions, openSettings, openBundledTest, openFixture, openPublished, checkPublishedUpdate }: ShellSettingsProps) {
   const { styles } = useShellStyles(createStyles);
-  const settingsClose = useRef<View>(null);
+  const settingsClose = useRef<ViewInstance>(null);
   return (
     <Modal visible={settings} animationType="none" onRequestClose={() => { if (!blocked) openSettings(); }} onShow={() => {
       settingsClose.current?.focus();
