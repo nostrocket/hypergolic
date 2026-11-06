@@ -56,6 +56,40 @@ test('SDK subscriptions requesting more initial history reach the native owner w
   await page.evaluate(({envelope, subId}) => (window as any).streamTest.push(envelope, {type: 'relay.eose', subId}), {envelope, subId});
   await expect.poll(() => frame.evaluate(() => (window as any).eose)).toBe(1);
 });
+test('trusted peer-live delivery works before aggregate EOSE and keeps private metadata out of the guest', async ({page}) => {
+  const {frame, envelope, subId} = await open(page, 0);
+  const response = {type: 'relay.event', subId, live: true, result: {event}};
+  await frame.evaluate(({envelope, response}) => {
+    const root = window as any;
+    root.relayMessages = [];
+    window.addEventListener('message', event => {
+      if (event.source === parent && event.data?.type === 'relay.event') root.relayMessages.push(event.data);
+    });
+    parent.postMessage({type: 'hypergolic.native-response', message: JSON.stringify({
+      type: 'capability.stream', sessionId: envelope.sessionId, sequence: envelope.sequence, delivery: 1,
+      response: JSON.stringify(response),
+    })}, '*');
+  }, {envelope, response});
+  await frame.evaluate(async () => await (window as any).napplet.theme.get());
+  expect(await frame.evaluate(() => (window as any).events)).toEqual([]);
+  await page.evaluate(({envelope, response}) => (window as any).streamTest.push(envelope, response), {envelope, response});
+  await expect.poll(() => frame.evaluate(() => (window as any).events)).toEqual([event.id]);
+  expect(await frame.evaluate(() => (window as any).relayMessages)).toEqual([{type: 'relay.event', subId, result: {event}}]);
+  expect(await frame.evaluate(() => (window as any).eose)).toBe(0);
+});
+
+test('aggregate EOSE cannot authorize a zero-only event without its peer-live marker', async ({page}) => {
+  const {frame, envelope, subId} = await open(page, 0);
+  await page.evaluate(({envelope, subId}) => (window as any).streamTest.push(envelope, {type: 'relay.eose', subId}), {envelope, subId});
+  await expect.poll(() => frame.evaluate(() => (window as any).eose)).toBe(1);
+  await page.evaluate(({envelope, subId, event}) => (window as any).streamTest.push(envelope, {
+    type: 'relay.event', subId, result: {event},
+  }), {envelope, subId, event});
+  await expect.poll(() => page.evaluate(() => (window as any).streamTest.requests.some((item: any) =>
+    item.type === 'capability' && JSON.parse(item.message).type === 'relay.close'))).toBe(true);
+  expect(await frame.evaluate(() => (window as any).events)).toEqual([]);
+});
+
 async function observeQuotaDenials(frame: Awaited<ReturnType<typeof open>>['frame']) {
   await frame.evaluate(() => {
     const root = window as any;

@@ -72,8 +72,9 @@ export function parseRelayQuery(value: unknown): RelayQueryRequest {
   if (data.type !== 'relay.query' || Object.keys(data).length !== 3 || !Object.prototype.hasOwnProperty.call(data, 'filters')) return fail();
   return Object.freeze({ type: 'relay.query', id: text(data.id, 128), filters: parseQueryFilters(data.filters) });
 }
-export function queryMatches(event: NostrEvent, filter: QueryFilter): boolean {
-  if (filter.limit === 0) return false;
+type QueryPhase = 'stored' | 'live';
+export function queryMatches(event: NostrEvent, filter: QueryFilter, phase: QueryPhase = 'stored'): boolean {
+  if (phase === 'stored' && filter.limit === 0) return false;
   return Object.entries(filter).every(([key, value]) => {
     if (key === 'limit') return true;
     if (key === 'since') return event.created_at >= (value as number);
@@ -85,7 +86,7 @@ export function queryMatches(event: NostrEvent, filter: QueryFilter): boolean {
   });
 }
 /** Fresh exact event fields prevent cached verifyEvent symbols from blessing mutated input. */
-export function verifyQueryEvent(input: unknown, filters: readonly QueryFilter[]): NostrEvent {
+export function verifyQueryEvent(input: unknown, filters: readonly QueryFilter[], phase: QueryPhase = 'stored'): NostrEvent {
   const value = record(input);
   if (typeof value.id !== 'string' || !hex64.test(value.id) || typeof value.pubkey !== 'string' || !hex64.test(value.pubkey) ||
       typeof value.sig !== 'string' || !/^[0-9a-f]{128}$/.test(value.sig) ||
@@ -97,7 +98,7 @@ export function verifyQueryEvent(input: unknown, filters: readonly QueryFilter[]
   });
   const event: NostrEvent = { id: value.id as string, pubkey: value.pubkey as string,
     kind: value.kind, created_at: value.created_at, content: value.content, tags, sig: value.sig };
-  if (utf8Bytes(JSON.stringify(event)) > QUERY_LIMITS.eventBytes || !filters.some(filter => queryMatches(event, filter))) return fail();
+  if (utf8Bytes(JSON.stringify(event)) > QUERY_LIMITS.eventBytes || !filters.some(filter => queryMatches(event, filter, phase))) return fail();
   try { if (getEventHash(event) !== event.id || !verifyEvent(event)) return fail(); } catch { return fail(); }
   // Remove verification cache symbols; downstream code receives only NIP-01 fields.
   const clean = { id: event.id, pubkey: event.pubkey, kind: event.kind, created_at: event.created_at,

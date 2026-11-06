@@ -60,6 +60,67 @@ test('multi-relay duplicate events merge and aggregate EOSE waits for initial ou
   h.event(0);h.event(1);h.eose(0);assert.equal(h.messages.filter(m=>m.type==='relay.eose').length,0);
   h.eose(1);h.eose(1);assert.deepEqual(h.messages.map(m=>m.type),['relay.event','relay.eose']);
 });
+test('zero-limit filters match live after their own relay EOSE while another relay is still backfilling', () => {
+  const h = harness(['wss://one.example.org', 'wss://two.example.org']);
+  const filters = [{kinds: [1], limit: 0}, {kinds: [2], limit: 1}];
+  h.session.subscribe({...request(), filters}, h.send);
+  assert.deepEqual(JSON.parse(h.calls[0]!.wire).slice(2), filters);
+  const stored = signed('stored on second relay', 2);
+  h.event(1, stored);
+  h.eose(0);
+  const early = signed('live on first relay');
+  h.event(0, early);
+  assert.deepEqual(h.messages, [
+    {type: 'relay.event', subId: 'caller', result: {event: stored}},
+    {type: 'relay.event', subId: 'caller', live: true, result: {event: early}},
+  ]);
+  h.eose(1);
+  assert.deepEqual(h.messages.at(-1), {type: 'relay.eose', subId: 'caller'});
+  const later = signed('live on second relay');
+  h.event(1, later);
+  assert.deepEqual(h.messages.at(-1), {type: 'relay.event', subId: 'caller', live: true, result: {event: later}});
+  h.session.revoke();
+});
+test('zero-limit history, live signature failures and signed mismatches cannot reach the guest', () => {
+  for (const mode of ['before-eose', 'after-reconnect', 'wrong-signature', 'wrong-filter']) {
+    const h = harness();
+    h.session.subscribe({...request(), filters: [{kinds: [1], limit: 0}]}, h.send);
+    if (mode !== 'before-eose') h.eose();
+    if (mode === 'after-reconnect') {
+      h.manager.setForeground(false);
+      h.manager.setForeground(true);
+      h.event(0, signed('stale callback'));
+    }
+    const candidate = mode === 'wrong-signature' ? {...signed(), sig: '0'.repeat(128)}
+      : mode === 'wrong-filter' ? signed('wrong kind', 2) : signed();
+    h.event(mode === 'after-reconnect' ? 1 : 0, candidate);
+    assert.deepEqual(h.messages.map(message => message.type),
+      mode === 'before-eose' ? ['relay.closed'] : ['relay.eose', 'relay.closed']);
+    h.session.revoke();
+  }
+});
+test('zero-limit raw stream resumes only after new EOSE and cannot reconnect after explicit close', () => {
+  const h = harness();
+  const filters = [{kinds: [1], limit: 0}];
+  h.session.subscribe({...request(), filters}, h.send);
+  h.eose();
+  h.event(0, signed('initial live delivery'));
+  h.manager.setForeground(false);
+  h.manager.setForeground(true);
+  assert.deepEqual(JSON.parse(h.calls[1]!.wire).slice(2), filters);
+  h.event(0, signed('stale generation'));
+  h.eose(1);
+  h.event(1, signed('resumed live delivery'));
+  assert.deepEqual(h.messages.map(message => message.type), ['relay.eose', 'relay.event', 'relay.eose', 'relay.event']);
+  assert(h.messages.every(message => message.type !== 'relay.event' || message.live === true));
+  h.session.close(close());
+  h.event(1, signed('closed generation'));
+  h.manager.setForeground(false);
+  h.manager.setForeground(true);
+  assert.equal(h.calls.length, 2);
+  assert.equal(h.messages.length, 4);
+  h.session.revoke();
+});
 test('invalid signature, signed mismatch and foreign subscription fail closed',()=> {
   for(const mode of ['signature','filter','foreign']) {
     const h=harness();h.session.subscribe(request(),h.send);

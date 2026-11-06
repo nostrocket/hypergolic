@@ -30,8 +30,11 @@ function receiveStream(envelope:StreamEnvelope,streams:Map<number,StreamState>,s
     if(!message||message.subId!==stream.subId)throw new Error('Stream mismatch');
     if(message.type===stream.domain+'.event') {
       const fields=new Set(['event',...(stream.domain==='outbox'?['sidecar']:[])]);
-      if(Object.keys(message).length!==3||!message.result||Object.keys(message.result).some(key=>!fields.has(key))||!('event' in message.result))throw new Error('Invalid stream event');
-      const event=verifyQueryEvent(message.result.event,stream.domain==='outbox'?stream.filters.map(filter=>({...filter,limit:32})):stream.filters);
+      // Aggregate EOSE cannot identify the phase of a single peer, especially after reconnect.
+      const live = stream.domain === 'relay' && message.live === true && stream.filters.some(filter => filter.limit === 0);
+      if(Object.keys(message).length!==(live?4:3)||!message.result||Object.keys(message.result).some(key=>!fields.has(key))||!('event' in message.result))throw new Error('Invalid stream event');
+      const filters = stream.domain==='outbox'?stream.filters.map(filter=>({...filter,limit:32})):stream.filters;
+      const event=verifyQueryEvent(message.result.event,filters,live?'live':'stored');
       let sidecar:Readonly<{relayHints:readonly string[]}>|undefined;
       if(message.result.sidecar!==undefined){
         const value=message.result.sidecar;

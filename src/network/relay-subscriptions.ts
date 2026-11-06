@@ -32,14 +32,18 @@ function receiveFrame(process:SessionProcess,callbacks:SessionCallbacks,subscrip
   const message=parsePublishedRelayMessage(text,connection.sub);
   if(message.type==='event') {
     const filters=subscription.planned?subscription.request.filters.map(filter=>({...filter,limit:32})):subscription.request.filters;
-    const event=verifyQueryEvent(message.event,filters);
+    const live = !subscription.planned && connection.state === 'eose';
+    const event=verifyQueryEvent(message.event,filters,live?'live':'stored');
     if(event.kind===4||event.kind===1059)throw new RelaySubscriptionError('encrypted subscriptions unsupported');
     if(subscription.ids.has(event.id))return;
     if(subscription.planned&&connection.state!=='eose'&&subscription.backfill>=subscription.backfillLimit)return;
     subscription.ids.add(event.id);
     if(subscription.ids.size>SUBSCRIPTION_LIMITS.dedupe)subscription.ids.delete(subscription.ids.values().next().value!);
     if(subscription.planned&&connection.state!=='eose')subscription.backfill++;
-    if(!callbacks.emit(subscription,Object.freeze({type:'relay.event',subId:subscription.request.subId,result:Object.freeze({event,...(subscription.planned?{sidecar:Object.freeze({relayHints:Object.freeze([connection.relay])})}:{})})})))subscription.ids.delete(event.id);
+    const markLive = live && filters.some(filter => filter.limit === 0);
+    const result = Object.freeze({event,...(subscription.planned?{sidecar:Object.freeze({relayHints:Object.freeze([connection.relay])})}:{})});
+    const push: RelaySubscriptionMessage = Object.freeze({type:'relay.event',subId:subscription.request.subId,result,...(markLive?{live:true as const}:{})});
+    if(!callbacks.emit(subscription,push))subscription.ids.delete(event.id);
   }else if(message.type==='eose'){connection.state='eose';connection.attempts=0;callbacks.eose(subscription);}
   else if(message.type!=='notice'&&message.type!=='auth')throw new RelaySubscriptionError();
 }
