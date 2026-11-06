@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 const event=JSON.parse(readFileSync(new URL('../../tests/native/feed-query/events.json',import.meta.url),'utf8'))[0];
 // Native-port double: genuine SDK/Kehto, signed validation and captured recipient only.
-async function open(page:Page) {
+async function open(page:Page, initialLimit = 2) {
   await page.clock.install();
   await page.addInitScript(()=> {
     if(window!==window.top)return;
@@ -26,8 +26,8 @@ async function open(page:Page) {
   await page.goto('/assets/runtime/index.html?sessionId=stream-test&fixture=feed-lab');
   await expect(page.frameLocator('#napplet').getByTestId('lab')).toHaveAttribute('data-ready','true');
   const frame=page.frames().find(frame=>frame.parentFrame()===page.mainFrame())!;
-  await frame.evaluate(async()=>{const root=window as any;await root.napplet.theme.get();root.events=[];root.eose=0;
-    root.handle=root.napplet.relay.subscribe({kinds:[1],limit:2},(result:any)=>root.events.push(result.event.id),()=>root.eose++);});
+  await frame.evaluate(async limit=>{const root=window as any;await root.napplet.theme.get();root.events=[];root.eose=0;
+    root.handle=root.napplet.relay.subscribe({kinds:[1],limit},(result:any)=>root.events.push(result.event.id),()=>root.eose++);}, initialLimit);
   await expect.poll(()=>page.evaluate(()=>(window as any).streamTest.requests.filter((e:any)=>e.type==='relay-stream').length)).toBe(1);
   const envelope=await page.evaluate(()=>(window as any).streamTest.requests.find((e:any)=>e.type==='relay-stream'));
   return {frame,envelope,subId:JSON.parse(envelope.message).subId};
@@ -49,6 +49,12 @@ test('canonical stream survives EOSE and ordinary lease duration, shares native 
   await page.evaluate(({envelope,subId,event})=>(window as any).streamTest.push(envelope,{type:'relay.event',subId,result:{event}}),{envelope:h.envelope,subId:h.subId,event});
   await h.frame.evaluate(async()=>await (window as any).napplet.theme.get());
   expect(await h.frame.evaluate(()=>(window as any).events)).toEqual([event.id,event.id]);
+});
+test('SDK subscriptions requesting more initial history reach the native owner with a capped filter', async ({page}) => {
+  const {frame, envelope, subId} = await open(page, 200);
+  expect(JSON.parse(envelope.message).filters).toEqual([{kinds: [1], limit: 32}]);
+  await page.evaluate(({envelope, subId}) => (window as any).streamTest.push(envelope, {type: 'relay.eose', subId}), {envelope, subId});
+  await expect.poll(() => frame.evaluate(() => (window as any).eose)).toBe(1);
 });
 test('guest native-channel forgery and wrong generation cannot redirect signed stream replies',async({page})=> {
   const h=await open(page);

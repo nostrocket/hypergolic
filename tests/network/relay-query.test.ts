@@ -23,10 +23,18 @@ test('selected core filters are cloned, bounded and match owning request fields'
   const request = parseRelayQuery({ type: 'relay.query', id: 'correlation', filters: [{ kinds: [1] }] });
   assert.deepEqual(request.filters, [{ kinds: [1], limit: 32 }]);
   assert.ok(Object.isFrozen(request.filters[0]!.kinds));
-  for (const filters of [[], [{ search: 'extra' }], [{ authors: ['abc'] }], [{ kinds: [] }], [{ limit: 33 }], [{ limit: -1 }], [{ since: 10, until: 1 }], [{ '#e': ['abc'] }], [{ kinds: [65536] }]]) {
+  for (const filters of [[], [{ search: 'extra' }], [{ authors: ['abc'] }], [{ kinds: [] }], [{ limit: -1 }], [{ limit: 1.5 }], [{ limit: '32' }], [{ limit: Number.MAX_SAFE_INTEGER + 1 }], [{ since: 10, until: 1 }], [{ '#e': ['abc'] }], [{ kinds: [65536] }]]) {
     assert.throws(() => parseQueryFilters(filters));
   }
   assert.throws(() => parseRelayQuery({ type: 'relay.query', id: 'x', filters: [{}], relay: 'wss://forged.example.com' }));
+});
+test('requests for more initial history use the same bounded native query and result profile', async () => {
+  const h = harness();
+  const request = parseRelayQuery({ type: 'relay.query', id: 'wide', filters: [{ kinds: [1], limit: 160 }] });
+  await h.create().query(request.filters, signal(), () => {});
+  assert.deepEqual(JSON.parse(h.calls[0]!.wire), ['REQ', h.calls[0]!.sub, { kinds: [1], limit: 32 }]);
+  assert.deepEqual(parseQueryFilters([{ limit: 0 }, { limit: 2 }, { limit: Number.MAX_SAFE_INTEGER }]),
+    [{ limit: 0 }, { limit: 2 }, { limit: 32 }]);
 });
 test('filter descriptors, sparse arrays and cached verification cannot bypass validation', () => {
   const filters = parseQueryFilters([{ kinds: [1] }]);

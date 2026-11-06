@@ -42,8 +42,9 @@ export function parseQueryFilters(input: unknown, maximumLimit: number = QUERY_L
     if (Object.keys(source).length > 32) return fail();
     for (const [key, item] of Object.entries(source)) {
       if (['since', 'until', 'limit'].includes(key)) {
-        if (!integer(item) || (key === 'limit' && item > maximumLimit)) return fail();
-        filter[key] = item;
+        if (!integer(item)) return fail();
+        // NIP-01 allows fewer initial results than the caller requests.
+        filter[key] = key === 'limit' ? Math.min(item, maximumLimit) : item;
       } else {
         if (!['ids', 'authors', 'kinds'].includes(key) && !/^#[a-zA-Z]$/.test(key)) return fail();
         const values = dense(item, QUERY_LIMITS.list);

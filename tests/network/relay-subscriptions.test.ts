@@ -41,6 +41,20 @@ test('stored and live verified events retain caller subId; EOSE does not close o
   assert.deepEqual(h.messages.map(m=>m.type),['relay.event','relay.eose','relay.event','relay.event']);
   assert.ok(h.messages.every(m=>m.subId==='caller'));assert.equal(h.calls[0]!.stopped,0);
 });
+test('wide signed-guest filter shapes are bounded before native subscription', () => {
+  const h = harness();
+  const author = 'a'.repeat(64);
+  const filters = [
+    { kinds: [1, 1111, 7, 6, 16, 9735], '#p': [author], limit: 200 },
+    { kinds: [1111], '#P': [author], limit: 200 },
+  ];
+  h.session.subscribe({ ...request(), filters }, h.send);
+  assert.deepEqual(JSON.parse(h.calls[0]!.wire).slice(2), filters.map(filter => ({ ...filter, limit: 32 })));
+  assert.deepEqual(filters.map(filter => filter.limit), [200, 200]);
+  h.eose();
+  assert.deepEqual(h.messages, [{ type: 'relay.eose', subId: 'caller' }]);
+  h.session.revoke();
+});
 test('multi-relay duplicate events merge and aggregate EOSE waits for initial outcomes',()=> {
   const h=harness(['wss://one.example.org','wss://two.example.org']);h.session.subscribe(request(),h.send);
   h.event(0);h.event(1);h.eose(0);assert.equal(h.messages.filter(m=>m.type==='relay.eose').length,0);

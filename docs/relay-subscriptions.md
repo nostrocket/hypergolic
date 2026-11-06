@@ -25,7 +25,8 @@ A close or revocation invalidates intent and delivery revisions before cancellin
 
 The process allows eight subscriptions, two per session, two trusted relays per
 subscription and 64 session coordinators. Filters retain the bounded core query
-profile. Connections use fresh native UUIDs and host-created relay subscription
+profile. A valid request for more stored events uses the existing limit of 32
+per filter. Connections use fresh native UUIDs and host-created relay subscription
 IDs; caller IDs cannot reopen closed intent. Trusted Network destinations are
 snapshotted at admission; a scoped guest relay must already be trusted.
 
