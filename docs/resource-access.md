@@ -4,7 +4,7 @@ Phase 2.3 implements a selected profile of [NAP-RESOURCE PR13 head 8c0645d](http
 
 ## Public contract and authority
 
-Guest SDKs call the Kehto injected resource facade. It accepts the SDK 0.27.2 URL-list form and the SDK 0.33.0 single-resource and per-item hint forms. [SDK 0.33.0 Resource wrapper](https://github.com/napplet/web/blob/efd5aa103359f1b150dfbb8870fa23e90fbc5540/packages/sdk/src/config.ts) The pinned Kehto shell/runtime patches route only `resource.info`, `resource.bytes`, `resource.bytesMany` and `resource.cancel` through ACL/firewall admission to the original native recipient.
+Guest SDKs call the Kehto injected resource facade. It accepts the SDK 0.27.2 URL-list form and the SDK 0.33.0 single-resource and per-item hint forms. [SDK 0.33.0 Resource wrapper](https://github.com/napplet/web/blob/efd5aa103359f1b150dfbb8870fa23e90fbc5540/packages/sdk/src/resource.ts) The pinned Kehto shell/runtime patches route only `resource.info`, `resource.bytes`, `resource.bytesMany` and `resource.cancel` through ACL/firewall admission to the original native recipient.
 
 Requests contain `type` and a bounded opaque `id`. Single-resource requests add `url` and optional `servers`. Batch requests add either an ordered `urls` list of strings or an ordered `requests` list of objects with the single-resource fields. The SDK receives actual complete `Blob` objects and a required `mime` field matching each successful Blob type. Success is the request type plus `.result` and matching ID; failure is the request type plus `.error`, matching ID and canonical error string. Cancel uses the original ID, has no ACK, is idempotent, and the SDK suppresses late results. Individual bulk failures preserve input order and successful siblings. A cancelled root cancels the whole bulk request.
 
@@ -24,7 +24,7 @@ A resource grant permits any validated public HTTPS hostname. Each connection re
 
 Default Blossom download origins are `https://blossom.primal.net` and `https://cdn.satellite.earth`, editable in trusted Settings. Up to four distinct public HTTPS origins are saved in the dedicated native SQLite settings database; an empty list disables Blossom. These public device settings apply across identities and persist after restart. They do not select an upload provider. Unavailable settings disable Blossom without blocking identity startup or other resource schemes.
 
-The hash-and-extension form follows the bare [BUD-10 URI at b5bd280](https://github.com/hzrd149/blossom/blob/b5bd2801d1763aa635fc8fea7a76597e0eb18990/buds/10.md). The deployed bare-hash form also works. Each request target accepts up to 16 explicit server hints and up to 16 URI `xs` hints within the 8 KiB URL limit. Each hint is limited to 512 UTF-8 bytes. URI hints accept a bare hostname or an HTTPS origin. Unusable URI hints are ignored, and `as` and `sz` do not affect resolution. The search still attempts at most four configured HTTPS origins. The defaults follow the [BUD-01 examples pinned at b5bd280](https://github.com/hzrd149/blossom/blob/b5bd2801d1763aa635fc8fea7a76597e0eb18990/buds/01.md). Actual default-server availability must be checked with native receipts. The bounded redirect profile was selected after a canonical Primal hash URL returned HTTP 302 to public object storage. The original zero-redirect candidate could not complete that real download. Published HTML retrieval uses a separate 16 MiB profile and verifies the signed artifact hash.
+The hash-and-extension form follows the bare [BUD-10 URI at b5bd280](https://github.com/hzrd149/blossom/blob/b5bd2801d1763aa635fc8fea7a76597e0eb18990/buds/10.md). The deployed bare-hash form also works. Each request target accepts up to 16 explicit server hints and up to 16 URI `xs` hints within the 8 KiB URL limit. Each hint is limited to 512 UTF-8 bytes. URI hints accept a bare hostname or an HTTPS origin after query decoding. Origin syntax excludes credentials, encoded hosts, paths beyond the root, queries and fragments. Unusable URI hints are ignored, and `as` and `sz` do not affect resolution. The search still attempts at most four configured HTTPS origins. The defaults follow the [BUD-01 examples pinned at b5bd280](https://github.com/hzrd149/blossom/blob/b5bd2801d1763aa635fc8fea7a76597e0eb18990/buds/01.md). Actual default-server availability must be checked with native receipts. The bounded redirect profile was selected after a canonical Primal hash URL returned HTTP 302 to public object storage. The original zero-redirect candidate could not complete that real download. Published HTML retrieval uses a separate 16 MiB profile and verifies the signed artifact hash.
 
 Resource response headers never reach guests. Repeated informational headers, such as the two `x-goog-hash` values observed on the audio sample, are ignored; repeated framing, encoding, redirect or connection fields remain denied. Header/body framing bounds remain independent. Compression is not supported. This follows the need to avoid ambiguous message framing while allowing irrelevant repeated metadata; see [HTTP field semantics](https://www.rfc-editor.org/rfc/rfc9110.html#section-5.2).
 
@@ -33,12 +33,12 @@ Resource response headers never reach guests. Repeated informational headers, su
 | Bound | Selected value |
 | --- | --- |
 | Complete file / successful bulk aggregate | 10 MiB |
-| URLs per bulk call / advisory server origins per resource | 8 / 4 |
+| URLs per bulk call / explicit hints per resource / URI `xs` hints per resource | 8 / 16 / 16 |
 | URL / data-URL bytes | 8 KiB / 64 KiB |
 | Concurrent retrievals per realm / process | 2 / 4 |
 | URL attempts per realm per minute, including cache hits | 60 |
 | Memory cache per realm / process | 30 MiB / 50 MiB |
-| Cached entries per realm | 64, exact URL keys, LRU eviction |
+| Cached entries per realm | 64, exact URL or verified Blossom hash, LRU eviction |
 | Cumulative delivered bytes per loaded realm | 50 MiB, monotonic until revocation |
 | Root / individual native URL deadline | 20 seconds / 15 seconds |
 | Private carrier chunk / transfer lifetime | 256 KiB / 15 seconds |
@@ -53,7 +53,7 @@ MIME comes from bytes. The profile admits bounded PNG/GIF/JPEG/WebP headers, WAV
 
 ## Cache and playback lifetime
 
-Cache and Object URLs live only while that napplet realm is loaded. Switching preserves its cache and place; cold launch refetches. Revocation clears the cache and private transfers. SDK URL helpers revoke on release, including revocation before asynchronous readiness; late completion cannot allocate a fresh URL.
+Cache and Object URLs live only while that napplet realm is loaded. Equivalent Blossom references share verified bytes by hash. Disabling Blossom blocks cached Blossom delivery too. Switching preserves its cache and place; cold launch refetches. Revocation clears the cache and private transfers. SDK URL helpers revoke on release, including revocation before asynchronous readiness; late completion cannot allocate a fresh URL.
 
 Audio/video uses complete grant-scoped Blob bytes. Trusted native focus/background handling pauses playback; the guest prelude rejects inactive/autoplay attempts and requires a fresh trusted gesture to Play. Returning retains position while loaded and waits for manual Play. iOS enables inline playback and disables AirPlay/Picture in Picture. Closing/replacement destroys the player. No background player, direct network media, stream or OS attachment-save workflow is claimed.
 

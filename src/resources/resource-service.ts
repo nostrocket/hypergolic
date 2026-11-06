@@ -6,7 +6,7 @@ import { parseQueryFilters, verifyQueryEvent } from '../network/relay-query-cont
 import { decodeNativePublishedBody } from '../napplets/native-published-https.ts';
 import { classifyResourceBytes } from './resource-mime.ts';
 import { ResourceError, RESOURCE_LIMITS, parseResourceURL, resourceServerOrigin, resourceInfo,
-  type ResourceRequest, type ResourceTarget, type ResourceBytes, type ResourceErrorCode } from './resource-contract.ts';
+  type ResourceRequest, type ResourceTarget, type ResourceURL, type ResourceBytes, type ResourceErrorCode } from './resource-contract.ts';
 
 export type ResourceAuthority = Readonly<{ nativeToken: string; assertActive(): void }>;
 export interface ResourceResolvers {
@@ -67,8 +67,9 @@ async function nostr(resolvers: ResourceResolvers, active: Active, reference: st
   if (event.kind === 4 || event.kind === 1059) throw new ResourceError('blocked-by-policy');
   return new TextEncoder().encode(JSON.stringify(event));
 }
-async function resolve(resolvers: ResourceResolvers, active: Active, request: ResourceTarget, signal: AbortSignal, authority: ResourceAuthority): Promise<Uint8Array<ArrayBuffer>> {
-  const target = parseResourceURL(request.url);
+async function resolve(resolvers: ResourceResolvers, active: Active, target: ResourceURL,
+  options: Readonly<{configured: readonly string[]; hints?: readonly string[]}>, signal: AbortSignal,
+  authority: ResourceAuthority): Promise<Uint8Array<ArrayBuffer>> {
   if (target.scheme === 'https') return resolvers.https(target.url, signal, () => active(signal, authority), authority.nativeToken);
   if (target.scheme === 'nostr') return nostr(resolvers, active, target.reference, signal, authority);
   if (target.scheme === 'data') {
@@ -90,16 +91,14 @@ async function resolve(resolvers: ResourceResolvers, active: Active, request: Re
       return new Uint8Array(output);
     } catch { throw new ResourceError('decode-failed'); }
   }
-  const configured = resolvers.servers();
-  if (!Array.isArray(configured) || configured.length === 0 || configured.length > RESOURCE_LIMITS.blossomServers) throw new ResourceError('blocked-by-policy');
-  const hinted = new Set([...(request.servers ?? []), ...(target.servers ?? [])]);
-  const servers = [...configured].sort((left, right) => Number(hinted.has(right)) - Number(hinted.has(left)));
+  const hinted = new Set([...(options.hints ?? []), ...(target.servers ?? [])]);
+  const servers = [...options.configured].sort((left, right) => Number(hinted.has(right)) - Number(hinted.has(left)));
   let failure: ResourceErrorCode = 'not-found';
   for (const server of servers) {
     active(signal, authority);
     try {
       const origin = resourceServerOrigin(server);
-      const bytes = await resolvers.https(new URL('/' + target.hash, origin).href, signal, () => active(signal, authority), authority.nativeToken);
+      const bytes = await resolvers.https(origin + '/' + target.hash, signal, () => active(signal, authority), authority.nativeToken);
       active(signal, authority);
       if (await resolvers.sha256(bytes) !== target.hash) throw new ResourceError('decode-failed');
       active(signal, authority); return bytes;
@@ -146,10 +145,15 @@ function bindResourceSession(resolvers: ResourceResolvers, process: ResourceProc
         return Object.freeze({ mime: value.mime, bytes: new Uint8Array(value.bytes) });
       }
       async function bytes(request: ResourceTarget, signal: AbortSignal, authority: ResourceAuthority): Promise<ResourceBytes> {
-        const {url} = request;
-        active(signal, authority); countURL(); parseResourceURL(url);
-        const hit = cache.get(url);
-        if (hit) { cache.delete(url); hit.used = ++process.revision; cache.set(url, hit); return charge(hit.value); }
+        active(signal, authority); countURL();
+        const target = parseResourceURL(request.url);
+        const configured = target.scheme === 'blossom' ? resolvers.servers() : [];
+        if (target.scheme === 'blossom' && (!Array.isArray(configured) || configured.length === 0 || configured.length > RESOURCE_LIMITS.blossomServers)) {
+          throw new ResourceError('blocked-by-policy');
+        }
+        const key = target.scheme === 'blossom' ? 'blossom:sha256:' + target.hash : request.url;
+        const hit = cache.get(key);
+        if (hit) { cache.delete(key); hit.used = ++process.revision; cache.set(key, hit); return charge(hit.value); }
         if (fetching >= RESOURCE_LIMITS.sessionConcurrent || process.fetching >= RESOURCE_LIMITS.processConcurrent) throw new ResourceError('quota-exceeded');
         fetching++; process.fetching++;
         const scoped = new AbortController();
@@ -157,7 +161,7 @@ function bindResourceSession(resolvers: ResourceResolvers, process: ResourceProc
         signal.addEventListener('abort', cancelURL, { once: true });
         if (signal.aborted) cancelURL();
         const timeout = setTimeout(cancelURL, RESOURCE_LIMITS.urlMs);
-        const work = resolve(resolvers, active, request, scoped.signal, authority);
+        const work = resolve(resolvers, active, target, {configured, hints: request.servers}, scoped.signal, authority);
         const settled = work.finally(() => { fetching--; process.fetching--; });
         // Timeout drops delivery; an uncooperative resolver retains its reservation until it really settles.
         let abort!: () => void;
@@ -169,9 +173,9 @@ function bindResourceSession(resolvers: ResourceResolvers, process: ResourceProc
           if (!(body instanceof Uint8Array) || body.byteLength > RESOURCE_LIMITS.fileBytes) throw new ResourceError('too-large');
           const value = Object.freeze({ bytes: new Uint8Array(body), mime: classifyResourceBytes(body) });
           const result = charge(value);
-          const previous = cache.get(url);
-          if (previous) { cacheBytes -= previous.value.bytes.length; process.cacheBytes -= previous.value.bytes.length; cache.delete(url); }
-          cache.set(url, { value, used: ++process.revision }); cacheBytes += body.byteLength; process.cacheBytes += body.byteLength;
+          const previous = cache.get(key);
+          if (previous) { cacheBytes -= previous.value.bytes.length; process.cacheBytes -= previous.value.bytes.length; cache.delete(key); }
+          cache.set(key, { value, used: ++process.revision }); cacheBytes += body.byteLength; process.cacheBytes += body.byteLength;
           while (cacheBytes > RESOURCE_LIMITS.sessionCacheBytes || cache.size > RESOURCE_LIMITS.cacheEntries) process.cacheBytes -= evict();
           evictProcess(process); return result;
         } finally { clearTimeout(timeout); signal.removeEventListener('abort', cancelURL); scoped.signal.removeEventListener('abort', abort); }

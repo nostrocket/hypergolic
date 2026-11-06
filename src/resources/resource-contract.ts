@@ -89,17 +89,26 @@ export function publicResourceHttps(value: string): string {
   try { url = new URL(value); } catch { return fail(); }
   if (value.slice(value.indexOf('://') + 3).split('/')[0]!.includes('@')) return fail('blocked-by-policy');
   if (url.protocol !== 'https:' || url.username !== '' || url.password !== '' || url.hash !== '') return fail('blocked-by-policy');
-  const host = url.hostname.toLowerCase();
-  if (!host.includes('.') || host.endsWith('.') || /^[0-9.]+$/.test(host) || host.includes(':') || host.includes('%') ||
-    ['localhost', 'local', 'internal', 'home', 'home.arpa', 'lan', 'test', 'example', 'invalid', 'onion', 'arpa'].some(suffix => host === suffix || host.endsWith('.' + suffix)) ||
-    host.split('.').some(label => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) return fail('blocked-by-policy');
+  assertPublicResourceHostname(url.hostname.toLowerCase());
   if (utf8Bytes(url.href) > RESOURCE_LIMITS.urlBytes) return fail('too-large');
   return url.href;
 }
+
+function assertPublicResourceHostname(host: string): void {
+  if (host.length > 253 || !host.includes('.') || host.endsWith('.') || /(?:^|\.)(?:[0-9]+|0x[0-9a-f]*)$/.test(host) ||
+    ['localhost', 'local', 'internal', 'home', 'home.arpa', 'lan', 'test', 'example', 'invalid', 'onion', 'arpa'].some(suffix => host === suffix || host.endsWith('.' + suffix)) ||
+    host.split('.').some(label => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) fail('blocked-by-policy');
+}
+
 export function resourceServerOrigin(value: string): string {
-  const url = new URL(publicResourceHttps(value));
-  if (url.pathname !== '/' || url.search !== '') return fail('blocked-by-policy');
-  return url.origin;
+  // Parse the literal origin before a browser or React Native URL parser can repair it.
+  const match = /^https:\/\/([a-z0-9.-]+)(?::([0-9]{1,5}))?\/?$/i.exec(value);
+  if (!match) return fail('blocked-by-policy');
+  const hostname = match[1]!.toLowerCase();
+  const port = match[2] === undefined ? 443 : Number(match[2]);
+  if (port < 1 || port > 65535) return fail('blocked-by-policy');
+  assertPublicResourceHostname(hostname);
+  return 'https://' + hostname + (port === 443 ? '' : ':' + port);
 }
 
 function blossomURL(value: string): Extract<ResourceURL, {scheme: 'blossom'}> {
@@ -108,16 +117,21 @@ function blossomURL(value: string): Extract<ResourceURL, {scheme: 'blossom'}> {
   const hash = (match[1] ?? match[2])!;
   const query = match[3];
   if (query === undefined) return Object.freeze({scheme: 'blossom', hash});
-  let hints: string[];
-  try { hints = new URLSearchParams(query).getAll('xs'); } catch { return fail(); }
-  if (hints.length > RESOURCE_LIMITS.blossomHints) return fail('too-large');
   const servers = new Set<string>();
-  for (const hint of hints) {
-    if (!hint || utf8Bytes(hint) > RESOURCE_LIMITS.blossomHintBytes) continue;
-    const url = hint.includes('://') ? hint : 'https://' + hint;
-    if (!/^https:\/\/[^/?#]+\/?$/i.test(url)) continue;
-    // A URI is still usable by hash when a discovery hint is unusable here.
-    try { servers.add(resourceServerOrigin(url)); } catch { /* Ignore unusable advisory hints. */ }
+  let count = 0;
+  // Split only once at '='. Decode each selected field independently on both engines.
+  for (const field of query.split('&')) {
+    const equals = field.indexOf('=');
+    let name: string;
+    try { name = decodeURIComponent(equals < 0 ? field : field.slice(0, equals)); } catch { continue; }
+    if (name !== 'xs') continue;
+    if (++count > RESOURCE_LIMITS.blossomHints) return fail('too-large');
+    if (equals < 0) continue;
+    try {
+      const hint = decodeURIComponent(field.slice(equals + 1));
+      if (!hint || utf8Bytes(hint) > RESOURCE_LIMITS.blossomHintBytes) continue;
+      servers.add(resourceServerOrigin(hint.includes('://') ? hint : 'https://' + hint));
+    } catch { /* A URI is still usable by hash when a discovery hint is unusable. */ }
   }
   return Object.freeze({scheme: 'blossom', hash, ...(servers.size ? {servers: Object.freeze([...servers])} : {})});
 }

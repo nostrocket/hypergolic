@@ -85,6 +85,26 @@ test('SeedHammer converter hint shape preserves its exact hash and bounds adviso
   assert.throws(() => parseResourceURL(raw + '?as=' + 'a'.repeat(8192)), error('too-large'));
 });
 
+test('Blossom origins reject parser repairs and URI hints decode only once', () => {
+  const digest = 'a'.repeat(64);
+  const url = `blossom:${digest}`;
+  const repairedOrigins = ['https://%62lossom.primal.net', 'https:////blossom.primal.net',
+    'https:/blossom.primal.net', 'https://blossom.primal.net:', 'https://blossom.primal.net?',
+    'https://blossom.primal.net#', 'https://blossom.primal.net/foo/..', 'https://blossom.primal.net/%2e',
+    'https://user@blossom.primal.net', 'https://blossom.primal.net\t', 'https://blossom.primal.net:65536',
+    'https://blossom.primal.net:0', 'https://127.0.0.0x1'];
+  for (const server of repairedOrigins) {
+    assert.throws(() => parseResourceRequest({type: 'resource.bytes', id: 'invalid', url, servers: [server]}), error('blocked-by-policy'));
+    assert.deepEqual(parseResourceURL(`${url}?xs=${encodeURIComponent(server)}`), {scheme: 'blossom', hash: digest});
+  }
+  assert.deepEqual(parseResourceURL(`${url}?xs=%2562lossom.primal.net&xs=blossom.primal.net=invalid`), {scheme: 'blossom', hash: digest});
+  assert.deepEqual(parseResourceURL(`${url}?as=%bad&xs=%bad&sz=%&%78s=BLOSSOM.Primal.Net%3A0443`),
+    {scheme: 'blossom', hash: digest, servers: ['https://blossom.primal.net']});
+  assert.deepEqual(parseResourceURL(`${url}?xs=%62lossom.primal.net&xs=blossom.primal.net%3A8443`), {
+    scheme: 'blossom', hash: digest, servers: ['https://blossom.primal.net', 'https://blossom.primal.net:8443'],
+  });
+});
+
 test('public URL preflight rejects private spellings, credentials, fragments and unknown schemes', () => {
   for (const url of ['https://127.0.0.1/a','https://2130706433/a','https://[::1]/a','https://localhost/a',
     'https://a.local/a','https://a.home.arpa/a','https://user:pass@a.example.com/a','https://@a.example.com/a',
@@ -113,6 +133,31 @@ test('cache is isolated, exact-keyed and protected from returned-byte mutation',
   await a.execute(bytes('d','https://assets.example.com/a?x=1'));assert.equal(h.calls(),3);
   a.revoke();await assert.rejects(a.execute(bytes('e')),error('timeout'));h.service.revokeAll();
 });
+test('Blossom aliases share verified bytes by hash within one realm and respect disabled settings', async () => {
+  let enabled = true;
+  const h = setup({servers: () => enabled ? ['https://cdn.example.com'] : []});
+  const a = h.bind(), b = h.bind('other');
+  const digest = hash(text());
+  const canonical = `blossom:sha256:${digest}`;
+  const bare = `blossom:${digest}`;
+  const hinted = `${bare}.jpg?xs=cdn.example.com&sz=1`;
+  try {
+    const first = await a.execute(bytes('first', canonical)) as {value: {bytes: Uint8Array}};
+    first.value.bytes[0] = 0;
+    for (const url of [bare, hinted]) {
+      const hit = await a.execute(bytes(url === bare ? 'bare' : 'hinted', url)) as {value: {bytes: Uint8Array; mime: string}};
+      assert.deepEqual(hit.value, {bytes: text(), mime: 'text/plain'});
+    }
+    assert.equal(h.calls(), 1);
+    enabled = false;
+    await assert.rejects(a.execute(bytes('disabled', hinted)), error('blocked-by-policy'));
+    assert.equal(h.calls(), 1);
+    enabled = true;
+    await b.execute(bytes('other', hinted));
+    assert.equal(h.calls(), 2);
+  } finally { h.service.revokeAll(); }
+});
+
 test('bulk keeps order and siblings while local data is classified by bytes', async () => {
   const h=setup(), session=h.bind();
   const result=await session.execute(parseResourceRequest({type:'resource.bytesMany',id:'bulk',urls:[
