@@ -81,7 +81,7 @@ function capabilityReceiver(database: ShellDatabase, native: RuntimeNativePort,
           const owner={registration:{...configuration,generation},assertActive};
           if(configuration.domains.includes('relay')&&native.subscriptions&&subscriptions)streams=createRelaySubscriptionBroker(native.subscriptions,subscriptions,owner);
           if(configuration.domains.includes('outbox')&&configuration.domains.includes('relay')&&native.subscriptions&&outboxStreams)outboxSubscriptions=createOutboxSubscriptionBroker(native.subscriptions,outboxStreams,owner);
-          broker = createCapabilityBroker(database, native, owner, queries, request=>streams?.close(request), resources, identityData, outbox,request=>outboxSubscriptions?.close(request));
+          broker = createCapabilityBroker(database, native, owner, queries, request=>streams?.close(request), resources, identityData, outbox,request=>outboxSubscriptions?.close(request), discovery !== undefined);
         }
         if (event.generation !== generation) return;
         if (event.lane === 'published-open') {

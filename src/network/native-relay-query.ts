@@ -1,3 +1,4 @@
+import type { CatalogRelayReader } from '../napplets/catalog-paging.ts';
 import type { NostrEvent } from 'nostr-tools/pure';
 import type { NativePublishedRelayPort } from '../napplets/native-published-relay.ts';
 import { parsePublishedRelayMessage } from '../napplets/published-relay-wire.ts';
@@ -6,6 +7,7 @@ import { utf8Bytes } from '../storage/codec.ts';
 import { parseQueryFilters, QUERY_LIMITS, RelayQueryDataError, RelayQueryError, selectQueryEvents, verifyQueryEvent, type QueryFilter } from './relay-query-contract.ts';
 
 export interface RelayQueryService {
+  readonly catalog?: CatalogRelayReader;
   query(filters: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void): Promise<readonly Readonly<{ event: NostrEvent }>[]>;
 }
 export type RelayQueryResult = Readonly<{ events: readonly Readonly<{ event: NostrEvent }>[]; incomplete: boolean; relayHints?: Readonly<Record<string, readonly string[]>> }>;
@@ -46,12 +48,19 @@ export function createNativeRelayQuery(port: Pick<NativePublishedRelayPort, 'new
   destinations: () => readonly string[], timeoutMs: number = QUERY_LIMITS.timeoutMs, options:Readonly<{allowPartialOnLimit?:boolean}> = {}): DetailedRelayQueryService {
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > QUERY_LIMITS.timeoutMs) throw new RelayQueryError();
   let concurrent = 0;
-  async function runQuery(input: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void, partialAtDeadline: boolean): Promise<RelayQueryResult> {
+  function configuredRelays(): string[] {
+    const configured = destinations();
+    if (!Array.isArray(configured) || configured.length < 1 || configured.length > MAX_RELAYS_PER_ROLE) throw new RelayQueryError('relay query unavailable');
+    const relays = configured.map(normalizeRelayUrl);
+    if (new Set(relays).size !== relays.length) throw new RelayQueryError('relay query unavailable');
+    return relays;
+  }
+  async function runQuery(input: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void, partialAtDeadline: boolean,
+    catalogRelay?: string): Promise<RelayQueryResult> {
       const filters = parseQueryFilters(input);
-      const configured = destinations();
-      if (!Array.isArray(configured) || configured.length < 1 || configured.length > MAX_RELAYS_PER_ROLE) throw new RelayQueryError('relay query unavailable');
-      const relays = configured.map(normalizeRelayUrl);
-      if (new Set(relays).size !== relays.length || concurrent >= QUERY_LIMITS.concurrent) throw new RelayQueryError('relay query busy');
+      const configured = configuredRelays();
+      const relays = catalogRelay === undefined ? configured : configured.filter(relay => relay === catalogRelay);
+      if (relays.length === 0 || concurrent >= QUERY_LIMITS.concurrent) throw new RelayQueryError('relay query busy');
       const active = () => { if (signal.aborted) throw new RelayQueryError('relay query cancelled'); assertActive(); };
       active();
       concurrent++;
@@ -95,7 +104,10 @@ export function createNativeRelayQuery(port: Pick<NativePublishedRelayPort, 'new
               const frames = await port.queryPublishedRelay(operation, relay, wire, subscription);
               active();
               if (cancelledSignal.aborted) throw new RelayQueryError();
-              try {batch = parseFrames(frames, subscription, filters);} catch {invalidData = true; throw new RelayQueryDataError();}
+              try {
+                batch = parseFrames(frames, subscription, filters);
+                if (catalogRelay !== undefined && new Set(batch.map(event => event.id)).size !== batch.length) throw new RelayQueryDataError();
+              } catch {invalidData = true; throw new RelayQueryDataError();}
             } catch {
               active();
               if (cancelledSignal.aborted) throw new RelayQueryError();
@@ -115,6 +127,12 @@ export function createNativeRelayQuery(port: Pick<NativePublishedRelayPort, 'new
       }
   }
   return Object.freeze({
+    catalog: Object.freeze({
+      destinations: configuredRelays,
+      async read(relay: string, filter: QueryFilter, signal: AbortSignal, active: () => void) {
+        return (await runQuery([filter], signal, active, false, relay)).events;
+      },
+    }),
     queryDetailed(input: readonly QueryFilter[], signal: AbortSignal, active: () => void) {return runQuery(input, signal, active, true);},
     async query(filters: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void) {
       return (await runQuery(filters, signal, assertActive, false)).events;

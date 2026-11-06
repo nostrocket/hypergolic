@@ -25,3 +25,13 @@ With an address configured, Hypergolic checks for a release when the user opens 
 An unchanged grant under the current support profile allows the verified update to proceed automatically. A new or changed grant opens trusted access review showing the publisher, exact release, and required and optional capabilities. Declining the review, losing focus during the check, or failing to reach a verified release leaves the current catalog in place. Other published napplets retain explicit version review. [Published admission and grants](published-network.md#published-admission-and-updates)
 
 A retained published pin can reopen from its verified artifact cache. The guest keeps the last verified listing in memory during a failed refresh and pauses opening while the listing is stale. The directory starts a fresh listing session when the guest reloads.
+
+
+Hypergolic's bundled Discover uses a private page projection over its existing
+Relay grant. The shell keeps a separate cursor for each configured Network
+relay. It retries a failed relay from the same cursor while other relays can
+continue, and commits a cursor only after matched EOSE, event verification
+and acknowledgement of the page by its original guest. Failed or truncated
+coverage remains visible. Refresh starts a fresh bounded pass. Other shells
+can use the portable guest with standard NAP Relay queries. Search covers the
+publications loaded so far.

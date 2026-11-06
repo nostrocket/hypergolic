@@ -1,3 +1,5 @@
+import { CATALOG_PAGE, parseCatalogPageRequest } from '../napplets/catalog-page-contract.ts';
+import { createCatalogPaging } from '../napplets/catalog-paging.ts';
 import type { OutboxReadService } from '../outbox/read-service.ts';
 import { outboxReadFailure, OutboxQueryError, type OutboxReadRequest } from '../outbox/query-contract.ts';
 import type { IdentityDataPort } from '../identity/identity-service.ts';
@@ -83,11 +85,37 @@ async function readIdentity(request: IdentityRequest, service: IdentityDataPort 
   try { return await watchedRead(pending, active, signal => service.read(request, registration, signal, active)); }
   catch { return identityFailure(request, 'identity data unavailable'); }
 }
+async function readCatalogPage(value: unknown, catalog: ReturnType<typeof createCatalogPaging>,
+  seen: Set<string>, pending: Set<AbortController>, active: () => void): Promise<CapabilityReply> {
+  const request = parseCatalogPageRequest(value);
+  const key = JSON.stringify([request.type, request.id]);
+  const reply = {type: CATALOG_PAGE + '.result', id: request.id};
+  const failure = {...reply, error: 'Catalog paging unavailable'};
+  if (seen.has(key) || seen.size >= CAPABILITY_LIMITS.sessionRequests || pending.size >= 2) return failure;
+  seen.add(key);
+  try {return {...reply, result: await watchedRead(pending, active, signal => catalog(request, signal, active))};}
+  catch {return failure;}
+}
+function invalidRequestReply(payload: unknown, domains: readonly string[]): CapabilityReply | null {
+  const relay = domains.includes('relay') ? queryFailure(payload, 'invalid relay query') : null;
+  const storage = domains.includes('storage') ? storageFailure(payload, 'invalid storage request') : null;
+  const outbox = domains.includes('outbox') && domains.includes('relay') ? outboxReadFailure(payload, 'invalid filter') : null;
+  return relay ?? storage ?? outbox;
+}
+
+function finishCapability(native: NativeCapabilityPort, token: string, response: string | null, active: () => void): void {
+  // A revoked owner never receives a stale successful result, even if COMMIT already finished.
+  try { active(); } catch { response = null; }
+  const bounded = response !== null && utf8Bytes(response) <= CAPABILITY_LIMITS.messageBytes ? response : null;
+  try { native.finish(token, bounded); } catch { /* Native expiry retains the final denial boundary. */ }
+}
+
 /** One broker per registered native view. It is never passed into the WebView. */
-export function createCapabilityBroker(database: ShellDatabase, native: NativeCapabilityPort, owner: CapabilityOwner, queries?: RelayQueryService, closeRelay?: (request:unknown)=>void, resources?: ResourceHost, identityData?: IdentityDataPort, outbox?: OutboxReadService, closeOutbox?: (request:unknown)=>void) {
+export function createCapabilityBroker(database: ShellDatabase, native: NativeCapabilityPort, owner: CapabilityOwner, queries?: RelayQueryService, closeRelay?: (request:unknown)=>void, resources?: ResourceHost, identityData?: IdentityDataPort, outbox?: OutboxReadService, closeOutbox?: (request:unknown)=>void, discovery = false) {
   const registration = decodeNativeRegistration(owner.registration);
   const expected = JSON.stringify(registration);
   const resource = resources ? createResourceBroker(resources, owner) : null;
+  const catalog = discovery && registration.domains.includes('relay') && queries?.catalog ? createCatalogPaging(queries.catalog) : null;
   const seen = new Set<string>();
   let disposed = false;
   const pending = new Set<AbortController>();
@@ -108,26 +136,29 @@ export function createCapabilityBroker(database: ShellDatabase, native: NativeCa
         const captured = decodeNativeRequest(raw);
         if (JSON.stringify(captured.registration) !== expected) return;
         assertActive(token);
-        if (captured.request && typeof captured.request === 'object' && 'type' in captured.request && captured.request.type === 'outbox.close') {
-          if(registration.domains.includes('outbox')&&registration.domains.includes('relay'))closeOutbox?.(captured.request);
+        const payload = captured.request;
+        const type = payload && typeof payload === 'object' && 'type' in payload ? payload.type : null;
+        if (type === 'outbox.close') {
+          if (registration.domains.includes('outbox') && registration.domains.includes('relay')) closeOutbox?.(payload);
           return;
         }
-        if (captured.request && typeof captured.request === 'object' && 'type' in captured.request && captured.request.type === 'relay.close') {
-          if (registration.domains.includes('relay')) closeRelay?.(captured.request);
+        if (type === 'relay.close') {
+          if (registration.domains.includes('relay')) closeRelay?.(payload);
           return;
         }
-        if (captured.request && typeof captured.request === 'object' && 'type' in captured.request &&
-          typeof captured.request.type === 'string' && captured.request.type.startsWith('resource.')) {
-          response = await resource?.dispatch(captured.request, {nativeToken: token, assertActive: () => assertActive(token)}) ?? null;
+        if (typeof type === 'string' && type.startsWith('resource.')) {
+          response = await resource?.dispatch(payload, {nativeToken: token, assertActive: () => assertActive(token)}) ?? null;
+          return;
+        }
+        if (type === CATALOG_PAGE) {
+          if (catalog) response = JSON.stringify(await readCatalogPage(payload, catalog, seen, pending, () => assertActive(token)));
           return;
         }
         let request: CapabilityRequest;
-        try { request = parseCapabilityRequest(captured.request); }
+        try { request = parseCapabilityRequest(payload); }
         catch {
-          const failure = registration.domains.includes('relay') ? queryFailure(captured.request, 'invalid relay query') : null;
-          const storage = registration.domains.includes('storage') ? storageFailure(captured.request, 'invalid storage request') : null;
-          const outboxFailure = registration.domains.includes('outbox') && registration.domains.includes('relay') ? outboxReadFailure(captured.request, 'invalid filter') : null;
-          if (failure || storage || outboxFailure) response = JSON.stringify(failure ?? storage ?? outboxFailure);
+          const failure = invalidRequestReply(payload, registration.domains);
+          if (failure) response = JSON.stringify(failure);
           return;
         }
         const domain = request.type.split('.')[0]!;
@@ -153,15 +184,10 @@ export function createCapabilityBroker(database: ShellDatabase, native: NativeCa
         }
         assertActive(token);
         response = JSON.stringify(result);
-        if (utf8Bytes(response) > CAPABILITY_LIMITS.messageBytes) response = null;
       } catch { response = null; }
       finally {
         release?.();
-        // A revoked owner never receives a stale successful result, even if COMMIT already finished.
-        if (claimed) {
-          try { assertActive(token); } catch { response = null; }
-          try { native.finish(token, response); } catch { /* Native expiry retains the final denial boundary. */ }
-        }
+        if (claimed) finishCapability(native, token, response, () => assertActive(token));
       }
     },
   });

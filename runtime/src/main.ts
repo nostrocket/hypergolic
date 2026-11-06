@@ -1,6 +1,8 @@
 import './legacy-webview';
 import { injectAndroidEditorReveal } from './android-editor-reveal';
 import { createDiscoveryOpenReceiver, injectDiscoveryOpen } from './discovery-open';
+import { CATALOG_PAGE } from '../../src/napplets/catalog-page-contract';
+import { createCatalogPageReceiver } from './discovery-catalog';
 import { DISCOVERY_OPEN } from '../../src/napplets/discovery-open-contract';
 import { installCloseCheck, CLOSE_CHECK_SERVICE } from './close-check';
 import { injectSupportReport } from './support-report';
@@ -299,6 +301,8 @@ function mount(artifact: RuntimeMetadata) {
     (id, state) => hostWindow.HypergolicHost?.postMessage(JSON.stringify({type: 'close-check.result', sessionId, id, state})));
   const discoveryToken = artifact.discoveryOpen ? crypto.randomUUID() : null;
   const discoveryOpen = discoveryToken ? createDiscoveryOpenReceiver(source, native, discoveryToken, live) : null;
+  const catalogPage = discoveryToken && artifact.domains.includes('relay')
+    ? createCatalogPageReceiver(source, native, discoveryToken, live) : null;
   const deadline = window.setTimeout(() => fail('runtime-timeout'), 10_000);
 
   const receive = (event: MessageEvent): void => {
@@ -311,6 +315,10 @@ function mount(artifact: RuntimeMetadata) {
     if (routing.connect(event)) return;
     if (event.data?.type === DISCOVERY_OPEN) {
       discoveryOpen?.(event.data);
+      return;
+    }
+    if (event.data?.type === CATALOG_PAGE) {
+      catalogPage?.(event.data);
       return;
     }
     if (!validEnvelope(event.data)) {
@@ -360,7 +368,7 @@ function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
   const {frame, environment, policy, discoveryToken} = mount(artifact);
   const [prefix, withCsp] = artifact.published
     ? publishedCspParts(rawHtml, policy) : ['', injectCsp(rawHtml, policy)] as const;
-  const html = discoveryToken ? injectDiscoveryOpen(withCsp, discoveryToken) : withCsp;
+  const html = discoveryToken ? injectDiscoveryOpen(withCsp, discoveryToken, artifact.domains.includes('relay')) : withCsp;
   const guest = injectAndroidEditorReveal(injectResourceMediaGate(html));
   frame.srcdoc = prefix + injectNappletNamespacePrelude(injectSupportReport(guest), {
     ...environment.capabilities,
