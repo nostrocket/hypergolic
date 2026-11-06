@@ -18,7 +18,7 @@ import java.util.function.LongSupplier;
 
 /** One-use, app-process-only handoff for bytes already verified by the trusted shell. */
 public final class PublishedArtifactRegistry {
-  public static final int MAX_HTML_BYTES = 16 * 1024 * 1024;
+  public static final int MAX_HTML_BYTES = 20 * 1024 * 1024;
   static final int MAX_PENDING_BYTES = 32 * 1024 * 1024;
   public static final int MAX_PENDING = 4;
   public static final long MAX_LIFETIME_MS = 60_000L;

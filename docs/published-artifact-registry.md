@@ -9,9 +9,9 @@ host view can claim a staged handle once and own the bytes for that generation.
 The registry accepts an app-only staging call with original UTF-8 bytes and
 bounded claims: shell session ID, publisher public key, stable napplet `d`
 identifier, signed event ID, aggregate version hash and HTML SHA-256. It checks
-the 2 MiB byte limit, strict UTF-8 decoding, SHA-256 and NIP-5A single-path
+the 20 MiB byte limit, strict UTF-8 decoding, SHA-256 and NIP-5A single-path
 aggregate over `<html hash> /index.html\n`. It copies the bytes privately,
-enforces a small number of pending artifacts and short staging expiry, and
+enforces a 32 MiB aggregate staging budget and short expiry, and
 returns an unpredictable opaque token. It never accepts a caller-supplied
 `verified` flag as proof.
 
@@ -32,8 +32,9 @@ The Expo module transfer uses `registerPublishedSession`,
 `beginPublishedArtifact`, `appendPublishedArtifact`, `finishPublishedArtifact`,
 `cancelPublishedArtifact`, `revokePublishedSession`, and
 `revokeAllPublishedArtifacts` on both platforms. A begin call binds the exact
-claims and declared length (1 through 2 MiB) to a registered session. At most
-four uploads can exist, with one per session and a 60-second lifetime. Each
+claims and declared length (1 byte through 20 MiB) to a registered session. At
+most four uploads can exist, with one per session, a 60-second lifetime and a
+separate 32 MiB aggregate reservation. Each
 zero-based sequential, canonical Base64 chunk decodes to 1 through 48 KiB.
 Malformed or repeated chunks consume the partial upload. Finish consumes it
 and independently checks exact length, strict UTF-8, original SHA-256 and the

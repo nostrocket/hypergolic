@@ -153,48 +153,53 @@ public final class PublishedHttpsRequestOwnerProof {
   }
 
   private static void preservesBodyBudgetUntilCancelledFetchUnwinds() throws Exception {
-    CountDownLatch started = new CountDownLatch(2);
+    CountDownLatch started = new CountDownLatch(1);
     CountDownLatch sawCancellation = new CountDownLatch(1);
     CountDownLatch release = new CountDownLatch(1);
     AtomicInteger attempts = new AtomicInteger();
-    PublishedHttpsRequestOwner owner = new PublishedHttpsRequestOwner((url, cancellation) -> {
-      if (attempts.incrementAndGet() > 2) return new byte[] { 1 };
-      started.countDown();
-      waitForCancellation(cancellation);
-      sawCancellation.countDown();
-      await(release);
-      throw new IOException("cancelled");
-    });
+    PublishedHttpsRequestOwner owner = new PublishedHttpsRequestOwner((url, cancellation) -> new byte[] { 1 },
+        (url, cancellation) -> {
+          if (attempts.incrementAndGet() > 1) return new byte[] { 2 };
+          started.countDown();
+          waitForCancellation(cancellation);
+          sawCancellation.countDown();
+          await(release);
+          throw new IOException("cancelled");
+        });
     owner.setForeground(true);
     String target = "https://napplets.example.org/" + "a".repeat(64);
     String first = UUID.randomUUID().toString(), second = UUID.randomUUID().toString();
-    Thread one = new Thread(() -> startPendingArtifact(owner, first, target));
-    Thread two = new Thread(() -> startPendingArtifact(owner, second, target));
-    one.setDaemon(true); two.setDaemon(true);
-    one.start(); two.start();
+    Thread pending = new Thread(() -> startPendingArtifact(owner, first, target));
+    pending.setDaemon(true);
+    pending.start();
     check(started.await(2, TimeUnit.SECONDS));
-    throwsIo(() -> owner.fetchArtifact(UUID.randomUUID().toString(), target, () -> true));
+    throwsIo(() -> owner.fetchArtifact(second, target, () -> true));
+    equal(1, owner.fetch(UUID.randomUUID().toString(), target, () -> true).length);
     check(owner.cancel(first));
     check(sawCancellation.await(2, TimeUnit.SECONDS));
-    throwsIo(() -> owner.fetchArtifact(UUID.randomUUID().toString(), target, () -> true));
+    throwsIo(() -> owner.fetchArtifact(second, target, () -> true));
+    equal(1, attempts.get());
     release.countDown();
-    one.join(2_000);
-    check(!one.isAlive());
-    check(owner.cancel(second));
-    two.join(2_000);
-    check(!two.isAlive());
+    pending.join(2_000);
+    check(!pending.isAlive());
+    equal(1, owner.fetchArtifact(second, target, () -> true));
+    equal(2, owner.readArtifactChunk(second, 0)[0]);
 
+    int maximum = 20 * 1024 * 1024, remainder = 12 * 1024 * 1024;
+    String smallTarget = "https://napplets.example.org/" + "b".repeat(64);
     PublishedHttpsRequestOwner retained = new PublishedHttpsRequestOwner((url, cancellation) ->
-        new byte[16 * 1024 * 1024]);
+        new byte[url.equals(smallTarget) ? remainder : maximum]);
     retained.setForeground(true);
     String third = UUID.randomUUID().toString();
-    equal(16 * 1024 * 1024, retained.fetchArtifact(first, target, () -> true));
-    equal(16 * 1024 * 1024, retained.fetchArtifact(second, target, () -> true));
-    throwsIo(() -> retained.fetchArtifact(third, target, () -> true));
+    equal(maximum, retained.fetchArtifact(first, target, () -> true));
+    throwsIo(() -> retained.fetchArtifact(second, smallTarget, () -> true));
     check(retained.cancel(first));
-    equal(16 * 1024 * 1024, retained.fetchArtifact(third, target, () -> true));
+    equal(remainder, retained.fetchArtifact(second, smallTarget, () -> true));
+    equal(maximum, retained.fetchArtifact(third, target, () -> true));
+    throwsIo(() -> retained.fetchArtifact(UUID.randomUUID().toString(), target, () -> true));
     retained.revokeAll();
     throwsIo(() -> retained.readArtifactChunk(second, 0));
+    throwsIo(() -> retained.readArtifactChunk(third, 0));
   }
 
   private static void startPendingArtifact(PublishedHttpsRequestOwner owner, String id, String url) {

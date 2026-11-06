@@ -69,7 +69,8 @@ test('skips an artifact whose full row cannot fit without evicting the saved pin
   await cache.put(pin);
   const start = '<!doctype html><html><head></head><body>';
   const end = '</body></html>';
-  const size = PUBLISHED_ARTIFACT_CACHE_MAX_BYTES;
+  assert.equal(PUBLISHED_ARTIFACT_CACHE_MAX_BYTES, 16 * 1024 * 1024);
+  const size = 20 * 1024 * 1024;
   const big = await makeArtifact('cached', new TextEncoder().encode(start + 'x'.repeat(size - start.length - end.length) + end));
   await cache.put(big);
   assert.equal(await cache.get('cached', big.manifest.eventId), null);

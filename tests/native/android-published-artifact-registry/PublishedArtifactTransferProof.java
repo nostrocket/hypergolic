@@ -152,7 +152,7 @@ public final class PublishedArtifactTransferProof {
 
   private static void exactMaximumUsesBoundedChunks() {
     Fixture f = new Fixture(); check(f.transfer.registerPublishedSession(SESSION));
-    byte[] bytes = new byte[PublishedArtifactRegistry.MAX_HTML_BYTES];
+    byte[] bytes = new byte[20 * 1024 * 1024];
     Arrays.fill(bytes, (byte) 'x');
     Claims c = new Claims(bytes);
     String id = c.begin(f, SESSION);
@@ -171,21 +171,24 @@ public final class PublishedArtifactTransferProof {
 
   private static void boundsReservedAndStagedArtifactBytes() {
     Fixture f = new Fixture();
-    Claims large = new Claims(new byte[16 * 1024 * 1024]);
+    Claims large = new Claims(new byte[20 * 1024 * 1024]);
+    Claims remainder = new Claims(new byte[12 * 1024 * 1024]);
     Claims small = new Claims(new byte[] {'a'});
     String one = "max-one", two = "max-two", three = "max-three";
     check(f.transfer.registerPublishedSession(one));
     check(f.transfer.registerPublishedSession(two));
     check(f.transfer.registerPublishedSession(three));
     String first = large.begin(f, one);
-    String second = large.begin(f, two);
+    check(large.begin(f, two) == null);
+    String second = remainder.begin(f, two);
     check(first != null && second != null);
     check(small.begin(f, three) == null);
     f.transfer.cancelPublishedArtifact(first);
     check(small.begin(f, three) != null);
 
     check(f.registry.stage(large.bytes, one, PUBLISHER, "published-test", EVENT, large.aggregateHash, large.htmlHash) != null);
-    check(f.registry.stage(large.bytes, two, PUBLISHER, "published-test", EVENT, large.aggregateHash, large.htmlHash) != null);
+    check(f.registry.stage(large.bytes, two, PUBLISHER, "published-test", EVENT, large.aggregateHash, large.htmlHash) == null);
+    check(f.registry.stage(remainder.bytes, two, PUBLISHER, "published-test", EVENT, remainder.aggregateHash, remainder.htmlHash) != null);
     check(f.registry.stage(small.bytes, three, PUBLISHER, "published-test", EVENT, small.aggregateHash, small.htmlHash) == null);
     f.registry.revokeSession(one);
     check(f.registry.stage(small.bytes, three, PUBLISHER, "published-test", EVENT, small.aggregateHash, small.htmlHash) != null);

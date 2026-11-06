@@ -35,7 +35,7 @@ import javax.net.ssl.SSLSocketFactory;
 /** Bounded HTTPS-only retrieval for published napplet artifacts. */
 public final class PublishedHttpsTransport {
   public static final int MAX_BODY_BYTES = 2 * 1024 * 1024;
-  static final int MAX_ARTIFACT_BYTES = 16 * 1024 * 1024;
+  static final int MAX_ARTIFACT_BYTES = 20 * 1024 * 1024;
   enum ReadProfile {
     AVATAR(MAX_BODY_BYTES, 0), RESOURCE(10 * 1024 * 1024, 2), ARTIFACT(MAX_ARTIFACT_BYTES, 3);
     final int maxBytes, redirects;

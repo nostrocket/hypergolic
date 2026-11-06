@@ -52,7 +52,7 @@ private final class TestClock: @unchecked Sendable {
     try check(transfer.finishPublishedArtifact(upload) == nil, "finish replay denied")
     try check(registry.claim(token!, claims: claim, viewGeneration: "view-1")?.htmlBytes == html, "genuine bytes reached native registry")
     try check(registry.claim(token!, claims: claim, viewGeneration: "view-2") == nil, "registry claim replay denied")
-    let exact = Data(repeating: 0x61, count: 16 * 1024 * 1024)
+    let exact = Data(repeating: 0x61, count: 20 * 1024 * 1024)
     let exactClaim = claims(exact, session: "session-a")
     let exactUpload = begin(transfer, exactClaim, exact.count)!
     var offset = 0
@@ -65,9 +65,9 @@ private final class TestClock: @unchecked Sendable {
       sequence += 1
     }
     let exactToken = transfer.finishPublishedArtifact(exactUpload)
-    try check(exactToken != nil, "16 MiB transfer stages")
+    try check(exactToken != nil, "20 MiB transfer stages")
     try check(registry.claim(exactToken!, claims: exactClaim, viewGeneration: "exact-view")?.htmlBytes == exact,
-      "16 MiB original bytes survive transfer")
+      "20 MiB original bytes survive transfer")
 
     let incomplete = begin(transfer, claim, html.count)!
     try check(transfer.appendPublishedArtifact(incomplete, sequence: 0, base64Chunk: first.base64EncodedString()), "incomplete first chunk")
@@ -122,19 +122,23 @@ private final class TestClock: @unchecked Sendable {
     try check(begin(transfer, claim, html.count) == nil, "revoke all clears sessions")
     try check(!transfer.appendPublishedArtifact(uploads[1], sequence: 0, base64Chunk: html.base64EncodedString()), "revoke all clears partial bytes")
     let maxOne = claims(exact, session: "max-one")
-    let maxTwo = claims(exact, session: "max-two")
+    let remainder = Data(repeating: 0x61, count: 12 * 1024 * 1024)
+    let maxTwo = claims(remainder, session: "max-two")
     let afterMax = claims(html, session: "after-max")
     for candidate in [maxOne, maxTwo, afterMax] {
       try check(transfer.registerPublishedSession(candidate.sessionId), "register budget case")
     }
     let firstLarge = begin(transfer, maxOne, exact.count)
-    let secondLarge = begin(transfer, maxTwo, exact.count)
-    try check(firstLarge != nil && secondLarge != nil, "two maximum upload reservations")
+    try check(begin(transfer, maxTwo, exact.count) == nil, "second maximum upload denied")
+    let secondLarge = begin(transfer, maxTwo, remainder.count)
+    try check(firstLarge != nil && secondLarge != nil, "20 MiB and 12 MiB fit the upload budget")
     try check(begin(transfer, afterMax, html.count) == nil, "third upload cannot exceed aggregate")
     transfer.cancelPublishedArtifact(firstLarge!)
     try check(begin(transfer, afterMax, html.count) != nil, "cancel releases reserved bytes")
     try check(registry.stage(exact, claims: maxOne) != nil, "first maximum staged artifact")
-    try check(registry.stage(exact, claims: maxTwo) != nil, "second maximum staged artifact")
+    let anotherExact = claims(exact, session: maxTwo.sessionId)
+    try check(registry.stage(exact, claims: anotherExact) == nil, "second maximum staged artifact denied")
+    try check(registry.stage(remainder, claims: maxTwo) != nil, "20 MiB and 12 MiB fit the stage budget")
     try check(registry.stage(html, claims: afterMax) == nil, "third staged artifact cannot exceed aggregate")
     registry.revokeSession(maxOne.sessionId)
     try check(registry.stage(html, claims: afterMax) != nil, "revocation releases staged byte budget")

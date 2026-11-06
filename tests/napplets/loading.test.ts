@@ -144,7 +144,8 @@ test('rejects malformed UTF-8/HTML, mismatched hashes and oversized blobs before
   await rejects(() => verifyArtifact(manifest, new Uint8Array([0xff, 0xfe])));
   await rejects(() => verifyArtifact(manifest, new TextEncoder().encode('<html><body>truncated')));
   await rejects(() => verifyArtifact(manifest, new TextEncoder().encode('<!doctype html><html><head></head><body>wrong</body></html>')));
-  await rejects(() => verifyArtifact(manifest, new Uint8Array(MAX_HTML_BYTES + 1)));
+  assert.equal(MAX_HTML_BYTES, 20 * 1024 * 1024);
+  await rejects(() => verifyArtifact(manifest, new Uint8Array(20 * 1024 * 1024 + 1)));
 });
 
 test('rejects an unregistered lookalike manifest at the artifact verification boundary', async () => {

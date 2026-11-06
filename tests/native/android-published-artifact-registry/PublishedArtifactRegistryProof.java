@@ -49,10 +49,12 @@ public final class PublishedArtifactRegistryProof {
 
   private static void boundsAndRealHashes() {
     Fixture f=new Fixture();
-    byte[] exact=new byte[PublishedArtifactRegistry.MAX_HTML_BYTES]; Arrays.fill(exact,(byte)' ');
+    int cap = 20 * 1024 * 1024;
+    check(PublishedArtifactRegistry.MAX_HTML_BYTES == cap);
+    byte[] exact=new byte[cap]; Arrays.fill(exact,(byte)' ');
     Claims c=new Claims(exact); String token=c.stage(f.registry,SESSION);
     check(token!=null); check(c.claim(f.registry,token,SESSION,VIEW)!=null);
-    byte[] oversized=new byte[PublishedArtifactRegistry.MAX_HTML_BYTES+1];
+    byte[] oversized=new byte[cap+1];
     check(new Claims(oversized).stage(f.registry,SESSION)==null);
     check(f.registry.stage(new byte[0],SESSION,PUBLISHER,IDENTIFIER,EVENT,"00".repeat(32),"00".repeat(32))==null);
     byte[] content="<p>real hash</p>".getBytes(StandardCharsets.UTF_8); Claims valid=new Claims(content);
