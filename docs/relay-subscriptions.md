@@ -35,6 +35,14 @@ per filter. Connections use fresh native UUIDs and host-created relay subscripti
 IDs; caller IDs cannot reopen closed intent. Trusted Network destinations are
 snapshotted at admission; a scoped guest relay must already be trusted.
 
+When the three raw slots are occupied, the runtime can hold up to three more
+explicitly scoped raw starts for four seconds. Waiting starts hold no native
+token and open no connection. A trusted terminal reply releases a slot, and
+the runtime acknowledges it before dispatching the next waiting start. The
+broker reports a policy denial only through its exact accepted native token.
+Guest close, renderer teardown, or the original deadline removes the waiting
+start. Unscoped and mixed Outbox streams keep their immediate quota behavior.
+
 Event size is bounded to 64 KiB, raw text to 66 KiB, native frame delivery to one
 unacknowledged frame per connection and renderer delivery to four messages/256
 KiB per token. Native rolling wire bounds are 64 frames and 2 MiB per second.

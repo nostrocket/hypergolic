@@ -172,3 +172,81 @@ test('unsupported encrypted SDK subscription is explicitly closed before native 
   await expect.poll(()=>h.frame.evaluate(()=>(window as any).closedCount)).toBe(1);
   expect(await page.evaluate(()=>(window as any).streamTest.requests.filter((e:any)=>e.type==='relay-stream').length)).toBe(1);
 });
+
+function scopedStarts(page: Page) {
+  return page.evaluate(() => (window as any).streamTest.requests
+    .filter((envelope: any) => envelope.type === 'relay-stream' && JSON.parse(envelope.message).relay));
+}
+function finishScoped(page: Page, envelope: {message: string}, sessionId?: string) {
+  return page.evaluate(({envelope, sessionId}) => {
+    const target = sessionId === undefined ? envelope : {...envelope, sessionId};
+    (window as any).streamTest.push(target, {type:'relay.closed', subId:JSON.parse(envelope.message).subId});
+  }, {envelope, sessionId});
+}
+async function scopedBurst(page: Page, count: number) {
+  const {frame} = await open(page);
+  await observeQuotaDenials(frame);
+  await frame.evaluate(count => {
+    const root = window as any;
+    root.handle.close();
+    root.scopedHandles = Array.from({length:count}, (_, index) => root.napplet.relay.subscribe(
+      {kinds:[1], limit:2}, () => {}, () => {}, {relay:`wss://peer-${index}.nostr.net`},
+    ));
+  }, count);
+  await expect.poll(async () => (await scopedStarts(page)).length).toBe(3);
+  return frame;
+}
+
+test('scoped burst reserves at most three starts and drains only after the exact terminal ACK', async ({page}) => {
+  const frame = await scopedBurst(page,7);
+  await expect.poll(() => frame.evaluate(() => (window as any).quotaDenials)).toBe(1);
+  const [first] = await scopedStarts(page);
+  await frame.evaluate(envelope => parent.postMessage({type:'hypergolic.native-response',message:JSON.stringify({
+    type:'capability.stream', sessionId:envelope.sessionId, sequence:envelope.sequence, delivery:1,
+    response:JSON.stringify({type:'relay.closed',subId:JSON.parse(envelope.message).subId}),
+  })}, '*'), first);
+  await finishScoped(page,first,'foreign-generation');
+  await frame.evaluate(() => (window as any).napplet.theme.get());
+  expect(await scopedStarts(page)).toHaveLength(3);
+
+  await finishScoped(page,first);
+  await expect.poll(async () => (await scopedStarts(page)).length).toBe(4);
+  const tail = await page.evaluate(() => (window as any).streamTest.requests.slice(-2));
+  expect(tail[0]).toMatchObject({type:'relay-stream-ack',streamSequence:first.sequence,delivery:1});
+  expect(tail[1].type).toBe('relay-stream');
+  expect(JSON.parse(tail[1].message).relay).toBe('wss://peer-3.nostr.net');
+  expect(tail[1].sequence).toBeGreaterThan(tail[0].sequence);
+  await finishScoped(page,first);
+  expect(await scopedStarts(page)).toHaveLength(4);
+});
+
+test('queued publisher close, active close, and expired starts cannot dispatch stale intents', async ({page}) => {
+  const frame = await scopedBurst(page,6);
+  const [first,second,third] = await scopedStarts(page);
+  await frame.evaluate(() => {
+    (window as any).scopedHandles[3].close();
+    (window as any).scopedHandles[0].close();
+  });
+  await expect.poll(() => page.evaluate(() => (window as any).streamTest.requests
+    .filter((request: any) => request.type === 'capability' && JSON.parse(request.message).type === 'relay.close').length)).toBe(2);
+  await finishScoped(page,first);
+  expect(await scopedStarts(page)).toHaveLength(3);
+  await page.clock.fastForward(3000);
+  await finishScoped(page,second);
+  await expect.poll(async () => (await scopedStarts(page)).length).toBe(4);
+  expect(JSON.parse((await scopedStarts(page)).at(-1).message).relay).toBe('wss://peer-4.nostr.net');
+  await page.clock.fastForward(1001);
+  await expect.poll(() => frame.evaluate(() => (window as any).quotaDenials)).toBe(2);
+  await finishScoped(page,third);
+  expect(await scopedStarts(page)).toHaveLength(4);
+});
+
+test('destroyed renderer discards pending starts before any late native terminal', async ({page}) => {
+  await scopedBurst(page,6);
+  const [first] = await scopedStarts(page);
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide')));
+  await expect(page.locator('#napplet')).toHaveCount(0);
+  await finishScoped(page,first);
+  await page.clock.fastForward(4500);
+  expect(await scopedStarts(page)).toHaveLength(3);
+});

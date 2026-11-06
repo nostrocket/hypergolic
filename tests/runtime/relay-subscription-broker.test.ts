@@ -68,3 +68,17 @@ test('duplicate caller admission and denied native acceptance are closed without
   const h=harness(t);const first=h.admit(),second=h.admit();assert.ok(h.closed.includes(second));assert.ok(h.native.isActive(first));assert.equal(h.calls.length,1);
   h.setForeground(false);const denied=h.admit(request('new'));assert.ok(h.closed.includes(denied));assert.equal(h.calls.length,1);
 });
+
+test('configured-destination denial sends a terminal only through the exact accepted native token', t => {
+  const h=harness(t);
+  const token=h.admit({...request(),relay:'wss://not-configured.nostr.net'});
+  assert.equal(h.calls.length,0);
+  assert.deepEqual(h.messages,[{type:'relay.closed',subId:'caller',reason:'relay subscription unavailable'}]);
+  assert.equal(h.native.isActive(token),true); // Native holds the terminal until its renderer ACK.
+  assert.ok(!h.closed.includes(token));
+  const allowed=h.admit({...request('allowed'),relay:'wss://relay.example.org'});
+  assert.equal(h.calls[0]?.token,allowed);
+  h.setOwner(false);
+  h.admit({...request('revoked'),relay:'wss://not-configured.nostr.net'});
+  assert.equal(h.messages.length,1);
+});
