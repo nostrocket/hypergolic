@@ -92,7 +92,7 @@ async function resolve(resolvers: ResourceResolvers, active: Active, request: Re
   }
   const configured = resolvers.servers();
   if (!Array.isArray(configured) || configured.length === 0 || configured.length > RESOURCE_LIMITS.blossomServers) throw new ResourceError('blocked-by-policy');
-  const hinted = new Set(request.servers);
+  const hinted = new Set([...(request.servers ?? []), ...(target.servers ?? [])]);
   const servers = [...configured].sort((left, right) => Number(hinted.has(right)) - Number(hinted.has(left)));
   let failure: ResourceErrorCode = 'not-found';
   for (const server of servers) {

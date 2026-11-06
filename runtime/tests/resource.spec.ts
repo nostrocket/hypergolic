@@ -140,7 +140,8 @@ test('canonical single and bulk success envelopes carry MIME matching the recons
 test('modern Resource arguments preserve single hints and ordered batch items through the host', async ({page}) => {
   await open(page);
   const guest = page.frames().find(frame => frame.parentFrame() === page.mainFrame())!;
-  const input = {url: `blossom:${'a'.repeat(64)}.png`, servers: ['https://cdn.example.com']};
+  const input = {url: `blossom:${'a'.repeat(64)}?xs=cdn.example.com&xs=mirror.example.com`,
+    servers: Array.from({length: 10}, (_, index) => `https://cdn${index}.example.com`)};
   const items = [input, {url: 'https://assets.example.com/second.png'}];
   const outputs = await guest.evaluate(async ({input, items}) => {
     const resource = (window as any).napplet.resource;
@@ -153,5 +154,20 @@ test('modern Resource arguments preserve single hints and ordered batch items th
   expect(calls.filter((call: {type: string}) => call.type !== 'resource.__chunk')).toEqual([
     {type: 'resource.bytes', id: expect.any(String), ...input},
     {type: 'resource.bytesMany', id: expect.any(String), requests: items},
+  ]);
+});
+
+test('oversized advisory server arrays stop at the WebView gate', async ({page}) => {
+  await open(page);
+  const guest = page.frames().find(frame => frame.parentFrame() === page.mainFrame())!;
+  await guest.evaluate(async () => {
+    const resource = (window as any).napplet.resource;
+    parent.postMessage({type: 'resource.bytes', id: 'too-many-hints', url: `blossom:${'a'.repeat(64)}`,
+      servers: Array(17).fill('https://cdn.example.com')}, '*');
+    await resource.bytes('data:,control');
+  });
+  const calls = await page.evaluate(() => (window as any).resourceCalls);
+  expect(calls.filter((call: {type: string}) => call.type === 'resource.bytes')).toEqual([
+    {type: 'resource.bytes', id: expect.any(String), url: 'data:,control'},
   ]);
 });

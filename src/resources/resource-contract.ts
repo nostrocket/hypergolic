@@ -2,7 +2,7 @@ import { utf8Bytes } from '../storage/codec.ts';
 
 export const RESOURCE_SPEC = '8c0645d32ceb159bc3e8bcec1107a92862b7e86a';
 export const RESOURCE_LIMITS = Object.freeze({ fileBytes: 10 * 1024 * 1024, urls: 8, urlBytes: 8192,
-  dataUrlBytes: 64 * 1024, blossomServers: 4, sessionConcurrent: 2, processConcurrent: 4, perMinute: 60,
+  dataUrlBytes: 64 * 1024, blossomServers: 4, blossomHints: 16, blossomHintBytes: 512, sessionConcurrent: 2, processConcurrent: 4, perMinute: 60,
   sessionCacheBytes: 30 * 1024 * 1024, processCacheBytes: 50 * 1024 * 1024,
   deliveredBytes: 50 * 1024 * 1024, cacheEntries: 64, requestMs: 20_000, urlMs: 15_000,
   chunkBytes: 256 * 1024 });
@@ -19,7 +19,7 @@ export type ResourceRequest = Readonly<{ type: 'resource.info'; id: string }> | 
   | Readonly<{ type: 'resource.bytesMany'; id: string; requests: readonly ResourceTarget[] }>;
 export type ResourceBytes = Readonly<{ bytes: Uint8Array<ArrayBuffer>; mime: string }>;
 export type ResourceURL = Readonly<{ scheme: 'https'; url: string }>
-  | Readonly<{ scheme: 'blossom'; hash: string }>
+  | Readonly<{ scheme: 'blossom'; hash: string; servers?: readonly string[] }>
   | Readonly<{ scheme: 'nostr'; reference: string }>
   | Readonly<{ scheme: 'data'; url: string }>;
 const fail = (code: ResourceErrorCode = 'invalid-request'): never => { throw new ResourceError(code); };
@@ -74,7 +74,11 @@ function boundedList<T>(value: unknown, max: number, parse: (item: unknown) => T
 function resourceTarget(fields: Record<string, unknown>): ResourceTarget {
   const url = urlText(fields.url);
   if (!Object.hasOwn(fields, 'servers')) return Object.freeze({url});
-  const servers = boundedList(fields.servers, RESOURCE_LIMITS.blossomServers, value => resourceServerOrigin(urlText(value)));
+  const servers = boundedList(fields.servers, RESOURCE_LIMITS.blossomHints, value => {
+    const hint = urlText(value);
+    if (utf8Bytes(hint) > RESOURCE_LIMITS.blossomHintBytes) return fail('too-large');
+    return resourceServerOrigin(hint);
+  });
   return Object.freeze({url, servers});
 }
 /** HTTPS destination preflight; native DNS/address pinning remains mandatory. */
@@ -98,15 +102,31 @@ export function resourceServerOrigin(value: string): string {
   return url.origin;
 }
 
+function blossomURL(value: string): Extract<ResourceURL, {scheme: 'blossom'}> {
+  const match = /^blossom:(?:sha256:([0-9a-f]{64})|([0-9a-f]{64})(?:\.[a-zA-Z0-9]{1,12})?)(?:\?([^#]*))?$/.exec(value);
+  if (!match) return fail();
+  const hash = (match[1] ?? match[2])!;
+  const query = match[3];
+  if (query === undefined) return Object.freeze({scheme: 'blossom', hash});
+  let hints: string[];
+  try { hints = new URLSearchParams(query).getAll('xs'); } catch { return fail(); }
+  if (hints.length > RESOURCE_LIMITS.blossomHints) return fail('too-large');
+  const servers = new Set<string>();
+  for (const hint of hints) {
+    if (!hint || utf8Bytes(hint) > RESOURCE_LIMITS.blossomHintBytes) continue;
+    const url = hint.includes('://') ? hint : 'https://' + hint;
+    if (!/^https:\/\/[^/?#]+\/?$/i.test(url)) continue;
+    // A URI is still usable by hash when a discovery hint is unusable here.
+    try { servers.add(resourceServerOrigin(url)); } catch { /* Ignore unusable advisory hints. */ }
+  }
+  return Object.freeze({scheme: 'blossom', hash, ...(servers.size ? {servers: Object.freeze([...servers])} : {})});
+}
+
 export function parseResourceURL(value: string): ResourceURL {
   urlText(value);
   if (value.startsWith('https:')) return Object.freeze({ scheme: 'https', url: publicResourceHttps(value) });
   if (value.startsWith('data:')) return Object.freeze({ scheme: 'data', url: value });
-  if (value.startsWith('blossom:')) {
-    const match = /^blossom:sha256:([0-9a-f]{64})$/.exec(value) ?? /^blossom:([0-9a-f]{64})\.[a-zA-Z0-9]{1,12}$/.exec(value);
-    if (!match) return fail('invalid-request');
-    return Object.freeze({ scheme: 'blossom', hash: match[1]! });
-  }
+  if (value.startsWith('blossom:')) return blossomURL(value);
   if (value.startsWith('nostr:')) {
     const reference = value.slice(6);
     if (!/^(?:note|nevent|naddr)1[023456789acdefghjklmnpqrstuvwxyz]+$/.test(reference)) return fail('decode-failed');

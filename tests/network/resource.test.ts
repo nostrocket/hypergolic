@@ -59,10 +59,29 @@ test('modern Resource inputs share legacy bounds and reject injected authority',
   ]) assert.throws(() => parseResourceRequest({...modern, requests}), error('invalid-request'));
   assert.throws(() => parseResourceRequest({...modern, urls: [url]}), error('invalid-request'));
   assert.throws(() => parseResourceRequest({...modern, requests: Array(9).fill({url})}), error('too-large'));
-  assert.throws(() => parseResourceRequest({type: 'resource.bytes', id: 'many', url, servers: Array(5).fill('https://one.example.com')}), error('too-large'));
+  assert.throws(() => parseResourceRequest({type: 'resource.bytes', id: 'many', url, servers: Array(17).fill('https://one.example.com')}), error('too-large'));
+  assert.throws(() => parseResourceRequest({type: 'resource.bytes', id: 'huge', url, servers: ['x'.repeat(513)]}), error('too-large'));
   assert.throws(() => parseResourceRequest({type: 'resource.bytes', id: 'unsafe', url, servers: ['https://127.0.0.1/']}), error('blocked-by-policy'));
   assert.deepEqual(parseResourceURL(url), {scheme: 'blossom', hash: 'a'.repeat(64)});
-  assert.throws(() => parseResourceURL(url + '?xs=private.local'), error('invalid-request'));
+  assert.deepEqual(parseResourceURL(url + '?xs=private.local'), {scheme: 'blossom', hash: 'a'.repeat(64)});
+});
+
+test('SeedHammer converter hint shape preserves its exact hash and bounds advisory input', () => {
+  const digest = 'ef0611095f75c56e60cf7772bdc90a30e388406cf17f318b13933e77e105a877';
+  const raw = `blossom:${digest}`;
+  const uri = raw + '?xs=bls.unrug.tech&xs=blossom.primal.net&xs=cdn.hzrd149.com&xs=blossom.ditto.pub';
+  const servers = ['https://bls.unrug.tech', 'https://blossom.primal.net', 'https://cdn.hzrd149.com', 'https://blossom.ditto.pub',
+    'https://blossom.data.haus', 'https://blossom-01.uid.ovh', 'https://blossom.nmail.li', 'https://blossom.nostr.black',
+    'https://cdn.klepak.net', 'https://media.libernet.app'];
+  const request = {type: 'resource.bytes', id: 'seed-converter', url: uri, servers};
+  assert.deepEqual(parseResourceRequest(request), request);
+  assert.deepEqual(parseResourceURL(uri), {scheme: 'blossom', hash: digest, servers: servers.slice(0, 4)});
+  assert.deepEqual(parseResourceURL(raw), {scheme: 'blossom', hash: digest});
+  assert.deepEqual(parseResourceURL(`blossom:sha256:${digest}?as=ignored&sz=2&xs=https%3A%2F%2Fblossom.primal.net%3A443%2F&xs=blossom.primal.net`),
+    {scheme: 'blossom', hash: digest, servers: ['https://blossom.primal.net']});
+  assert.throws(() => parseResourceURL(raw + '#xs=blossom.primal.net'), error('invalid-request'));
+  assert.throws(() => parseResourceURL(raw + '?' + Array(17).fill('xs=blossom.primal.net').join('&')), error('too-large'));
+  assert.throws(() => parseResourceURL(raw + '?as=' + 'a'.repeat(8192)), error('too-large'));
 });
 
 test('public URL preflight rejects private spellings, credentials, fragments and unknown schemes', () => {
@@ -72,7 +91,7 @@ test('public URL preflight rejects private spellings, credentials, fragments and
   assert.equal(publicResourceHttps('https://assets.example.com/a?b=1'),'https://assets.example.com/a?b=1');
   assert.throws(() => parseResourceURL('http://assets.example.com/a'),error('unsupported-scheme'));
   assert.throws(() => parseResourceURL('htree://root'),error('unsupported-scheme'));
-  assert.throws(() => parseResourceURL('blossom:sha256:'+'a'.repeat(64)+'?xs=foreign'),error('invalid-request'));
+  assert.throws(() => parseResourceURL('blossom:sha256:' + 'A'.repeat(64)), error('invalid-request'));
 });
 test('classification ignores headers and rejects active, malformed and oversized bytes', () => {
   assert.equal(classifyResourceBytes(png()),'image/png');
@@ -139,6 +158,25 @@ test('advisory Blossom hints prefer an exact configured origin and preserve conf
       servers: ['https://one.example.com']})), error('blocked-by-policy'));
     assert.equal(disabled.calls(), 0);
   } finally { disabled.service.revokeAll(); }
+});
+
+test('URI and SDK hints can reorder only the four configured attempts and bytes still need the exact hash', async () => {
+  const body = text('verified');
+  const digest = hash(body);
+  const configured = ['https://one.example.com', 'https://two.example.com', 'https://three.example.com', 'https://four.example.com'];
+  const url = `blossom:${digest}?xs=two.example.com&xs=http://one.example.com&xs=https://user@one.example.com&xs=127.0.0.1&xs=one.example.com/wrong`;
+  const servers = ['https://four.example.com:443/', ...Array.from({length: 9}, (_, index) => `https://outside${index}.example.com`)];
+  const attempts: string[] = [];
+  const h = setup({servers: () => configured, https: async (target, _signal, active, token) => {
+    active();
+    assert.equal(token, 'controlled-lease');
+    attempts.push(target);
+    return text('wrong');
+  }});
+  try {
+    await assert.rejects(h.bind().execute(parseResourceRequest({type: 'resource.bytes', id: 'hint', url, servers})), error('decode-failed'));
+    assert.deepEqual(attempts, [configured[1], configured[3], configured[0], configured[2]].map(origin => `${origin}/${digest}`));
+  } finally { h.service.revokeAll(); }
 });
 
 test('Nostr resolves one validated event without following content or relay hints', async () => {
