@@ -1,0 +1,26 @@
+diff --git a/build/getWatchFolders.js b/build/getWatchFolders.js
+--- a/build/getWatchFolders.js
++++ b/build/getWatchFolders.js
+@@ -80,14 +80,16 @@
+                 ]
+             });
+         }
++        const isIgnoredDirectory = (entry)=>entry.split(_path().default.sep).some((part)=>[
++                'Carthage',
++                'Pods',
++                'node_modules'
++            ].includes(part));
++        // Also check the results because globSync can return excluded directories as matches.
+         return _fs().default.globSync(pattern, {
+             cwd: workspaceProjectRoot,
+-            exclude: (entry)=>entry.split(_path().default.sep).some((part)=>[
+-                        'Carthage',
+-                        'Pods',
+-                        'node_modules'
+-                    ].includes(part))
+-        }).map((directory)=>_path().default.resolve(workspaceProjectRoot, directory, 'package.json'));
++            exclude: isIgnoredDirectory
++        }).filter((directory)=>!isIgnoredDirectory(directory)).map((directory)=>_path().default.resolve(workspaceProjectRoot, directory, 'package.json'));
+     }).filter(isValidJsonFile);
+ }
+ function resolveAllWorkspacePackageJsonPaths(workspaceProjectRoot) {

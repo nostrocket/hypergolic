@@ -32,6 +32,11 @@ CI reads the NDK selected by that build from its CMake cache. The notice guard
 checks both host layouts against the same SHA-256 hashes. A different NDK
 revision or host layout requires a new review.
 
+Android builds Expo Modules Core and JSI from source through
+`expo-build-properties` and its `buildExpoModulesCoreFromSource` option. The
+release notice review binds those libraries to the local build outputs and the
+reviewed NDK.
+
 ## Runtime attribution
 
 The trusted host includes Kehto ACL, firewall, runtime, services and shell,

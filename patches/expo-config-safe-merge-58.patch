@@ -1,16 +1,24 @@
---- a/build/Config.js
-+++ b/build/Config.js
-@@ -75,7 +75,12 @@
-     return data;
+diff --git a/build/mergeConfig.js b/build/mergeConfig.js
+--- a/build/mergeConfig.js
++++ b/build/mergeConfig.js
+@@ -17,9 +17,9 @@
+     return tag !== '[object Date]' && tag !== '[object RegExp]' && value.$$typeof !== Symbol.for('react.element');
  }
- function _deepmerge() {
--    const data = /*#__PURE__*/ _interop_require_default(require("deepmerge"));
-+    const createMerge = require("@fastify/deepmerge");
-+    const merge = createMerge({ symbols: true });
-+    const data = /*#__PURE__*/ _interop_require_default((target, source, options) =>
-+        options?.arrayMerge
-+            ? createMerge({ symbols: true, mergeArray: () => options.arrayMerge })(target, source)
-+            : merge(target, source));
-     _deepmerge = function() {
-         return data;
-     };
+ function getEnumerableKeys(value) {
+-    // NOTE(@kitten): Exclude __proto__ from both inputs so assignments cannot change the result's prototype.
++    // Ignore prototype-related keys from both inputs, including nested config objects.
+     return [
+-        ...Object.keys(value).filter((key)=>key !== '__proto__'),
++        ...Object.keys(value).filter((key)=>key !== '__proto__' && key !== 'constructor' && key !== 'prototype'),
+         ...Object.getOwnPropertySymbols(value).filter((key)=>Object.prototype.propertyIsEnumerable.call(value, key))
+     ];
+ }
+@@ -45,7 +45,7 @@
+             return clone(source);
+         }
+         if (Array.isArray(source)) {
+-            return arrayMerge ? arrayMerge(target, source) : target.concat(source).map(clone);
++            return arrayMerge ? arrayMerge(target, source) : Array.from(target.concat(source), clone);
+         }
+         const result = {};
+         if (isMergeable(target)) {

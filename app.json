@@ -39,6 +39,9 @@
       [
         "expo-build-properties",
         {
+          "android": {
+            "buildExpoModulesCoreFromSource": true
+          },
           "ios": {
             "deploymentTarget": "18.4",
             "extraPods": [

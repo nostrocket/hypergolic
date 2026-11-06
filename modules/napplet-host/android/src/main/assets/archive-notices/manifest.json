@@ -148,6 +148,11 @@
       "file": "sqlite-3.53.3-api-NOTICE.txt",
       "sha256": "85806d613cfda5901f848b3b5b4b04396c8c64e89c97c0af3706c42b0c44bb47",
       "bytes": 1485
+    },
+    {
+      "file": "expo-modules-v2-android-0.2.7-LICENSE.txt",
+      "sha256": "a1690bef5d8880c1036a72204838b18cf9dc19f51ed6a5147e281505601ac6cf",
+      "bytes": 1106
     }
   ],
   "noticeBindings": [
@@ -191,20 +196,6 @@
       "artifact": "documentfile-1.1.0.aar",
       "artifactSha256": "684e0ffcb21a660c939d1bb814521f42c4bd74816f4a117291fe6a101cf3a822",
       "entry": "META-INF/androidx/documentfile/documentfile/LICENSE.txt",
-      "file": "androidx-archive-LICENSE.txt"
-    },
-    {
-      "component": "androidx.dynamicanimation:dynamicanimation:1.1.0",
-      "artifact": "dynamicanimation-1.1.0.aar",
-      "artifactSha256": "9062cc6637136a49ad17f8603c72519052ff9a569e617fc1b6db7086304da88f",
-      "entry": "META-INF/androidx/dynamicanimation/dynamicanimation/LICENSE.txt",
-      "file": "androidx-archive-LICENSE.txt"
-    },
-    {
-      "component": "androidx.graphics:graphics-shapes-android:1.0.1",
-      "artifact": "graphics-shapes-release.aar",
-      "artifactSha256": "7171269a4122feabb071768df46d10b362e47ac75fd0aa8dbcafa1f44f61b40c",
-      "entry": "META-INF/androidx/graphics/graphics-shapes/LICENSE.txt",
       "file": "androidx-archive-LICENSE.txt"
     },
     {
@@ -269,6 +260,16 @@
       "artifactSha256": "a7f713593007813bf07d19bd1df9f81c86c0719e9a0bb2ef1b98b78313fc940d",
       "entry": "META-INF/NOTICE.txt",
       "file": "commons-io-1.4-NOTICE.txt"
+    },
+    {
+      "component": "io.github.expo:expo-modules-v2-react:0.2.7",
+      "artifact": "expo-modules-v2-react-0.2.7.aar",
+      "artifactSha256": "ae8f26bbc6b6168a3caa3a36752cd3b500247fbc02a28cea283f641bf7062ea0",
+      "source": "https://raw.githubusercontent.com/expo/expo-modules-v2-android/c5c8a614ea5508dd62f60a69417b1f7fbb80b2e3/LICENSE.txt",
+      "sourceCommit": "c5c8a614ea5508dd62f60a69417b1f7fbb80b2e3",
+      "sourcePath": "LICENSE.txt",
+      "sourceGitBlob": "16be61fd024d6fae4aeef9a37473fb3e943f6347",
+      "file": "expo-modules-v2-android-0.2.7-LICENSE.txt"
     }
   ],
   "selectedArtifacts": [
@@ -318,11 +319,6 @@
       "sha256": "270c7b7d99942d5ec1dd88594e4648feb33d8e31d8c3c2ab2321d49d9abdfc1f"
     },
     {
-      "component": "androidx.cardview:cardview:1.0.0",
-      "filename": "cardview-1.0.0.aar",
-      "sha256": "1193c04c22a3d6b5946dae9f4e8c59d6adde6a71b6bd5d87fb99d82dda1afec7"
-    },
-    {
       "component": "androidx.collection:collection-jvm:1.4.4",
       "filename": "collection-jvm-1.4.4.jar",
       "sha256": "539a43428df8a337622fb781401f5f0cdcd52d8b3615f0085af51c90002ff333"
@@ -331,21 +327,6 @@
       "component": "androidx.concurrent:concurrent-futures:1.1.0",
       "filename": "concurrent-futures-1.1.0.jar",
       "sha256": "0ce067c514a0d1049d1bebdf709e344ed3266fe9744275682937cdcb13334e9e"
-    },
-    {
-      "component": "androidx.constraintlayout:constraintlayout-core:1.0.0",
-      "filename": "constraintlayout-core-1.0.0.jar",
-      "sha256": "496c8c79664bd970c6a6be7a960a20dd157dfc5aa2f18e5b8333767ffbc59911"
-    },
-    {
-      "component": "androidx.constraintlayout:constraintlayout:2.1.0",
-      "filename": "constraintlayout-2.1.0.aar",
-      "sha256": "a458a7562363bd59c209a7dea847326a0e2b26b37a883dc3e29065a79a1c788b"
-    },
-    {
-      "component": "androidx.coordinatorlayout:coordinatorlayout:1.1.0",
-      "filename": "coordinatorlayout-1.1.0.aar",
-      "sha256": "44a9e30abf56af1025c52a0af506fee9c4131aa55efda52f9fd9451211c5e8cb"
     },
     {
       "component": "androidx.core:core-ktx:1.18.0",
@@ -373,9 +354,9 @@
       "sha256": "a81c8fe78815fa47df5b749deb52727ad11f9397da58b16017f4eb2c11e28564"
     },
     {
-      "component": "androidx.customview:customview:1.1.0",
-      "filename": "customview-1.1.0.aar",
-      "sha256": "01f76ab043770a97b054046f9815717b82ce0355c02967d16c61981359dc189a"
+      "component": "androidx.customview:customview:1.0.0",
+      "filename": "customview-1.0.0.aar",
+      "sha256": "20e5b8f6526a34595a604f56718da81167c0b40a7a94a57daa355663f2594df2"
     },
     {
       "component": "androidx.documentfile:documentfile:1.1.0",
@@ -383,14 +364,19 @@
       "sha256": "684e0ffcb21a660c939d1bb814521f42c4bd74816f4a117291fe6a101cf3a822"
     },
     {
-      "component": "androidx.drawerlayout:drawerlayout:1.1.1",
-      "filename": "drawerlayout-1.1.1.aar",
-      "sha256": "2c5f0dca378eb78ca2c4403f9889c77daa3059302260f26a07fe9f63c08926fe"
+      "component": "androidx.documentfile:documentfile:1.1.0",
+      "filename": "documentfile-1.1.0.aar",
+      "sha256": "684e0ffcb21a660c939d1bb814521f42c4bd74816f4a117291fe6a101cf3a822"
     },
     {
-      "component": "androidx.dynamicanimation:dynamicanimation:1.1.0",
-      "filename": "dynamicanimation-1.1.0.aar",
-      "sha256": "9062cc6637136a49ad17f8603c72519052ff9a569e617fc1b6db7086304da88f"
+      "component": "androidx.drawerlayout:drawerlayout:1.0.0",
+      "filename": "drawerlayout-1.0.0.aar",
+      "sha256": "9402442cdc5a43cf62fb14f8cf98c63342d4d9d9b805c8033c6cf7e802749ac1"
+    },
+    {
+      "component": "androidx.dynamicanimation:dynamicanimation:1.0.0",
+      "filename": "dynamicanimation-1.0.0.aar",
+      "sha256": "ce005162c229bf308d2d5b12fb6cad0874069cbbeaccee63a8193bd08d40de04"
     },
     {
       "component": "androidx.emoji2:emoji2-views-helper:1.3.0",
@@ -413,19 +399,14 @@
       "sha256": "5eeb5964a8edb25966d5cc7933fe893e3c58e245ac433d358478b20b6d09d4e3"
     },
     {
-      "component": "androidx.fragment:fragment:1.6.1",
-      "filename": "fragment-1.6.1.aar",
-      "sha256": "5eeb5964a8edb25966d5cc7933fe893e3c58e245ac433d358478b20b6d09d4e3"
-    },
-    {
-      "component": "androidx.graphics:graphics-shapes-android:1.0.1",
-      "filename": "graphics-shapes-release.aar",
-      "sha256": "7171269a4122feabb071768df46d10b362e47ac75fd0aa8dbcafa1f44f61b40c"
-    },
-    {
       "component": "androidx.interpolator:interpolator:1.0.0",
       "filename": "interpolator-1.0.0.aar",
       "sha256": "33193135a64fe21fa2c35eec6688f1a76e512606c0fc83dc1b689e37add7732a"
+    },
+    {
+      "component": "androidx.legacy:legacy-support-core-utils:1.0.0",
+      "filename": "legacy-support-core-utils-1.0.0.aar",
+      "sha256": "a7edcf01d5b52b3034073027bc4775b78a4764bb6202bb91d61c829add8dd1c7"
     },
     {
       "component": "androidx.lifecycle:lifecycle-common:2.6.2",
@@ -473,19 +454,19 @@
       "sha256": "11f735cb3b55c458d470bed9e25254375b518b4b1bad6926783a7026db0f5025"
     },
     {
+      "component": "androidx.localbroadcastmanager:localbroadcastmanager:1.0.0",
+      "filename": "localbroadcastmanager-1.0.0.aar",
+      "sha256": "e71c328ceef5c4a7d76f2d86df1b65d65fe2acf868b1a4efd84a3f34336186d8"
+    },
+    {
+      "component": "androidx.print:print:1.0.0",
+      "filename": "print-1.0.0.aar",
+      "sha256": "1d5c7f3135a1bba661fc373fd72e11eb0a4adbb3396787826dd8e4190d5d9edd"
+    },
+    {
       "component": "androidx.profileinstaller:profileinstaller:1.3.1",
       "filename": "profileinstaller-1.3.1.aar",
       "sha256": "d0e402ec31f24028a1dc7eb6a0a3f9d9635c1459392cd734396343b73d673948"
-    },
-    {
-      "component": "androidx.recyclerview:recyclerview:1.2.1",
-      "filename": "recyclerview-1.2.1.aar",
-      "sha256": "a1ea0329ee6d938305dfd0f8ce5c48dea2aac14e5606d23e7fb60afcfb655d6e"
-    },
-    {
-      "component": "androidx.recyclerview:recyclerview:1.2.1",
-      "filename": "recyclerview-1.2.1.aar",
-      "sha256": "a1ea0329ee6d938305dfd0f8ce5c48dea2aac14e5606d23e7fb60afcfb655d6e"
     },
     {
       "component": "androidx.resourceinspection:resourceinspection-annotation:1.0.1",
@@ -536,11 +517,6 @@
       "component": "androidx.versionedparcelable:versionedparcelable:1.1.1",
       "filename": "versionedparcelable-1.1.1.aar",
       "sha256": "57e8d93260d18d5b9007c9eed3c64ad159de90c8609ebfc74a347cbd514535a4"
-    },
-    {
-      "component": "androidx.viewpager2:viewpager2:1.0.0",
-      "filename": "viewpager2-1.0.0.aar",
-      "sha256": "e95c0031d4cc247cd48196c6287e58d2cee54d9c79b85afea7c90920330275af"
     },
     {
       "component": "androidx.viewpager:viewpager:1.0.0",
@@ -823,11 +799,6 @@
       "sha256": "81cccbbad121366c7e2ba767b3c46f5150bfccf4b67f33caf094ef34ac4471be"
     },
     {
-      "component": "com.google.android.material:material:1.13.0",
-      "filename": "material-1.13.0.aar",
-      "sha256": "6d5e1cbb67c05bcdcbbf84005787dafd354a155f59a4d3800fd45fa7eb3689f5"
-    },
-    {
       "component": "com.google.code.findbugs:jsr305:3.0.2",
       "filename": "jsr305-3.0.2.jar",
       "sha256": "766ad2a0783f2687962c8ad74ceecc38a28b9f72a2d085ee438b7813e928d0c7"
@@ -838,9 +809,9 @@
       "sha256": "c8fb4839054d280b3033f800d1f5a97de2f028eb8ba2eb458ad287e536f3f25f"
     },
     {
-      "component": "com.google.errorprone:error_prone_annotations:2.15.0",
-      "filename": "error_prone_annotations-2.15.0.jar",
-      "sha256": "067047714349e7789a5bdbfad9d1c0af9f3a1eb28c55a0ee3f68e682f905c4eb"
+      "component": "com.google.errorprone:error_prone_annotations:2.3.2",
+      "filename": "error_prone_annotations-2.3.2.jar",
+      "sha256": "357cd6cfb067c969226c442451502aee13800a24e950fdfde77bcdb4565a668d"
     },
     {
       "component": "com.google.guava:failureaccess:1.0.1",
@@ -903,8 +874,8 @@
       "sha256": "a7f713593007813bf07d19bd1df9f81c86c0719e9a0bb2ef1b98b78313fc940d"
     },
     {
-      "component": "expo.modules.asset:expo.modules.asset:58.0.18",
-      "filename": "expo.modules.asset-58.0.18.aar",
+      "component": "expo.modules.asset:expo.modules.asset:58.0.20",
+      "filename": "expo.modules.asset-58.0.20.aar",
       "sha256": "6638572bc255e7dd1653db31deff0bc5150b52a04b0fc4e9d9db5ac63e7cbbf8"
     },
     {
@@ -918,8 +889,8 @@
       "sha256": "3e72ad98ec4ea60dbd6c7794ef67d31180d203a8de19b454d0af1af634f00859"
     },
     {
-      "component": "host.exp.exponent:expo.modules.filesystem:58.0.12",
-      "filename": "expo.modules.filesystem-58.0.12.aar",
+      "component": "host.exp.exponent:expo.modules.filesystem:58.0.13",
+      "filename": "expo.modules.filesystem-58.0.13.aar",
       "sha256": "05b04d656f4a5b19617aeb299500fce68d6777c9c3272c1886efea7fdf2f0ab9"
     },
     {
@@ -933,9 +904,9 @@
       "sha256": "8d1d85f4ad5abad880118a04c9bd6db709b1a8c2843a25d6e4705828088f6f61"
     },
     {
-      "component": "host.exp.exponent:expo.modules.sqlite:58.0.14",
-      "filename": "expo.modules.sqlite-58.0.14.aar",
-      "sha256": "6d6c7548d9149e50807984282121ae750a82f61cb8a2d8613d330eb86fe0f1b1"
+      "component": "host.exp.exponent:expo.modules.sqlite:58.0.15",
+      "filename": "expo.modules.sqlite-58.0.15.aar",
+      "sha256": "07fd702db446c37af350500fbb2bba0c344b9c219c407cd4676417b5c04269b0"
     },
     {
       "component": "host.exp.exponent:expo.modules.systemui:58.0.7",
@@ -943,13 +914,13 @@
       "sha256": "89d2db5ac92abb5d6596bc9999cd995fc44cbda2ffeba55c1ffc12a8a9bb92f5"
     },
     {
-      "component": "io.github.expo.kolibri:kolibri-android:0.2.3",
-      "filename": "kolibri-android-0.2.3.aar",
-      "sha256": "5b2875b525b2f7e3afc6b966a9844a86d9d6ec54974da50131b587dda659c26d"
+      "component": "io.github.expo.kolibri:kolibri-android:0.2.4",
+      "filename": "kolibri-android-0.2.4.aar",
+      "sha256": "bf527ae00ef8269a62b77bb949518f2e8a8ceb1a94fe9c3c5a4c522d58bdcdbb"
     },
     {
-      "component": "io.github.expo.kolibri:runtime:0.2.3",
-      "filename": "runtime-0.2.3.jar",
+      "component": "io.github.expo.kolibri:runtime:0.2.4",
+      "filename": "runtime-0.2.4.jar",
       "sha256": "adf456eb170b4986e46ec243aaa823de5510c72549f4b119847f37c6e4cab792"
     },
     {
@@ -958,9 +929,9 @@
       "sha256": "61e8446172bee3fdfd1e445d8947d7dd269cc048434cfc1a5f2a26f651865640"
     },
     {
-      "component": "io.github.expo:expo-modules-v2-react:0.2.5",
-      "filename": "expo-modules-v2-react-0.2.5.aar",
-      "sha256": "421ec96096312eb408d4f9af2055f50381058f16d719b8fee5d91975b78ef352"
+      "component": "io.github.expo:expo-modules-v2-react:0.2.7",
+      "filename": "expo-modules-v2-react-0.2.7.aar",
+      "sha256": "ae8f26bbc6b6168a3caa3a36752cd3b500247fbc02a28cea283f641bf7062ea0"
     },
     {
       "component": "javax.inject:javax.inject:1",
@@ -1008,9 +979,9 @@
       "sha256": "cf95eccc6cc784dff479dee0b8834f3584b93292cc5d91972e82f5d7b9e13e3b"
     },
     {
-      "component": "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22",
-      "filename": "kotlin-stdlib-jdk8-1.8.22.jar",
-      "sha256": "4198b0eaf090a4f25b6f7e5a59581f4314ba8c9f6cd1d13ee9d348e65ed8f707"
+      "component": "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.0",
+      "filename": "kotlin-stdlib-jdk8-1.8.0.jar",
+      "sha256": "05b62804441b0c9a1920b6b7d5cf7329a4e24b6258478e32b1f046ca01900946"
     },
     {
       "component": "org.jetbrains.kotlin:kotlin-stdlib:2.2.20",
@@ -6956,21 +6927,21 @@
     {
       "group": "kolibri",
       "repo": "expo/kolibri",
-      "tag": "v0.2.3",
-      "resolvedCommit": "7bacf775d2ed10f1f19aba01b12a2e2a81a4dfb7",
+      "tag": "v0.2.4",
+      "resolvedCommit": "afb099efe52588941346b02a88859d124c822730",
       "owningArtifact": {
-        "component": "io.github.expo.kolibri:kolibri-android:0.2.3",
-        "filename": "kolibri-android-0.2.3.aar",
-        "sha256": "5b2875b525b2f7e3afc6b966a9844a86d9d6ec54974da50131b587dda659c26d"
+        "component": "io.github.expo.kolibri:kolibri-android:0.2.4",
+        "filename": "kolibri-android-0.2.4.aar",
+        "sha256": "bf527ae00ef8269a62b77bb949518f2e8a8ceb1a94fe9c3c5a4c522d58bdcdbb"
       },
       "rootOriginals": [
         {
           "file": "LICENSE.txt",
           "bytes": 1106,
           "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
-          "source": "https://raw.githubusercontent.com/expo/kolibri/7bacf775d2ed10f1f19aba01b12a2e2a81a4dfb7/LICENSE.txt",
+          "source": "https://raw.githubusercontent.com/expo/kolibri/afb099efe52588941346b02a88859d124c822730/LICENSE.txt",
           "original": {
-            "file": "js-expo-modules-core-58.0.26-LICENSE.txt",
+            "file": "js-expo-modules-core-58.0.30-LICENSE.txt",
             "location": "main-javascript",
             "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4"
           }
@@ -7020,7 +6991,7 @@
         },
         {
           "entry": "prefab/modules/kolibri/include/kolibri/ScopedNativeObject.h",
-          "sha256": "9f4c1884f8fc82c96f0143d27c3ff0856a0130c685cfe4145142f7b981bf30a3",
+          "sha256": "f8e7d2b9420beb80825725f56663d3531bc433e4529cbaab1b7a848da651a9c7",
           "immutableUpstreamPaths": [
             "runtime/src/main/cpp/kolibri/ScopedNativeObject.h"
           ],
@@ -7044,7 +7015,7 @@
         },
         {
           "entry": "prefab/modules/kolibri/include/kolibri/binary/BinaryBuffer.h",
-          "sha256": "5d953d8dbc392f000d9bdd40661928cdfa98e1097869cba4c0ff03ee39e0398c",
+          "sha256": "628b43e261d77284fe9b8a01c3262522573a796c95e2bfd8a61092a6637d2cb5",
           "immutableUpstreamPaths": [
             "runtime/src/main/cpp/kolibri/binary/BinaryBuffer.h"
           ],
@@ -7060,7 +7031,7 @@
         },
         {
           "entry": "prefab/modules/kolibri/include/kolibri/binary/BinaryReader.h",
-          "sha256": "3bd321a2f2f1d44e7e81e687a4daa32c8a3567312ae6ae08f4723c0e41b48fc5",
+          "sha256": "eafe5d48527de4846b4654196581f4507dfde463b1d2b08672c780f43eb8e6f4",
           "immutableUpstreamPaths": [
             "runtime/src/main/cpp/kolibri/binary/BinaryReader.h"
           ],
@@ -7437,21 +7408,21 @@
     "newOwnerSources": [
       {
         "repo": "expo/kolibri",
-        "tag": "v0.2.3",
-        "resolvedCommit": "7bacf775d2ed10f1f19aba01b12a2e2a81a4dfb7",
+        "tag": "v0.2.4",
+        "resolvedCommit": "afb099efe52588941346b02a88859d124c822730",
         "tagObjectChain": [
           {
             "type": "commit",
-            "sha": "7bacf775d2ed10f1f19aba01b12a2e2a81a4dfb7"
+            "sha": "afb099efe52588941346b02a88859d124c822730"
           }
         ],
-        "source": "https://api.github.com/repos/expo/kolibri/git/ref/tags/v0.2.3"
+        "source": "https://api.github.com/repos/expo/kolibri/git/ref/tags/v0.2.4"
       }
     ],
     "productionCoverage": {
       "abi": "arm64-v8a",
       "buildType": "RelWithDebInfo",
-      "ordinaryObjectRecords": 329,
+      "ordinaryObjectRecords": 330,
       "precompiledHeaderRecords": 3,
       "scope": "All six selected production CMake owner dependency records, including source-built Expo Core and JSI and PCH transitive closures; normal preBuild guards executed."
     }
@@ -7462,13 +7433,13 @@
       "version": "3.53.3",
       "sourceId": "2026-06-26 20:14:12 d4c0e51e4aeb96955b99185ab9cde75c339e2c29c3f3f12428d364a10d782c62",
       "owningArtifact": {
-        "component": "host.exp.exponent:expo.modules.sqlite:58.0.14",
-        "filename": "expo.modules.sqlite-58.0.14.aar",
-        "sha256": "6d6c7548d9149e50807984282121ae750a82f61cb8a2d8613d330eb86fe0f1b1"
+        "component": "host.exp.exponent:expo.modules.sqlite:58.0.15",
+        "filename": "expo.modules.sqlite-58.0.15.aar",
+        "sha256": "07fd702db446c37af350500fbb2bba0c344b9c219c407cd4676417b5c04269b0"
       },
       "entry": "jni/arm64-v8a/libexpo-sqlite.so",
-      "nativeSha256": "19b06b43e7cc1675c7f22e0123c41b2f4eda140ba9b6f9b73abe57b36515d097",
-      "nativeBytes": 1896248,
+      "nativeSha256": "fe74626a8f01bbd4796eae1acb724b4b824a6962991d26b315237ddef163d277",
+      "nativeBytes": 1717128,
       "sourceArchive": {
         "url": "https://sqlite.org/2026/sqlite-amalgamation-3530300.zip",
         "sha256": "646421e12aac110282ef8cc68f1a62d4bb15fc7b8f09da0b53e29ee690500431"
@@ -7500,7 +7471,7 @@
         }
       ],
       "wrapperOriginal": {
-        "file": "js-expo-sqlite-58.0.14-LICENSE.txt",
+        "file": "js-expo-sqlite-58.0.15-LICENSE.txt",
         "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4"
       },
       "boundary": "The selected AAR contains the recorded arm64 library and exact SQLite source ID. Reversing the wrapper prefix reproduces the official C and header."

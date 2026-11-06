@@ -5,29 +5,29 @@
   "components": [
     {
       "name": "@expo/cli",
-      "version": "58.1.15",
+      "version": "58.1.19",
       "license": "MIT",
       "repository": {
         "type": "git",
         "url": "https://github.com/expo/expo.git",
         "directory": "packages/@expo/cli"
       },
-      "packageJsonSha256": "25db67cff07f26c8c94b72253e158dcb473238befca9c32e98b377c032134f6e",
+      "packageJsonSha256": "279eb99e60e282dde3bfd4a8b4d231c12db34544e30a888eccd7adb94c41e003",
       "scope": "main Android JavaScript source-map contributor",
       "notices": [
         {
-          "file": "js-@expo_cli-58.1.15-LICENSE.txt",
+          "file": "js-@expo_cli-58.1.19-LICENSE.txt",
           "sourcePath": "LICENSE",
-          "sourceCoordinate": "@expo/cli@58.1.15",
-          "sourceUrl": "https://www.npmjs.com/package/@expo/cli/v/58.1.15",
+          "sourceCoordinate": "@expo/cli@58.1.19",
+          "sourceUrl": "https://www.npmjs.com/package/@expo/cli/v/58.1.19",
           "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
           "bytes": 1106
         },
         {
-          "file": "js-@expo_cli-58.1.15-LICENSE-third-party.txt",
+          "file": "js-@expo_cli-58.1.19-LICENSE-third-party.txt",
           "sourcePath": "LICENSE-third-party",
-          "sourceCoordinate": "@expo/cli@58.1.15",
-          "sourceUrl": "https://www.npmjs.com/package/@expo/cli/v/58.1.15",
+          "sourceCoordinate": "@expo/cli@58.1.19",
+          "sourceUrl": "https://www.npmjs.com/package/@expo/cli/v/58.1.19",
           "sha256": "377f1a9763b9dd9dad730c1534fe2f215496eda131553a16f3f9251f559e3a59",
           "bytes": 1076
         }
@@ -35,14 +35,14 @@
     },
     {
       "name": "@react-native/js-polyfills",
-      "version": "0.88.0",
+      "version": "0.88.1",
       "license": "MIT",
       "repository": {
         "type": "git",
         "url": "git+https://github.com/react/react-native.git",
         "directory": "packages/polyfills"
       },
-      "packageJsonSha256": "b6d6fcb90f91450121c21139428dc77bc423a20326417b02d58a04e89331fd9f",
+      "packageJsonSha256": "4b540e4c8ea9920faeefdaa16a7da7dd49ff5521fd168153ef52aa5e975f837b",
       "scope": "main Android JavaScript source-map contributor",
       "notices": [],
       "licenseNoticeFiles": [
@@ -50,28 +50,28 @@
       ],
       "sharedLicenseSource": {
         "repository": "https://github.com/react/react-native",
-        "commit": "5c35c82cf7dd322bf94d47501508c3de975c077b",
+        "commit": "c30b7f86850d47422637a64c70508e7411dbd8ea",
         "sourcePath": "LICENSE",
         "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
       }
     },
     {
       "name": "expo",
-      "version": "58.0.19",
+      "version": "58.0.23",
       "license": "MIT",
       "repository": {
         "type": "git",
         "url": "https://github.com/expo/expo.git",
         "directory": "packages/expo"
       },
-      "packageJsonSha256": "17cb6e9b357e9ac6bae7b9c5a6259294a5c7ae330883d74b55a21e85abeccd24",
+      "packageJsonSha256": "6d461bcd4e874be6b30583b13480fb28e74d9fa2732acba593640415693643f6",
       "scope": "main Android JavaScript source-map contributor",
       "notices": [
         {
-          "file": "js-expo-58.0.19-LICENSE.txt",
+          "file": "js-expo-58.0.23-LICENSE.txt",
           "sourcePath": "LICENSE",
-          "sourceCoordinate": "expo@58.0.19",
-          "sourceUrl": "https://www.npmjs.com/package/expo/v/58.0.19",
+          "sourceCoordinate": "expo@58.0.23",
+          "sourceUrl": "https://www.npmjs.com/package/expo/v/58.0.23",
           "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
           "bytes": 1106
         }
@@ -557,21 +557,21 @@
     },
     {
       "name": "expo-modules-core",
-      "version": "58.0.26",
+      "version": "58.0.30",
       "license": "MIT",
       "repository": {
         "type": "git",
         "url": "https://github.com/expo/expo.git",
         "directory": "packages/expo-modules-core"
       },
-      "packageJsonSha256": "716641c283a9e597a7e817c3c93275f16f72a9c569f3079b25ea69f223badda1",
+      "packageJsonSha256": "37f280f153bd97aab338c92512a4ca570edbe001c2a51c1758838bbb7624b7cc",
       "scope": "main Android JavaScript source-map contributor",
       "notices": [
         {
-          "file": "js-expo-modules-core-58.0.26-LICENSE.txt",
+          "file": "js-expo-modules-core-58.0.30-LICENSE.txt",
           "sourcePath": "LICENSE",
-          "sourceCoordinate": "expo-modules-core@58.0.26",
-          "sourceUrl": "https://www.npmjs.com/package/expo-modules-core/v/58.0.26",
+          "sourceCoordinate": "expo-modules-core@58.0.30",
+          "sourceUrl": "https://www.npmjs.com/package/expo-modules-core/v/58.0.30",
           "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
           "bytes": 1106
         }
@@ -579,21 +579,21 @@
     },
     {
       "name": "expo-asset",
-      "version": "58.0.18",
+      "version": "58.0.20",
       "license": "MIT",
       "repository": {
         "type": "git",
         "url": "https://github.com/expo/expo.git",
         "directory": "packages/expo-asset"
       },
-      "packageJsonSha256": "1d3d0bd22c3316779e99253e10bc8c11f68b4d17b8f7a2a4aa9d50939c2379c2",
+      "packageJsonSha256": "9e9f2ad7a8106015c8cc61232b35bb84f1d80fa942ed99641f7146c3ac248f12",
       "scope": "main Android JavaScript source-map contributor",
       "notices": [
         {
-          "file": "js-expo-asset-58.0.18-LICENSE.txt",
+          "file": "js-expo-asset-58.0.20-LICENSE.txt",
           "sourcePath": "LICENSE",
-          "sourceCoordinate": "expo-asset@58.0.18",
-          "sourceUrl": "https://www.npmjs.com/package/expo-asset/v/58.0.18",
+          "sourceCoordinate": "expo-asset@58.0.20",
+          "sourceUrl": "https://www.npmjs.com/package/expo-asset/v/58.0.20",
           "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
           "bytes": 1106
         }
@@ -601,21 +601,21 @@
     },
     {
       "name": "expo-constants",
-      "version": "58.0.13",
+      "version": "58.0.15",
       "license": "MIT",
       "repository": {
         "type": "git",
         "url": "https://github.com/expo/expo.git",
         "directory": "packages/expo-constants"
       },
-      "packageJsonSha256": "b1a13b0a908b2403d09bfe59921a19727002f2e265dd053384943f84e3ae8649",
+      "packageJsonSha256": "1a3adee283dc0e514170ddf724c9aed5425ffad1386b1416164cc90d97b83511",
       "scope": "main Android JavaScript source-map contributor",
       "notices": [
         {
-          "file": "js-expo-constants-58.0.13-LICENSE.txt",
+          "file": "js-expo-constants-58.0.15-LICENSE.txt",
           "sourcePath": "LICENSE",
-          "sourceCoordinate": "expo-constants@58.0.13",
-          "sourceUrl": "https://www.npmjs.com/package/expo-constants/v/58.0.13",
+          "sourceCoordinate": "expo-constants@58.0.15",
+          "sourceUrl": "https://www.npmjs.com/package/expo-constants/v/58.0.15",
           "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
           "bytes": 1106
         }
@@ -730,20 +730,20 @@
     },
     {
       "name": "react-native-safe-area-context",
-      "version": "5.10.1",
+      "version": "5.11.1",
       "license": "MIT",
       "repository": {
         "type": "git",
         "url": "git+https://github.com/appandflow/react-native-safe-area-context.git"
       },
-      "packageJsonSha256": "2ac8132723f5f6fe0ea24ab902724583908ca1f63837def85fa3c3ad19143ac6",
+      "packageJsonSha256": "664910ae3a789f27bdbc31b9bc9e639fceb89d5d30294dc3bb4c209a67a27a83",
       "scope": "main Android JavaScript source-map contributor",
       "notices": [
         {
-          "file": "js-react-native-safe-area-context-5.10.1-LICENSE.txt",
+          "file": "js-react-native-safe-area-context-5.11.1-LICENSE.txt",
           "sourcePath": "LICENSE",
-          "sourceCoordinate": "react-native-safe-area-context@5.10.1",
-          "sourceUrl": "https://www.npmjs.com/package/react-native-safe-area-context/v/5.10.1",
+          "sourceCoordinate": "react-native-safe-area-context@5.11.1",
+          "sourceUrl": "https://www.npmjs.com/package/react-native-safe-area-context/v/5.11.1",
           "sha256": "f5c7a4d527258e11fdfe3d84eb73cd14fe6d64224ef051e59f6ee21fe378800c",
           "bytes": 1067
         }
@@ -1247,21 +1247,21 @@
     },
     {
       "name": "expo-sqlite",
-      "version": "58.0.14",
+      "version": "58.0.15",
       "license": "MIT",
       "repository": {
         "type": "git",
         "url": "https://github.com/expo/expo.git",
         "directory": "packages/expo-sqlite"
       },
-      "packageJsonSha256": "891f57422716b72849c9f51261a9add1c13c49c8a7571645a0632330b1b9defc",
+      "packageJsonSha256": "08f5188824aca83d2adbe6d550d3038fe7c3393090d59aae6cfd74dff6cfac63",
       "scope": "main Android JavaScript source-map contributor",
       "notices": [
         {
-          "file": "js-expo-sqlite-58.0.14-LICENSE.txt",
+          "file": "js-expo-sqlite-58.0.15-LICENSE.txt",
           "sourcePath": "LICENSE",
-          "sourceCoordinate": "expo-sqlite@58.0.14",
-          "sourceUrl": "https://www.npmjs.com/package/expo-sqlite/v/58.0.14",
+          "sourceCoordinate": "expo-sqlite@58.0.15",
+          "sourceUrl": "https://www.npmjs.com/package/expo-sqlite/v/58.0.15",
           "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
           "bytes": 1106
         }
@@ -1335,17 +1335,17 @@
   ],
   "mainJavaScriptProfile": {
     "platform": "android",
-    "reviewedMetroBundleSha256": "cdcd296f49fec51e4f4e674a13221359486e8aebb6e985a5d2096f929809a314",
-    "sourceMapSha256": "29f5e1335373f735762e40674584bfbb833b44d220d90c3d6a3f6dfcee1c797e",
+    "reviewedMetroBundleSha256": "0ea7fc458e018567db7bf91f0ac5308dc0afa12ae200a626008e4d29681dee40",
+    "sourceMapSha256": "7faabcfa2b831977aec8f1eacce23391d6b28ddb9b0a9681c19fed4a3cf2ff32",
     "packageIdentityCount": 63,
     "suppliedOriginalFileCount": 60,
     "sharedOriginalPackageCount": 4,
     "dependencyInputs": {
-      "package.json": "314d0ef3cc3998c918de210aaf17bf45578a7e57fab406808ad54c19cd6eaecc",
-      "pnpm-lock.yaml": "b3e4ef88d5371d2cf6795114290d226d66576e017352e87517827dae29859fdd",
-      "node_modules/.pnpm/@expo+cli@58.1.15_@expo+dom-webview@58.0.2_expo-constants@58.0.13_expo@58.0.19_react-na_3c726d6bab7f41c266925a1cc48f343f/node_modules/@expo/cli/package.json": "25db67cff07f26c8c94b72253e158dcb473238befca9c32e98b377c032134f6e",
-      "node_modules/.pnpm/@react-native+js-polyfills@0.88.0/node_modules/@react-native/js-polyfills/package.json": "b6d6fcb90f91450121c21139428dc77bc423a20326417b02d58a04e89331fd9f",
-      "node_modules/.pnpm/expo@58.0.19_@babel+core@7.29.7_@expo+dom-webview@58.0.2_react-native-worklets@0.13.0_@_fd2bdc51abd4a2d9da04476883cda17d/node_modules/expo/package.json": "17cb6e9b357e9ac6bae7b9c5a6259294a5c7ae330883d74b55a21e85abeccd24",
+      "package.json": "3305cd7b8b4826b4e2e94572f3a8aa571327481f4cbc96056bb1fd906c175917",
+      "pnpm-lock.yaml": "0b5dc1d8838d29f56def3a2a70757768a91dcf88b90976a913cca138c4c010d0",
+      "node_modules/.pnpm/@expo+cli@58.1.19_@expo+dom-webview@58.0.2_expo-constants@58.0.15_expo@58.0.23_react-na_56e6f5118065dd911a566dde5519da83/node_modules/@expo/cli/package.json": "279eb99e60e282dde3bfd4a8b4d231c12db34544e30a888eccd7adb94c41e003",
+      "node_modules/.pnpm/@react-native+js-polyfills@0.88.1/node_modules/@react-native/js-polyfills/package.json": "4b540e4c8ea9920faeefdaa16a7da7dd49ff5521fd168153ef52aa5e975f837b",
+      "node_modules/.pnpm/expo@58.0.23_@babel+core@7.29.7_@expo+dom-webview@58.0.2_react-native-worklets@0.13.0_@_37efeb4228490d2fc4486fb86dce2ee6/node_modules/expo/package.json": "6d461bcd4e874be6b30583b13480fb28e74d9fa2732acba593640415693643f6",
       "node_modules/.pnpm/react-native@0.88.1_@babel+core@7.29.7_@react-native+metro-config@0.88.1_@babel+core@7._05eadce5f1d68d8a8a609a3b62d66ff9/node_modules/react-native/package.json": "3f2bf69ed883e97a295b1de43f5a2d75d112ab45495153360c2fb521023c7f3f",
       "node_modules/.pnpm/invariant@2.2.4/node_modules/invariant/package.json": "ef0c08d9f91029e247bb570a04903f3a9bd646c1f2128d29e69ee171794cd2a3",
       "node_modules/.pnpm/stacktrace-parser@0.1.11/node_modules/stacktrace-parser/package.json": "e074abdd6fd9da17db51b0eacc14c7a1b7f4a069e9786e15e8069fedb833b430",
@@ -1369,18 +1369,18 @@
       "node_modules/.pnpm/flow-enums-runtime@0.0.6/node_modules/flow-enums-runtime/package.json": "a9d83154145ed1bf98a1bb5b52ec7cac031537f6e8e47e726aa0b6f16a551c8b",
       "node_modules/.pnpm/@expo+log-box-utils@58.0.2/node_modules/@expo/log-box-utils/package.json": "a30b58aaf90c3ec9210dba94ce4e619978fbef799ab9a4d3b8770c755cd94ee9",
       "node_modules/.pnpm/@ungap+structured-clone@1.4.0/node_modules/@ungap/structured-clone/package.json": "8f931c21e4c0b37c35d5ffef35e0bc057f3cbd0224b026b21a5bdb82a98cbd8f",
-      "node_modules/.pnpm/expo-modules-core@58.0.26_react-native-worklets@0.13.0_@babel+core@7.29.7_@react-native_b4a5574b99b259e95444230c87351ab5/node_modules/expo-modules-core/package.json": "716641c283a9e597a7e817c3c93275f16f72a9c569f3079b25ea69f223badda1",
-      "node_modules/.pnpm/expo-asset@58.0.18_expo@58.0.19_react-native@0.88.1_@babel+core@7.29.7_@react-native+me_f2f549677a9c11353045e43f5a820188/node_modules/expo-asset/package.json": "1d3d0bd22c3316779e99253e10bc8c11f68b4d17b8f7a2a4aa9d50939c2379c2",
-      "node_modules/.pnpm/expo-constants@58.0.13_expo@58.0.19_react-native@0.88.1_@babel+core@7.29.7_@react-nativ_f7628c36258ff2da84b0f021d41aa7b0/node_modules/expo-constants/package.json": "b1a13b0a908b2403d09bfe59921a19727002f2e265dd053384943f84e3ae8649",
+      "node_modules/.pnpm/expo-modules-core@58.0.30_react-native-worklets@0.13.0_@babel+core@7.29.7_@react-native_0023c1a6f87aca7abf0bf32d4b5800b1/node_modules/expo-modules-core/package.json": "37f280f153bd97aab338c92512a4ca570edbe001c2a51c1758838bbb7624b7cc",
+      "node_modules/.pnpm/expo-asset@58.0.20_expo@58.0.23_react-native@0.88.1_@babel+core@7.29.7_@react-native+me_201862596b3b04390ca09fa571fa5dfe/node_modules/expo-asset/package.json": "9e9f2ad7a8106015c8cc61232b35bb84f1d80fa942ed99641f7146c3ac248f12",
+      "node_modules/.pnpm/expo-constants@58.0.15_expo@58.0.23_react-native@0.88.1_@babel+core@7.29.7_@react-nativ_1c907b16ea264956e3978aee4aca93a5/node_modules/expo-constants/package.json": "1a3adee283dc0e514170ddf724c9aed5425ffad1386b1416164cc90d97b83511",
       "node_modules/.pnpm/react-native-gesture-handler@3.3.0_react-native@0.88.1_@babel+core@7.29.7_@react-native_b2f6696ee0a672602e00329259e59717/node_modules/react-native-gesture-handler/package.json": "e662c78f69e36947e39b7d4e1265e12a5c976dcdec584da4a1b7369cd44fbd05",
       "node_modules/.pnpm/react-native-worklets@0.13.0_@babel+core@7.29.7_@react-native+metro-config@0.88.1_@babe_bc56d9ab56e73b28d35c31eb1f837328/node_modules/react-native-worklets/package.json": "aa8f3e796568bedf9b72b8cac0b1935a2356a5cd5ba5bd7735e75e1bad7e9ead",
       "node_modules/.pnpm/react-native-reanimated@4.7.1_react-native-worklets@0.13.0_@babel+core@7.29.7_@react-na_bbb623bb11b5342864751febb74c7aff/node_modules/react-native-reanimated/package.json": "48f6747c1b290642a1391402d2b8f342ee2c141840a9c7a12afe0f72e55c170c",
       "node_modules/.pnpm/semver@7.8.5/node_modules/semver/package.json": "7c94cb7f2a53c27b20d76386ec144c062894dbcc909cfabd0f728c37874b1776",
       "node_modules/.pnpm/react-native-is-edge-to-edge@1.3.1_react-native@0.88.1_@babel+core@7.29.7_@react-native_caa0fd8d5fa2fc426fb93dca17b7810b/node_modules/react-native-is-edge-to-edge/package.json": "4808c1cfb5e0c5d8d082c0d9e5efaf36eeb64da249fc65502d1a0333f3762a23",
-      "node_modules/.pnpm/react-native-safe-area-context@5.10.1_react-native@0.88.1_@babel+core@7.29.7_@react-nat_2480ad6a4bdd0dd859d2d15167ddddeb/node_modules/react-native-safe-area-context/package.json": "2ac8132723f5f6fe0ea24ab902724583908ca1f63837def85fa3c3ad19143ac6",
-      "node_modules/.pnpm/expo-font@58.0.11_expo@58.0.19_react-native@0.88.1_@babel+core@7.29.7_@react-native+met_e47afb7e393592809555dcf309d7c1d4/node_modules/expo-font/package.json": "a39a111996fb3549857ce64b59fee0900af9d953f9b8581e5f116ae647041220",
-      "node_modules/.pnpm/expo-image@58.0.18_expo@58.0.19_react-native@0.88.1_@babel+core@7.29.7_@react-native+me_7569878d466b59ddba8194e4ca1961fc/node_modules/expo-image/package.json": "b21f4530a67399aaa7492c51e7b2c1aa50bc5b9c1089e86e9e9ffa7fba095f2f",
-      "node_modules/.pnpm/expo-crypto@58.0.7_expo@58.0.19/node_modules/expo-crypto/package.json": "95d382241a7f7d9662dafaef7b590988ad4def1144e38b05f9eafc5aac7d8b3b",
+      "node_modules/.pnpm/react-native-safe-area-context@5.11.1_react-native@0.88.1_@babel+core@7.29.7_@react-nat_87f127276331cf4845053b57b369b15e/node_modules/react-native-safe-area-context/package.json": "664910ae3a789f27bdbc31b9bc9e639fceb89d5d30294dc3bb4c209a67a27a83",
+      "node_modules/.pnpm/expo-font@58.0.11_expo@58.0.23_react-native@0.88.1_@babel+core@7.29.7_@react-native+met_3500d7b9317d0b4b4429a5a57a72234c/node_modules/expo-font/package.json": "a39a111996fb3549857ce64b59fee0900af9d953f9b8581e5f116ae647041220",
+      "node_modules/.pnpm/expo-image@58.0.18_expo@58.0.23_react-native@0.88.1_@babel+core@7.29.7_@react-native+me_8851e0179bc82020014abc409e2d6365/node_modules/expo-image/package.json": "b21f4530a67399aaa7492c51e7b2c1aa50bc5b9c1089e86e9e9ffa7fba095f2f",
+      "node_modules/.pnpm/expo-crypto@58.0.7_expo@58.0.23/node_modules/expo-crypto/package.json": "95d382241a7f7d9662dafaef7b590988ad4def1144e38b05f9eafc5aac7d8b3b",
       "node_modules/.pnpm/applesauce-relay@6.2.1_typescript@6.0.3/node_modules/applesauce-relay/package.json": "00de51a6cefc0fba1e8a48b8dc896f519a7f437787e18b7a9513da79034f98c7",
       "node_modules/.pnpm/applesauce-core@6.2.0_typescript@6.0.3/node_modules/applesauce-core/package.json": "889b287ef9f674d835b560738cd74352e38ea3d97d7bdfba4394deeb5e445d04",
       "node_modules/.pnpm/nostr-tools@2.19.4_typescript@6.0.3/node_modules/nostr-tools/package.json": "ef408a3c64bc2519f34a3e5ad9a935a20cd409f596e9fafe1e5c52799203a0fa",
@@ -1401,11 +1401,11 @@
       "node_modules/.pnpm/@noble+curves@2.0.1/node_modules/@noble/curves/package.json": "588b510f1b8804bdf820acbd14065126286d92575c45811acef08fe480899469",
       "node_modules/.pnpm/@noble+hashes@2.0.1/node_modules/@noble/hashes/package.json": "ceb30ba96a14786c419db53f2b8d3d59ece7ac5221c198ac03def462cf96ef23",
       "node_modules/.pnpm/@scure+base@2.0.0/node_modules/@scure/base/package.json": "93cb3a28e1f34a5399aed7c4ba8ba337acd28b01420c34e6daa9bc35a24f34af",
-      "node_modules/.pnpm/expo-secure-store@58.0.2_patch_hash=d82c16f5c16a19e5294400cdf1ae5b572506e22a449bf7eea00eb08a63eebb82_expo@58.0.19/node_modules/expo-secure-store/package.json": "810fd562270182b7497ef1045a7a09a038861f7733e2967e165aa686bbad34e6",
-      "node_modules/.pnpm/expo-sqlite@58.0.14_expo@58.0.19_react-native@0.88.1_@babel+core@7.29.7_@react-native+m_f621a698b4c86760c0798f3f6271bd0f/node_modules/expo-sqlite/package.json": "891f57422716b72849c9f51261a9add1c13c49c8a7571645a0632330b1b9defc",
+      "node_modules/.pnpm/expo-secure-store@58.0.2_patch_hash=d82c16f5c16a19e5294400cdf1ae5b572506e22a449bf7eea00eb08a63eebb82_expo@58.0.23/node_modules/expo-secure-store/package.json": "810fd562270182b7497ef1045a7a09a038861f7733e2967e165aa686bbad34e6",
+      "node_modules/.pnpm/expo-sqlite@58.0.15_expo@58.0.23_react-native@0.88.1_@babel+core@7.29.7_@react-native+m_d8ca3eda7466ae07e12e847c2d858e5d/node_modules/expo-sqlite/package.json": "08f5188824aca83d2adbe6d550d3038fe7c3393090d59aae6cfd74dff6cfac63",
       "node_modules/.pnpm/@babel+runtime@7.29.7/node_modules/@babel/runtime/package.json": "8c4bf20c55e3f3a93df034b12746bf72185cf2acb0ef52847a3465d6e67c61e7",
       "node_modules/.pnpm/await-lock@2.2.2/node_modules/await-lock/package.json": "646f3516dc035f0aef095b321eee009cefff46529813e4923e39e5579098205e",
-      "node_modules/.pnpm/@expo+devtools@58.0.2_expo@58.0.19_react-native@0.88.1_@babel+core@7.29.7_@react-native_2a36e1c120d3d62e5bba2b1f4dd6a031/node_modules/@expo/devtools/package.json": "79495142bcf449038d73e827010ba7b5c41014c5c70684540437025fea941c59"
+      "node_modules/.pnpm/@expo+devtools@58.0.2_expo@58.0.23_react-native@0.88.1_@babel+core@7.29.7_@react-native_9dfdf269eff94e775900098b293ac671/node_modules/@expo/devtools/package.json": "79495142bcf449038d73e827010ba7b5c41014c5c70684540437025fea941c59"
     }
   }
 }

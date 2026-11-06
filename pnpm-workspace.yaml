@@ -12,3 +12,32 @@ minimumReleaseAgeExclude:
   - source-map-js@1.2.2
   - proxy-addr@2.0.8
   - compression@1.8.2
+
+  # Expo SDK 58 alignment, approved 2026-11-06. Remove when these releases reach seven days.
+  - expo@58.0.23
+  - expo-build-properties@58.0.12
+  - expo-sqlite@58.0.15
+  - react-native-safe-area-context@5.11.1
+  - '@expo/cli@58.1.19'
+  - expo-asset@58.0.20
+  - '@expo/config@58.0.11'
+  - '@expo/log-box@58.0.15'
+  - expo-constants@58.0.15
+  - '@expo/fingerprint@0.21.9'
+  - babel-preset-expo@58.0.24
+  - expo-modules-core@58.0.30
+  - '@expo/metro-config@58.0.21'
+  - '@expo/config-plugins@58.0.12'
+  - expo-modules-autolinking@58.0.17
+  - '@expo/local-build-cache-provider@58.0.11'
+  - '@expo/schema-utils@58.0.3'
+  - '@expo/env@2.5.4'
+  - '@expo/router-server@58.0.21'
+  - '@expo/inline-modules@0.2.9'
+  - '@expo/prebuild-config@58.0.19'
+  - expo-modules-jsi@58.0.22
+  - expo-modules-macros@0.29.0
+  - '@expo/modules-macros-linux-x64@0.29.0'
+  - '@expo/modules-macros-win32-x64@0.29.0'
+  - '@expo/modules-macros-linux-arm64@0.29.0'
+  - '@expo/modules-macros-win32-arm64@0.29.0'

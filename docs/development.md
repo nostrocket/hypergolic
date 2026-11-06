@@ -9,7 +9,7 @@ changes in app configuration, config plugins and modules.
 | Component | Repository pin or requirement |
 | --- | --- |
 | Node / pnpm | 24.20.0 / 10.34.5 |
-| Expo / React Native / React | 58.0.19 / 0.88.1 / 19.3.0 |
+| Expo / React Native / React | 58.0.23 / 0.88.1 / 19.3.0 |
 | Java | Temurin 17.0.20.1+1; CI notation `17.0.20+101` |
 | Android SDK / Build Tools | Compile API 37 with 37.0.0, target API 36 |
 | Gradle / Android Gradle Plugin | 9.4.1 / 9.2.1 |
@@ -104,8 +104,8 @@ native build. Report each result and any blocked or skipped stage separately.
 
 Both final React Doctor and aislop scores must reach 100/100 without hiding
 findings. The standard local React Doctor command disables telemetry and its
-scoring service; clean local diagnostics do not provide a numeric score. Full
-quality and dependency closeout remain open. See the
+scoring service; clean local diagnostics do not provide a numeric score.
+CI obtains numeric scores and audits all ten lockfiles. See the
 [patch and exception record](dependency-patches.md).
 
 `check` does not run every behavioral test. Run the suites relevant to the change,

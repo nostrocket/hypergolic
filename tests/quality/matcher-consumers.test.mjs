@@ -9,7 +9,6 @@ const root = createRequire(import.meta.url);
 const expo = createRequire(root.resolve('expo/package.json'));
 const cli = createRequire(expo.resolve('@expo/cli/package.json'));
 const fingerprint = createRequire(cli.resolve('@expo/fingerprint/package.json'));
-const config = createRequire(cli.resolve('@expo/config/package.json'));
 const plugins = createRequire(cli.resolve('@expo/config-plugins/package.json'));
 const metro = createRequire(expo.resolve('@expo/metro-config/package.json'));
 const cliMetro = createRequire(cli.resolve('@expo/metro-config/package.json'));
@@ -38,6 +37,8 @@ function fixture(t) {
     'packages/a/package.json': '{"name":"disposable-a"}',
     'packages/b/package.json': 'invalid json',
     'packages/node_modules/package.json': '{"name":"must-be-ignored"}',
+    'packages/Carthage/package.json': '{"name":"must-be-ignored"}',
+    'packages/Pods/package.json': '{"name":"must-be-ignored"}',
     'ios/Main.xcodeproj/project.pbxproj': '',
     'ios/Pods/Skip.xcodeproj/project.pbxproj': '',
     'ios/Main.xcodeproj/xcshareddata/xcschemes/Main.xcscheme': '',
@@ -51,7 +52,7 @@ function fixture(t) {
   return directory;
 }
 
-for (const [name, consumer] of Object.entries({ cli, config, plugins, fingerprint, metro, cliMetro })) {
+for (const [name, consumer] of Object.entries({ cli, fingerprint })) {
   test(`Expo ${name} glob preserves discovery, ignores and symlink options`, async t => {
     const cwd = fixture(t);
     const { glob, globStream, globSync } = consumer('glob');
@@ -120,10 +121,13 @@ for (const [name, consumer] of Object.entries({ metro, cliMetro })) {
     const directory = fixture(t);
     const { globAllPackageJsonPaths } = consumer('./build/getWatchFolders.js');
 
-    assert.deepEqual(
-      relativePaths(directory, globAllPackageJsonPaths(directory, ['packages/*'])),
-      ['packages/a/package.json'],
-    );
+    for (const pattern of ['packages/*', 'packages/**']) {
+      assert.deepEqual(
+        relativePaths(directory, globAllPackageJsonPaths(directory, [pattern])),
+        ['packages/a/package.json'],
+        pattern,
+      );
+    }
   });
 }
 

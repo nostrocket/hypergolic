@@ -1165,17 +1165,17 @@
     },
     {
       "component": "react-native-safe-area-context",
-      "version": "5.10.1",
+      "version": "5.11.1",
       "files": [
-        "js-react-native-safe-area-context-5.10.1-LICENSE.txt"
+        "js-react-native-safe-area-context-5.11.1-LICENSE.txt"
       ],
       "sha256": "f5c7a4d527258e11fdfe3d84eb73cd14fe6d64224ef051e59f6ee21fe378800c"
     },
     {
       "component": "expo-modules-core",
-      "version": "58.0.26",
+      "version": "58.0.30",
       "files": [
-        "js-expo-modules-core-58.0.26-LICENSE.txt"
+        "js-expo-modules-core-58.0.30-LICENSE.txt"
       ],
       "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4"
     }

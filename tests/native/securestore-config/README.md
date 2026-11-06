@@ -65,7 +65,7 @@ append both SecureStore patterns there as well because platform options replace
 the root list. Keep its existing `^expo-image$` entry. Android matches Gradle project names with a full regex;
 iOS matches the npm package or pod name. This is required even if a current local
 Android build already selects source. A precompiled AAR/XCFramework cannot include
-the new policy. The installed Expo autolinking 58.0.15 implements these selectors.
+the new policy. The installed Expo autolinking 58.0.17 implements these selectors.
 After coordinating active build jobs, regenerate the lock and install the patch:
 
 ```sh

@@ -35,11 +35,11 @@ function merge(directory, changes, dryRun = true) {
 	return modifyConfigAsync(directory, changes, options, { dryRun });
 }
 
-test("Expo resolves the real maintained merge implementation and not deepmerge", () => {
-	assert.equal(config("@fastify/deepmerge/package.json").version, "3.2.4");
-	assert.throws(() => config.resolve("deepmerge"), {
-		code: "MODULE_NOT_FOUND",
-	});
+test("Expo Config uses its own merger without either external merge package", () => {
+	assert.equal(typeof config("./mergeConfig.js").mergeConfig, "function");
+	for (const name of ["deepmerge", "@fastify/deepmerge"]) {
+		assert.throws(() => config.resolve(name), { code: "MODULE_NOT_FOUND" });
+	}
 });
 
 test("nested arrays concatenate, fields merge and returned values do not alias caller input", async () => {
