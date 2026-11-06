@@ -80,6 +80,7 @@ async function loadSessionArtifact(ports: PublishedSessionDependencies, request:
 async function preparePublishedSession(ports: PublishedSessionDependencies, request: PrepareRequest,
   externalSignal: AbortSignal, review: ConsentReview): Promise<PreparedPublishedSession> {
   const authority = ports.identity.sessionAuthority();
+  const assertExactOpenActive = request.exactOpen?.assertActive;
   const controller = new AbortController();
   const cancel = () => controller.abort();
   if (externalSignal.aborted) cancel();
@@ -88,7 +89,7 @@ async function preparePublishedSession(ports: PublishedSessionDependencies, requ
     if (controller.signal.aborted) fail();
     try {
       authority.assertActive();
-      if (!success) request.exactOpen?.assertActive();
+      if (!success) assertExactOpenActive?.();
     } catch { fail(); }
     if (controller.signal.aborted) fail();
   };

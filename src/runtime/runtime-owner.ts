@@ -124,17 +124,19 @@ export function createRuntimeOwner(database: ShellDatabase,
   const bindingFor = (selected: NappletDescriptor, ready: PreparedPublishedSession): PublishedRuntimeBinding => {
     let revoked = false;
     let mounted: string | null = null;
-    const host = JSON.parse(ready.hostInput) as { configuration: string };
+    // Keep only binding metadata and callbacks after staging, not the HTML buffer.
+    const {hostInput, assertActive: assertPreparedActive, revoke: revokePrepared} = ready;
+    const host = JSON.parse(hostInput) as { configuration: string };
     const configuration = JSON.parse(host.configuration) as Omit<NativeRegistration, 'generation'>;
     const entry = discovery && isDiscoveryEntry(selected) ? { broker: discovery, source: selected } : undefined;
     const assertActive = () => {
       if (revoked) throw new ShellStorageError('REVOKED');
-      ready.assertActive();
+      assertPreparedActive();
       exactSession(selected);
     };
     const receiver = capabilityReceiver(database, native, approvals, selected.id, configuration, assertActive, queries, subscriptions, resources, uploads, identityData, routing?.broker, notify, config, outbox, outboxStreams, entry);
     const binding: PublishedRuntimeBinding = Object.freeze({
-      publishedArtifact: entry ? JSON.stringify({...host, configuration: JSON.stringify({...configuration, publishedOpen: true})}) : ready.hostInput,
+      publishedArtifact: entry ? JSON.stringify({...host, configuration: JSON.stringify({...configuration, publishedOpen: true})}) : hostInput,
       requestedDomains: Object.freeze({ requiredDomains: ready.artifact.manifest.requiredDomains,
         optionalDomains: ready.artifact.manifest.optionalDomains }),
       ready(generation: string) {
@@ -162,7 +164,7 @@ export function createRuntimeOwner(database: ShellDatabase,
       },
       revoke(): void {
         if (revoked) return;
-        revoked = true; receiver.revoke(); ready.revoke(); approvals?.service.close(selected.id); uploads?.close(selected.id);
+        revoked = true; receiver.revoke(); revokePrepared(); approvals?.service.close(selected.id); uploads?.close(selected.id);
         if (running.get(selected.id) === binding) running.delete(selected.id);
       },
       receive: receiver.receive,
