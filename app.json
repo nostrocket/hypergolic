@@ -8,7 +8,7 @@
       "android",
       "ios"
     ],
-    "orientation": "portrait",
+    "orientation": "default",
     "android": {
       "package": "org.nostrocket.hypergolic.dev",
       "adaptiveIcon": {

@@ -1,5 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { FlatList, Modal, StyleSheet, Text, View, type ListRenderItemInfo } from 'react-native';
+import { FlatList, StyleSheet, Text, View, type ListRenderItemInfo } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ShellModal as Modal } from './ShellModal';
 import { ShellPressable as Pressable } from './ShellPressable';
 import type { UploadService, UploadPresentation } from '../uploads/upload-service.ts';
 import { signerFailureMessage } from '../security/signing-methods.ts';
@@ -33,6 +35,7 @@ const RecoveryRow = memo(function RecoveryRow({row, checking, attempted, onCheck
 const recoveryKey = (row: UploadRecoveryRecord): string => row.uploadId;
 function Recovery({service, blocked}: {service: UploadRecoveryService; blocked: boolean}) {
   const { styles } = useShellStyles(createStyles);
+  const insets = useSafeAreaInsets();
   const snapshot = useSyncExternalStore(service.subscribe, service.getSnapshot);
   const [open, setOpen] = useState(false);
   useEffect(() => {
@@ -50,7 +53,7 @@ function Recovery({service, blocked}: {service: UploadRecoveryService; blocked: 
       <Text style={styles.cancelText}>{unknown ? `${unknown} upload${unknown === 1 ? ' needs' : 's need'} checking` : 'View checked uploads'}</Text>
     </Pressable>}
     <Modal visible={open && !blocked && snapshot.available && records.length > 0} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-      <View style={styles.backdrop}><View accessibilityViewIsModal style={styles.sheet}>
+      <View style={[styles.backdrop, {paddingLeft: Math.max(20, insets.left), paddingRight: Math.max(20, insets.right)}]}><View accessibilityViewIsModal style={styles.sheet}>
         <Text accessibilityRole="header" style={styles.heading}>Check interrupted uploads</Text>
         <Text style={styles.detail}>Checks read the saved server and hash. They do not retry an upload, sign in to another provider, or delete a remote file.</Text>
         <FlatList data={records} keyExtractor={recoveryKey} contentContainerStyle={styles.records} renderItem={renderRow} />

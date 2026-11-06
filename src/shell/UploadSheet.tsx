@@ -1,7 +1,8 @@
 import { TrustedBand } from './TrustedBand';
 import { useMemo, useState } from 'react';
 import { Image } from 'expo-image';
-import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ShellModal as Modal } from './ShellModal';
 import { ShellPressable as Pressable } from './ShellPressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { UploadItem } from '../uploads/upload-service.ts';
@@ -40,7 +41,7 @@ function Review({item, title, onApprove, onReject}: Omit<Props, 'item'> & {item:
   const header = useMemo(() => item.previewReady && item.review.metadataPolicy === 'attachment-unchanged' ? inspection(item) : null, [item]);
   const canApprove = item.previewReady && (item.review.metadataPolicy === 'attachment-unchanged' ? header !== null : decoded);
   return <Modal transparent animationType="none" visible onRequestClose={() => onReject(item.id)}>
-    <View style={styles.backdrop}><View testID="upload-sheet" accessibilityViewIsModal style={[styles.sheet, {paddingBottom: Math.max(16, insets.bottom)}]}>
+    <View style={[styles.backdrop, {paddingLeft: insets.left, paddingRight: insets.right}]}><View testID="upload-sheet" accessibilityViewIsModal style={[styles.sheet, {paddingBottom: Math.max(16, insets.bottom)}]}>
       <TrustedBand />
       <ScrollView contentContainerStyle={styles.content}>
         <Text accessibilityRole="header" style={styles.title}>Approve file upload</Text>

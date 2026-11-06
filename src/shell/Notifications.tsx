@@ -1,6 +1,7 @@
 import { TrustedBand } from './TrustedBand';
 import {useCallback, useEffect, useMemo, useState, useSyncExternalStore} from 'react';
-import {AppState, FlatList, Modal, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {AppState, FlatList, ScrollView, StyleSheet, Text, View} from 'react-native';
+import { ShellModal as Modal } from './ShellModal';
 import { ShellPressable as Pressable } from './ShellPressable';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import type {NotifyBroker, NotificationBadge, NotificationCard, NotifyReview} from '../presentation/notify-broker';
@@ -20,7 +21,7 @@ function NotificationContent({card, service}: {card: NotificationCard; service: 
 function NotificationPermission({review, service}: {review: NotifyReview; service: NotifyBroker}) {
   const { styles } = useShellStyles(createStyles);
   const insets = useSafeAreaInsets();
-  return <Modal visible transparent animationType="fade" onRequestClose={() => service.decide(review.id, false)}><View style={[styles.shade, {paddingTop: insets.top}]}><View style={styles.permissionSheet} accessibilityViewIsModal><TrustedBand /><ScrollView contentContainerStyle={[styles.sheet, {paddingBottom: Math.max(insets.bottom, 24)}]}>
+  return <Modal visible transparent animationType="fade" onRequestClose={() => service.decide(review.id, false)}><View style={[styles.shade, {paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right}]}><View style={styles.permissionSheet} accessibilityViewIsModal><TrustedBand /><ScrollView contentContainerStyle={[styles.sheet, {paddingBottom: Math.max(insets.bottom, 24)}]}>
     <Text accessibilityRole="header" style={styles.heading}>Allow notifications?</Text>
     <Text selectable style={styles.title}>{review.origin.appId}</Text><Text selectable style={styles.publisher}>{formatNpub(review.origin.publisher)}</Text>
     <Text style={styles.detail}>Selected identity</Text><Text selectable style={styles.publisher}>{formatNpub(review.origin.user)}</Text>
@@ -49,7 +50,7 @@ export function Notifications({service, blocked}: {service: NotifyBroker; blocke
       <Button id="notify-toast-open" label="View notification" onPress={() => setOpened(true)}/>
     </View></View>}
     {(snapshot.cards.length > 0 || badge > 0) && !snapshot.review && <View style={styles.launcher}><Button id="notify-centre-open" label={'Notifications (' + snapshot.cards.length + '), badges ' + badge} onPress={() => setOpened(true)}/></View>}
-    <Modal visible={opened && !snapshot.review} transparent animationType="fade" onRequestClose={() => setOpened(false)}><View style={[styles.shade, {paddingTop: insets.top}]}><FlatList
+    <Modal visible={opened && !snapshot.review} transparent animationType="fade" onRequestClose={() => setOpened(false)}><View style={[styles.shade, {paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right}]}><FlatList
       data={entries}
       keyExtractor={item => item.kind === 'card' ? 'card-' + item.card.id : 'badge-' + item.badge.origin.generation}
       contentContainerStyle={[styles.sheet, {paddingBottom: Math.max(insets.bottom, 24)}]}

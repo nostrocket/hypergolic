@@ -1,7 +1,8 @@
 import { TrustedBand } from './TrustedBand';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRef } from 'react';
-import { AccessibilityInfo, Modal, ScrollView, StyleSheet, Text, View, type ViewInstance } from 'react-native';
+import { AccessibilityInfo, ScrollView, StyleSheet, Text, View, type ViewInstance } from 'react-native';
+import { ShellModal as Modal } from './ShellModal';
 import { ShellPressable as Pressable } from './ShellPressable';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 
@@ -15,7 +16,7 @@ export function ClosePrompt({ title, onKeepOpen, onClose, onDismiss }: Props) {
       keep.current?.focus();
       if (keep.current) AccessibilityInfo.sendAccessibilityEvent(keep.current, 'focus');
     }}>
-      <View style={styles.backdrop}>
+      <View style={[styles.backdrop, {paddingLeft: insets.left, paddingRight: insets.right}]}>
         <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]} accessibilityViewIsModal><TrustedBand label="Close napplet" /><ScrollView contentContainerStyle={styles.dialog}>
           <Text accessibilityRole="header" style={styles.title}>Close {title}?</Text>
           <Text style={styles.body}>Unsaved work may be lost. Saved data will remain available when you open it again.</Text>

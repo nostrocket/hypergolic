@@ -1,5 +1,6 @@
 import { useRef } from 'react';
-import { AccessibilityInfo, Modal, ScrollView, StyleSheet, Text, type TextInstance } from 'react-native';
+import { AccessibilityInfo, ScrollView, StyleSheet, Text, type TextInstance } from 'react-native';
+import { ShellModal as Modal } from './ShellModal';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import type { NappletConsentReview } from '../napplets/first-open-consent';
 import { ShellPressable as Pressable } from './ShellPressable';

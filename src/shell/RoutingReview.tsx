@@ -1,6 +1,7 @@
 import { TrustedBand } from './TrustedBand';
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { AppState, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppState, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ShellModal as Modal } from './ShellModal';
 import { ShellPressable as Pressable } from './ShellPressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { CatalogHandler } from '../routing/routing-catalog';
@@ -97,13 +98,15 @@ const reviewActions = {'published-open': 'Open verified version', intent: 'Appro
 function RoutingReviewSheet({service, item}: {service: RoutingReviewService; item: RoutingReviewItem}) {
   const { styles } = useShellStyles(createStyles);
   const request = item.request, insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+  const landscape = width > height;
   const [selected, setSelected] = useState<CatalogHandler | null>(request.kind === 'intent' ? request.selected : null);
   const [remember, setRemember] = useState(false);
   const cancel = () => service.decide(item.id, {allow: false});
   const accept = () => service.decide(item.id, {allow: true, ...(selected ? {selected} : {}), remember});
   const disabled = request.kind === 'intent' && selected === null;
   return <Modal visible transparent animationType="none" onRequestClose={cancel}>
-    <View style={styles.backdrop}><View accessibilityViewIsModal testID="routing-review" style={[styles.sheet, {paddingBottom: Math.max(16, insets.bottom)}]}>
+    <View style={[styles.backdrop, {paddingLeft: insets.left, paddingRight: insets.right}]}><View accessibilityViewIsModal testID="routing-review" style={[styles.sheet, {paddingBottom: Math.max(16, insets.bottom)}]}>
       <TrustedBand />
       <ScrollView contentContainerStyle={styles.content}>
         <Text accessibilityRole="header" style={styles.title}>{reviewTitle(request)}</Text>
@@ -113,9 +116,9 @@ function RoutingReviewSheet({service, item}: {service: RoutingReviewService; ite
           : <NappletIdentity {...request.origin}/>}
         <ReviewDetails request={request} selected={selected} onSelect={setSelected} remember={remember} onRemember={() => setRemember(value => !value)}/>
       </ScrollView>
-      <View style={styles.actions}><Pressable accessibilityRole="button" testID="routing-approve" disabled={disabled} accessibilityState={{disabled}} style={styles.button} onPress={accept}><Text style={styles.action}>{request.kind === 'published-open' && request.changesAccess ? 'Allow and open' : reviewActions[request.kind]}</Text></Pressable>
-        <Pressable accessibilityRole="button" testID="routing-cancel" style={styles.button} onPress={cancel}><Text style={styles.action}>Cancel</Text></Pressable></View>
+      <View style={[styles.actions, landscape && styles.actionsLandscape]}><Pressable accessibilityRole="button" testID="routing-approve" disabled={disabled} accessibilityState={{disabled}} style={[styles.button, landscape && styles.actionLandscape]} onPress={accept}><Text style={styles.action}>{request.kind === 'published-open' && request.changesAccess ? 'Allow and open' : reviewActions[request.kind]}</Text></Pressable>
+        <Pressable accessibilityRole="button" testID="routing-cancel" style={[styles.button, landscape && styles.actionLandscape]} onPress={cancel}><Text style={styles.action}>Cancel</Text></Pressable></View>
     </View></View>
   </Modal>;
 }
-const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.create({backdrop: {flex: 1, backgroundColor: colors.shade, justifyContent: 'flex-end'}, sheet: {maxHeight: '90%', backgroundColor: colors.surface, borderTopWidth: 1, borderColor: colors.border, paddingTop: 0}, content: {gap: 12, padding: 24}, group: {gap: 6}, title: { fontFamily: fonts.display,fontSize: 28, color: colors.text}, label: { textTransform: 'uppercase', letterSpacing: 1.2, fontFamily: fonts.mono,fontSize: 12, color: colors.muted}, text: { fontFamily: fonts.body,fontSize: 16, lineHeight: 24, color: colors.text}, mono: { fontFamily: fonts.mono,fontSize: 13, lineHeight: 20, color: colors.text}, detail: { fontFamily: fonts.body,fontSize: 14, lineHeight: 21, color: colors.muted}, choice: {padding: 16, gap: 6, borderWidth: 1, borderColor: colors.border}, chosen: {borderColor: colors.accent}, actions: {paddingHorizontal: 24, gap: 8}, button: {minHeight: 48, padding: 12, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center'}, action: { textTransform: 'uppercase', letterSpacing: 1.8, fontFamily: fonts.strong,fontSize: 14, color: colors.accent}});
+const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.create({backdrop: {flex: 1, backgroundColor: colors.shade, justifyContent: 'flex-end'}, sheet: {maxHeight: '90%', backgroundColor: colors.surface, borderTopWidth: 1, borderColor: colors.border, paddingTop: 0}, content: {gap: 12, padding: 24}, group: {gap: 6}, title: { fontFamily: fonts.display,fontSize: 28, color: colors.text}, label: { textTransform: 'uppercase', letterSpacing: 1.2, fontFamily: fonts.mono,fontSize: 12, color: colors.muted}, text: { fontFamily: fonts.body,fontSize: 16, lineHeight: 24, color: colors.text}, mono: { fontFamily: fonts.mono,fontSize: 13, lineHeight: 20, color: colors.text}, detail: { fontFamily: fonts.body,fontSize: 14, lineHeight: 21, color: colors.muted}, choice: {padding: 16, gap: 6, borderWidth: 1, borderColor: colors.border}, chosen: {borderColor: colors.accent}, actions: {paddingHorizontal: 24, gap: 8}, actionsLandscape: {flexDirection: 'row'}, actionLandscape: {flex: 1}, button: {minHeight: 48, padding: 12, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center'}, action: { textTransform: 'uppercase', letterSpacing: 1.8, fontFamily: fonts.strong,fontSize: 14, color: colors.accent}});

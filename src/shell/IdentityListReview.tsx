@@ -1,6 +1,7 @@
 import { TrustedBand } from './TrustedBand';
 import {useEffect, useSyncExternalStore} from 'react';
-import {AppState, Modal, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {AppState, ScrollView, StyleSheet, Text, View} from 'react-native';
+import { ShellModal as Modal } from './ShellModal';
 import { ShellPressable as Pressable } from './ShellPressable';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import type {IdentityListAccess, IdentityListAccessSnapshot} from '../identity/identity-permissions';
@@ -21,7 +22,7 @@ export function IdentityListReview({service, blocked = false}: {service: Identit
   const review = state.review, disabled = state.busy;
   const decide = (allow: boolean) => {void service.decide(review.id, allow).catch(() => { /* Service publishes the current failure. */ });};
   return <Modal visible transparent animationType="none" onRequestClose={() => {if (!disabled) decide(false);}}>
-    <View style={styles.backdrop}><View testID="identity-list-review" accessibilityViewIsModal style={[styles.sheet, {paddingBottom: Math.max(16, insets.bottom)}]}>
+    <View style={[styles.backdrop, {paddingLeft: insets.left, paddingRight: insets.right}]}><View testID="identity-list-review" accessibilityViewIsModal style={[styles.sheet, {paddingBottom: Math.max(16, insets.bottom)}]}>
       <TrustedBand />
       <ScrollView contentContainerStyle={styles.content}>
         <Text accessibilityRole="header" style={styles.title}>Allow public list access?</Text>

@@ -1,5 +1,6 @@
 import { useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
-import { Modal, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { ShellModal as Modal } from './ShellModal';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import type { WorkspaceController } from '../storage/workspace-controller';
 import type { ShellIdentity } from './Header';

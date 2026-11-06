@@ -1,5 +1,6 @@
 import {useRef} from 'react';
-import {AccessibilityInfo,Modal,ScrollView,StyleSheet,Text,View, type TextInstance } from 'react-native';
+import {AccessibilityInfo,ScrollView,StyleSheet,Text,View, type TextInstance } from 'react-native';
+import { ShellModal as Modal } from './ShellModal';
 import { ShellPressable as Pressable } from './ShellPressable';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import type {OutboxPublicationReceipt} from '../outbox/publication-receipt';
@@ -15,7 +16,7 @@ function Group({title,id,rows}:{title:string;id:string;rows:readonly RelayOutcom
 export function PublicationReceiptSheet({receipt,onDismiss}:{receipt:OutboxPublicationReceipt;onDismiss:()=>void}){
   const { styles } = useShellStyles(createStyles);
  const insets=useSafeAreaInsets(),heading=useRef<TextInstance>(null);
- return <Modal visible transparent animationType="none" onRequestClose={onDismiss} onShow={()=>{if(heading.current)AccessibilityInfo.sendAccessibilityEvent(heading.current,'focus');}}><View style={styles.backdrop}><View accessibilityViewIsModal style={[styles.sheet,{paddingBottom:Math.max(16,insets.bottom)}]} testID="outbox-publication-receipts">
+ return <Modal visible transparent animationType="none" onRequestClose={onDismiss} onShow={()=>{if(heading.current)AccessibilityInfo.sendAccessibilityEvent(heading.current,'focus');}}><View style={[styles.backdrop, {paddingLeft: insets.left, paddingRight: insets.right}]}><View accessibilityViewIsModal style={[styles.sheet,{paddingBottom:Math.max(16,insets.bottom)}]} testID="outbox-publication-receipts">
   <ScrollView contentContainerStyle={styles.scroll}><Text ref={heading} accessibilityRole="header" style={styles.heading}>Publication results</Text><Text accessibilityLiveRegion="polite" style={styles.text}>{receipt.primary.ok?'Primary event accepted.':receipt.response.error}</Text>
    <Group title="Primary event" id={receipt.primary.event.id} rows={receipt.primary.outcomes}/>
    {receipt.ancillary&&<Group title="Existing relay list" id={receipt.ancillary.event.id} rows={receipt.ancillary.outcomes}/>}</ScrollView>
