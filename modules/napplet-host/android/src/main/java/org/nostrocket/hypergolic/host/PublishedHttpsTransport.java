@@ -1,6 +1,5 @@
 package org.nostrocket.hypergolic.host;
 
-import java.io.ByteArrayOutputStream;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -16,10 +15,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
@@ -48,8 +45,6 @@ public final class PublishedHttpsTransport {
   public static final int CONNECT_TIMEOUT_MS = 8_000;
   public static final int READ_TIMEOUT_MS = 12_000;
   public static final int TOTAL_TIMEOUT_MS = 30_000;
-  private static final int MAX_RESPONSE_HEADERS = 128;
-  private static final int MAX_CHUNK_LINE_BYTES = 128;
   private static final ThreadPoolExecutor DNS = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
       new ArrayBlockingQueue<>(4), task -> {
         Thread thread = new Thread(task, "napplet-https-dns");
@@ -145,23 +140,7 @@ public final class PublishedHttpsTransport {
   }
 
   static URL parseUrl(String rawUrl) throws IOException {
-    if (rawUrl == null || rawUrl.length() > 8192 || rawUrl.indexOf('\\') >= 0) {
-      throw new IOException("Invalid HTTPS URL");
-    }
-    for (int i = 0; i < rawUrl.length(); i++) {
-      char c = rawUrl.charAt(i);
-      if (c <= 0x20 || c == 0x7f) throw new IOException("Invalid HTTPS URL");
-    }
-    final URI uri;
-    try { uri = new URI(rawUrl); }
-    catch (URISyntaxException error) { throw new IOException("Invalid HTTPS URL", error); }
-    if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getRawUserInfo() != null ||
-        uri.getHost() == null || uri.getPort() == 0 || uri.getPort() < -1 ||
-        uri.getPort() > 65535 || uri.getRawFragment() != null) {
-      throw new IOException("Only credential-free HTTPS URLs are supported");
-    }
-    try { return uri.toURL(); }
-    catch (IllegalArgumentException error) { throw new IOException("Invalid HTTPS URL", error); }
+    return PublicAddressPolicy.parseUrl(rawUrl);
   }
 
   static URL validateRequest(String rawUrl, AddressPolicy policy) throws IOException {
@@ -175,37 +154,7 @@ public final class PublishedHttpsTransport {
   }
 
   static boolean isDnsHostname(String host) {
-    if (host == null || host.length() > 253 || host.indexOf(':') >= 0 || !host.contains(".")) return false;
-    String lower = host.toLowerCase(Locale.ROOT);
-    if (lower.endsWith(".") || lower.equals("localhost") || lower.endsWith(".localhost") ||
-        lower.endsWith(".local") || lower.endsWith(".internal") || lower.endsWith(".test") ||
-        lower.equals("example") || lower.endsWith(".example") || lower.equals("invalid") ||
-        lower.endsWith(".invalid") || lower.endsWith(".lan") || lower.endsWith(".home") ||
-        lower.endsWith(".home.arpa") || lower.endsWith(".onion") || lower.endsWith(".arpa")) return false;
-    if (lower.matches("[0-9.]+") || looksLikeNonDecimalIpv4(lower)) return false;
-    String[] labels = lower.split("\\.", -1);
-    for (String label : labels) {
-      if (label.isEmpty() || label.length() > 63 || label.startsWith("-") || label.endsWith("-") ||
-          !label.matches("[a-z0-9-]+")) return false;
-    }
-    return true;
-  }
-
-  private static boolean looksLikeNonDecimalIpv4(String host) {
-    String[] parts = host.split("\\.", -1);
-    if (parts.length > 4) return false;
-    boolean numeric = true;
-    for (String part : parts) {
-      if (part.isEmpty()) return false;
-      boolean decimal = true;
-      for (int i = 0; i < part.length(); i++) if (!Character.isDigit(part.charAt(i))) decimal = false;
-      if (!decimal) numeric = false;
-      if (part.length() > 2 && part.startsWith("0x")) {
-        for (int i = 2; i < part.length(); i++) if (Character.digit(part.charAt(i), 16) < 0) return false;
-        return true;
-      }
-    }
-    return numeric && parts.length < 4;
+    return PublicAddressPolicy.isDnsHostname(host);
   }
 
   static InetAddress[] checkedAddresses(InetAddress[] resolved, AddressPolicy policy) throws IOException {
@@ -385,12 +334,6 @@ public final class PublishedHttpsTransport {
       updateTimeout();
       return super.read(bytes, offset, length);
     }
-  }
-
-  private static final class HeaderBlock {
-    final String text;
-    final int size;
-    HeaderBlock(String text, int size) { this.text = text; this.size = size; }
   }
 
   static final class AbortMonitor implements AutoCloseable {
