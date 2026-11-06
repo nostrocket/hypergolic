@@ -71,6 +71,13 @@ frames, forms, base overrides, media and objects except selected native-mediated
 resource projection. The sandbox has no same-origin, popup, download, form or
 top-navigation grant.
 
+On the trusted Android runtime origin, activation of an explicit local submit
+button can deliver a synthetic `submit` event when Chromium suppresses the
+sandboxed form’s normal event. The deferred event respects author cancellation,
+form validation, and guest focus and visibility. Eligible forms omit navigation
+attributes such as action, method, target and encoding. The event stays inside
+the guest document, with `sandbox="allow-scripts"` and `form-action 'none'` in force.
+
 Source-window identity, trusted browser event, strict schema, readiness and rate
 checks precede Kehto dispatch. Native navigation revokes authority before a
 replacement frame can inherit its WindowProxy; subsequent iframe-load detection

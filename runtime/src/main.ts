@@ -1,5 +1,5 @@
 import './legacy-webview';
-import { injectAndroidEditorReveal } from './android-editor-reveal';
+import { injectAndroidGuestHelpers } from './android-guest-helpers';
 import { createDiscoveryOpenReceiver, injectDiscoveryOpen } from './discovery-open';
 import { CATALOG_PAGE } from '../../src/napplets/catalog-page-contract';
 import { createCatalogPageReceiver } from './discovery-catalog';
@@ -369,7 +369,7 @@ function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
   const [prefix, withCsp] = artifact.published
     ? publishedCspParts(rawHtml, policy) : ['', injectCsp(rawHtml, policy)] as const;
   const html = discoveryToken ? injectDiscoveryOpen(withCsp, discoveryToken, artifact.domains.includes('relay')) : withCsp;
-  const guest = injectAndroidEditorReveal(injectResourceMediaGate(html));
+  const guest = injectAndroidGuestHelpers(injectResourceMediaGate(html));
   frame.srcdoc = prefix + injectNappletNamespacePrelude(injectSupportReport(guest), {
     ...environment.capabilities,
     requestTimeoutsMs: approvalTimeouts(artifact),
