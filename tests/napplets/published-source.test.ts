@@ -240,6 +240,24 @@ test('passes cancellation and enforces the Blossom request timeout', async () =>
   await assert.rejects(pending);
 });
 
+test('generic Blossom keeps its 15 second default', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let signal: AbortSignal | undefined;
+  const source = createPublishedArtifactSource({
+    createRelayPool: unusedPool,
+    fetchPublicHttps: (_url, init) => new Promise((_resolve, reject) => {
+      signal = init.signal;
+      signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+    }),
+  });
+  const rejected = assert.rejects(source.readHtml(HASH, ['https://blossom.example.org/'], 128, new AbortController().signal));
+  t.mock.timers.tick(14_999);
+  assert.equal(signal?.aborted, false);
+  t.mock.timers.tick(1);
+  await rejected;
+  assert.equal(signal?.aborted, true);
+});
+
 test('requires a relay port that declares raw-frame bounds and public-IP pinning', async () => {
   const invalidPool = {
     request() { return new Subject<NostrEvent>(); }, close() {},

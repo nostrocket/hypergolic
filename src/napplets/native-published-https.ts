@@ -89,12 +89,16 @@ export function createNativePublishedArtifactHttpsFetch(port: NativePublishedArt
     const id = port.newInstanceId();
     if (!UUID.test(id)) throw new PublishedNativeHttpsError();
     const cancel = () => { try { port.cancelPublishedHttps(id); } catch { /* Native expiry is the backstop. */ } };
-    init.signal.addEventListener('abort', cancel, { once: true });
+    let abort = cancel;
     let bytes: Uint8Array<ArrayBuffer> | undefined;
     let complete = false;
     try {
-      if (init.signal.aborted) throw new PublishedNativeHttpsError();
-      const length = await port.fetchPublishedArtifactHttps(id, url);
+      const length = await new Promise<number>((resolve, reject) => {
+        abort = () => { cancel(); reject(new PublishedNativeHttpsError()); };
+        init.signal.addEventListener('abort', abort, { once: true });
+        if (init.signal.aborted) abort();
+        else port.fetchPublishedArtifactHttps(id, url).then(resolve, reject);
+      });
       if (init.signal.aborted || !Number.isSafeInteger(length) || length < 1 || length > MAX_HTML_BYTES) {
         throw new PublishedNativeHttpsError();
       }
@@ -113,8 +117,8 @@ export function createNativePublishedArtifactHttpsFetch(port: NativePublishedArt
       return createNativeBoundedResponse(bytes);
     } catch { throw new PublishedNativeHttpsError(); }
     finally {
-      init.signal.removeEventListener('abort', cancel);
-      if (!complete) cancel();
+      init.signal.removeEventListener('abort', abort);
+      if (!complete && !init.signal.aborted) cancel();
       bytes?.fill(0);
     }
   };

@@ -140,3 +140,93 @@ test('artifact chunk read rejects invalid length, truncated chunk and revocation
     assert.ok(cancelled.length > 0 && cancelled.every(id => id === ID));
   }
 });
+
+const ARTIFACT_ORIGIN = 'https://blossom.example.org/';
+const CHUNK_BYTES = 48 * 1024;
+const nextTurn = () => new Promise<void>(resolve => setImmediate(resolve));
+
+function artifactSource(port: NativePublishedArtifactHttpsPort) {
+  return createNativePublishedArtifactSource({
+    relayLookup: { query: async () => [] }, fetchPublicHttps: createNativePublishedArtifactHttpsFetch(port),
+  });
+}
+
+test('native HTTPS completion near its network deadline leaves time to claim all artifact bytes', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const bytes = Buffer.alloc(19_067_455, 0x61);
+  const hash = createHash('sha256').update(bytes).digest('hex');
+  let reads = 0;
+  const source = artifactSource({
+    newInstanceId: () => ID,
+    fetchPublishedArtifactHttps(id, url) {
+      assert.equal(id, ID);
+      assert.equal(url, ARTIFACT_ORIGIN + hash);
+      return new Promise(resolve => setTimeout(() => resolve(bytes.length), 14_999));
+    },
+    readPublishedArtifactHttpsChunk(id, offset) {
+      assert.equal(id, ID);
+      assert.equal(offset, reads++ * CHUNK_BYTES);
+      return bytes.subarray(offset, offset + CHUNK_BYTES).toString('base64');
+    },
+    cancelPublishedHttps() { assert.fail('unexpected cancellation'); },
+  });
+  const pending = source.readHtml(hash, [ARTIFACT_ORIGIN], MAX_HTML_BYTES, new AbortController().signal);
+  const outcome = pending.then(body => ({ body }), error => ({ error }));
+  t.mock.timers.tick(14_999);
+  await nextTurn();
+  assert.equal(reads, 4);
+  for (let i = 0; i < 97; i++) {
+    t.mock.timers.tick(1);
+    await nextTurn();
+  }
+  assert.equal(reads, 388);
+  assert.deepEqual(await outcome, { body: new Uint8Array(bytes) });
+});
+
+test('parent cancellation between chunk batches stops transfer and does not try another origin', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const controller = new AbortController();
+  const cancelled: string[] = [];
+  let attempts = 0;
+  let reads = 0;
+  const chunk = Buffer.alloc(CHUNK_BYTES).toString('base64');
+  const source = artifactSource({
+    newInstanceId: () => ID,
+    async fetchPublishedArtifactHttps() { attempts++; return 5 * CHUNK_BYTES; },
+    readPublishedArtifactHttpsChunk() { reads++; return chunk; },
+    cancelPublishedHttps(id) { cancelled.push(id); },
+  });
+  const rejected = assert.rejects(source.readHtml('a'.repeat(64),
+    [ARTIFACT_ORIGIN, 'https://another.example.org/'], MAX_HTML_BYTES, controller.signal));
+  await nextTurn();
+  assert.equal(reads, 4);
+  controller.abort();
+  t.mock.timers.tick(1);
+  await rejected;
+  assert.equal(reads, 4);
+  assert.equal(attempts, 1);
+  assert.deepEqual(cancelled, [ID]);
+});
+
+test('native watchdog settles a stalled bridge and ignores its late completion', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const cancelled: string[] = [];
+  let resolveNative: (length: number) => void = () => assert.fail('native request did not start');
+  let reads = 0;
+  const source = artifactSource({
+    newInstanceId: () => ID,
+    fetchPublishedArtifactHttps() { return new Promise(resolve => { resolveNative = resolve; }); },
+    readPublishedArtifactHttpsChunk() { reads++; return 'YQ=='; },
+    cancelPublishedHttps(id) { cancelled.push(id); },
+  });
+  const rejected = assert.rejects(source.readHtml('a'.repeat(64),
+    [ARTIFACT_ORIGIN], MAX_HTML_BYTES, new AbortController().signal));
+  t.mock.timers.tick(29_999);
+  assert.deepEqual(cancelled, []);
+  t.mock.timers.tick(1);
+  await rejected;
+  assert.deepEqual(cancelled, [ID]);
+  resolveNative(1);
+  await nextTurn();
+  assert.equal(reads, 0);
+});

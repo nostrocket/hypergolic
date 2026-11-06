@@ -13,6 +13,7 @@ export const DEFAULT_RELAY_TIMEOUT_MS = 10_000;
 export const MAX_RELAY_TIMEOUT_MS = 60_000;
 export const DEFAULT_BLOSSOM_TIMEOUT_MS = 15_000;
 export const MAX_BLOSSOM_TIMEOUT_MS = 60_000;
+const DEFAULT_NATIVE_BLOSSOM_TIMEOUT_MS = 30_000;
 export const MAX_RELAY_FRAME_BYTES = MAX_MANIFEST_BYTES + 1024;
 
 export type PublishedRelayPool = Pick<RelayPool, 'request' | 'close'> & Readonly<{
@@ -324,7 +325,7 @@ export function createPublishedArtifactSource(options: PublishedSourceOptions): 
 
 /** Uses the native WSS lookup path while sharing the existing bounded Blossom/hash reader. */
 export function createNativePublishedArtifactSource(options: NativePublishedSourceOptions): PublishedArtifactSource {
-  const blossomTimeoutMs = boundedTimeout(options.blossomTimeoutMs, DEFAULT_BLOSSOM_TIMEOUT_MS, MAX_BLOSSOM_TIMEOUT_MS);
+  const blossomTimeoutMs = boundedTimeout(options.blossomTimeoutMs, DEFAULT_NATIVE_BLOSSOM_TIMEOUT_MS, MAX_BLOSSOM_TIMEOUT_MS);
   if (typeof options.fetchPublicHttps !== 'function' || typeof options.relayLookup?.query !== 'function') return fail();
   return Object.freeze({
     query: (coordinate: NappletLookupCoordinate, relays: readonly string[], pinnedEventId: string | null, signal: AbortSignal, discovery?: true) =>
