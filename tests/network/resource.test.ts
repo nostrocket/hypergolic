@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
 import { finalizeEvent } from 'nostr-tools/pure';
 import { noteEncode, neventEncode } from 'nostr-tools/nip19';
 import { createResourceService, type ResourceResolvers } from '../../src/resources/resource-service.ts';
@@ -214,6 +215,52 @@ test('rate budget includes cache hits and rollback cannot reset it', async () =>
 });
 
 // Header fixtures exercise dimensional admission, not codec decoding.
+
+test('classifies GLB v2 with valid JSON and binary chunk framing', () => {
+  const json = text('{"asset":{"version":"2.0"}} ');
+  assert.equal(json.length % 4, 0);
+  const bytes = new Uint8Array(20 + json.length + 12);
+  bytes.set(text('glTF'));
+  const view = new DataView(bytes.buffer);
+  view.setUint32(4, 2, true);
+  view.setUint32(8, bytes.length, true);
+  view.setUint32(12, json.length, true);
+  bytes.set(text('JSON'), 16);
+  bytes.set(json, 20);
+  view.setUint32(20 + json.length, 4, true);
+  bytes.set(text('BIN\0'), 24 + json.length);
+  assert.equal(classifyResourceBytes(bytes), 'model/gltf-binary');
+
+  const corrupt = (offset: number, value: number) => {
+    const changed = bytes.slice();
+    changed[offset] = value;
+    return changed;
+  };
+  for (const invalid of [bytes.subarray(0, 23), corrupt(4, 1), corrupt(8, 0),
+    corrupt(12, 3), corrupt(16, 0), corrupt(20, 60), corrupt(20 + json.length, 8)]) {
+    assert.throws(() => classifyResourceBytes(invalid), error('decode-failed'));
+  }
+});
+
+test('classifies bounded gzip containers without decoding compressed payloads', () => {
+  const plain = new Uint8Array(gzipSync('measurement data'));
+  const name = text('measurements.json\0');
+  const named = new Uint8Array(plain.length + name.length);
+  named.set(plain.subarray(0, 10));
+  named[3] = 8;
+  named.set(name, 10);
+  named.set(plain.subarray(10), 10 + name.length);
+  assert.equal(classifyResourceBytes(plain), 'application/gzip');
+  assert.equal(classifyResourceBytes(named), 'application/gzip');
+
+  for (const [offset, value] of [[2, 7], [3, 0x20], [3, 4], [10, 6]] as const) {
+    const invalid = plain.slice();
+    invalid[offset] = value;
+    assert.throws(() => classifyResourceBytes(invalid), error('decode-failed'));
+  }
+  assert.throws(() => classifyResourceBytes(plain.subarray(0, 19)), error('decode-failed'));
+});
+
 test('JPEG frame headers bound dimensions after metadata and reject truncated or unknown frames', () => {
   const jpeg = (width:number,height:number) => {
     const value = new Uint8Array([255,216,255,225,0,4,1,2,255,194,0,11,8,0,0,0,0,1,1,17,0]);

@@ -49,6 +49,45 @@ function webpDimensions(bytes: Uint8Array, view: DataView): void {
   }
   return bad();
 }
+/** Validate GLB v2 framing. The guest remains responsible for decoding the model. */
+function classifyGlb(bytes: Uint8Array, view: DataView): string {
+  if (bytes.length < 24 || view.getUint32(4, true) !== 2 || view.getUint32(8, true) !== bytes.length ||
+    !ascii(bytes, 16, 'JSON')) return bad();
+  const jsonLength = view.getUint32(12, true);
+  if (jsonLength < 4 || jsonLength % 4 || jsonLength > bytes.length - 20) return bad();
+  const jsonEnd = 20 + jsonLength;
+  const first = bytes.subarray(20, jsonEnd).find(byte => byte !== 32 && byte !== 9 && byte !== 10 && byte !== 13);
+  if (first !== 123) return bad();
+  for (let cursor = jsonEnd; cursor < bytes.length;) {
+    if (bytes.length - cursor < 8) return bad();
+    const length = view.getUint32(cursor, true);
+    if (length % 4 || length > bytes.length - cursor - 8 || ascii(bytes, cursor + 4, 'JSON') ||
+      (cursor !== jsonEnd && ascii(bytes, cursor + 4, 'BIN\0'))) return bad();
+    cursor += 8 + length;
+  }
+  return 'model/gltf-binary';
+}
+/** Check bounded RFC 1952 header fields and leave compressed bytes opaque. */
+function classifyGzip(bytes: Uint8Array, view: DataView): string {
+  const flags = bytes[3]!;
+  if (bytes.length < 20 || bytes[2] !== 8 || (flags & 0xe0)) return bad();
+  const headerEnd = Math.min(64 * 1024, bytes.length - 10);
+  let cursor = 10;
+  if (flags & 4) {
+    if (cursor + 2 > headerEnd) return bad();
+    cursor += 2 + view.getUint16(cursor, true);
+  }
+  const header = bytes.subarray(0, headerEnd);
+  for (const flag of [8, 16]) {
+    if (!(flags & flag)) continue;
+    const end = header.indexOf(0, cursor);
+    if (end < 0) return bad();
+    cursor = end + 1;
+  }
+  if (flags & 2) cursor += 2;
+  if (cursor > headerEnd || (bytes[cursor]! & 6) === 6) return bad();
+  return 'application/gzip';
+}
 /** Byte classification, never an upstream Content-Type. Native/browser decoding remains separately tested. */
 export function classifyResourceBytes(bytes: Uint8Array): string {
   if (!(bytes instanceof Uint8Array) || bytes.byteLength > RESOURCE_LIMITS.fileBytes) throw new ResourceError('too-large');
@@ -75,6 +114,8 @@ export function classifyResourceBytes(bytes: Uint8Array): string {
     return bad();
   }
   if (ascii(bytes, 0, '%PDF-')) return 'application/pdf';
+  if (ascii(bytes, 0, 'glTF')) return classifyGlb(bytes, view);
+  if (bytes[0] === 0x1f && bytes[1] === 0x8b) return classifyGzip(bytes, view);
   // A leading text/XML probe rejects active document bytes even with a lying server header.
   let text: string;
   try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { return bad(); }
