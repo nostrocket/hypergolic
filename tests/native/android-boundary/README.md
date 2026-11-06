@@ -14,8 +14,8 @@ a Gradle init script rather than rewriting them. Products use the existing local
 development signer; they are test builds, not production distribution artifacts.
 
 The init script keeps Release minification enabled. It adds a fixture-only
-`reflection.pro` to preserve the exact native classes and members used by the
-separately compiled test APK. The rules retain the existing disabled
+`reflection.pro` to preserve the exact host and AndroidX WebKit members used by
+the separately compiled test APK. The rules retain the existing disabled
 `UPLOAD_NETWORK_PROOF` constant for the startup assertion. They grant no
 authority and make no change to the ordinary app's optimizer configuration.
 

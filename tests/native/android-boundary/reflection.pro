@@ -31,3 +31,30 @@
 -keep class org.nostrocket.hypergolic.host.BuildConfig {
     public static final boolean UPLOAD_NETWORK_PROOF;
 }
+
+# The runner calls this AndroidX surface from its separately compiled APK.
+-keep class androidx.webkit.WebViewFeature {
+    public static boolean isFeatureSupported(java.lang.String);
+}
+
+-keep class androidx.webkit.WebViewCompat {
+    public static void addWebMessageListener(android.webkit.WebView, java.lang.String, java.util.Set, androidx.webkit.WebViewCompat$WebMessageListener);
+    public static androidx.webkit.ScriptHandler addDocumentStartJavaScript(android.webkit.WebView, java.lang.String, java.util.Set);
+    public static void removeWebMessageListener(android.webkit.WebView, java.lang.String);
+}
+
+-keep interface androidx.webkit.WebViewCompat$WebMessageListener {
+    public void onPostMessage(android.webkit.WebView, androidx.webkit.WebMessageCompat, android.net.Uri, boolean, androidx.webkit.JavaScriptReplyProxy);
+}
+
+-keep class androidx.webkit.WebMessageCompat {
+    public java.lang.String getData();
+}
+
+-keep class androidx.webkit.JavaScriptReplyProxy {
+    public void postMessage(java.lang.String);
+}
+
+-keep interface androidx.webkit.ScriptHandler {
+    public void remove();
+}
