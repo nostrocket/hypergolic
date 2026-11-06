@@ -49,20 +49,33 @@ function webpDimensions(bytes: Uint8Array, view: DataView): void {
   }
   return bad();
 }
-/** Validate GLB v2 framing. The guest remains responsible for decoding the model. */
+const glbJsonType = 0x4e4f534a;
+const glbBinaryType = 0x004e4942;
+const glbJsonBytes = 2 * 1024 * 1024;
+const glbChunks = 16;
+function requireGlbAsset(bytes: Uint8Array): void {
+  let version: unknown;
+  try {
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    version = JSON.parse(text)?.asset?.version;
+  } catch { return bad(); }
+  if (typeof version !== 'string' || !/^2\.[0-9]+$/.test(version)) return bad();
+}
+/** Validate GLB v2 framing and its asset header. The guest still owns model decoding. */
 function classifyGlb(bytes: Uint8Array, view: DataView): string {
   if (bytes.length < 24 || view.getUint32(4, true) !== 2 || view.getUint32(8, true) !== bytes.length ||
-    !ascii(bytes, 16, 'JSON')) return bad();
+    view.getUint32(16, true) !== glbJsonType) return bad();
   const jsonLength = view.getUint32(12, true);
-  if (jsonLength < 4 || jsonLength % 4 || jsonLength > bytes.length - 20) return bad();
+  if (jsonLength < 4 || jsonLength % 4 || jsonLength > Math.min(glbJsonBytes, bytes.length - 20)) return bad();
   const jsonEnd = 20 + jsonLength;
-  const first = bytes.subarray(20, jsonEnd).find(byte => byte !== 32 && byte !== 9 && byte !== 10 && byte !== 13);
-  if (first !== 123) return bad();
-  for (let cursor = jsonEnd; cursor < bytes.length;) {
-    if (bytes.length - cursor < 8) return bad();
+  requireGlbAsset(bytes.subarray(20, jsonEnd));
+  let cursor = jsonEnd;
+  for (let index = 1; cursor < bytes.length; index++) {
+    if (index >= glbChunks || bytes.length - cursor < 8) return bad();
     const length = view.getUint32(cursor, true);
-    if (length % 4 || length > bytes.length - cursor - 8 || ascii(bytes, cursor + 4, 'JSON') ||
-      (cursor !== jsonEnd && ascii(bytes, cursor + 4, 'BIN\0'))) return bad();
+    const type = view.getUint32(cursor + 4, true);
+    if (length % 4 || length > bytes.length - cursor - 8 || type === glbJsonType ||
+      (index !== 1 && type === glbBinaryType)) return bad();
     cursor += 8 + length;
   }
   return 'model/gltf-binary';
