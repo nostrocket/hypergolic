@@ -55,9 +55,12 @@ function receiveStream(envelope:StreamEnvelope,streams:Map<number,StreamState>,s
       window.clearTimeout(stream.timer);stream.eose=true;if(stream.domain==='relay')stream.deliver(message);
     }else if(message.type===stream.domain+'.closed'&&Object.keys(message).every(key=>['type','subId','reason'].includes(key))&&
       (message.reason===undefined||typeof message.reason==='string'&&message.reason.length<=256)) {
-      streams.delete(envelope.sequence);window.clearTimeout(stream.timer);stream.eose=true;stream.deliver(message);
-      acknowledge(envelope);
-      released();
+      streams.delete(envelope.sequence);window.clearTimeout(stream.timer);stream.eose=true;
+      try { stream.deliver(message); }
+      finally {
+        acknowledge(envelope);
+        released();
+      }
       return;
     }else throw new Error('Invalid stream lifecycle');
     acknowledge(envelope);
