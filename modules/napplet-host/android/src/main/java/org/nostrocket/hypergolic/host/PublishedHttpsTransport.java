@@ -123,7 +123,7 @@ public final class PublishedHttpsTransport {
             abort, deadline, resolver, executor, socketFactory, hostnameVerifier);
         try (SSLSocket closeable = socket) {
           closeable.setSoTimeout(deadline.timeoutMs(READ_TIMEOUT_MS));
-          sendRequest(closeable.getOutputStream(), uri, url);
+          sendRequest(closeable.getOutputStream(), uri, url, profile);
           byte[] body = PublishedHttpsResponseReader.readGet(new DeadlineInputStream(closeable.getInputStream(), closeable, deadline), cancellation, profile);
           abort.check();
           return body;
@@ -250,13 +250,16 @@ public final class PublishedHttpsTransport {
     catch (GeneralSecurityException error) { throw new IOException("Default TLS is unavailable", error); }
   }
 
-  private static void sendRequest(OutputStream output, URI uri, URL url) throws IOException {
+  private static void sendRequest(OutputStream output, URI uri, URL url, ReadProfile profile) throws IOException {
     String target = requestTarget(uri);
     String host = url.getHost();
     int port = url.getPort();
     String hostHeader = port < 0 || port == 443 ? host : host + ":" + port;
+    String userAgent = profile == ReadProfile.RESOURCE
+        ? "User-Agent: Hypergolic-Resource/1.0 (https://github.com/nostrocket/hypergolic)\r\n" : "";
     String request = "GET " + target + " HTTP/1.1\r\n" +
         "Host: " + hostHeader + "\r\n" +
+        userAgent +
         "Accept-Encoding: identity\r\n" +
         "Connection: close\r\n" +
         "\r\n";

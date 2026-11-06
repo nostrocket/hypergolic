@@ -80,7 +80,8 @@ enum PublishedPinnedHTTPS {
 
     var wire: Data {
       let authority = port == 443 ? host : "\(host):\(port)"
-      return Data("GET \(target) HTTP/1.1\r\nHost: \(authority)\r\nAccept: \((resourceProfile || recoveryProfile) ? "*/*" : "text/html")\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n".utf8)
+      let userAgent = resourceProfile ? "User-Agent: Hypergolic-Resource/1.0 (https://github.com/nostrocket/hypergolic)\r\n" : ""
+      return Data("GET \(target) HTTP/1.1\r\nHost: \(authority)\r\nAccept: \((resourceProfile || recoveryProfile) ? "*/*" : "text/html")\r\n\(userAgent)Accept-Encoding: identity\r\nConnection: close\r\n\r\n".utf8)
     }
   }
 

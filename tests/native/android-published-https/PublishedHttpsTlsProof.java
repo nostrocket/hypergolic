@@ -89,6 +89,7 @@ public final class PublishedHttpsTlsProof {
       equal("hello", new String(body, StandardCharsets.US_ASCII));
       check(server.requestArrived.await(2, TimeUnit.SECONDS));
       check(server.request.startsWith("GET /artifact HTTP/1.1\r\nHost: napplets.example.org:" + server.port()));
+      check(!server.request.contains("\r\nUser-Agent:"));
       equal(1, server.accepted);
     }
   }
@@ -164,6 +165,9 @@ public final class PublishedHttpsTlsProof {
          LocalServer first = new LocalServer(context, redirect("https://napplets.example.org:" + last.port() + "/artifact"), false)) {
       byte[] body = resource(first, proofPolicy, host -> {lookups.incrementAndGet();return new InetAddress[]{LOOPBACK};}, dns, trusted);
       equal("resource", new String(body, StandardCharsets.US_ASCII));equal(2,lookups.get());equal(1,first.requestCount);equal(1,last.requestCount);
+      String userAgent = "\r\nUser-Agent: Hypergolic-Resource/1.0 (https://github.com/nostrocket/hypergolic)\r\n";
+      check(first.request.contains(userAgent));
+      check(last.request.contains(userAgent));
     }
     try (LocalServer first = new LocalServer(context, redirect("/artifact"), false)) {
       throwsIo(() -> resource(first, proofPolicy, host -> new InetAddress[]{LOOPBACK}, dns, trusted));equal(1,first.requestCount);
@@ -202,6 +206,7 @@ public final class PublishedHttpsTlsProof {
       equal("artifact", new String(body, StandardCharsets.US_ASCII));
       equal(4, lookups.get());
       check(last.request.startsWith("GET /uploads/" + hash + ".html "));
+      check(!first.request.contains("\r\nUser-Agent:") && !last.request.contains("\r\nUser-Agent:"));
       throwsIo(() -> artifact(first, "bad-hash", policy, () -> false, resolver, dns, trusted));
       equal(4, lookups.get());
     }

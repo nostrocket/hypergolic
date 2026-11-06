@@ -10,6 +10,8 @@ Requests contain `type` and a bounded opaque `id`. Single-resource requests add 
 
 Caller scope, fetch options, cookies, authorization headers, response headers/status, byte ranges, streams and progress are absent. Correlation IDs confer no authority. The native registry captures identity epoch, publisher, app/version, instance, renderer generation and granted domains. The production broker checks that immutable registration, owner lifetime and claimed native lease before work and delivery. Close, identity transition, replacement and renderer loss revoke the old broker, memory cache and pending/private byte handles. Background revokes native in-flight leases before the React Native lifecycle mirror.
 
+Native Resource GETs identify the client with the fixed Hypergolic Resource User-Agent and its public project URL. The header contains no device, account, or napplet identifiers. [Wikimedia Foundation User-Agent policy](https://foundation.wikimedia.org/wiki/Policy:Wikimedia_Foundation_User-Agent_Policy)
+
 A resource grant permits any validated public HTTPS hostname. Each connection resolves and checks all addresses, rejects private/mixed results, pins a permitted address, and verifies TLS against the hostname. HTTPS URLs reject credentials, IP literals, local/private aliases, fragments and malformed controls. The WebView itself has no network authority. Its inner CSP admits Blob image/media previews only when resource is granted; the trusted CSP remains the leading head policy before all preludes.
 
 ## Selected schemes

@@ -88,6 +88,17 @@ import Foundation
     try checkRequest(request, host: "blossom.example.net", port: 8443,
       wire: "GET /abc?format=html HTTP/1.1\r\nHost: blossom.example.net:8443\r\nAccept: text/html\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n")
     checks += 1
+    let resource = try PublishedPinnedHTTPS.Request("https://media.example.net/image.jpg", resourceProfile: true)
+    try checkRequest(resource, host: "media.example.net", port: 443,
+      wire: "GET /image.jpg HTTP/1.1\r\nHost: media.example.net\r\nAccept: */*\r\nUser-Agent: Hypergolic-Resource/1.0 (https://github.com/nostrocket/hypergolic)\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n")
+    checks += 1
+    let contentHash = String(repeating: "a", count: 64)
+    let artifact = try PublishedPinnedHTTPS.Request("https://blossom.example.net/\(contentHash)", artifactProfile: true)
+    let recovery = try PublishedPinnedHTTPS.Request("https://blossom.example.net/\(contentHash)", recoveryProfile: true)
+    guard [artifact, recovery].allSatisfy({ !String(decoding: $0.wire, as: UTF8.self).contains("User-Agent:") }) else {
+      throw NSError(domain: "Resource agent leaked to another profile", code: 1)
+    }
+    checks += 1
     for invalid in ["http://blossom.example.net/", "https://localhost/", "https://127.0.0.1/",
                     "https://user:pass@blossom.example.net/", "https://blossom.example.net/#fragment",
                     "https://blossom.example.net/%0d%0aInjected"] {
