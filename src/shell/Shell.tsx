@@ -178,7 +178,7 @@ export function Shell({ blocked = false, initialWorkspace, workspace: controlled
   const openFixture = useBundledNapplets({ current, runtime, position, progress, change, setSettings });
   const openBundledTest = () => openFixture('ux-lab');
   const publishedActions = () => publishedSettingsActions({
-    runtime, blocked, getWorkspace: () => current.current, position, progress, change, setSettings, onBeforeClose,
+    runtime, blocked, getWorkspace: getWorkspace ?? (() => current.current), position, progress, change, setSettings, onBeforeClose,
   });
   const openPublished: SettingsActions['openPublished'] = (...args) => publishedActions().openPublished(...args);
   const checkPublishedUpdate: SettingsActions['checkPublishedUpdate'] = (...args) => publishedActions().checkPublishedUpdate(...args);
