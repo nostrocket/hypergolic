@@ -181,6 +181,32 @@ test('Discover deadline candidates still need valid signatures and the exact new
   }
 });
 
+test('Discover verifies a revision conflict across an early retry and a late initial reply', async () => {
+  const displayed = manifest(1_700_000_001), conflict = modern(displayed.created_at);
+  const emptyRelay = 'wss://empty.example.org', retryRelay = 'wss://retry.example.org';
+  const frames = (sub: string, event: unknown) => [JSON.stringify(['EVENT', sub, event]), JSON.stringify(['EOSE', sub])];
+  let completeInitial: (() => void) | undefined, retryAttempts = 0, blobReads = 0;
+  const lookup = createNativePublishedRelayLookup({
+    newInstanceId: randomUUID,
+    queryPublishedRelay(_id, relay, _wire, sub) {
+      if (relay === lookupRelays[0]) return new Promise(resolve => {completeInitial = () => resolve(frames(sub, displayed));});
+      if (relay === emptyRelay) return Promise.resolve([JSON.stringify(['EOSE', sub])]);
+      if (++retryAttempts === 1) return Promise.reject(Error('busy'));
+      completeInitial!();
+      return Promise.resolve(frames(sub, conflict));
+    },
+    cancelPublishedRelay() {},
+    revokeAllPublishedRelay() {},
+  }, 100);
+  await assert.rejects(loadPublishedArtifact(link, {
+    source: {query: lookup.query, async readHtml() {blobReads++; return html;}},
+    lookupRelays, networkRelays: [emptyRelay, retryRelay], signal: new AbortController().signal,
+    expectedEventId: displayed.id, assertActive() {},
+  }), {code: 'PUBLISHED_REVISION_CONFLICT'});
+  assert.equal(retryAttempts, 2);
+  assert.equal(blobReads, 0);
+});
+
 test('discovery separates empty results, authentic unsupported manifests and same-time conflicts', async () => {
   const current = modern(1_700_000_001);
   const conflicting = manifest(1_700_000_001);

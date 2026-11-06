@@ -122,6 +122,111 @@ test('Discover retries only failed peers after an empty partial response', async
   assert.equal(new Set(fixture.calls.map(call => call.id)).size, 3);
 });
 
+test('Discover retries a capacity-rejected carrier while a different initial peer is still pending', async () => {
+  const relayC = 'wss://relay-c.example.org';
+  const hit = event('a'.repeat(64)), slow = deferred<string[]>();
+  const fixture = harness((url, _wire, sub, index) => {
+    if (url === relayC) return slow.promise;
+    if (url === relayB) return [eose(sub)];
+    return index === 0 ? Promise.reject(Error('Native lookup capacity exhausted')) : [eventFrame(sub, hit), eose(sub)];
+  });
+  const result = await createNativePublishedRelayLookup(fixture.port, 15).query(
+    coordinate, [relayA, relayB, relayC], null, new AbortController().signal, true);
+  assert.deepEqual(result, [hit]);
+  assert.deepEqual(fixture.calls.map(call => call.url), [relayA, relayB, relayC, relayA]);
+  assert.deepEqual(fixture.cancelled, [fixture.calls[2]!.id]);
+});
+
+test('Discover attempts all configured relays before retries and keeps at most four operations in flight', async () => {
+  const relays = Array.from({length: 8}, (_, index) => `wss://relay-${index}.example.org`);
+  let active = 0, peak = 0;
+  const fixture = harness((_url, _wire, sub, index) => {
+    peak = Math.max(peak, ++active);
+    return new Promise((resolve, reject) => setImmediate(() => {
+      active--;
+      if (index < relays.length) reject(Error('initial attempt failed'));
+      else resolve([eose(sub)]);
+    }));
+  });
+  const result = await createNativePublishedRelayLookup(fixture.port).query(
+    coordinate, relays, null, new AbortController().signal, true);
+  assert.deepEqual(result, []);
+  assert.deepEqual(fixture.calls.slice(0, relays.length).map(call => call.url), relays);
+  assert.deepEqual(fixture.calls.slice(relays.length).map(call => call.url).sort(), [...relays].sort());
+  assert.equal(peak, 4);
+});
+
+test('a late complete candidate stops queued retries and keeps candidates from retries already in flight', async () => {
+  const relays = Array.from({length: 8}, (_, index) => `wss://relay-${index}.example.org`);
+  const initial = relays.map(() => deferred<string[]>());
+  const started = deferred<void>(), retried = deferred<void>(), retry = deferred<string[]>();
+  const firstHit = event('a'.repeat(64)), retryHit = event('b'.repeat(64));
+  const fixture = harness((_url, _wire, _sub, index) => {
+    if (index < 4) return Promise.reject(Error('initial attempt failed'));
+    if (index < relays.length) {
+      if (index === relays.length - 1) started.resolve();
+      return initial[index]!.promise;
+    }
+    retried.resolve();
+    return retry.promise;
+  });
+  const operation = createNativePublishedRelayLookup(fixture.port, 100).query(
+    coordinate, relays, null, new AbortController().signal, true);
+  await Promise.race([started.promise, operation]);
+  initial[4]!.resolve([eose(fixture.calls[4]!.subscriptionId)]);
+  await Promise.race([retried.promise, operation]);
+  assert.equal(fixture.calls.length, 9);
+  const late = fixture.calls[5]!.subscriptionId;
+  initial[5]!.resolve([eventFrame(late, firstHit), eose(late)]);
+  const retrySub = fixture.calls[8]!.subscriptionId;
+  retry.resolve([eventFrame(retrySub, retryHit), eose(retrySub)]);
+  for (const index of [6, 7]) initial[index]!.resolve([eose(fixture.calls[index]!.subscriptionId)]);
+  assert.deepEqual(await operation, [firstHit, retryHit]);
+  assert.equal(fixture.calls.length, 9);
+  assert.deepEqual(fixture.cancelled, []);
+});
+
+test('abort cancels an active retry and slow initial read without dispatching the queued retries', async () => {
+  const relayC = 'wss://relay-c.example.org', relayD = 'wss://relay-d.example.org';
+  const controller = new AbortController();
+  const retry = deferred<string[]>(), slow = deferred<string[]>();
+  const fixture = harness((url, _wire, sub, index) => {
+    if (url === relayC) return slow.promise;
+    if (url === relayB) return [eose(sub)];
+    if (index < 4) return Promise.reject(Error('initial failure'));
+    controller.abort();
+    return retry.promise;
+  });
+  await assert.rejects(createNativePublishedRelayLookup(fixture.port, 100).query(
+    coordinate, [relayA, relayB, relayC, relayD], null, controller.signal, true), NativePublishedRelayError);
+  assert.equal(fixture.calls.length, 5);
+  assert.deepEqual(fixture.cancelled, [fixture.calls[2]!.id, fixture.calls[4]!.id]);
+  for (const [wait, index] of [[retry, 4], [slow, 2]] as const) wait.resolve([eose(fixture.calls[index]!.subscriptionId)]);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(fixture.calls.length, 5);
+});
+
+test('synchronous cancellation during allocation or native dispatch stops the Discover pump', async () => {
+  for (const point of ['allocation', 'dispatch']) {
+    const controller = new AbortController();
+    const wait = deferred<string[]>();
+    const fixture = harness(() => {
+      if (point === 'dispatch') controller.abort();
+      return wait.promise;
+    }, {
+      newInstanceId() {
+        if (point === 'allocation') controller.abort();
+        return ids[0]!;
+      },
+    });
+    await assert.rejects(createNativePublishedRelayLookup(fixture.port).query(
+      coordinate, [relayA, relayB], null, controller.signal, true), NativePublishedRelayError);
+    const dispatched = point === 'dispatch' ? 1 : 0;
+    assert.equal(fixture.calls.length, dispatched);
+    assert.deepEqual(fixture.cancelled, dispatched ? [fixture.calls[0]!.id] : []);
+  }
+});
+
 test('Discover reports a persistently incomplete empty response as a failure', async () => {
   const fixture = harness((url, _request, sub) => url === relayA
     ? Promise.reject(new Error('unreachable'))

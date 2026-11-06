@@ -73,9 +73,40 @@ function encodedSize(event: unknown): number {
   } catch { return fail(); }
 }
 
+function queryDiscoverRelays(relays: readonly string[], queryRelay: (relay: string) => Promise<boolean>,
+  live: () => boolean, hasCandidates: () => boolean): Promise<boolean> {
+  let next = 0, inFlight = 0, firstPending = relays.length, matched = false;
+  const failed = new Set<string>();
+  const retries: string[] = [];
+  return new Promise((resolve, reject) => {
+    function pump(): void {
+      if (!live()) {resolve(false); return;}
+      while (live() && inFlight < MAX_NATIVE_RELAY_OPERATIONS) {
+        const first = next < relays.length;
+        if (!first && (hasCandidates() || (!matched && firstPending > 0))) break;
+        const relay = first ? relays[next++] : retries.shift();
+        if (relay === undefined) break;
+        inFlight++;
+        void queryRelay(relay).then(complete => {
+          inFlight--;
+          if (first) firstPending--;
+          if (complete) {matched = true; failed.delete(relay);}
+          else {
+            failed.add(relay);
+            if (first) retries.push(relay);
+          }
+          pump();
+        }, reject);
+      }
+      if (inFlight === 0) resolve(hasCandidates() || failed.size === 0);
+    }
+    pump();
+  });
+}
+
 /**
  * Query selected, normalized destinations through the app-only native WSS port.
- * One deadline covers fan-out and a Discover retry of an incomplete empty read.
+ * One deadline covers fan-out and each Discover retry for an incomplete empty read.
  * Aborts, deadline expiry,
  * and shared budget violations cancel outstanding work. Individual relay
  * failures are isolated while another selected relay can still provide results.
@@ -136,7 +167,7 @@ export function createNativePublishedRelayLookup(
         const queryRelay = async (relay: string): Promise<boolean> => {
           let id: string;
           try { id = port.newInstanceId(); } catch { return false; }
-          if (typeof id !== 'string' || !UUID.test(id) || usedIds.has(id)) return false;
+          if (closed || typeof id !== 'string' || !UUID.test(id) || usedIds.has(id)) return false;
           usedIds.add(id);
           outstanding.add(id);
           attempted.add(relay);
@@ -170,13 +201,10 @@ export function createNativePublishedRelayLookup(
           await Promise.all(Array.from({ length: Math.min(MAX_NATIVE_RELAY_OPERATIONS, queue.length) }, worker));
           return failed;
         };
-        const complete = async () => {
-          let failed = await queryRound(relays);
-          if (discovery && !closed && events.length === 0 && failed.length > 0) failed = await queryRound(failed);
-          if (closed || signal.aborted) return;
-          finish(failed.length !== relays.length && (!discovery || events.length > 0 || failed.length === 0));
-        };
-        void complete().catch(() => finish(false));
+        const complete = discovery
+          ? queryDiscoverRelays(relays, queryRelay, () => !closed, () => events.length > 0)
+          : queryRound(relays).then(failed => failed.length !== relays.length);
+        void complete.then(finish, () => finish(false));
       });
     },
   });
