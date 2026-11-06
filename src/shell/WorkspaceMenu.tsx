@@ -7,11 +7,11 @@ import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 
 interface Props {
   title: string; disabled: boolean;
-  onDismiss(): void; onOverview(): void; onSettings(): void; onClose(): void;
+  onDismiss(): void; onOverview(): void; onSettings(): void; onNappletSettings?(): void; onClose(): void;
 }
 
 /** An in-shell overlay keeps menu dismissal and close/review dialogs in one navigation flow. */
-export function WorkspaceMenu({ title, disabled, onDismiss, onOverview, onSettings, onClose }: Props) {
+export function WorkspaceMenu({ title, disabled, onDismiss, onOverview, onSettings, onNappletSettings, onClose }: Props) {
   const { styles } = useShellStyles(createStyles);
   const insets = useSafeAreaInsets();
   const done = useRef<ViewInstance>(null);
@@ -32,6 +32,7 @@ export function WorkspaceMenu({ title, disabled, onDismiss, onOverview, onSettin
         </View>
         <ScrollView contentContainerStyle={styles.actions}>
           <ShellPressable testID="shell-menu-overview" accessibilityRole="button" disabled={disabled} onPress={onOverview} style={styles.action}><Text style={styles.actionText}>All napplets</Text><Text accessible={false} style={styles.symbol}>›</Text></ShellPressable>
+          {onNappletSettings && <ShellPressable testID="shell-menu-napplet-settings" accessibilityRole="button" disabled={disabled} onPress={onNappletSettings} style={styles.action}><Text style={styles.actionText}>Napplet settings</Text><Text accessible={false} style={styles.symbol}>›</Text></ShellPressable>}
           <ShellPressable testID="shell-menu-settings" accessibilityRole="button" disabled={disabled} onPress={onSettings} style={styles.action}><Text style={styles.actionText}>Settings</Text><Text accessible={false} style={styles.symbol}>›</Text></ShellPressable>
           <ShellPressable testID="shell-close" accessibilityRole="button" accessibilityLabel={`Close ${title}`} disabled={disabled} onPress={onClose} style={styles.action}><Text style={styles.actionText}>Close napplet</Text><Text accessible={false} style={styles.symbol}>×</Text></ShellPressable>
         </ScrollView>

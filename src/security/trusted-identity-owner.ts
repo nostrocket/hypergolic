@@ -135,7 +135,7 @@ async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android
     const reviews = new RoutingReviewService(slot);
     const discovery = createDiscoveryOpenBroker({ identity: transition, runtime: () => runtime, capability, native: routingNative, reviews });
     notifyBroker = new NotifyBroker(capability, routingNative, notifyPermissions);
-    configBroker = new ConfigBroker(capability, routingNative, await openNativeConfigStore());
+    configBroker = new ConfigBroker(capability, routingNative, await openNativeConfigStore(), slot);
     routingBroker = new RoutingBroker(capability, routingNative, routingCatalog, reviews, createRoutingTargets(transition, () => runtime, reviews, routingNative));
     const routing = Object.freeze({broker: routingBroker, catalog: routingCatalog, reviews, settings: createRoutingSettings(transition, routingNative, routingCatalog, routingBroker)});
     const identityData = createIdentityDataService(identityCache, queries, Date.now, listAccess ?? undefined);

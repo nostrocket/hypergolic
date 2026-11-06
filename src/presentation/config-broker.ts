@@ -6,9 +6,13 @@ import {ShellStorageError, type TrustedRegistration} from '../storage/ports.ts';
 import {parseConfigMessage, type ConfigMessage} from './config-contract.ts';
 import {captureConfigSchema, configSecretFields, configValueValid, configValuesConform, resolveConfigValues, ConfigSchemaError, type ConfigSchema, type ConfigValues, type ConfigValue} from './config-schema.ts';
 import type {ConfigRecord, ConfigStore} from './config-store.ts';
-type Endpoint = {origin: NativeRegistration; assertActive(): void; seen: Set<string>; tail: Promise<unknown>; schema: ConfigSchema | null; version?: number; subscription: object | null; window: number; opens: number};
+import type {ReviewSlot} from '../shell/review-slot.ts';
+type Endpoint = {origin: NativeRegistration; assertActive(): void; seen: Set<string>; tail: Promise<unknown>; schema: ConfigSchema | null; menu?: ConfigMenuTarget; version?: number; subscription: object | null; window: number; opens: number};
 export type ConfigReview = Readonly<{id: string; origin: NativeRegistration; schema: ConfigSchema; reviewRevision: number; ordinary: ConfigValues; secretPresent: Readonly<Record<string, boolean>>; section?: string}>;
-export type ConfigSnapshot = Readonly<{review: ConfigReview | null}>;
+export type ConfigMenuTarget = Readonly<{origin: NativeRegistration}>;
+export type ConfigSnapshot = Readonly<{review: ConfigReview | null; menu: readonly ConfigMenuTarget[]}>;
+type Opening = {generation: string; assertActive(): void; focusChanged?: () => void};
+const MENU_FOCUS_WAIT_MS = 4_000;
 const sameScope = (left: NativeRegistration, right: NativeRegistration) => left.user === right.user && left.publisher === right.publisher && left.appId === right.appId && left.version === right.version;
 function valueAt(root: unknown, path: readonly string[]): unknown {
   let value = root;
@@ -43,31 +47,63 @@ function sections(schema: ConfigSchema): readonly string[] {
 export class ConfigBroker {
   private readonly endpoints = new Map<string, Endpoint>();
   private readonly listeners = new Set<() => void>();
-  private snapshot: ConfigSnapshot = Object.freeze({review: null});
+  private snapshot: ConfigSnapshot = Object.freeze({review: null, menu: Object.freeze([])});
   private revision = -1;
   private counter = 0;
   private stopped = false;
   private saving: string | null = null;
-  private opening: {generation: string; assertActive(): void} | null = null;
+  private opening: Opening | null = null;
   private readonly release: () => void;
+  private readonly releaseSlot?: () => void;
+  private readonly slot?: ReviewSlot;
   private readonly capability: NativeCapabilityPort;
   private readonly native: RoutingNativePort;
   private readonly store: ConfigStore;
-  constructor(capability: NativeCapabilityPort, native: RoutingNativePort, store: ConfigStore) {
-    this.capability = capability; this.native = native; this.store = store; this.release = native.subscribe(() => this.refresh());
+  constructor(capability: NativeCapabilityPort, native: RoutingNativePort, store: ConfigStore, slot?: ReviewSlot) {
+    this.capability = capability; this.native = native; this.store = store; this.slot = slot;
+    this.release = native.subscribe(() => this.refresh());
+    this.releaseSlot = slot?.subscribe(() => this.refresh());
   }
   subscribe = (listener: () => void) => {this.listeners.add(listener); return () => {this.listeners.delete(listener);};};
   getSnapshot = () => this.snapshot;
-  private publish(review: ConfigReview | null) {this.snapshot = Object.freeze({review}); for (const listener of this.listeners) try {listener();} catch { /* UI is not authority. */ }}
+  private emit() {for (const listener of this.listeners) try {listener();} catch { /* UI is not authority. */ }}
+  private publish(review: ConfigReview | null) {
+    const previous = this.snapshot.review;
+    if (previous === review) return;
+    this.snapshot = Object.freeze({...this.snapshot, review});
+    if (previous) this.slot?.release('config', previous.id);
+    this.emit();
+  }
+  private publishMenu() {
+    const menu: ConfigMenuTarget[] = [];
+    for (const endpoint of this.endpoints.values()) if (endpoint.menu) menu.push(endpoint.menu);
+    this.snapshot = Object.freeze({...this.snapshot, menu: Object.freeze(menu)});
+    this.emit();
+  }
+  private cancelOpening() {
+    const opening = this.opening;
+    this.opening = null;
+    opening?.focusChanged?.();
+  }
   refresh() {
     const state = this.native.state();
-    if (state.revision !== this.revision) {this.revision = state.revision; this.opening = null; this.publish(null);}
+    if (state.revision !== this.revision) {this.revision = state.revision; this.cancelOpening(); this.publish(null);}
     for (const [generation, endpoint] of this.endpoints) {
       if (!state.ownerAvailable || state.user !== endpoint.origin.user || state.epoch !== endpoint.origin.epoch) this.close(generation);
     }
-    if (this.opening) {try {this.opening.assertActive();} catch {this.opening = null;}}
+    if (this.opening) {
+      try {this.opening.assertActive(); this.opening.focusChanged?.();}
+      catch {this.cancelOpening();}
+    }
     const review = this.snapshot.review;
-    if (review) {try {const endpoint = this.endpoints.get(review.origin.generation); if (!endpoint) throw new Error(); this.active(endpoint, this.revision); if (this.native.reviewRevision(review.origin.generation, this.revision) !== review.reviewRevision) throw new Error();} catch {this.publish(null);}}
+    if (review) {
+      try {
+        const endpoint = this.endpoints.get(review.origin.generation);
+        if (!endpoint || endpoint.schema !== review.schema || this.slot && !this.slot.owns('config', review.id)) throw new ShellStorageError('REVOKED');
+        this.active(endpoint, this.revision);
+        if (this.native.reviewRevision(review.origin.generation, this.revision) !== review.reviewRevision) throw new ShellStorageError('REVOKED');
+      } catch {this.publish(null);}
+    }
   }
   private active(endpoint: Endpoint, revision: number) {
     const state = this.native.state(), origin = endpoint.origin;
@@ -95,24 +131,63 @@ export class ConfigBroker {
     }
     await Promise.all(work);
   }
-  async open(generation: string, section?: string, assertRequestActive?: () => void): Promise<void> {
-    this.refresh(); const endpoint = this.endpoints.get(generation), revision = this.revision;
-    if (!endpoint?.schema || this.opening || this.snapshot.review || this.counter >= Number.MAX_SAFE_INTEGER) return;
-    const schema = endpoint.schema, reviewRevision = this.native.reviewRevision(generation, revision);
-    if (reviewRevision === null) throw new ShellStorageError('REVOKED');
-    const opening = {generation, assertActive: () => {
-      if (this.opening !== opening) throw new ShellStorageError('REVOKED');
+  openFromMenu(target: ConfigMenuTarget, signal: AbortSignal, assertSelection: () => void): Promise<boolean> {
+    const {generation} = target.origin;
+    return this.open(generation, undefined, () => {
+      if (this.endpoints.get(generation)?.menu !== target) throw new ShellStorageError('REVOKED');
+      assertSelection();
+    }, signal);
+  }
+  private waitForFocus(opening: Opening, revision: number): Promise<number> {
+    return new Promise((resolve, reject) => {
+      // The deadline only cancels. The native focus lifecycle alone authorizes opening.
+      const deadline = setTimeout(() => {if (this.opening === opening) this.cancelOpening();}, MENU_FOCUS_WAIT_MS);
+      const stop = () => {clearTimeout(deadline); opening.focusChanged = undefined;};
+      opening.focusChanged = () => {
+        try {
+          opening.assertActive();
+          const focused = this.native.reviewRevision(opening.generation, revision);
+          if (focused === null) return;
+          stop(); resolve(focused);
+        } catch (error) {stop(); reject(error);}
+      };
+      opening.focusChanged();
+    });
+  }
+  async open(generation: string, section?: string, assertRequestActive?: () => void, menuSignal?: AbortSignal): Promise<boolean> {
+    this.refresh();
+    const endpoint = this.endpoints.get(generation), revision = this.revision;
+    if (!endpoint?.schema || this.opening || this.snapshot.review || this.counter >= Number.MAX_SAFE_INTEGER) return false;
+    const schema = endpoint.schema;
+    let reviewRevision = this.native.reviewRevision(generation, revision);
+    if (reviewRevision === null && !menuSignal) throw new ShellStorageError('REVOKED');
+    const opening: Opening = {generation, assertActive: () => {
+      if (this.opening !== opening || menuSignal?.aborted) throw new ShellStorageError('REVOKED');
       this.active(endpoint, revision); assertRequestActive?.();
-      if (endpoint.schema !== schema || this.native.reviewRevision(generation, revision) !== reviewRevision) throw new ShellStorageError('REVOKED');
+      if (endpoint.schema !== schema || reviewRevision !== null && this.native.reviewRevision(generation, revision) !== reviewRevision) throw new ShellStorageError('REVOKED');
     }};
+    const cancel = () => {if (this.opening === opening) this.cancelOpening();};
     this.opening = opening;
+    menuSignal?.addEventListener('abort', cancel, {once: true});
+    let reservedId: string | null = null;
     try {
+      opening.assertActive();
+      if (reviewRevision === null) reviewRevision = await this.waitForFocus(opening, revision);
       opening.assertActive();
       const record = await this.store.read(this.owner(endpoint, opening.assertActive)); opening.assertActive();
       const values = resolved(schema, record), present: Record<string, boolean> = {};
       for (const field of configSecretFields(schema)) present[JSON.stringify(field.path)] = valueAt(values, field.path) !== undefined;
-      this.publish(Object.freeze({id: 'config-review-' + ++this.counter, origin: endpoint.origin, schema, reviewRevision, ordinary: ordinary(schema, values), secretPresent: Object.freeze(present), ...(section && sections(schema).includes(section) ? {section} : {})}));
-    } finally {if (this.opening === opening) this.opening = null;}
+      const id = 'config-review-' + ++this.counter;
+      if (this.slot && !this.slot.reserve('config', {id, origin: endpoint.origin})) return false;
+      reservedId = id;
+      opening.assertActive();
+      this.publish(Object.freeze({id, origin: endpoint.origin, schema, reviewRevision, ordinary: ordinary(schema, values), secretPresent: Object.freeze(present), ...(section && sections(schema).includes(section) ? {section} : {})}));
+      return this.getSnapshot().review?.id === id;
+    } finally {
+      menuSignal?.removeEventListener('abort', cancel);
+      cancel();
+      if (reservedId && this.getSnapshot().review?.id !== reservedId) this.slot?.release('config', reservedId);
+    }
   }
   closeReview(id: string) {if (this.snapshot.review?.id === id) this.publish(null);}
   async commit(id: string, input: unknown, secretChanges: Readonly<Record<string, ConfigValue | null>>): Promise<void> {
@@ -125,7 +200,8 @@ export class ConfigBroker {
     if (!review || review.id !== id) throw new ShellStorageError('REVOKED');
     const endpoint = this.endpoints.get(review.origin.generation), revision = this.revision;
     if (!endpoint || endpoint.schema !== review.schema) throw new ShellStorageError('REVOKED');
-    const check = () => {this.active(endpoint, revision); if (this.snapshot.review !== review || this.native.reviewRevision(endpoint.origin.generation, revision) !== review.reviewRevision) throw new ShellStorageError('REVOKED');}; check();
+    const check = () => {this.active(endpoint, revision); if (this.snapshot.review !== review || endpoint.schema !== review.schema ||
+      (this.slot && !this.slot.owns('config', id)) || this.native.reviewRevision(endpoint.origin.generation, revision) !== review.reviewRevision) throw new ShellStorageError('REVOKED');}; check();
     const values = routingRecord(routingPayload(input), [], Object.keys(input as object)), changes = routingRecord(routingPayload(secretChanges), [], Object.keys(secretChanges));
     const fields = configSecretFields(review.schema), allowed = new Map(fields.map(field => [JSON.stringify(field.path), field]));
     if (fields.some(field => valueAt(values, field.path) !== undefined) || Object.entries(changes).some(([key, value]) => !allowed.has(key) || value !== null && !configValueValid(allowed.get(key)!.schema, value))) throw new ConfigSchemaError('invalid-schema');
@@ -148,6 +224,10 @@ export class ConfigBroker {
         if (request.version !== undefined && schema.$version !== undefined && request.version !== schema.$version || endpoint.version !== undefined && version !== undefined && version < endpoint.version) throw new ConfigSchemaError('version-conflict');
         await this.store.change(this.owner(endpoint, check), current => cleaned(schema, current)); check();
         endpoint.schema = schema; endpoint.version = version;
+        endpoint.menu = Object.freeze({origin: endpoint.origin});
+        if (this.opening?.generation === endpoint.origin.generation) this.cancelOpening();
+        if (this.snapshot.review?.origin.generation === endpoint.origin.generation) this.publish(null);
+        this.publishMenu();
         if (endpoint.subscription) {const values = await this.values(endpoint, revision, check); check(); if (values !== null) this.push(endpoint, revision, {type: 'config.values', values});}
         return {type: 'config.registerSchema.result', id: request.id, ok: true};
       } catch (error) {
@@ -186,6 +266,15 @@ export class ConfigBroker {
     } catch { /* No native-correlated success or secret escapes a revoked owner. */ }
     finally {if (claimed) this.capability.finish(token, response);}
   }
-  close(generation: string) {if (this.opening?.generation === generation) this.opening = null; this.endpoints.delete(generation); if (this.snapshot.review?.origin.generation === generation) this.publish(null);}
-  stop() {this.stopped = true; this.opening = null; this.release(); this.endpoints.clear(); this.publish(null);}
+  close(generation: string) {
+    if (this.opening?.generation === generation) this.cancelOpening();
+    const endpoint = this.endpoints.get(generation);
+    this.endpoints.delete(generation);
+    if (this.snapshot.review?.origin.generation === generation) this.publish(null);
+    if (endpoint?.menu) this.publishMenu();
+  }
+  stop() {
+    this.stopped = true; this.cancelOpening(); this.release(); this.releaseSlot?.();
+    this.endpoints.clear(); this.publish(null); this.publishMenu();
+  }
 }

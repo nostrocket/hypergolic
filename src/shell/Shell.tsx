@@ -3,6 +3,8 @@ import { DiscoveryAccessReview } from './DiscoveryAccessReview';
 import { WorkspaceHeader } from './WorkspaceHeader';
 import { WorkspaceMenu } from './WorkspaceMenu';
 import { useWorkspaceMenu } from './useWorkspaceMenu';
+import { useWorkspaceConfig } from './useWorkspaceConfig';
+import { OwnerContext } from './IdentityOwnerContext';
 import { useWorkspaceBack } from './useWorkspaceBack';
 import { useBundledNapplets } from './useBundledNapplets';
 import { publishedSettingsActions } from './published-settings-actions';
@@ -71,6 +73,7 @@ function useReducedMotion(): boolean {
 export function Shell({ blocked = false, initialWorkspace, workspace: controlledWorkspace, getWorkspace, onWorkspaceChange, identity, pendingApprovals, canCloseWithoutWarning, onBeforeClose, onHostEvent, footer, settingsComponent: SettingsContent }: ShellProps) {
   const { styles } = useShellStyles(createStyles);
   const runtime = useContext(RuntimeContext);
+  const owner = useContext(OwnerContext);
   const [localWorkspace, setLocalWorkspace] = useState(() => initialWorkspace ?? initialTestWorkspace());
   const workspace = controlledWorkspace ?? localWorkspace;
   const current = useRef(workspace);
@@ -188,6 +191,9 @@ export function Shell({ blocked = false, initialWorkspace, workspace: controlled
     position, progress, change, setSettings, openSettings,
   });
   const openDiscovery = discovery.open;
+  const openNappletSettings = useWorkspaceConfig(owner, workspace, menuSession, clearMenu, {
+    blocked: navigationBlocked, dragging: handleDragging, settings, closing: closingId !== null, discovery: discovery.review !== null,
+  });
   const obscured = settings || menuVisible || closingId !== null || discovery.review !== null;
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'right', 'bottom', 'left']}>
@@ -204,7 +210,7 @@ export function Shell({ blocked = false, initialWorkspace, workspace: controlled
       </View>
       {footer}
       <DiscoveryAccessReview review={discovery.review} decide={discovery.decide} />
-      {menuSession && <WorkspaceMenu title={menuSession.title} disabled={navigationBlocked}
+      {menuSession && <WorkspaceMenu title={menuSession.title} disabled={navigationBlocked} onNappletSettings={openNappletSettings}
         onDismiss={dismissMenu} onOverview={() => { clearMenu(); openOverview(); }}
         onSettings={() => { clearMenu(); openSettings(); }} onClose={() => { clearMenu(); requestClose(menuSession.id); }} />}
       <ClosePrompt title={workspace.sessions.find(session => session.id === closingId)?.title ?? null} onKeepOpen={keepOpen} onClose={confirmClose} onDismiss={() => overview.current?.focusCard(lastCloseId.current)} />
