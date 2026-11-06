@@ -1,3 +1,4 @@
+import type { ReviewSlot } from './review-slot';
 import { TrustedBand } from './TrustedBand';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { AppState, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
@@ -9,8 +10,9 @@ import type { RoutingReviewItem, RoutingReviewService, RoutingReviewRequest } fr
 import { formatNpub } from '../security/public-identity';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 const subscribe = () => () => {}, empty = () => null;
-export function RoutingReview({service, blocked = false}: {service: RoutingReviewService | null; blocked?: boolean}) {
+export function RoutingReview({service, reviewSlot, blocked = false}: {service: RoutingReviewService | null; reviewSlot?: ReviewSlot; blocked?: boolean}) {
   const item = useSyncExternalStore(service?.subscribe ?? subscribe, service?.getSnapshot ?? empty);
+  const current = useSyncExternalStore(reviewSlot?.subscribe ?? subscribe, reviewSlot?.getSnapshot ?? empty);
   useEffect(() => {
     if (!service) return;
     const timer = setInterval(() => service.refresh(), 250);
@@ -18,7 +20,7 @@ export function RoutingReview({service, blocked = false}: {service: RoutingRevie
     return () => {clearInterval(timer); state.remove();};
   }, [service]);
   useEffect(() => { if (blocked) service?.cancelAll(); }, [blocked, service]);
-  return service && item && !blocked ? <RoutingReviewSheet key={item.id} service={service} item={item} /> : null;
+  return service && item && !blocked && (!reviewSlot || current?.lane === 'routing' && current.item.id === item.id) ? <RoutingReviewSheet key={item.id} service={service} item={item} /> : null;
 }
 type IntentReviewRequest = Extract<RoutingReviewRequest, {kind: 'intent'}>;
 function NappletIdentity({appId, publisher, fixture}: {appId: string; publisher: string; fixture: string}) {

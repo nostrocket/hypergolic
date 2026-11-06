@@ -21,13 +21,15 @@ export function useUploadPresentation(service: UploadService | undefined, epoch:
   }, [service, snapshot.pending, snapshot.active.length]);
   return snapshot;
 }
-export function UploadWorkspace({service, snapshot, workspace, blocked}: {
+export function UploadWorkspace({service, snapshot, workspace, blocked, mayReview}: {
   service: UploadService | undefined; snapshot: UploadPresentation; workspace: Workspace | undefined; blocked: boolean;
+  mayReview?(id: string): boolean;
 }) {
-  const shown = blocked ? null : snapshot.current;
+  const allowed = (id: string) => mayReview?.(id) ?? true;
+  const shown = !blocked && snapshot.current && allowed(snapshot.current.id) ? snapshot.current : null;
   const title = workspace?.sessions.find(session => session.id === shown?.origin.sessionId)?.title ?? 'Napplet';
   return <>
     <UploadProgress service={service} snapshot={snapshot} workspace={workspace} blocked={blocked} reviewing={shown !== null} />
-    <UploadSheet item={shown} title={title} onApprove={id => {void service?.approve(id).catch(() => {});}} onReject={id => service?.reject(id)} />
+    <UploadSheet item={shown} title={title} onApprove={id => {if (allowed(id)) void service?.approve(id).catch(() => {});}} onReject={id => {if (allowed(id)) service?.reject(id);}} />
   </>;
 }

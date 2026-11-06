@@ -12,6 +12,7 @@ import { resolveNappletLink } from '../../src/napplets/resolve-link.ts';
 import { verifyArtifact, verifyManifest, type VerifiedNappletArtifact } from '../../src/napplets/verified-artifact.ts';
 import type { RoutingNativePort } from '../../src/routing/routing-port.ts';
 import { RoutingReviewService } from '../../src/routing/routing-review.ts';
+import { ReviewSlot } from '../../src/shell/review-slot.ts';
 import type { TransitionSnapshot } from '../../src/security/identity-transition.ts';
 import { bundledDescriptor, resolveBundledSession } from '../../src/shell/fixtures.ts';
 import { emptyWorkspace, openNapplet, showOverview, type NappletDescriptor } from '../../src/shell/workspace.ts';
@@ -55,7 +56,7 @@ function subscriptions() {
   };
 }
 
-function setup(initial = openNapplet(emptyWorkspace(), source)) {
+function setup(initial = openNapplet(emptyWorkspace(), source), reviews = new RoutingReviewService()) {
   let workspace = initial;
   let revision = 2;
   let focusRevision = 7;
@@ -82,7 +83,6 @@ function setup(initial = openNapplet(emptyWorkspace(), source)) {
     send: () => false, newChannelId: () => 'channel', subscribe: lifecycle.subscribe,
   };
   const held = new Map<string, string>(), responses = new Map<string, DiscoveryOpenStatus | null>();
-  const reviews = new RoutingReviewService();
   const broker = createDiscoveryOpenBroker({
     identity: { getSnapshot: () => transition, subscribe: account.subscribe }, reviews, native,
     capability: {
@@ -275,4 +275,27 @@ test('a verified event from a different coordinate cannot reach review even with
     assert.equal(env.reviews.getSnapshot(), null);
     assert.equal(env.staged(), 0);
   }
+});
+
+
+test('a native review that arrives during exact discovery lookup returns busy before staging', async t => {
+  let upload: {id: string; origin: typeof registration} | null = null;
+  const inert = () => () => {};
+  const slot = new ReviewSlot({getSnapshot: () => ({current: null}), subscribe: inert},
+    {getSnapshot: () => ({current: upload}), subscribe: inert}, () => registration.epoch, inert);
+  t.after(() => slot.dispose());
+  const env = setup(undefined, new RoutingReviewService(slot));
+  let resume = () => {};
+  env.holdLookup(new Promise<void>(resolve => {resume = resolve;}));
+  const pending = env.run('lookup-then-busy');
+  await until(() => env.lookups.length === 1);
+  upload = {id: 'pending-upload', origin: registration};
+  slot.refresh();
+  resume();
+  await pending;
+  assert.equal(env.responses.get('lookup-then-busy'), 'busy');
+  assert.equal(env.reviews.getSnapshot(), null);
+  assert.equal(env.staged(), 0);
+  assert.deepEqual(env.state().sessions.map(session => session.id), [source.id]);
+  assert.ok(slot.owns('upload', upload.id));
 });

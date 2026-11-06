@@ -1,3 +1,4 @@
+import { ReviewBusyError } from '../shell/review-slot.ts';
 import { naddrEncode } from 'nostr-tools/nip19';
 import type { IdentityTransition } from '../security/identity-transition.ts';
 import type { ShellDatabase } from '../storage/database.ts';
@@ -149,7 +150,8 @@ async function preparePublishedSession(ports: PublishedSessionDependencies, requ
       assertActive: () => { active(); admission.assertActive(); },
       revoke: () => { controller.abort(); ports.native.revokePublishedSession(id); },
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof ReviewBusyError) throw error;
     return fail();
   }
   finally {

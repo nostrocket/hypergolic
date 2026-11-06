@@ -1,3 +1,4 @@
+import { ReviewBusyError } from '../shell/review-slot.ts';
 import { assertVerifiedArtifact, type VerifiedNappletArtifact } from './verified-artifact.ts';
 import type { AppStorageControl } from '../storage/database.ts';
 import type { TrustedApp } from '../storage/ports.ts';
@@ -106,7 +107,7 @@ export async function requestFirstOpenConsent(
       optionalDomains, unsupportedOptionalDomains });
     let approved = false;
     try { approved = await review(request) === true; }
-    catch { return fail(); }
+    catch (error) { if (error instanceof ReviewBusyError) throw error; return fail(); }
     active(signal, owner, identity, assertActive);
     if (!approved) return fail();
     try {

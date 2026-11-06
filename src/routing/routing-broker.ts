@@ -1,3 +1,4 @@
+import { ReviewBusyError } from '../shell/review-slot.ts';
 import { decodeNativeRegistration, decodeNativeRequest, CAPABILITY_LIMITS, type NativeRegistration } from '../runtime/capability-protocol.ts';
 import type { NativeCapabilityPort, CapabilityOwner } from '../runtime/capability-broker.ts';
 import { ShellStorageError, type TrustedUser } from '../storage/ports.ts';
@@ -33,9 +34,9 @@ function availability(catalog: CatalogSnapshot, archetype: string) {
   }
   return Object.freeze({ archetype, available: candidates.length > 0, candidates: Object.freeze(candidates), hasDefault: candidates.some(value => value.isDefault) });
 }
-function routingFailure(message: RoutingMessage): Readonly<Record<string, unknown>> | null {
+function routingFailure(message: RoutingMessage, error = 'routing unavailable'): Readonly<Record<string, unknown>> | null {
   if (message.id === undefined) return null;
-  const base = {type: message.type + '.result', id: message.id, error: 'routing unavailable'};
+  const base = {type: message.type + '.result', id: message.id, error};
   if (message.type === 'intent.invoke') return {...base, result: {ok: false, handled: false, archetype: message.request!.archetype, action: message.request!.action, error: base.error}};
   if (message.type === 'intent.available') return {...base, availability: {archetype: message.archetype, available: false, candidates: [], hasDefault: false}};
   if (message.type === 'intent.handlers') return {...base, handlers: []};
@@ -127,6 +128,8 @@ export class RoutingBroker {
     const base = { archetype: request.archetype, action: request.action, ...(request.convention === undefined ? {} : { convention: request.convention }) };
     const failure = (error: string) => Object.freeze({ ...base, ok: false, handled: false, error });
     try {
+      const mayReview = () => this.native.mayReview(endpoint.registration.generation, revision);
+      this.reviews.assertAvailable(mayReview);
       const catalog = await this.catalog.list(this.owner(endpoint, revision, 'intent'), { signal }); active();
       let candidates = catalog.handlers.filter(handler => handler.roles.some(role => role.archetype === request.archetype));
       if (!candidates.length) return failure('no handler');
@@ -141,7 +144,7 @@ export class RoutingBroker {
       // A saved default is used first, then its action/convention support is checked. Never silently substitute another handler.
       const selected = request.handler === 'choose' ? null : (!explicit && preferred ? candidates.find(handler => handler.publisher === preferred.publisher && handler.appId === preferred.appId) ?? null : candidates.length === 1 ? candidates[0]! : null);
       const newInstance = request.behavior?.newWindow === true || request.behavior?.reuse === false;
-      const decision = await this.reviews.ask(Object.freeze({ kind: 'intent', origin: endpoint.registration, request, candidates: Object.freeze(candidates), selected, newInstance }), active, () => this.native.mayReview(endpoint.registration.generation, revision));
+      const decision = await this.reviews.ask(Object.freeze({ kind: 'intent', origin: endpoint.registration, request, candidates: Object.freeze(candidates), selected, newInstance }), active, mayReview);
       active(); if (!decision.allow || !decision.selected) return failure('user cancelled');
       const handler = decision.selected;
       const latest = await this.catalog.list(this.owner(endpoint, revision, 'intent'), { signal }); active();
@@ -159,7 +162,7 @@ export class RoutingBroker {
       const delivered = await this.deliver(endpoint, target, revision, request, convention, role.contracts !== undefined, active, signal);
       const handlerId = role.contracts ? namedIntentId(handler.publisher, handler.appId) : handler.appId;
       return delivered ? Object.freeze({ ...base, convention, ok: true, handled: true, handler: handlerId, windowId: sessionId }) : failure(role.contracts ? 'handler delivery unavailable' : 'invoke failed');
-    } catch { return failure('invoke failed'); }
+    } catch (error) { return failure(error instanceof ReviewBusyError ? error.message : 'invoke failed'); }
   }
   private async operate(endpoint: Endpoint, revision: number, message: RoutingMessage, active: () => void, signal: AbortSignal): Promise<Readonly<Record<string, unknown>> | null> {
     if (message.type === 'intent.invoke') return { type: 'intent.invoke.result', id: message.id, result: await this.invoke(endpoint, revision, message.request!, active, signal) };
@@ -233,7 +236,7 @@ export class RoutingBroker {
       else {
         const message = parseRoutingMessage(wrapper.message);
         try { result = await this.operate(selected, capturedRevision, message, active, controller.signal); }
-        catch { active(); result = routingFailure(message); }
+        catch (error) { active(); result = routingFailure(message, error instanceof ReviewBusyError ? error.message : undefined); }
         if (result !== null && new TextEncoder().encode(JSON.stringify(result)).length > ROUTING_LIMITS.payloadBytes) result = routingFailure(message);
       }
       active(); response = JSON.stringify({ type: 'routing.call.result', id, response: result });

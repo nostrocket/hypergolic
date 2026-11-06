@@ -14,6 +14,7 @@ import { verifyArtifact, verifyManifest } from '../../src/napplets/verified-arti
 import { createRuntimeOwner } from '../../src/runtime/runtime-owner.ts';
 import { emptyWorkspace, openNapplet, closeNapplet, replacePublishedNapplet, restoreWorkspace, snapshotWorkspace } from '../../src/shell/workspace.ts';
 import { NativeLeases } from '../runtime/native-leases.ts';
+import { ReviewBusyError } from '../../src/shell/review-slot.ts';
 import type { IdentityTransition } from '../../src/security/identity-transition.ts';
 import { createApprovalOwner, createUploadOwner } from '../../src/security/approval-owner.ts';
 import type { ApprovalOrigin, ApprovalService } from '../../src/security/approval-service.ts';
@@ -463,6 +464,13 @@ test('exact discovery review binds staging, then transfers lifetime to the mount
   const sourceActive = () => { if (!focused) throw new Error('Caller unfocused'); };
   const signal = new AbortController();
   const artifact = await owner.resolveDiscovered(LINK, EMBEDDED_TEST_EVENT.id, signal.signal, sourceActive);
+  const busy = new ReviewBusyError();
+  await assert.rejects(owner.prepareDiscovered(artifact, signal.signal, sourceActive, async changesAccess => {
+    assert.equal(changesAccess, true);
+    throw busy;
+  }), error => error === busy);
+  assert.deepEqual(calls, []);
+
   await assert.rejects(owner.prepareDiscovered(artifact, signal.signal, sourceActive, async changesAccess => {
     assert.equal(changesAccess, true);
     focused = false;
@@ -490,6 +498,12 @@ test('exact discovery review binds staging, then transfers lifetime to the mount
   assert.equal(owner.publishedReadyGeneration(descriptor), null);
 
   focused = true;
+  await assert.rejects(owner.prepareDiscovered(artifact, new AbortController().signal, sourceActive, async changesAccess => {
+    assert.equal(changesAccess, false);
+    throw busy;
+  }, descriptor), error => error === busy);
+  assert.equal(calls.filter(call => call.startsWith('register:')).length, 1);
+
   await assert.rejects(owner.prepareDiscovered(artifact, new AbortController().signal, sourceActive, async changesAccess => {
     assert.equal(changesAccess, false);
     return false;

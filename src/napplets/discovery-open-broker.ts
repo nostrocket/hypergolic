@@ -1,3 +1,4 @@
+import { ReviewBusyError } from '../shell/review-slot.ts';
 import { naddrEncode } from 'nostr-tools/nip19';
 import { resolveNappletLink, type NappletCoordinate } from './resolve-link.ts';
 import type { IdentityTransition } from '../security/identity-transition.ts';
@@ -33,6 +34,7 @@ const sameTarget = (left: NappletDescriptor, right: NappletDescriptor) => left.s
 const integer = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
 
 function lookupStatus(error: unknown): DiscoveryOpenStatus {
+  if (error instanceof ReviewBusyError) return 'busy';
   if (error instanceof PublishedLoadError) {
     switch (error.code) {
       case 'PUBLISHED_REVISION_CHANGED': return 'refresh-required';
@@ -213,7 +215,7 @@ async function runLaunch(ports: Ports, launch: Launch): Promise<DiscoveryOpenSta
   try {
     release.push(ports.identity.subscribe(check), workspace.subscribe(check));
     release.push(ports.native.subscribe(check));
-    active();
+    active(); ports.reviews.assertAvailable();
     status = await openExact(ports, launch, attempt, active, signal);
     if (status === 'opened') active();
     return status;

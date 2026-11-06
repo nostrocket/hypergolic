@@ -107,13 +107,16 @@ function capabilityReceiver(database: ShellDatabase, native: RuntimeNativePort,
 /** The process-owned database and identity authority remain outside React/WebView props. */
 export function createRuntimeOwner(database: ShellDatabase,
   identity: Pick<IdentityTransition, 'getSnapshot' | 'sessionAuthority'>, native: RuntimeNativePort,
-  approvals?: Readonly<{ service: ApprovalService; destinations: () => readonly string[] }>,
+  approvals?: Readonly<{ service: ApprovalService; destinations: () => readonly string[]; closeReview?(sessionId: string): void }>,
   published?: Omit<PublishedSessionDependencies, 'identity' | 'database' | 'newInstanceId'>, queries?: RelayQueryService, subscriptions?: ReturnType<typeof createRelaySubscriptions>, resources?: ResourceHost, uploads?: UploadService, identityData?: IdentityDataPort, routing?: Readonly<{broker: RoutingBroker; catalog: RoutingCatalog}>, notify?: NotifyBroker, config?: ConfigBroker, outbox?: OutboxReadService, outboxStreams?:ReturnType<typeof createOutboxSubscriptions>, discovery?: DiscoveryOpenBroker): RuntimeOwner {
   const coordinator = published ? createPublishedSessionCoordinator({
     ...published, identity, database, newInstanceId: () => native.newInstanceId(),
   }) : null;
   const prepared = new Map<string, PreparedPublishedSession>();
   const running = new Map<string, PublishedRuntimeBinding>();
+  const closeCapabilityReviews = (id: string) => {
+    approvals?.service.close(id); uploads?.close(id); approvals?.closeReview?.(id);
+  };
   const exactSession = (session: NappletDescriptor): NappletDescriptor => {
     const state = identity.getSnapshot().session.workspace.getSnapshot();
     const current = state.workspace.sessions.find(value => value.id === session.id);
@@ -163,7 +166,7 @@ export function createRuntimeOwner(database: ShellDatabase,
       },
       revoke(): void {
         if (revoked) return;
-        revoked = true; receiver.revoke(); revokePrepared(); approvals?.service.close(selected.id); uploads?.close(selected.id);
+        revoked = true; receiver.revoke(); revokePrepared(); closeCapabilityReviews(selected.id);
         if (running.get(selected.id) === binding) running.delete(selected.id);
       },
       receive: receiver.receive,
@@ -298,7 +301,7 @@ export function createRuntimeOwner(database: ShellDatabase,
     assertActive();
     const receiver = capabilityReceiver(database, native, approvals, descriptor.id, configuration, assertActive, queries, subscriptions, resources, uploads, identityData, routing?.broker, notify, config, outbox, outboxStreams, discovery && isDiscoveryEntry(descriptor) ? { broker: discovery, source: descriptor } : undefined);
     return Object.freeze({ configuration: JSON.stringify(configuration),
-      revoke(): void { revoked = true; receiver.revoke(); approvals?.service.close(descriptor.id); uploads?.close(descriptor.id); },
+      revoke(): void { revoked = true; receiver.revoke(); closeCapabilityReviews(descriptor.id); },
       receive: receiver.receive,
     });
   } });

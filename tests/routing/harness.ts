@@ -9,7 +9,7 @@ import { artifact } from './fixtures.ts';
 import type { VerifiedNappletArtifact } from '../../src/napplets/verified-artifact.ts';
 export const user = '01'.repeat(32);
 export async function setup(t: {after(action: () => void | Promise<void>): void},
-  selected?: VerifiedNappletArtifact, domains: readonly string[] = ['inc']) {
+  selected?: VerifiedNappletArtifact, domains: readonly string[] = ['inc'], reviews = new RoutingReviewService()) {
   const sqlite = new DiskSQLite();
   const catalog = await openRoutingCatalog(sqlite, 'ios'); t.after(async () => {try {await catalog.close();} finally {sqlite.cleanup();}});
   const a = selected ?? await artifact(), b = await artifact(10);
@@ -29,7 +29,6 @@ export async function setup(t: {after(action: () => void | Promise<void>): void}
     subscribe(listener: () => void) {lifecycle = listener; return () => {};}, newChannelId: () => 'channel-' + ++counter,
   };
   const capability = {take(token: string) {const raw = slots.get(token) ?? null; slots.delete(token); return raw;}, isActive: (token: string) => live.has(token), finish(token: string, response: string | null) {live.delete(token); replies.set(token, response === null ? null : JSON.parse(response));}};
-  const reviews = new RoutingReviewService();
   const broker = new RoutingBroker(capability, native, catalog, reviews, {async activate(handler) {if (rejectActivation) return null; activated.push(handler.publisher); return target.sessionId;}}); t.after(() => broker.stop());
   function dispatch(registration: NativeRegistration, message: unknown, patch: Partial<NativeRegistration> = {}, wrapperId?: string) {
     const token = 'token-' + ++counter; live.add(token); slots.set(token, JSON.stringify({registration: {...registration, ...patch}, request: JSON.stringify({type: 'routing.call', id: wrapperId ?? 'call-' + counter, message, revision: state.revision})}));

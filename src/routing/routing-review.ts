@@ -1,3 +1,4 @@
+import { ReviewBusyError, type ReviewSlot } from '../shell/review-slot.ts';
 import type { NappletDescriptor } from '../shell/workspace.ts';
 import type { NappletConsentReview } from '../napplets/first-open-consent.ts';
 import type { NativeRegistration } from '../runtime/capability-protocol.ts';
@@ -13,7 +14,7 @@ export type RoutingReviewRequest = Readonly<{ kind: 'intent'; origin: NativeRegi
         unsupportedDomains: readonly string[]; unsupportedOptionalDomains: readonly string[] }> }>;
 export type RoutingDecision = Readonly<{ allow: boolean; selected?: CatalogHandler; remember?: boolean }>;
 export type RoutingReviewItem = Readonly<{ id: string; request: RoutingReviewRequest }>;
-type Pending = RoutingReviewItem & { active(): void; mayReview(): boolean; resolve(value: RoutingDecision): void };
+type Pending = RoutingReviewItem & { active(): void; mayReview(): boolean; resolve(value: RoutingDecision): void; reject(error: ReviewBusyError): void };
 const denied: RoutingDecision = Object.freeze({ allow: false });
 /** Presentation only. Each answer is checked against its exact still-live native request. */
 export class RoutingReviewService {
@@ -21,10 +22,21 @@ export class RoutingReviewService {
   private counter = 0;
   private listeners = new Set<() => void>();
   private snapshot: RoutingReviewItem | null = null;
+  private readonly slot?: ReviewSlot;
+  constructor(slot?: ReviewSlot) { this.slot = slot; }
+  assertAvailable(mayReview: () => boolean = () => true): void {
+    if (!this.slot || !mayReview()) return;
+    this.slot.refresh();
+    if (this.slot.getSnapshot()) throw new ReviewBusyError();
+  }
   subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   getSnapshot = (): RoutingReviewItem | null => this.snapshot;
   private publish() {
-    const item = this.pending.find(entry => { try { entry.active(); return entry.mayReview(); } catch { return false; } });
+    let item = this.pending.find(entry => { try { entry.active(); return entry.mayReview(); } catch { return false; } });
+    if (this.snapshot && this.snapshot.id !== item?.id) this.slot?.releaseRouting(this.snapshot.id);
+    if (item && this.slot && !this.slot.reserveRouting({id: item.id, origin: item.request.origin})) {
+      this.end(item, new ReviewBusyError()); item = undefined;
+    }
     if (item?.id === this.snapshot?.id) return;
     this.snapshot = item ? Object.freeze({ id: item.id, request: item.request }) : null;
     for (const listener of this.listeners) try { listener(); } catch { /* Presentation cannot grant or retain authority. */ }
@@ -35,21 +47,24 @@ export class RoutingReviewService {
     }
     this.publish();
   }
-  private end(entry: Pending, decision: RoutingDecision) {
-    this.pending = this.pending.filter(value => value !== entry); entry.resolve(decision);
+  private end(entry: Pending, decision: RoutingDecision | ReviewBusyError) {
+    this.pending = this.pending.filter(value => value !== entry);
+    this.slot?.releaseRouting(entry.id);
+    if (decision instanceof ReviewBusyError) entry.reject(decision); else entry.resolve(decision);
   }
-  ask(request: RoutingReviewRequest, active: () => void, mayReview: () => boolean): Promise<RoutingDecision> {
+  async ask(request: RoutingReviewRequest, active: () => void, mayReview: () => boolean): Promise<RoutingDecision> {
     this.refresh();
-    try { active(); } catch { return Promise.resolve(denied); }
-    if (this.pending.length >= 8 || this.pending.filter(entry => entry.request.origin.generation === request.origin.generation).length >= 4 || this.counter >= Number.MAX_SAFE_INTEGER) return Promise.resolve(denied);
-    return new Promise(resolve => {
-      this.pending.push({ id: 'routing-review-' + ++this.counter, request, active, mayReview, resolve }); this.publish();
+    try { active(); } catch { return denied; }
+    this.assertAvailable(mayReview);
+    if (this.pending.length >= 8 || this.pending.filter(entry => entry.request.origin.generation === request.origin.generation).length >= 4 || this.counter >= Number.MAX_SAFE_INTEGER) return denied;
+    return new Promise((resolve, reject) => {
+      this.pending.push({ id: 'routing-review-' + ++this.counter, request, active, mayReview, resolve, reject }); this.publish();
     });
   }
   decide(id: string, decision: RoutingDecision): void {
     this.refresh();
     const entry = this.pending.find(value => value.id === id);
-    if (!entry || this.snapshot?.id !== id) return;
+    if (!entry || this.snapshot?.id !== id || (this.slot && !this.slot.owns('routing', id))) return;
     try {
       entry.active(); if (!entry.mayReview()) throw new Error('Review unavailable');
       if (decision.allow && entry.request.kind === 'intent') {
