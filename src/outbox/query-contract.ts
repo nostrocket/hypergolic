@@ -1,8 +1,9 @@
-import { parseQueryFilters, QUERY_LIMITS, type QueryFilter } from '../network/relay-query-contract.ts';
+import { parseQueryFilters, QUERY_LIMITS, relayQueryWire, type QueryFilter } from '../network/relay-query-contract.ts';
 import { normalizeRelayUrl } from '../network/relay-settings.ts';
 import { publicKey, text } from '../storage/codec.ts';
 import { OUTBOX_LIST_LIMITS } from './relay-list.ts';
 
+export const OUTBOX_QUERY_FILTERS = 32;
 export class OutboxQueryError extends Error {
   constructor(message = 'invalid filter') { super(message); this.name = 'OutboxQueryError'; }
 }
@@ -30,14 +31,15 @@ export function outboxUint(value: unknown, min: number, max: number): number {
   return value;
 }
 /** Supported bounded NIP-01 query profile; options never select a native owner. */
-export function parseOutboxQuery(input: unknown): OutboxQueryRequest {
+export function parseOutboxQuery(input: unknown, maximumFilters: number = OUTBOX_QUERY_FILTERS): OutboxQueryRequest {
   try {
     const source = outboxRecord(input);
     if (source.type !== 'outbox.query' || !Object.hasOwn(source, 'filters') || Object.keys(source).some(key => !['type','id','filters','options'].includes(key))) return fail();
     const options = Object.hasOwn(source, 'options') ? outboxRecord(source.options) : {};
     if (Object.keys(options).some(key => !['authors','relays','limit','timeoutMs'].includes(key))) return fail();
-    return Object.freeze({type: 'outbox.query', id: text(source.id, 128),
-      filters: parseQueryFilters(Array.isArray(source.filters) ? source.filters : [source.filters], Number.MAX_SAFE_INTEGER),
+    const filters = parseQueryFilters(Array.isArray(source.filters) ? source.filters : [source.filters], Number.MAX_SAFE_INTEGER, maximumFilters);
+    if (filters.length > QUERY_LIMITS.filters) relayQueryWire('query_' + '0'.repeat(32), capOutboxFilters(filters));
+    return Object.freeze({type: 'outbox.query', id: text(source.id, 128), filters,
       options: Object.freeze({authors: Object.hasOwn(options,'authors') ? outboxList(options.authors, OUTBOX_LIST_LIMITS.authors, publicKey) : Object.freeze([]),
         relays: Object.hasOwn(options,'relays') ? outboxList(options.relays, OUTBOX_LIST_LIMITS.relays, normalizeRelayUrl) : Object.freeze([]),
         limit: Object.hasOwn(options,'limit') ? outboxUint(options.limit, 0, Number.MAX_SAFE_INTEGER) : QUERY_LIMITS.events,

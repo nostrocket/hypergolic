@@ -4,8 +4,9 @@ import {finalizeEvent, getPublicKey} from 'nostr-tools/pure';
 import {parseRelayQuery, QUERY_LIMITS} from '../../src/network/relay-query-contract.ts';
 import {createOutboxReadService} from '../../src/outbox/read-service.ts';
 import {parseOutboxQuery,parseOutboxEvent,parseOutboxResolve} from '../../src/outbox/query-contract.ts';
+import {parseOutboxSubscribe} from '../../src/outbox/subscription-contract.ts';
 import {parseOutboxRelayList} from '../../src/outbox/relay-list.ts';
-import type {OutboxAuthorResolver} from '../../src/outbox/author-resolver.ts';
+import {createOutboxAuthorResolver, type OutboxAuthorResolver} from '../../src/outbox/author-resolver.ts';
 const key = new Uint8Array(32).fill(36), author = getPublicKey(key);
 const event = JSON.parse(JSON.stringify(finalizeEvent({kind: 1, created_at: 1, tags: [], content: 'disjoint'}, key)));
 const list = parseOutboxRelayList(JSON.parse(JSON.stringify(finalizeEvent({kind: 10002, created_at: 1, content: '', tags: [['r','wss://read.nostr.net','read'],['r','wss://write.nostr.net','write']]}, key))), author);
@@ -146,4 +147,117 @@ test('valid disjoint relay batches exceeding the global result bound retain newe
   h.native.queryPublishedRelay=async(_id,relay,_wire,sub)=>{h.calls.push(relay);const start=relay.includes('first')?1:33;return [...Array.from({length:32},(_,i)=>JSON.stringify(['EVENT',sub,JSON.parse(JSON.stringify(finalizeEvent({kind:1,created_at:start+i,tags:[],content:'bounded-'+(start+i)},key)))])),JSON.stringify(['EOSE',sub])];};
   const result=await h.service.query({...request,options:{limit:2}},author,signal(),()=>{});
   assert.deepEqual(result.events.map(row=>row.event.created_at),[64,63]);assert.equal(result.incomplete,true);assert.deepEqual(result.events[0]?.sidecar?.relayHints,['wss://second.nostr.net']);assert.equal(h.calls.length,2);
+});
+
+const profileKeys = Array.from({length:33}, (_, index) => new Uint8Array(32).fill(index + 1));
+const profileAuthors = profileKeys.map(getPublicKey);
+const profileFilters = profileAuthors.map(pubkey => ({authors:[pubkey], kinds:[0], limit:1}));
+
+test('Follow Packs can query 22 independent profiles without losing less recent authors', async () => {
+  const filters = profileFilters.slice(0,22);
+  const old = profileKeys.slice(0,22).map((key,index) => finalizeEvent({kind:0,created_at:index+1,tags:[],content:'{}'},key));
+  const winners = old.map((event,index) => index === 21 ? event :
+    finalizeEvent({kind:0,created_at:index+100,tags:[],content:JSON.stringify({name:'profile '+index})},profileKeys[index]!));
+  const routes = {...list,write:['wss://first.nostr.net','wss://second.nostr.net']};
+  const h = harness({
+    async resolve() {assert.fail('wide read must use one discovery batch');},
+    async resolveReadBatch(_user, authors, _signal, _active, timeoutMs) {
+      assert.deepEqual(authors,profileAuthors.slice(0,22)); assert.ok(timeoutMs <= 7500);
+      return new Map(authors.map(author => [author,{list:routes,source:'nip65',incomplete:false}]));
+    },
+  });
+  h.native.queryPublishedRelay = async (_id,relay,wire,sub) => {
+    h.calls.push(relay);
+    assert.deepEqual(JSON.parse(wire),['REQ',sub,...filters]);
+    return [...(relay.includes('first') ? old : winners).map(event => JSON.stringify(['EVENT',sub,event])),JSON.stringify(['EOSE',sub])];
+  };
+  const result = await h.service.query({...request,filters},author,signal(),()=>{});
+  assert.deepEqual(result.events.map(row => row.event.id),[...winners].sort((a,b)=>b.created_at-a.created_at).map(event => event.id));
+  assert.deepEqual(result.events.find(row => row.event.id === winners[21]!.id)?.sidecar?.relayHints,routes.write);
+  assert.deepEqual(h.calls,routes.write); assert.equal(result.incomplete,false);
+});
+
+test('wide one-shot count and native REQ byte bounds reject before resolving routes; live and raw stay at four', async () => {
+  const h = harness({async resolve() {assert.fail('oversized request must not resolve authors');}});
+  assert.equal(parseOutboxQuery({...request,filters:profileFilters.slice(0,32)}).filters.length,32);
+  for (const filters of [profileFilters, profileFilters.slice(0,9).map(filter => ({...filter,'#t':['é'.repeat(500)]}))]) {
+    await assert.rejects(h.service.query({...request,filters},author,signal(),()=>{}),/invalid filter/);
+  }
+  const filters = profileFilters.slice(0,5);
+  assert.throws(()=>parseRelayQuery({type:'relay.query',id:request.id,filters}));
+  assert.throws(()=>parseOutboxSubscribe({type:'outbox.subscribe',id:request.id,subId:'live',filters}));
+  assert.equal(h.calls.length,0);
+});
+
+test('wide route overflow retains configured fallback and whole author routes under the 16-peer cap', async () => {
+  const network = ['wss://approved.nostr.net'], hint = 'wss://validated-hint.nostr.net';
+  const h = harness({
+    async resolve() {assert.fail('wide read must use batched discovery');},
+    async resolveReadBatch(_user,authors) {
+      return new Map(authors.map((author,index) => [author,{
+        list:{...list,write:[`wss://author-${index}.nostr.net`]}, source:'nip65', incomplete:false,
+      }]));
+    },
+  },network);
+  h.native.queryPublishedRelay = async (_id,relay,_wire,sub) => {
+    h.calls.push(relay); return [JSON.stringify(['EOSE',sub])];
+  };
+  const result = await h.service.query({...request,filters:profileFilters.slice(0,22),options:{relays:[hint]}},author,signal(),()=>{});
+  assert.deepEqual(h.calls,[hint,...network,...Array.from({length:14},(_,index)=>`wss://author-${index}.nostr.net`)]);
+  assert.deepEqual(result.plan.missingAuthors,profileAuthors.slice(14,22));
+  assert.equal(result.plan.source,'fallback'); assert.equal(result.incomplete,true);
+});
+
+test('wide discovery spends the original deadline and revocation prevents data dispatch', async () => {
+  let entered!: () => void;
+  const enteredDiscovery = new Promise<void>(resolve => {entered=resolve;});
+  const h = harness({
+    async resolve() {assert.fail('wide read must use batched discovery');},
+    async resolveReadBatch(_user,_authors,signal) {
+      entered();
+      return new Promise((_,reject) => signal.addEventListener('abort',()=>reject(Error('cancelled')),{once:true}));
+    },
+  });
+  const controller = new AbortController();
+  const pending = h.service.query({...request,filters:profileFilters.slice(0,22)},author,controller.signal,()=>{});
+  await enteredDiscovery; controller.abort();
+  await assert.rejects(pending,/relay timeout/);
+  await assert.rejects(h.service.query({...request,filters:profileFilters.slice(0,22),options:{timeoutMs:15}},author,signal(),()=>{}),/relay timeout/);
+  assert.deepEqual(h.calls,[]);
+});
+
+
+test('wide authorless reads use configured Network fallback without discovery', async () => {
+  const h = harness({
+    async resolve() {assert.fail('authorless read must not resolve authors');},
+    async resolveReadBatch() {assert.fail('authorless read must not open a discovery batch');},
+  });
+  const filters = profileFilters.slice(0,22).map(() => ({kinds:[1],limit:1}));
+  const result = await h.service.query({...request,filters},author,signal(),()=>{});
+  assert.equal(result.events[0]?.event.id,event.id);
+  assert.deepEqual(result.plan,{relays:['wss://network.nostr.net'],source:'fallback',missingAuthors:[],incomplete:true});
+  assert.deepEqual(h.calls,['wss://network.nostr.net']);
+});
+
+test('wide planning timeout includes stalled cache reads and leaves time for data fallback', async () => {
+  let cacheStarted = false, cacheAborted = false;
+  const unused = async () => assert.fail('stalled cache must not start Lookup or write');
+  const resolver = createOutboxAuthorResolver({
+    async read(_user,_author,_active,signal) {
+      cacheStarted = true;
+      return new Promise((_,reject) => signal.addEventListener('abort',()=>{
+        cacheAborted = true; reject(Error('planning expired'));
+      },{once:true}));
+    },
+    write:unused, close:unused,
+  },{query:unused, queryDetailed:unused});
+  const h = harness(resolver);
+  const profile = finalizeEvent({kind:0,created_at:10,tags:[],content:'{"name":"available"}'},profileKeys[0]!);
+  h.native.queryPublishedRelay = async (_id,relay,_wire,sub) => {
+    h.calls.push(relay); return [JSON.stringify(['EVENT',sub,profile]),JSON.stringify(['EOSE',sub])];
+  };
+  const result = await h.service.query({...request,filters:profileFilters.slice(0,22),options:{timeoutMs:100}},author,signal(),()=>{});
+  assert.equal(cacheStarted,true); assert.equal(cacheAborted,true);
+  assert.equal(result.events[0]?.event.id,profile.id); assert.equal(result.incomplete,true);
+  assert.deepEqual(h.calls,['wss://network.nostr.net']);
 });

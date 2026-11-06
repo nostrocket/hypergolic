@@ -4,6 +4,7 @@ import { text, utf8Bytes } from '../storage/codec.ts';
 export const QUERY_LIMITS = Object.freeze({ filters: 4, list: 64, requestBytes: 16 * 1024,
   events: 32, eventBytes: 64 * 1024, resultBytes: 512 * 1024, frames: 64,
   timeoutMs: 15_000, concurrent: 2 });
+export const NATIVE_RELAY_REQUEST_BYTES = 8_192;
 export type QueryFilter = Readonly<Record<string, readonly string[] | readonly number[] | number>>;
 export type RelayQueryRequest = Readonly<{ type: 'relay.query'; id: string; filters: readonly QueryFilter[] }>;
 export class RelayQueryError extends Error {
@@ -34,8 +35,9 @@ function dense(value: unknown, max: number): unknown[] {
   }
   return output;
 }
-export function parseQueryFilters(input: unknown, maximumLimit: number = QUERY_LIMITS.events): readonly QueryFilter[] {
-  const filters = dense(input, QUERY_LIMITS.filters);
+export function parseQueryFilters(input: unknown, maximumLimit: number = QUERY_LIMITS.events,
+  maximumFilters: number = QUERY_LIMITS.filters): readonly QueryFilter[] {
+  const filters = dense(input, maximumFilters);
   if (filters.length === 0) return fail();
   const result = filters.map(value => {
     const source = record(value), filter: Record<string, readonly string[] | readonly number[] | number> = {};
@@ -66,6 +68,11 @@ export function parseQueryFilters(input: unknown, maximumLimit: number = QUERY_L
   });
   if (utf8Bytes(JSON.stringify(result)) > QUERY_LIMITS.requestBytes) return fail();
   return Object.freeze(result);
+}
+export function relayQueryWire(subscription: string, filters: readonly QueryFilter[]): string {
+  const wire = JSON.stringify(['REQ', subscription, ...filters]);
+  if (utf8Bytes(wire) > NATIVE_RELAY_REQUEST_BYTES) return fail();
+  return wire;
 }
 export function parseRelayQuery(value: unknown): RelayQueryRequest {
   const data = record(value);

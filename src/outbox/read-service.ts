@@ -3,7 +3,7 @@ import type {NativePublishedRelayPort} from '../napplets/native-published-relay.
 import type {RelaySettingsSnapshot} from '../network/relay-settings.ts';
 import {QUERY_LIMITS} from '../network/relay-query-contract.ts';
 import type {OutboxAuthorResolver} from './author-resolver.ts';
-import {capOutboxFilters, parseOutboxQuery, parseOutboxEvent, parseOutboxResolve, OutboxQueryError, type OutboxQueryRequest} from './query-contract.ts';
+import {OUTBOX_QUERY_FILTERS, capOutboxFilters, parseOutboxQuery, parseOutboxEvent, parseOutboxResolve, OutboxQueryError, type OutboxQueryRequest} from './query-contract.ts';
 import {resolveOutboxPlan, type OutboxReadPlan} from './route-plan.ts';
 export type {OutboxReadPlan} from './route-plan.ts';
 export type OutboxEventRow = Readonly<RelayQueryResult['events'][number] & {sidecar?: Readonly<{relayHints: readonly string[]}>}>;
@@ -21,7 +21,7 @@ export function createOutboxReadService(resolver: OutboxAuthorResolver,
   settings: () => RelaySettingsSnapshot, now: () => number = Date.now) {
   let pending = 0;
   async function bounded<T>(timeoutMs: number, signal: AbortSignal, assertActive: () => void,
-    work: (signal: AbortSignal, active: () => void, remaining: () => number) => Promise<T>): Promise<T> {
+    work: (signal: AbortSignal, active: () => void, remaining: (handoff?: boolean) => number) => Promise<T>): Promise<T> {
     if (pending >= QUERY_LIMITS.concurrent) throw new OutboxQueryError('relay timeout');
     const startedAt = now();
     if (!Number.isSafeInteger(startedAt) || startedAt < 0) throw new OutboxQueryError('relay timeout');
@@ -32,26 +32,29 @@ export function createOutboxReadService(resolver: OutboxAuthorResolver,
     let rejectCancelled!: () => void;
     const cancelled = new Promise<never>((_,reject) => {rejectCancelled = () => reject(new OutboxQueryError('relay timeout'));});
     controller.signal.addEventListener('abort',rejectCancelled,{once:true});
-    const remaining = () => {
+    const remaining = (handoff = false) => {
       active(); const ms = timeoutMs - (now() - startedAt);
       if (!Number.isSafeInteger(ms) || ms < 1 || ms > timeoutMs) throw new OutboxQueryError('relay timeout');
-      clearTimeout(timer); // Data transport now owns the same remaining deadline and may return verified partial data.
+      if (handoff) clearTimeout(timer); // Data transport now owns the same remaining deadline and may return verified partial data.
       return ms;
     };
     try {const result = await Promise.race([work(controller.signal,active,remaining),cancelled]); active(); return result;}
     finally {clearTimeout(timer);signal.removeEventListener('abort',stop);controller.signal.removeEventListener('abort',rejectCancelled);controller.abort();pending--;}
   }
-  function route(request: OutboxQueryRequest, user: string, signal: AbortSignal, active: () => void, refresh = false) {
+  function route(request: OutboxQueryRequest, user: string, signal: AbortSignal, active: () => void, refresh = false, batchTimeoutMs?: number) {
     const authors = new Set(request.options.authors);
     for (const filter of request.filters) for (const author of (filter.authors ?? []) as readonly string[]) authors.add(author);
-    return resolveOutboxPlan(resolver,settings(),user,[...authors],request.options.relays,'read',signal,active,refresh);
+    return resolveOutboxPlan(resolver,settings(),user,[...authors],request.options.relays,'read',signal,active,refresh,batchTimeoutMs);
   }
   async function query(input: unknown,user: string,signal: AbortSignal,assertActive: () => void): Promise<OutboxReadResult> {
     const request = parseOutboxQuery(input);
     return bounded(request.options.timeoutMs,signal,assertActive,async (leased,active,remaining) => {
-      const plan = await route(request,user,leased,active); active();
-      const transport = createNativeRelayQuery(native,() => plan.relays,remaining(),{allowPartialOnLimit:true});
-      const result = await transport.queryDetailed(capOutboxFilters(request.filters),leased,active); active();
+      const wide = request.filters.length > QUERY_LIMITS.filters;
+      const discoveryBudget = wide ? Math.max(1, Math.floor(remaining() / 2)) : undefined;
+      const plan = await route(request,user,leased,active,false,discoveryBudget); active();
+      const transport = createNativeRelayQuery(native,() => plan.relays,remaining(true),{allowPartialOnLimit:true});
+      const result = await transport.queryDetailed(capOutboxFilters(request.filters),leased,active,
+        wide ? {maximumFilters:OUTBOX_QUERY_FILTERS} : undefined); active();
       const capped = result.events.length === QUERY_LIMITS.events &&
         (request.options.limit > QUERY_LIMITS.events ||
           request.options.limit === QUERY_LIMITS.events && request.filters.some(filter => (filter.limit as number) > QUERY_LIMITS.events));

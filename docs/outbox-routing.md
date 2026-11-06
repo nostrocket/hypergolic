@@ -10,6 +10,17 @@ Original SDK getEvent/query/resolveRelays/subscribe/close/publish use the truste
 
 The identity-specific persistent list cache is fresh for 24 hours after a successful verified lookup. Reads may retain verified stale data for up to seven days while refreshing. Missing/failed discovery or authorless reads use bounded Network fallback and validated hints, reporting incomplete results truthfully. Larger Outbox query and backfill limits are capped at 32 events. A one-shot query that fills the cap when the caller requested more reports a potentially incomplete result. Publication refreshes expired metadata before review and refuses stale required routing. Missing own usable metadata permits labelled Network fallback; missing required inbox metadata blocks before review/signing.
 
+One-shot Outbox queries accept up to 32 NIP-01 filters within the existing native
+8 KiB REQ and result limits. Raw Relay queries and live subscriptions keep their
+four-filter limit. A wide Outbox query keeps each filter's own limit and uses
+one REQ per selected data relay. Its batched author-list discovery uses at most
+half the remaining time inside the same 15-second total deadline. Missing batch
+results are not cached as absent. When the complete signed read relay union
+would exceed 16 destinations, configured Network relays and validated hints
+leave room for whole author relay sets that fit. Omitted author routes make the
+result incomplete. Packs with more than 32 per-member filters still exceed
+this profile.
+
 ## Review, publication and receipts
 
 Before trusted review, freeze the exact unsigned primary template and the full unique union of own write, explicitly requested inbox read and explicit relay destinations. Bounds are 64 authors and 16 unique relay destinations; required fanout is never silently truncated. No automatic p-tag recipient inference is selected. toOutbox:false skips own discovery and own-list redistribution while explicit and required inbox destinations still apply.

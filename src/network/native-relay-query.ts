@@ -4,15 +4,16 @@ import type { NativePublishedRelayPort } from '../napplets/native-published-rela
 import { parsePublishedRelayMessage } from '../napplets/published-relay-wire.ts';
 import { normalizeRelayUrl, MAX_RELAYS_PER_ROLE } from './relay-settings.ts';
 import { utf8Bytes } from '../storage/codec.ts';
-import { parseQueryFilters, QUERY_LIMITS, RelayQueryDataError, RelayQueryError, selectQueryEvents, verifyQueryEvent, type QueryFilter } from './relay-query-contract.ts';
+import { parseQueryFilters, QUERY_LIMITS, RelayQueryDataError, RelayQueryError, relayQueryWire, selectQueryEvents, verifyQueryEvent, type QueryFilter } from './relay-query-contract.ts';
 
 export interface RelayQueryService {
   readonly catalog?: CatalogRelayReader;
   query(filters: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void): Promise<readonly Readonly<{ event: NostrEvent }>[]>;
 }
 export type RelayQueryResult = Readonly<{ events: readonly Readonly<{ event: NostrEvent }>[]; incomplete: boolean; relayHints?: Readonly<Record<string, readonly string[]>> }>;
+type DetailedQueryOptions = Readonly<{maximumFilters?: number; timeoutMs?: number; allowPartialOnLimit?: boolean}>;
 export interface DetailedRelayQueryService extends RelayQueryService {
-  queryDetailed(filters: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void): Promise<RelayQueryResult>;
+  queryDetailed(filters: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void, options?: DetailedQueryOptions): Promise<RelayQueryResult>;
 }
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 function parseFrames(input: unknown, subscription: string, filters: readonly QueryFilter[]): NostrEvent[] {
@@ -32,6 +33,17 @@ function parseFrames(input: unknown, subscription: string, filters: readonly Que
   return events;
 }
 type Aggregation={bytes:number;limited:boolean;sizes:Map<string,number>};
+function forgetEvent(events: Map<string, NostrEvent>, hints: Map<string, Set<string>>, id: string, state: Aggregation) {
+  events.delete(id); hints.delete(id); state.bytes -= state.sizes.get(id)!; state.sizes.delete(id);
+}
+function selectBatch(events: Map<string, NostrEvent>, hints: Map<string, Set<string>>,
+  batch: readonly NostrEvent[], filters: readonly QueryFilter[], state: Aggregation) {
+  const candidates = new Map(events);
+  for (const event of batch) candidates.set(event.id, event);
+  const selected = new Set(selectQueryEvents([...candidates.values()], filters).map(row => row.event.id));
+  for (const id of events.keys()) if (!selected.has(id)) forgetEvent(events, hints, id, state);
+  return batch.filter(event => selected.has(event.id));
+}
 function retainEvent(events:Map<string,NostrEvent>,hints:Map<string,Set<string>>,event:NostrEvent,relay:string,state:Aggregation,partial:boolean) {
   if(events.has(event.id)){hints.get(event.id)!.add(relay);return;}
   const size=utf8Bytes(JSON.stringify(event));
@@ -40,7 +52,7 @@ function retainEvent(events:Map<string,NostrEvent>,hints:Map<string,Set<string>>
   while(events.size>QUERY_LIMITS.events||state.bytes>QUERY_LIMITS.resultBytes) {
     state.limited=true;
     const last=[...events.values()].sort((a,b)=>a.created_at-b.created_at||(a.id<b.id?1:a.id>b.id?-1:0))[0]!;
-    events.delete(last.id);hints.delete(last.id);state.bytes-=state.sizes.get(last.id)!;state.sizes.delete(last.id);
+    forgetEvent(events, hints, last.id, state);
   }
 }
 /** App-side only. Destinations come from trusted Network settings, never guest JSON. */
@@ -56,8 +68,10 @@ export function createNativeRelayQuery(port: Pick<NativePublishedRelayPort, 'new
     return relays;
   }
   async function runQuery(input: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void, partialAtDeadline: boolean,
-    catalogRelay?: string): Promise<RelayQueryResult> {
-      const filters = parseQueryFilters(input);
+    catalogRelay?: string, detailed?: DetailedQueryOptions): Promise<RelayQueryResult> {
+      const filters = parseQueryFilters(input, QUERY_LIMITS.events, detailed?.maximumFilters);
+      const budget = detailed?.timeoutMs ?? timeoutMs;
+      if (!Number.isSafeInteger(budget) || budget < 1 || budget > timeoutMs) throw new RelayQueryError();
       const configured = configuredRelays();
       const relays = catalogRelay === undefined ? configured : configured.filter(relay => relay === catalogRelay);
       if (relays.length === 0 || concurrent >= QUERY_LIMITS.concurrent) throw new RelayQueryError('relay query busy');
@@ -77,7 +91,7 @@ export function createNativeRelayQuery(port: Pick<NativePublishedRelayPort, 'new
       const result = (incomplete: boolean): RelayQueryResult => Object.freeze({events:selectQueryEvents([...events.values()],filters),incomplete,...(hints.size ? {relayHints:Object.freeze(Object.fromEntries([...hints].map(([id,relays]) => [id,Object.freeze([...relays])]))) } : {})});
       let successes = 0, invalidData = false, deadline = false;
       const aggregation:Aggregation={bytes:0,limited:false,sizes:new Map()};
-      const timer = setTimeout(() => {deadline = true; cancel();}, timeoutMs);
+      const timer = setTimeout(() => {deadline = true; cancel();}, budget);
       signal.addEventListener('abort', cancel, { once: true });
       let stop!: () => void;
       const cancelled = new Promise<RelayQueryResult>((resolve, reject) => {stop = () => {
@@ -96,7 +110,7 @@ export function createNativeRelayQuery(port: Pick<NativePublishedRelayPort, 'new
             if (!uuid.test(operation) || used.has(operation)) throw new RelayQueryError();
             used.add(operation);
             const subscription = 'query_' + operation.replaceAll('-', '');
-            const wire = JSON.stringify(['REQ', subscription, ...filters]);
+            const wire = relayQueryWire(subscription, filters);
             pending = operation;
             let batch: NostrEvent[];
             try {
@@ -113,7 +127,11 @@ export function createNativeRelayQuery(port: Pick<NativePublishedRelayPort, 'new
               if (cancelledSignal.aborted) throw new RelayQueryError();
               continue;
             } finally { if (pending === operation) pending = null; }
-            for (const event of batch) retainEvent(events,hints,event,relay,aggregation,partialAtDeadline&&options.allowPartialOnLimit===true);
+            // Wide queries can receive a different revision per author from each relay.
+            // Enforce per-filter limits before the aggregate cap can crowd out other authors.
+            if (filters.length > QUERY_LIMITS.filters) batch = selectBatch(events, hints, batch, filters, aggregation);
+            for (const event of batch) retainEvent(events,hints,event,relay,aggregation,
+              partialAtDeadline && (detailed?.allowPartialOnLimit ?? options.allowPartialOnLimit) === true);
             successes++;
           }
           active();
@@ -133,7 +151,7 @@ export function createNativeRelayQuery(port: Pick<NativePublishedRelayPort, 'new
         return (await runQuery([filter], signal, active, false, relay)).events;
       },
     }),
-    queryDetailed(input: readonly QueryFilter[], signal: AbortSignal, active: () => void) {return runQuery(input, signal, active, true);},
+    queryDetailed(input: readonly QueryFilter[], signal: AbortSignal, active: () => void, detailed?: DetailedQueryOptions) {return runQuery(input, signal, active, true, undefined, detailed);},
     async query(filters: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void) {
       return (await runQuery(filters, signal, assertActive, false)).events;
     },
