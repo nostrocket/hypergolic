@@ -14,7 +14,7 @@ import type { RelayQueryService } from '../network/native-relay-query';
 import type { IdentityTransition } from '../security/identity-transition.ts';
 import type { ShellDatabase } from '../storage/database.ts';
 import { ShellStorageError } from '../storage/ports.ts';
-import type { NappletDescriptor } from '../shell/workspace.ts';
+import { samePublishedPin, type NappletDescriptor } from '../shell/workspace.ts';
 import { bundledDescriptor, resolveBundledSession, type BundledVariant } from '../shell/fixtures.ts';
 import { createCapabilityBroker, type NativeCapabilityPort } from './capability-broker.ts';
 import type { ApprovalOrigin, ApprovalService } from '../security/approval-service.ts';
@@ -114,12 +114,11 @@ export function createRuntimeOwner(database: ShellDatabase,
   }) : null;
   const prepared = new Map<string, PreparedPublishedSession>();
   const running = new Map<string, PublishedRuntimeBinding>();
-  const exactSession = (session: NappletDescriptor): void => {
+  const exactSession = (session: NappletDescriptor): NappletDescriptor => {
     const state = identity.getSnapshot().session.workspace.getSnapshot();
     const current = state.workspace.sessions.find(value => value.id === session.id);
-    if (state.error !== null || !current || current.source !== 'published' ||
-        current.publisher !== session.publisher || current.appId !== session.appId ||
-        current.version !== session.version || current.eventId !== session.eventId || current.title !== session.title) throw new ShellStorageError('REVOKED');
+    if (state.error !== null || !current || !samePublishedPin(current, session)) throw new ShellStorageError('REVOKED');
+    return current;
   };
   const bindingFor = (selected: NappletDescriptor, ready: PreparedPublishedSession): PublishedRuntimeBinding => {
     let revoked = false;
@@ -227,9 +226,7 @@ export function createRuntimeOwner(database: ShellDatabase,
       if (ready) prepared.delete(session.id);
       else ready = await coordinator.reopenPinned(session, signal, review);
       try {
-        if (ready.descriptor.id !== session.id || ready.descriptor.publisher !== session.publisher || ready.descriptor.appId !== session.appId ||
-            ready.descriptor.version !== session.version || ready.descriptor.eventId !== session.eventId ||
-            ready.descriptor.title !== session.title) throw new ShellStorageError('CONFLICT');
+        if (!samePublishedPin(ready.descriptor, session)) throw new ShellStorageError('CONFLICT');
         exactSession(session);
         ready.assertActive();
         if (routing) {
@@ -238,8 +235,15 @@ export function createRuntimeOwner(database: ShellDatabase,
           await routing.catalog.remember(catalogOwner, ready.artifact, {signal});
           await routing.broker.catalogChanged(catalogOwner, previous.handlers.flatMap(handler => handler.roles.map(role => role.archetype)));
         }
-        ready.assertActive(); exactSession(session);
+        ready.assertActive();
+        const current = exactSession(session);
         const binding = bindingFor(session, ready);
+        if (current.title !== ready.descriptor.title) {
+          const store = identity.getSnapshot().session.workspace;
+          const workspace = store.getSnapshot().workspace;
+          store.change({...workspace, sessions: workspace.sessions.map(value => value.id === session.id ? ready.descriptor : value)});
+          ready.assertActive(); exactSession(session);
+        }
         running.set(session.id, binding);
         return binding;
       } catch (error) { ready.revoke(); throw error; }

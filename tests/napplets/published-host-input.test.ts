@@ -30,6 +30,32 @@ test('a signed artifact and current consent bind the exact publisher, version an
   });
 });
 
+test('verified signed titles are plain bounded display metadata with an app ID fallback', async () => {
+  const secret = new Uint8Array(32).fill(34);
+  const embedded = await loadEmbeddedTestArtifact();
+  const appId = 'opaque-app-id', publisher = getPublicKey(secret);
+  const coordinate = { kind: 35129 as const, pubkey: publisher, identifier: appId, relayHints: [] };
+  const variants: [string[][], string][] = [
+    [[['title', ' Murder\t Mice \u202E\nArena ']], 'Murder Mice Arena'],
+    [[['title', 'a'.repeat(125) + '🐭']], 'a'.repeat(125)],
+    [[['title', '🐭 Mouse']], '🐭 Mouse'],
+    [[['title', '鼠'.repeat(45)]], '鼠'.repeat(42)],
+    [[['title', '\u200b\u202e']], appId],
+    [[['title', 'Ambiguous'], ['title', 'Duplicate']], appId],
+    [[['title', 'Malformed', 'extra']], appId],
+    [[], appId],
+  ];
+  for (const [tags, title] of variants) {
+    const event = finalizeEvent({ kind: 35129, created_at: 1_800_000_000, content: 'Verified demo',
+      tags: [['d', appId], ['x', embedded.htmlHash], ...tags] }, secret);
+    const manifest = await verifyManifest(coordinate, JSON.parse(JSON.stringify(event)));
+    const artifact = await verifyArtifact(manifest, embedded.htmlBytes);
+    const descriptor = descriptorForPublishedArtifact(artifact, SESSION);
+    assert.deepEqual(descriptor, {id: SESSION, title, publisher, appId, version: embedded.aggregateHash,
+      source: 'published', eventId: event.id});
+  }
+});
+
 test('stale identity, denied or forged consent and substituted descriptor cannot prepare a native host', async t => {
   const { database } = await setup(t);
   const artifact = await loadEmbeddedTestArtifact();

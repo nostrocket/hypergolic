@@ -1,6 +1,6 @@
 import type { NappletDescriptor } from '../shell/workspace.ts';
 import { assertVerifiedNappletAdmission, publishedCapabilityCompatibility, type VerifiedNappletAdmission } from './first-open-consent.ts';
-import { assertVerifiedArtifact, type VerifiedNappletArtifact } from './verified-artifact.ts';
+import { assertVerifiedArtifact, type VerifiedNappletArtifact, type VerifiedNappletManifest } from './verified-artifact.ts';
 
 const HEX64 = /^[0-9a-f]{64}$/;
 const SESSION = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -19,19 +19,33 @@ function claims(artifact: VerifiedNappletArtifact): { publisher: string; appId: 
     eventId: artifact.manifest.eventId, htmlHash: artifact.htmlHash };
 }
 
+function boundedTitle(input: string): string {
+  const clean = input.replace(/\s/g, ' ')
+    .replace(/[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u200b\u200e\u200f\u202a-\u202e\u2060\u2066-\u206f\ud800-\udfff]/gu, '')
+    .replace(/ +/g, ' ').trim();
+  const encoder = new TextEncoder();
+  let result = '', size = 0;
+  for (const character of clean) {
+    size += encoder.encode(character).byteLength;
+    if (size > 128) break;
+    result += character;
+  }
+  return result.trimEnd();
+}
+
+function publishedNappletTitle(manifest: VerifiedNappletManifest, appId: string): string {
+  const titles = manifest.tags.filter(tag => tag[0] === 'title');
+  const title = titles.length === 1 && titles[0]!.length === 2 ? boundedTitle(titles[0]![1]!) : '';
+  return title || boundedTitle(appId) || 'Napplet';
+}
+
 /** Create the exact durable pin only after signature and HTML verification. */
 export function descriptorForPublishedArtifact(artifactInput: unknown, sessionId: string): NappletDescriptor {
   assertVerifiedArtifact(artifactInput);
   const artifact: VerifiedNappletArtifact = artifactInput;
   if (!SESSION.test(sessionId)) return fail();
   const verified = claims(artifact);
-  let title = '';
-  for (const character of verified.appId) {
-    if (new TextEncoder().encode(title + character).length > 128) break;
-    title += character;
-  }
-  if (!title) return fail();
-  return Object.freeze({ id: sessionId, title, publisher: verified.publisher, appId: verified.appId,
+  return Object.freeze({ id: sessionId, title: publishedNappletTitle(artifact.manifest, verified.appId), publisher: verified.publisher, appId: verified.appId,
     version: verified.version, source: 'published', eventId: verified.eventId });
 }
 

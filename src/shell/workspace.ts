@@ -9,6 +9,12 @@ export interface NappletDescriptor {
   /** Exact signed kind-35129 event selected for this published version. */
   readonly eventId?: string;
 }
+export function samePublishedPin(left: NappletDescriptor, right: NappletDescriptor): boolean {
+  return left.source === 'published' && right.source === 'published' && left.id === right.id &&
+    left.publisher === right.publisher && left.appId === right.appId &&
+    left.eventId === right.eventId && left.version === right.version;
+}
+
 export interface Workspace {
   readonly sessions: readonly NappletDescriptor[];
   readonly focusedId: string | null;

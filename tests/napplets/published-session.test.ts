@@ -19,12 +19,12 @@ import type { ApprovalOrigin, ApprovalService } from '../../src/security/approva
 const USER = '31'.repeat(32);
 const SESSION = '58274370-ec8f-4058-a4cc-b63e7e75ca4b';
 const LINK = naddrEncode(EMBEDDED_TEST_COORDINATE);
-function signedFixture(createdAt: number, appId: string, html: Uint8Array, domains: readonly string[], secret: Uint8Array) {
+function signedFixture(createdAt: number, appId: string, html: Uint8Array, domains: readonly string[], secret: Uint8Array, title?: string) {
   const htmlHash = createHash('sha256').update(html).digest('hex');
   const aggregate = createHash('sha256').update(`${htmlHash} /index.html\n`).digest('hex');
   return finalizeEvent({ kind: 35129, created_at: createdAt, content: '', tags: [
     ['d', appId], ['path', '/index.html', htmlHash], ['x', aggregate, 'aggregate'],
-    ...domains.map(domain => ['requires', domain]),
+    ...domains.map(domain => ['requires', domain]), ...(title ? [['title', title]] : []),
   ] }, secret);
 }
 
@@ -159,6 +159,39 @@ test('workspace runtime consumes the reviewed artifact once and revokes it on cl
   epoch++;
 });
 
+test('reopening an old display title refreshes it only after exact pin verification', async t => {
+  const { database, sqlite } = await setup(t);
+  const html = getEmbeddedTestHtmlBytes(), appId = 'n-26115e0d25b';
+  const event = signedFixture(1_800_000_001, appId, html, ['theme'], new Uint8Array(32).fill(7), 'Murder Mice');
+  const link = naddrEncode({ kind: 35129, pubkey: event.pubkey, identifier: appId });
+  let workspace = emptyWorkspace();
+  const store = {getSnapshot: () => ({workspace,error:null}), change: (next: typeof workspace) => { workspace = next; }};
+  const identity = {
+    sessionAuthority: () => ({ user: USER, epoch: 2, assertActive: () => undefined }),
+    getSnapshot: () => ({ session: { epoch: 2, workspace: store } }),
+  } as unknown as Pick<IdentityTransition, 'sessionAuthority' | 'getSnapshot'>;
+  const calls: string[] = [];
+  const leases = Object.assign(new NativeLeases(), native(calls));
+  const owner = createRuntimeOwner(database, identity, leases, undefined, {
+    sqlite, native: leases, lookupRelays: () => ['wss://relay.example.org'],
+    source: { query: async () => [event], readHtml: async () => new Uint8Array(html) },
+  });
+  const descriptor = await owner.openPublishedLink(link, new AbortController().signal, async () => true);
+  assert.equal(descriptor.title, 'Murder Mice');
+  owner.discardPublished(descriptor.id);
+  const saved = {...descriptor, title: appId};
+  const wrong = {...descriptor, eventId: 'f'.repeat(64)};
+  workspace = openNapplet(workspace, wrong);
+  await assert.rejects(owner.openPublished(wrong, new AbortController().signal, async () => assert.fail('wrong pin')));
+  workspace = openNapplet(emptyWorkspace(), saved);
+  const binding = await owner.openPublished(saved, new AbortController().signal, async () => assert.fail('remembered grant'));
+  assert.deepEqual(workspace.sessions, [descriptor]);
+  binding.ready('verified-generation');
+  assert.equal(owner.publishedReadyGeneration(saved), 'verified-generation');
+  assert.throws(() => owner.publishedReadyGeneration(wrong), {code:'REVOKED'});
+  binding.revoke();
+});
+
 test('published relay approval needs the live verified session and its native generation', async t => {
   const { database, sqlite } = await setup(t);
   const html = getEmbeddedTestHtmlBytes();
@@ -204,8 +237,8 @@ test('verified update is inert until explicit review and cannot roll back to an 
   const originalHtml = getEmbeddedTestHtmlBytes();
   const updatedHtml = new TextEncoder().encode(new TextDecoder().decode(originalHtml).replace('fixture-loaded', 'fixture-updated'));
   const key = new Uint8Array(32).fill(11);
-  const oldEvent = signedFixture(1_800_000_001, appId, originalHtml, ['theme'], key);
-  const newEvent = signedFixture(1_800_000_002, appId, updatedHtml, ['theme'], key);
+  const oldEvent = signedFixture(1_800_000_001, appId, originalHtml, ['theme'], key, 'Original title');
+  const newEvent = signedFixture(1_800_000_002, appId, updatedHtml, ['theme'], key, 'Updated title');
   const link = naddrEncode({ kind: 35129, pubkey: oldEvent.pubkey, identifier: appId });
   const calls: string[] = [];
   let epoch = 1, latest = oldEvent;
@@ -219,8 +252,9 @@ test('verified update is inert until explicit review and cannot roll back to an 
   });
   const opened = await service.openLink(link, new AbortController().signal, async () => true);
   const count = calls.length;
+  const oldPin = {...opened.descriptor, title: appId};
   latest = newEvent;
-  await assert.rejects(service.prepareUpdate(opened.descriptor, new AbortController().signal,
+  await assert.rejects(service.prepareUpdate(oldPin, new AbortController().signal,
     async request => { assert.equal(request.nextEventId, newEvent.id); return false; }, async () => true));
   assert.equal(calls.length, count);
   const cancelled = new AbortController();
@@ -231,12 +265,13 @@ test('verified update is inert until explicit review and cannot roll back to an 
     async () => { epoch = 2; return true; }, async () => true));
   assert.equal(calls.length, count);
   epoch = 1;
-  const updated = await service.prepareUpdate(opened.descriptor, new AbortController().signal,
+  const updated = await service.prepareUpdate(oldPin, new AbortController().signal,
     async request => { assert.equal(request.previousEventId, oldEvent.id); return true; }, async () => {
       assert.fail('unchanged capability grant must not be reviewed again');
     });
   assert(updated);
   assert.equal(updated.descriptor.eventId, newEvent.id);
+  assert.equal(updated.descriptor.title, 'Updated title');
   assert.notEqual(updated.descriptor.id, opened.descriptor.id);
   assert.notEqual(updated.descriptor.version, opened.descriptor.version);
   opened.revoke();

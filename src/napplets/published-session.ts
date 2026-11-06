@@ -2,7 +2,7 @@ import { naddrEncode } from 'nostr-tools/nip19';
 import type { IdentityTransition } from '../security/identity-transition.ts';
 import type { ShellDatabase } from '../storage/database.ts';
 import type { SQLiteModule, TrustedApp } from '../storage/ports.ts';
-import type { NappletDescriptor } from '../shell/workspace.ts';
+import { samePublishedPin, type NappletDescriptor } from '../shell/workspace.ts';
 import { requestFirstOpenConsent, type NappletConsentReview } from './first-open-consent.ts';
 import { loadPublishedArtifact, type PublishedArtifactSource } from './loader.ts';
 import { openPublishedArtifactCache } from './published-artifact-cache.ts';
@@ -114,9 +114,7 @@ async function preparePublishedSession(ports: PublishedSessionDependencies, requ
     if (!SESSION.test(id)) fail();
     const descriptor = descriptorForPublishedArtifact(artifact, id);
     const expected = selected ?? exact?.existing;
-    if (expected && (expected.source !== 'published' || expected.publisher !== descriptor.publisher || expected.appId !== descriptor.appId ||
-        expected.version !== descriptor.version || expected.eventId !== descriptor.eventId ||
-        expected.title !== descriptor.title)) fail();
+    if (expected && !samePublishedPin(expected, descriptor)) fail();
     if (updateOf && (updateOf.source !== 'published' || !HEX64.test(updateOf.version) ||
         !HEX64.test(updateOf.eventId ?? '') || updateOf.publisher !== descriptor.publisher ||
         updateOf.appId !== descriptor.appId || updateOf.eventId === descriptor.eventId)) fail();
@@ -185,9 +183,7 @@ async function preparePublishedUpdate(ports: PublishedSessionDependencies, selec
     lookupRelays: ports.lookupRelays(), signal, assertActive: active, pinnedEventId: selected.eventId! });
   active();
   const previousDescriptor = descriptorForPublishedArtifact(previous, selected.id);
-  if (previousDescriptor.publisher !== selected.publisher || previousDescriptor.appId !== selected.appId ||
-      previousDescriptor.eventId !== selected.eventId || previousDescriptor.version !== selected.version ||
-      previousDescriptor.title !== selected.title) fail();
+  if (!samePublishedPin(previousDescriptor, selected)) fail();
   const candidate = await loadPublishedArtifact(link, { source: ports.source,
     lookupRelays: ports.lookupRelays(), signal, assertActive: active });
   active();

@@ -9,7 +9,7 @@ import type { RoutingNativePort } from '../routing/routing-port.ts';
 import type { RoutingReviewRequest, RoutingReviewService } from '../routing/routing-review.ts';
 import { resolveBundledSession } from '../shell/fixtures.ts';
 import { isDiscoveryEntry } from './discovery-entry.ts';
-import { focusNapplet, openNapplet, type NappletDescriptor } from '../shell/workspace.ts';
+import { focusNapplet, openNapplet, samePublishedPin, type NappletDescriptor } from '../shell/workspace.ts';
 import { ShellStorageError } from '../storage/ports.ts';
 import { DISCOVERY_LEASE_MS, parseDiscoveryOpen, type DiscoveryOpenStatus } from './discovery-open-contract.ts';
 import { publishedCapabilityCompatibility } from './first-open-consent.ts';
@@ -26,9 +26,10 @@ type Ports = Readonly<{
 export type DiscoveryOpenBroker = ReturnType<typeof createDiscoveryOpenBroker>;
 
 const cancelled = () => new ShellStorageError('REVOKED');
-const sameTarget = (left: NappletDescriptor, right: NappletDescriptor) => left.source === right.source &&
-  left.publisher === right.publisher && left.appId === right.appId && left.eventId === right.eventId &&
-  left.version === right.version && left.title === right.title;
+const sameTarget = (left: NappletDescriptor, right: NappletDescriptor) => left.source === 'published'
+  ? samePublishedPin(left, right)
+  : left.source === right.source && left.publisher === right.publisher && left.appId === right.appId &&
+    left.eventId === right.eventId && left.version === right.version && left.title === right.title;
 const integer = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
 
 function lookupStatus(error: unknown): DiscoveryOpenStatus {
