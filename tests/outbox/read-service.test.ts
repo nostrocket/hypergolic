@@ -51,7 +51,8 @@ test('larger Outbox requests stay bounded on the relay wire and flag saturated r
   const parsed = parseOutboxQuery(large);
   assert.equal(parsed.filters[0]?.limit,500);
   assert.equal(parsed.options.limit,128);
-  assert.throws(()=>parseRelayQuery({type:'relay.query',id:request.id,filters:[large.filters]}));
+  const raw = parseRelayQuery({type:'relay.query',id:request.id,filters:[large.filters]});
+  assert.equal(raw.filters[0]?.limit,32);
   assert.throws(()=>parseOutboxQuery({...large,filters:{...large.filters,limit:1.5}}));
 
   const fixtures = Array.from({length:QUERY_LIMITS.events},(_,index) =>
