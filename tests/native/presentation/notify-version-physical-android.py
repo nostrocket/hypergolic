@@ -46,9 +46,9 @@ class Journey(base.Journey):
    self.report['inputs'].append({'control':'observed measured Native Settings drag','target':label,'direction':direction,'bounds':[a,b,c,d],'targetBounds':target.get('bounds') if target is not None else None,'input':args});self.persist();self.adb('shell','input',*args);time.sleep(.2)
   self.capture('bounded-native-settings-navigation-failure');raise AssertionError('Native Settings target not exposed within measured bounded drags: '+label)
  def pinned(self,event,label):
-  self.settings();self.settings_find('Pinned event '+event);self.capture(label);self.tap('settings-done')
+  self.settings();self.settings_tap('settings-section-published-updates');self.settings_find('Pinned event '+event);self.capture(label);self.tap('settings-done')
  def update_review(self,instance,label):
-  self.settings();self.settings_tap('published-update-check-'+instance)
+  self.settings();self.settings_tap('settings-section-published-updates');self.settings_tap('published-update-check-'+instance)
   fields=['Use this verified update?',base.fixtures['caller']['event']['pubkey'],base.fixtures['caller']['appId'],base.fixtures['caller']['event']['id'],base.fixtures['notify-update']['event']['id'],'Requested access: notify']
   for index,value in enumerate(fields):
    self.settings_find(value);review_field(self.nodes(),instance,value);self.capture(label+'-field-'+str(index))

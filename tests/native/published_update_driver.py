@@ -159,6 +159,12 @@ class PublishedUpdateDriver(base.Driver):
                          str(x), str(y1 + (y2-y1)//3), '350')
         raise CheckFailed(description + ' was not reached by observed native scrolling')
 
+    def open_updates(self):
+        self.open_settings()
+        identifier = 'settings-section-published-updates'
+        nodes = self.scroll_until(lambda n: resource_id_is(n, identifier), 'published updates section')
+        self.tap(exactly_one(nodes, lambda n: resource_id_is(n, identifier), 'published updates section'))
+
     def open_settings(self):
         _, nodes = self.nodes()
         if any(label(n) == 'Settings' for n in nodes):
@@ -247,7 +253,7 @@ class PublishedUpdateDriver(base.Driver):
         _, nodes = self.wait(lambda observed: any('New revision available' in label(n) for n in observed),
                              'fixture release activated')
         self.check('fixture-release-activated', 'Fixture transport made the signed update available')
-        self.open_settings()
+        self.open_updates()
         nodes = self.scroll_until(lambda n: resource_id_suffix(n).startswith('published-update-check-'),
                                   'published update check action')
         check = find_update_control(nodes, 'published-update-check-')
@@ -278,7 +284,7 @@ class PublishedUpdateDriver(base.Driver):
         if guest_marker(nodes, 'update-v2'):
             raise CheckFailed('Declining the update changed the original guest revision')
 
-        self.open_settings()
+        self.open_updates()
         nodes = self.scroll_until(lambda n: resource_id_suffix(n).startswith('published-update-check-'),
                                   'published update check action after decline')
         check = find_update_control(nodes, 'published-update-check-')
@@ -319,7 +325,7 @@ class PublishedUpdateDriver(base.Driver):
                    'Cold-launched fixture restored the accepted update-v2 native guest without update-v1')
         self.capture('08-restarted-update-v2')
 
-        self.open_settings()
+        self.open_updates()
         nodes = self.scroll_until(lambda n: resource_id_suffix(n).startswith('published-update-check-'),
                                   'check older fixture revision after restart')
         check = find_update_control(nodes, 'published-update-check-')

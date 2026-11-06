@@ -160,7 +160,7 @@ class LiveUpdateDriver(embedded.PublishedUpdateDriver):
         self.check('live-v1-connected', 'Native guest rendered v1 from relay and Blossom bytes')
         self.capture('03-live-v1')
         self.publish_v2()
-        self.open_settings()
+        self.open_updates()
         nodes = self.scroll_until(lambda node: embedded.resource_id_suffix(node).startswith('published-update-check-'),
                                   'live update check')
         self.tap(embedded.find_update_control(nodes, 'published-update-check-'))
@@ -184,7 +184,7 @@ class LiveUpdateDriver(embedded.PublishedUpdateDriver):
             raise CheckFailed('Declining live update changed the guest')
         self.check('live-decline-retains-v1', 'Old signed guest stays connected after decline')
         self.capture('05-declined-v1')
-        self.open_settings()
+        self.open_updates()
         nodes = self.scroll_until(lambda node: embedded.resource_id_suffix(node).startswith('published-update-check-'),
                                   'check live update again')
         self.tap(embedded.find_update_control(nodes, 'published-update-check-'))

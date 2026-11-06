@@ -566,7 +566,7 @@ final class WorkspaceTests: XCTestCase {
     }
     record("live-v1-before-update", true, ["host": "update-v1", "eventId": fixture.v1])
     capture("live-update-before-v2-review")
-    try identityPress("shell-settings")
+    try openPublishedUpdates()
     let check = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "published-update-check-")).firstMatch
     try stateNativeReveal(check)
     let session = String(check.identifier.dropFirst("published-update-check-".count))
@@ -600,7 +600,7 @@ final class WorkspaceTests: XCTestCase {
     record("live-decline-retains-v1", true, ["pinnedEvent": fixture.v1, "host": "update-v1"])
     capture("live-update-declined-v1")
 
-    try identityPress("shell-settings")
+    try openPublishedUpdates()
     let secondCheck = app.buttons.matching(identifier: "published-update-check-" + session).firstMatch
     try stateNativeReveal(secondCheck)
     try identityPress(secondCheck.identifier)
@@ -685,7 +685,7 @@ final class WorkspaceTests: XCTestCase {
     let release = try one(app.buttons.matching(identifier: "update-fixture-release"), "fixture release control", visible: false)
     try nativeTap(release, name: "release-published-update")
     try until("Fixture exposes its newer revision") { self.app.buttons.matching(identifier: "update-fixture-release").firstMatch.label.contains("New revision available") }
-    try identityPress("shell-settings")
+    try openPublishedUpdates()
     let check = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "published-update-check-")).firstMatch
     try stateNativeReveal(check)
     let sessionId = String(check.identifier.dropFirst("published-update-check-".count))
@@ -728,7 +728,7 @@ final class WorkspaceTests: XCTestCase {
        "hostAfterCancel": "update-v1", "runtimeConnected": true])
     capture("published-update-cancel-retained-v1")
 
-    try identityPress("shell-settings")
+    try openPublishedUpdates()
     let secondCheck = app.buttons.matching(identifier: "published-update-check-" + sessionId).firstMatch
     try stateNativeReveal(secondCheck)
     try identityPress(secondCheck.identifier)
@@ -745,7 +745,7 @@ final class WorkspaceTests: XCTestCase {
     try stateNativeReveal(accept)
     try nativeTap(accept, name: "published-update-accept")
     try until("Accepted update returns to focused shell") { self.app.buttons.matching(identifier: "shell-settings").firstMatch.isHittable }
-    try identityPress("shell-settings")
+    try openPublishedUpdates()
     let updatedPinned = app.staticTexts.matching(NSPredicate(format: "label == %@", "Pinned event " + newEvent)).firstMatch
     try stateNativeReveal(updatedPinned)
     try until("New event is the only visible pin") {
@@ -771,7 +771,7 @@ final class WorkspaceTests: XCTestCase {
         && !self.publishedMarker("update-v1")
         && self.app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@", "runtime-status-")).firstMatch.label == "Runtime connected"
     }
-    try identityPress("shell-settings")
+    try openPublishedUpdates()
     let restartedPin = app.staticTexts.matching(NSPredicate(format: "label == %@", "Pinned event " + newEvent)).firstMatch
     try stateNativeReveal(restartedPin)
     let newPinAfterRestart = restartedPin.exists
@@ -781,7 +781,7 @@ final class WorkspaceTests: XCTestCase {
       ["pinnedEvent": newEvent, "host": "update-v2", "oldHostVisible": false, "runtimeConnected": true])
     capture("published-update-restarted-v2")
 
-    try identityPress("shell-settings")
+    try openPublishedUpdates()
     let olderCheck = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "published-update-check-")).firstMatch
     try stateNativeReveal(olderCheck)
     let restartedSessionId = String(olderCheck.identifier.dropFirst("published-update-check-".count))
@@ -876,7 +876,7 @@ final class WorkspaceTests: XCTestCase {
       self.app.buttons.matching(identifier: "changed-access-fixture-release").firstMatch.label == "Changed-access revision available"
     }
 
-    try identityPress("shell-settings")
+    try openPublishedUpdates()
     let check = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "published-update-check-")).firstMatch
     try stateNativeReveal(check)
     let sessionId = String(check.identifier.dropFirst("published-update-check-".count))
@@ -936,7 +936,7 @@ final class WorkspaceTests: XCTestCase {
       "separateAccessReview": true])
     capture("changed-access-declined-v1-retained")
 
-    try identityPress("shell-settings")
+    try openPublishedUpdates()
     let secondCheck = app.buttons.matching(identifier: "published-update-check-" + sessionId).firstMatch
     try stateNativeReveal(secondCheck)
     try identityPress(secondCheck.identifier)
@@ -957,7 +957,7 @@ final class WorkspaceTests: XCTestCase {
     try until("Accepted changed-access update returns to focused shell") {
       self.app.buttons.matching(identifier: "shell-settings").firstMatch.isHittable
     }
-    try identityPress("shell-settings")
+    try openPublishedUpdates()
     let pinnedV2 = app.staticTexts.matching(NSPredicate(format: "label == %@", "Pinned event " + v2Event)).firstMatch
     try stateNativeReveal(pinnedV2)
     try until("v2 event is the only pinned revision") {
@@ -1064,6 +1064,12 @@ final class WorkspaceTests: XCTestCase {
     guard choice.isHittable else { throw Failure.invalid("Unobservable storage scope option") }
     choice.tap()
     try dismissKeyboard()
+  }
+  private func openPublishedUpdates() throws {
+    try identityPress("shell-settings")
+    let section = app.buttons.matching(identifier: "settings-section-published-updates").firstMatch
+    try stateNativeReveal(section)
+    try identityPress(section.identifier)
   }
   private func stateNativeReveal(_ element: XCUIElement) throws {
     let scroll = app.scrollViews.firstMatch

@@ -19,6 +19,7 @@ class Journey(config.Journey):
   self.settings_tap(label);self.adb('shell','input','keycombination','113','29');self.adb('shell','input','keyevent','67');self.adb('shell','input','text',value);self.adb('shell','input','keyevent','4')
  def absent(self,label):assert not any(label in (n.get('resource-id'),n.get('text'),n.get('content-desc')) for n in self.nodes()),label
  def update_check(self):
+  self.settings_tap('settings-section-published-updates')
   title=self.settings_find('signed-config-caller-lab');nodes=list(ET.fromstring(self.xml).iter('node'))
   bounds=lambda n:tuple(map(int,re.fullmatch(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',n.get('bounds')).groups()))
   x1,y1,x2,y2=bounds(title);candidates=[]

@@ -110,22 +110,6 @@ function failureMessage(failure: ReturnType<IdentityTransition['getSnapshot']>['
   if (failure === 'DELETION_PENDING') return 'Deletion is paused. Authenticate again to finish removing the identity.';
   return 'The identity change was not accepted. Your current identity and open napplets are unchanged.';
 }
-function PublishedNappletSettings({ available, openPublished, publishedSessions, checkPublishedUpdate }: {
-  available: boolean;
-  openPublished: SettingsActions['openPublished'];
-  publishedSessions: SettingsActions['publishedSessions'];
-  checkPublishedUpdate: SettingsActions['checkPublishedUpdate'];
-}) {
-  const { styles } = useShellStyles(createStyles);
-  if (!available) return null;
-  return <>
-    <OpenPublishedNapplet open={openPublished} />
-    {publishedSessions.length > 0 && <>
-      <Text accessibilityRole="header" style={styles.title}>Published napplet updates</Text>
-      {publishedSessions.map(session => <UpdatePublishedNapplet key={session.id} session={session} check={checkPublishedUpdate} />)}
-    </>}
-  </>;
-}
 function SavedIdentities({session, transition, format, canDelete, onDelete}: {
   session: IdentitySession; transition: IdentityTransition; format(pubkey: string): string;
   canDelete: boolean; onDelete(pubkey: string): void;
@@ -151,13 +135,18 @@ function SettingsHome({session, onBackup, onCloseBackup, onDelete, onImport, onS
 }) {
   const { styles } = useShellStyles(createStyles);
   const {transition, formatNpub, runtime, actions, relaySettings, resourceSettings, uploadSettings, listAccess, routing, notificationSettings, fixturePublisher} = useIdentityOwner();
+  const publishedCount = publishedSessions.length;
   return <>
       <View style={styles.currentIdentity}><Text style={styles.identityLabel}>Your identity</Text>
         <Text selectable testID="settings-full-npub" style={styles.npub}>{formatNpub(session.vault.selectedPubkey)}</Text>
       </View>
       {runtime && openDiscovery && <Action title="Discover napplets" testID="settings-open-discovery" onPress={openDiscovery} />}
-      <PublishedNappletSettings available={Boolean(runtime)} openPublished={openPublished} publishedSessions={publishedSessions} checkPublishedUpdate={checkPublishedUpdate} />
+      {runtime && <OpenPublishedNapplet open={openPublished} />}
       <View style={styles.sections}>
+      {runtime && publishedCount > 0 && <SettingsSection title="Published napplet updates"
+        detail={`${publishedCount} ${publishedCount === 1 ? 'napplet' : 'napplets'} in this workspace`} id="published-updates">
+        {publishedSessions.map(session => <UpdatePublishedNapplet key={session.id} session={session} check={checkPublishedUpdate} />)}
+      </SettingsSection>}
       <SettingsSection title="Identity" detail="Accounts, signing methods and backup" id="identity">
       <SignerSettings transition={transition} session={session} actions={actions} format={formatNpub}
         onBackup={onBackup} onCloseBackup={onCloseBackup} />
