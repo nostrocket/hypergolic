@@ -56,7 +56,8 @@ test('selects newest verified replaceable manifest and pins its exact signed eve
 test('a bad selected blob never falls back to an older event', async () => {
   const events = [manifest(1_700_000_001), manifest(1_700_000_002)];
   const calls: string[] = [];
-  await assert.rejects(loadPublishedArtifact(link, options(events, new TextEncoder().encode('tampered'), undefined, calls)));
+  await assert.rejects(loadPublishedArtifact(link, options(events, new TextEncoder().encode('tampered'), undefined, calls)),
+    {code: 'PUBLISHED_HASH_MISMATCH'});
   assert.equal(calls.filter(call => call.startsWith('blob:')).length, 1);
 });
 
@@ -162,4 +163,20 @@ test('discovery separates empty results, authentic unsupported manifests and sam
     await assert.rejects(loadPublishedArtifact(link, {...options(events, html, undefined, calls), expectedEventId: current.id}), {code});
     assert.equal(calls.length, 1);
   }
+});
+
+
+test('exact opening distinguishes relay failure, download failure and signed invalid HTML', async () => {
+  const badHtml = new TextEncoder().encode('<body>Missing the required HTML document envelope</body>');
+  const event = finalizeEvent({kind: 35129, created_at: 1_700_000_002, content: 'Invalid HTML',
+    tags: [['d', 'loader-test'], ['x', sha(badHtml)], ['server', 'https://blossom.example.org/']]}, secret);
+  const input = {...options([event], badHtml), expectedEventId: event.id};
+  await assert.rejects(loadPublishedArtifact(link, {...input, source: {
+    async query() {throw new Error('a configured relay did not finish');},
+    async readHtml() {assert.fail('failed lookup cannot start a download');},
+  }}), {code: 'PUBLISHED_LOOKUP_UNAVAILABLE'});
+  await assert.rejects(loadPublishedArtifact(link, {...input, source: {...input.source,
+    async readHtml() {throw new Error('the published server could not be reached');},
+  }}), {code: 'PUBLISHED_DOWNLOAD_UNAVAILABLE'});
+  await assert.rejects(loadPublishedArtifact(link, input), {code: 'PUBLISHED_INVALID_HTML'});
 });

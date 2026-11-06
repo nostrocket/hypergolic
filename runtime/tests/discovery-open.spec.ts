@@ -9,8 +9,8 @@ type Request = {type: string; id: string; address: string; expectedEventId: stri
 type State = { ready: boolean; calls: Request[]; finish?: (status: string) => void };
 type TestWindow = Window & { discoveryOpenTest: State; HypergolicHost: object };
 type GuestWindow = Window & { hypergolic?: { publishedOpen?: {
-  version: number; open(address: string, expectedEventId: string): Promise<{status: string}>;
-} }; receivedOpenStatus?: string };
+  version: number; open(address: string, expectedEventId: string): Promise<{status: string; reason?: string}>;
+} }; receivedOpenStatus?: string; receivedOpenResult?: {status: string; reason?: string} };
 
 async function openRuntime(page: Page, fixture: string) {
   await page.addInitScript(() => {
@@ -71,4 +71,29 @@ test('ordinary bundled guests cannot acquire the discovery launch transport', as
     return Boolean((window as GuestWindow).hypergolic?.publishedOpen);
   }, {...target, type})).toBe(false);
   expect(await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls)).toEqual([]);
+});
+
+
+test('keeps the version-one result status and attaches only allowed load reasons', async ({page}) => {
+  const guest = await openRuntime(page, 'napplet-discovery');
+  for (const [reason, expected] of [
+    ['lookup-unavailable', {status: 'failed', reason: 'lookup-unavailable'}],
+    ['download-unavailable', {status: 'failed', reason: 'download-unavailable'}],
+    ['hash-mismatch', {status: 'failed', reason: 'hash-mismatch'}],
+    ['invalid-html', {status: 'failed', reason: 'invalid-html'}],
+    ['stage-unavailable', {status: 'failed', reason: 'stage-unavailable'}],
+    ['workspace-full', {status: 'unavailable', reason: 'workspace-full'}],
+    ['opaque native detail', {status: 'unavailable'}],
+  ] as const) {
+    const previous = await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length);
+    await guest.evaluate(({address, expectedEventId}) => {
+      const root = window as GuestWindow;
+      delete root.receivedOpenResult;
+      void root.hypergolic!.publishedOpen!.open(address, expectedEventId)
+        .then(result => {root.receivedOpenResult = result;});
+    }, target);
+    await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length)).toBe(previous + 1);
+    await page.evaluate(reason => (window as unknown as TestWindow).discoveryOpenTest.finish?.(reason), reason);
+    await expect.poll(() => guest.evaluate(() => (window as GuestWindow).receivedOpenResult)).toEqual(expected);
+  }
 });

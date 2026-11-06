@@ -5,8 +5,9 @@ import test, { before } from 'node:test';
 import { naddrEncode } from 'nostr-tools/nip19';
 import { finalizeEvent, getPublicKey } from 'nostr-tools/pure';
 import { createDiscoveryOpenBroker } from '../../src/napplets/discovery-open-broker.ts';
-import { DISCOVERY_OPEN, parseDiscoveryOpen, type DiscoveryOpenStatus } from '../../src/napplets/discovery-open-contract.ts';
+import { DISCOVERY_OPEN, parseDiscoveryOpen, type DiscoveryOpenOutcome } from '../../src/napplets/discovery-open-contract.ts';
 import { PublishedLoadError } from '../../src/napplets/loader.ts';
+import { PublishedTransferError } from '../../src/napplets/native-transfer.ts';
 import { descriptorForPublishedArtifact } from '../../src/napplets/published-host-input.ts';
 import { resolveNappletLink } from '../../src/napplets/resolve-link.ts';
 import { verifyArtifact, verifyManifest, type VerifiedNappletArtifact } from '../../src/napplets/verified-artifact.ts';
@@ -65,6 +66,7 @@ function setup(initial = openNapplet(emptyWorkspace(), source), reviews = new Ro
   let focused = false;
   const lookups: { address: string; expectedEventId: string }[] = [];
   let staged = 0;
+  let stageError: PublishedTransferError | null = null;
   let paused: Promise<void> | null = null;
   let lookupError: PublishedLoadError | null = null;
   const discarded: string[] = [];
@@ -82,28 +84,30 @@ function setup(initial = openNapplet(emptyWorkspace(), source), reviews = new Ro
     reviewRevision: generation => generation === registration.generation ? focusRevision : null,
     send: () => false, newChannelId: () => 'channel', subscribe: lifecycle.subscribe,
   };
-  const held = new Map<string, string>(), responses = new Map<string, DiscoveryOpenStatus | null>();
+  const held = new Map<string, string>(), responses = new Map<string, DiscoveryOpenOutcome | null>();
   const broker = createDiscoveryOpenBroker({
     identity: { getSnapshot: () => transition, subscribe: account.subscribe }, reviews, native,
     capability: {
       take: token => held.get(token) ?? null, isActive: token => held.has(token),
       finish: (token, response) => {
         held.delete(token);
-        responses.set(token, response === null ? null : JSON.parse(response).response as DiscoveryOpenStatus);
+        responses.set(token, response === null ? null : JSON.parse(response).response as DiscoveryOpenOutcome);
       },
     },
     runtime: () => ({
       async resolveDiscovered(link, expected, _signal, active) {
         lookups.push({ address: link, expectedEventId: expected });
         if (paused) await paused;
-        active();
         if (lookupError) throw lookupError;
+        active();
         return artifact;
       },
       async prepareDiscovered(candidate, _signal, active, review, existing) {
         assert.equal(candidate, artifact);
         if (!await review(true)) throw new Error('Consent declined');
-        active(); staged++;
+        active();
+        if (stageError) throw stageError;
+        staged++;
         return existing ?? target;
       },
       publishedReadyGeneration: session => session.id === target.id && mounted ? targetGeneration : null,
@@ -128,10 +132,11 @@ function setup(initial = openNapplet(emptyWorkspace(), source), reviews = new Ro
     ready: () => { mounted = true; lifecycle.emit(); },
     focusTarget: () => { focused = true; lifecycle.emit(); },
     overview: () => controller.change(showOverview(workspace)),
-    unfocus: () => { focusRevision++; lifecycle.emit(); },
+    unfocus: (notify = true) => { focusRevision++; if (notify) lifecycle.emit(); },
     background: () => { available = false; revision++; lifecycle.emit(); },
     holdLookup: (promise: Promise<void>) => { paused = promise; },
     failLookup: (error: PublishedLoadError) => { lookupError = error; },
+    failStage: () => { stageError = new PublishedTransferError(); },
   };
 }
 
@@ -197,6 +202,8 @@ test('signed lookup outcomes stop before review and never substitute a target', 
   for (const [code, status] of [
     ['PUBLISHED_REVISION_CHANGED', 'refresh-required'], ['PUBLISHED_REVISION_CONFLICT', 'conflict'],
     ['PUBLISHED_NOT_FOUND', 'not-found'], ['PUBLISHED_UNSUPPORTED_MANIFEST', 'unsupported'],
+    ['PUBLISHED_LOOKUP_UNAVAILABLE', 'lookup-unavailable'], ['PUBLISHED_DOWNLOAD_UNAVAILABLE', 'download-unavailable'],
+    ['PUBLISHED_HASH_MISMATCH', 'hash-mismatch'], ['PUBLISHED_INVALID_HTML', 'invalid-html'],
     ['PUBLISHED_LOAD_FAILED', 'failed'],
   ] as const) {
     const env = setup();
@@ -298,4 +305,45 @@ test('a native review that arrives during exact discovery lookup returns busy be
   assert.equal(env.staged(), 0);
   assert.deepEqual(env.state().sessions.map(session => session.id), [source.id]);
   assert.ok(slot.owns('upload', upload.id));
+});
+
+
+test('an exact transfer failure after approval reports staging without opening a target', async () => {
+  const env = setup();
+  env.failStage();
+  const pending = env.run('failed-stage');
+  const review = await env.review();
+  env.decide(review.id, true);
+  await pending;
+  assert.equal(env.responses.get('failed-stage'), 'stage-unavailable');
+  assert.equal(env.staged(), 0);
+  assert.deepEqual(env.state().sessions, [source]);
+});
+
+
+test('a full workspace reports its exact capacity without starting a review', async () => {
+  let full = emptyWorkspace();
+  for (let index = 0; index < 63; index++) {
+    full = openNapplet(full, {...target, id: 'other-view-' + index, appId: 'other-' + index});
+  }
+  const env = setup(openNapplet(full, source));
+  await env.run('full');
+  assert.equal(env.responses.get('full'), 'workspace-full');
+  assert.equal(env.reviews.getSnapshot(), null);
+  assert.equal(env.staged(), 0);
+});
+
+
+test('a changed native focus revision takes precedence over a late lookup diagnostic', async () => {
+  const env = setup();
+  let resume = () => {};
+  env.holdLookup(new Promise<void>(resolve => {resume = resolve;}));
+  const pending = env.run('stale-diagnostic');
+  await until(() => env.lookups.length === 1);
+  env.unfocus(false);
+  env.failLookup(new PublishedLoadError('PUBLISHED_LOOKUP_UNAVAILABLE'));
+  resume();
+  await pending;
+  assert.equal(env.responses.get('stale-diagnostic'), 'cancelled');
+  assert.equal(env.reviews.getSnapshot(), null);
 });

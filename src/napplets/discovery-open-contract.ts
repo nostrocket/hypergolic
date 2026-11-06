@@ -3,6 +3,17 @@ export const DISCOVERY_LEASE_MS = 120_000;
 export const DISCOVERY_STATUSES = ['opened', 'busy', 'cancelled', 'rejected', 'not-found', 'unsupported',
   'conflict', 'refresh-required', 'failed', 'unavailable'] as const;
 export type DiscoveryOpenStatus = typeof DISCOVERY_STATUSES[number];
+export const DISCOVERY_FAILURE_STATUS = Object.freeze({
+  'lookup-unavailable': 'failed',
+  'download-unavailable': 'failed',
+  'hash-mismatch': 'failed',
+  'invalid-html': 'failed',
+  'stage-unavailable': 'failed',
+  'workspace-full': 'unavailable',
+});
+type DiscoveryOpenFailure = keyof typeof DISCOVERY_FAILURE_STATUS;
+export type DiscoveryOpenOutcome = DiscoveryOpenStatus | DiscoveryOpenFailure;
+export const DISCOVERY_OUTCOMES = Object.freeze([...DISCOVERY_STATUSES, ...Object.keys(DISCOVERY_FAILURE_STATUS)]);
 export type DiscoveryOpenRequest = Readonly<{
   type: typeof DISCOVERY_OPEN; id: string; address: string; expectedEventId: string;
 }>;
@@ -17,6 +28,6 @@ export function parseDiscoveryOpen(value: unknown): DiscoveryOpenRequest {
   return Object.freeze({ type, id, address, expectedEventId });
 }
 
-export function discoveryOpenStatus(value: unknown): value is DiscoveryOpenStatus {
-  return typeof value === 'string' && (DISCOVERY_STATUSES as readonly string[]).includes(value);
+export function discoveryOpenOutcome(value: unknown): value is DiscoveryOpenOutcome {
+  return typeof value === 'string' && DISCOVERY_OUTCOMES.includes(value);
 }

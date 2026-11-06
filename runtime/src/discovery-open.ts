@@ -1,23 +1,24 @@
-import { DISCOVERY_LEASE_MS, DISCOVERY_OPEN, DISCOVERY_STATUSES, discoveryOpenStatus, parseDiscoveryOpen } from '../../src/napplets/discovery-open-contract';
+import { DISCOVERY_LEASE_MS, DISCOVERY_OPEN, DISCOVERY_OUTCOMES, DISCOVERY_FAILURE_STATUS, discoveryOpenOutcome, parseDiscoveryOpen } from '../../src/napplets/discovery-open-contract';
 import { NativeRequestRevoked, type createNativeClient } from './native-client';
 
 const RESULT = DISCOVERY_OPEN + '.result';
 
 /** Install only in the verified catalog HTML. The top document still authenticates every request. */
 export function injectDiscoveryOpen(html: string, token: string): string {
-  const state = JSON.stringify({ type: DISCOVERY_OPEN, statuses: DISCOVERY_STATUSES, token }).replace(/</g, '\\u003c');
+  const state = JSON.stringify({ type: DISCOVERY_OPEN, outcomes: DISCOVERY_OUTCOMES, failureStatus: DISCOVERY_FAILURE_STATUS, token }).replace(/</g, '\\u003c');
   const script = `<script>(() => {
-    const { type, statuses, token } = ${state};
+    const { type, outcomes, failureStatus, token } = ${state};
     let pending;
     window.addEventListener('message', event => {
       const data = event.data;
       if (!pending || !event.isTrusted || event.source !== parent ||
           data?.type !== type + '.result' || data.id !== pending.id ||
-          Object.keys(data).length !== 3 || !statuses.includes(data.status)) return;
+          Object.keys(data).length !== 3 || !outcomes.includes(data.status)) return;
       const reply = pending;
       pending = undefined;
       clearTimeout(reply.timer);
-      reply.resolve(Object.freeze({ status: data.status }));
+      const reason = Object.prototype.hasOwnProperty.call(failureStatus, data.status) ? data.status : undefined;
+      reply.resolve(Object.freeze(reason ? { status: failureStatus[reason], reason } : { status: data.status }));
     });
     const open = (address, expectedEventId) => {
       if (pending) return Promise.resolve({ status: 'busy' });
@@ -58,12 +59,12 @@ export function createDiscoveryOpenReceiver(source: Window, native: ReturnType<t
     pending = true;
     const wireId = 'published-open-' + crypto.randomUUID();
     const send = (status: unknown) => {
-      if (live() && discoveryOpenStatus(status)) source.postMessage({ type: RESULT, id, status }, '*');
+      if (live() && discoveryOpenOutcome(status)) source.postMessage({ type: RESULT, id, status }, '*');
     };
     const wrapper = { type: 'routing.call', id: wireId, message };
     void native.request(wrapper, undefined, DISCOVERY_LEASE_MS + 3_000)
       .then(reply => {
-        if (!('response' in reply) || !discoveryOpenStatus(reply.response)) throw new Error('Invalid published open response');
+        if (!('response' in reply) || !discoveryOpenOutcome(reply.response)) throw new Error('Invalid published open response');
         send(reply.response);
       }).catch(error => {
         if (!(error instanceof NativeRequestRevoked)) send('unavailable');

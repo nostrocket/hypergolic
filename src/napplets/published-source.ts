@@ -4,7 +4,7 @@ import type { Filter } from 'applesauce-core/helpers/filter';
 import { MAX_RELAYS_PER_ROLE, normalizeRelayUrl } from '../network/relay-settings.ts';
 import type { NappletLookupCoordinate, PublishedArtifactSource } from './loader.ts';
 import type { NativePublishedRelayLookup } from './native-published-relay.ts';
-import { MAX_HTML_BYTES, MAX_MANIFEST_BYTES } from './verified-artifact.ts';
+import { MAX_HTML_BYTES, MAX_MANIFEST_BYTES, NappletHashMismatchError } from './verified-artifact.ts';
 
 export const MAX_MANIFESTS_PER_QUERY = 32;
 export const MAX_PUBLISHED_QUERY_BYTES = MAX_MANIFESTS_PER_QUERY * MAX_MANIFEST_BYTES;
@@ -284,13 +284,15 @@ async function readBlossom(expectedHash: string, serverHints: readonly string[],
         throw new PublishedSourceError();
       }
       const bytes = await readBoundedBody(response, maxBytes, scope.signal);
-      if (await sha256(bytes) !== expectedHash) throw new PublishedSourceError();
+      if (await sha256(bytes) !== expectedHash) throw new NappletHashMismatchError();
       return bytes;
     } catch (error) {
       if (signal.aborted) return fail();
       failures.push(error);
     } finally { scope.close(); }
   }
+  const mismatch = failures.find(error => error instanceof NappletHashMismatchError);
+  if (mismatch) throw mismatch;
   throw new PublishedSourceError(failures.at(-1));
 }
 

@@ -9,7 +9,7 @@ import { loadPublishedArtifact, type PublishedArtifactSource } from './loader.ts
 import { openPublishedArtifactCache } from './published-artifact-cache.ts';
 import { descriptorForPublishedArtifact, publishedHostInput } from './published-host-input.ts';
 import { stageAdmittedPublishedArtifact } from './admitted-transfer.ts';
-import type { NativePublishedTransferPort } from './native-transfer.ts';
+import { PublishedTransferError, type NativePublishedTransferPort } from './native-transfer.ts';
 import { assertVerifiedArtifact, type VerifiedNappletArtifact } from './verified-artifact.ts';
 
 export class PublishedSessionError extends Error {
@@ -139,7 +139,7 @@ async function preparePublishedSession(ports: PublishedSessionDependencies, requ
     try { await cache.put(artifact, { signal: controller.signal }); }
     finally { await cache.close(); }
     active();
-    if (!ports.native.registerPublishedSession(id)) fail();
+    if (!ports.native.registerPublishedSession(id)) throw new PublishedTransferError();
     registered = id;
     const handle = await stageAdmittedPublishedArtifact(admission, artifact, id, ports.native,
       controller.signal, active);
@@ -152,6 +152,10 @@ async function preparePublishedSession(ports: PublishedSessionDependencies, requ
     });
   } catch (error) {
     if (error instanceof ReviewBusyError) throw error;
+    if (request.exactOpen && error instanceof PublishedTransferError) {
+      active();
+      throw error;
+    }
     return fail();
   }
   finally {

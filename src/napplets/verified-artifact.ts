@@ -12,6 +12,14 @@ export class NappletVerificationError extends Error {
   constructor() { super('Napplet verification failed'); this.name = 'NappletVerificationError'; }
 }
 
+export class NappletHashMismatchError extends NappletVerificationError {
+  constructor() { super(); this.name = 'NappletHashMismatchError'; }
+}
+
+export class NappletHtmlEnvelopeError extends NappletVerificationError {
+  constructor() { super(); this.name = 'NappletHtmlEnvelopeError'; }
+}
+
 /** Only returned for an authentic event at the requested coordinate. */
 export class UnsupportedNappletManifestError extends NappletVerificationError {
   constructor() { super(); this.name = 'UnsupportedNappletManifestError'; }
@@ -290,10 +298,10 @@ export async function verifyArtifact(manifest: VerifiedNappletManifest, htmlByte
     if (typeof manifest !== 'object' || manifest === null || !verifiedManifests.has(manifest) ||
         !(htmlBytes instanceof Uint8Array) || htmlBytes.byteLength === 0 || htmlBytes.byteLength > MAX_HTML_BYTES) return fail();
     const copy = new Uint8Array(htmlBytes);
-    const html = new TextDecoder('utf-8', { fatal: true }).decode(copy);
-    validateHtmlEnvelope(html);
     const htmlHash = await sha256(copy);
-    if (htmlHash !== manifest.expectedHtmlHash) return fail();
+    if (htmlHash !== manifest.expectedHtmlHash) throw new NappletHashMismatchError();
+    try { validateHtmlEnvelope(new TextDecoder('utf-8', { fatal: true }).decode(copy)); }
+    catch { throw new NappletHtmlEnvelopeError(); }
     const aggregateInput = new TextEncoder().encode(`${htmlHash} /index.html\n`);
     const aggregateHash = await sha256(aggregateInput);
     if (aggregateHash !== manifest.aggregateHash) return fail();

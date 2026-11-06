@@ -211,6 +211,11 @@ test('tries the next signed server hint after an HTTP failure or content-address
   const bytes = await source.readHtml(HASH, ['not a URL', 'https://first.example.org/', 'https://second.example.net/'], 128, new AbortController().signal);
   assert.deepEqual(bytes, BODY);
   assert.deepEqual(attempts, [`https://first.example.org/${HASH}`, `https://second.example.net/${HASH}`]);
+
+  const unavailable = createPublishedArtifactSource({fetchPublicHttps: async url => url.includes('first')
+    ? new Response('wrong bytes', {status: 200}) : new Response(null, {status: 503}), createRelayPool: unusedPool});
+  await assert.rejects(unavailable.readHtml(HASH, ['https://first.example.org/', 'https://second.example.net/'], 128,
+    new AbortController().signal), {name: 'NappletHashMismatchError'});
 });
 
 test('passes cancellation and enforces the Blossom request timeout', async () => {

@@ -9,7 +9,7 @@ ships with no remote Discover address configured.
 ```ts
 const opener = window.hypergolic?.publishedOpen;
 if (opener?.version === 1) {
-  const { status } = await opener.open(address, expectedEventId);
+  const { status, reason } = await opener.open(address, expectedEventId);
 }
 ```
 
@@ -71,8 +71,21 @@ revision has changed. The API times out locally so Discover can recover after re
 | `unsupported` | The signed publication uses an unsupported manifest format. |
 | `conflict` | The relay query found distinct same-time revisions or the workspace holds a different saved revision. |
 | `refresh-required` | The latest eligible event differs from the event displayed in Discover. Refresh the listing before requesting another open. |
-| `failed` | Relay access, artifact verification, staging or target readiness failed. |
+| `failed` | The release could not be verified, prepared or mounted. |
 | `unavailable` | The request was invalid, the workspace was full, or the projection could not get a receipt. |
+
+The version-one result can include a bounded `reason` with `failed` or `unavailable`.
+
+| Reason | Meaning |
+| --- | --- |
+| `lookup-unavailable` | The bounded trusted relay lookup could not complete. |
+| `download-unavailable` | The published servers did not supply an artifact through the bounded download path. |
+| `hash-mismatch` | A downloaded file did not match the signed hash and no mirror supplied the matching artifact. |
+| `invalid-html` | The signed bytes failed UTF-8 or napplet HTML validation. |
+| `stage-unavailable` | The verified artifact could not be handed to the native renderer after approval. |
+| `workspace-full` | The workspace had reached its session limit. |
+
+Discover selects its own static message from these reasons. Older Discover versions can use the base status.
 
 Run the focused broker cases with `pnpm run test:capabilities` and the Java and Swift
 endpoint tests with `pnpm run test:routing:native`. The browser projection check is

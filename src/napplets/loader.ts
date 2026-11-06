@@ -1,7 +1,8 @@
 import { MAX_HTML_BYTES } from './artifact-limits.ts';
 import { resolveNappletLink, type NappletCoordinate } from './resolve-link.ts';
 import { MAX_RELAYS_PER_ROLE, normalizeRelayUrl } from '../network/relay-settings.ts';
-import { UnsupportedNappletManifestError, verifyArtifact, verifyManifest, type VerifiedNappletArtifact, type VerifiedNappletManifest } from './verified-artifact.ts';
+import { NappletHashMismatchError, NappletHtmlEnvelopeError, UnsupportedNappletManifestError, verifyArtifact, verifyManifest,
+  type VerifiedNappletArtifact, type VerifiedNappletManifest } from './verified-artifact.ts';
 
 /** The source receives only the verified coordinate, never untrusted encoded relay hints. */
 export type NappletLookupCoordinate = Pick<NappletCoordinate, 'kind' | 'pubkey' | 'identifier'>;
@@ -26,7 +27,8 @@ export interface PublishedLoadOptions {
   readonly assertActive: () => void;
 }
 type PublishedLoadCode = 'PUBLISHED_LOAD_FAILED' | 'PUBLISHED_NOT_FOUND' | 'PUBLISHED_UNSUPPORTED_MANIFEST' |
-  'PUBLISHED_REVISION_CONFLICT' | 'PUBLISHED_REVISION_CHANGED';
+  'PUBLISHED_REVISION_CONFLICT' | 'PUBLISHED_REVISION_CHANGED' | 'PUBLISHED_LOOKUP_UNAVAILABLE' |
+  'PUBLISHED_DOWNLOAD_UNAVAILABLE' | 'PUBLISHED_HASH_MISMATCH' | 'PUBLISHED_INVALID_HTML';
 
 export class PublishedLoadError extends Error {
   readonly code: PublishedLoadCode;
@@ -63,16 +65,16 @@ export async function loadPublishedArtifact(link: unknown, options: PublishedLoa
   const relays = Object.freeze([...new Set([
     ...checkedRole(options.lookupRelays), ...checkedRole(options.networkRelays ?? []),
   ])]);
-  if (relays.length === 0) throw new PublishedLoadError();
+  if (relays.length === 0) throw new PublishedLoadError('PUBLISHED_LOOKUP_UNAVAILABLE');
   active(options);
   let candidates: readonly unknown[];
   try {
     const lookup = Object.freeze({ kind: coordinate.kind, pubkey: coordinate.pubkey, identifier: coordinate.identifier });
     candidates = await options.source.query(lookup, relays, options.pinnedEventId ?? null, options.signal, discovery ? true : undefined);
   }
-  catch { throw new PublishedLoadError(); }
+  catch { active(options); throw new PublishedLoadError('PUBLISHED_LOOKUP_UNAVAILABLE'); }
   active(options);
-  if (!Array.isArray(candidates) || candidates.length > MAX_MANIFESTS) throw new PublishedLoadError();
+  if (!Array.isArray(candidates) || candidates.length > MAX_MANIFESTS) throw new PublishedLoadError('PUBLISHED_LOOKUP_UNAVAILABLE');
   if (candidates.length === 0) throw new PublishedLoadError('PUBLISHED_NOT_FOUND');
   const verified: VerifiedNappletManifest[] = [];
   const checks = await Promise.all(candidates.map(async candidate => {
@@ -98,9 +100,19 @@ export async function loadPublishedArtifact(link: unknown, options: PublishedLoa
   }
   let bytes: Uint8Array;
   try { bytes = await options.source.readHtml(chosen.expectedHtmlHash, chosen.serverHints, MAX_NAPPLET_HTML_BYTES, options.signal); }
-  catch { throw new PublishedLoadError(); }
+  catch (error) {
+    active(options);
+    throw new PublishedLoadError(error instanceof NappletHashMismatchError ? 'PUBLISHED_HASH_MISMATCH' : 'PUBLISHED_DOWNLOAD_UNAVAILABLE');
+  }
   active(options);
-  const artifact = await verifyArtifact(chosen, bytes);
+  let artifact: VerifiedNappletArtifact;
+  try { artifact = await verifyArtifact(chosen, bytes); }
+  catch (error) {
+    active(options);
+    if (error instanceof NappletHashMismatchError) throw new PublishedLoadError('PUBLISHED_HASH_MISMATCH');
+    if (error instanceof NappletHtmlEnvelopeError) throw new PublishedLoadError('PUBLISHED_INVALID_HTML');
+    throw error;
+  }
   active(options);
   return artifact;
 }

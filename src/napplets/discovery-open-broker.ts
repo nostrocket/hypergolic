@@ -12,10 +12,11 @@ import { resolveBundledSession } from '../shell/fixtures.ts';
 import { isDiscoveryEntry } from './discovery-entry.ts';
 import { focusNapplet, openNapplet, samePublishedPin, type NappletDescriptor } from '../shell/workspace.ts';
 import { ShellStorageError } from '../storage/ports.ts';
-import { DISCOVERY_LEASE_MS, parseDiscoveryOpen, type DiscoveryOpenStatus } from './discovery-open-contract.ts';
+import { DISCOVERY_LEASE_MS, parseDiscoveryOpen, type DiscoveryOpenOutcome } from './discovery-open-contract.ts';
 import { publishedCapabilityCompatibility } from './first-open-consent.ts';
 import { assertVerifiedArtifact } from './verified-artifact.ts';
 import { PublishedLoadError } from './loader.ts';
+import { PublishedTransferError } from './native-transfer.ts';
 
 type Ports = Readonly<{
   identity: Pick<IdentityTransition, 'getSnapshot' | 'subscribe'>;
@@ -33,14 +34,19 @@ const sameTarget = (left: NappletDescriptor, right: NappletDescriptor) => left.s
     left.eventId === right.eventId && left.version === right.version && left.title === right.title;
 const integer = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
 
-function lookupStatus(error: unknown): DiscoveryOpenStatus {
+function failureOutcome(error: unknown): DiscoveryOpenOutcome {
   if (error instanceof ReviewBusyError) return 'busy';
+  if (error instanceof PublishedTransferError) return 'stage-unavailable';
   if (error instanceof PublishedLoadError) {
     switch (error.code) {
       case 'PUBLISHED_REVISION_CHANGED': return 'refresh-required';
       case 'PUBLISHED_NOT_FOUND': return 'not-found';
       case 'PUBLISHED_UNSUPPORTED_MANIFEST': return 'unsupported';
       case 'PUBLISHED_REVISION_CONFLICT': return 'conflict';
+      case 'PUBLISHED_LOOKUP_UNAVAILABLE': return 'lookup-unavailable';
+      case 'PUBLISHED_DOWNLOAD_UNAVAILABLE': return 'download-unavailable';
+      case 'PUBLISHED_HASH_MISMATCH': return 'hash-mismatch';
+      case 'PUBLISHED_INVALID_HTML': return 'invalid-html';
     }
   }
   return 'failed';
@@ -132,7 +138,7 @@ function reviewLaunch(ports: Ports, launch: Launch, target: Extract<RoutingRevie
 }
 
 async function waitForMount(ports: Ports, launch: Launch, target: NappletDescriptor, active: () => void,
-  signal: AbortSignal): Promise<DiscoveryOpenStatus> {
+  signal: AbortSignal): Promise<DiscoveryOpenOutcome> {
   const deadline = Date.now() + 28_000;
   while (Date.now() < deadline) {
     active();
@@ -144,7 +150,7 @@ async function waitForMount(ports: Ports, launch: Launch, target: NappletDescrip
 }
 
 async function openExact(ports: Ports, launch: Launch, attempt: Attempt, active: () => void,
-  signal: AbortSignal): Promise<DiscoveryOpenStatus> {
+  signal: AbortSignal): Promise<DiscoveryOpenOutcome> {
   const { request } = launch.captured;
   const { runtime, workspace } = launch;
   const artifact = await runtime.resolveDiscovered(request.address, request.expectedEventId, signal, active);
@@ -174,7 +180,7 @@ async function openExact(ports: Ports, launch: Launch, attempt: Attempt, active:
     if (!await review(false)) return 'rejected';
     next = loaded;
   } else {
-    if (!existing && workspace.getSnapshot().workspace.sessions.length >= 64) return 'unavailable';
+    if (!existing && workspace.getSnapshot().workspace.sessions.length >= 64) return 'workspace-full';
     next = await runtime.prepareDiscovered(artifact, signal, active, review, existing);
     attempt.staged = next;
   }
@@ -182,7 +188,8 @@ async function openExact(ports: Ports, launch: Launch, attempt: Attempt, active:
   const current = workspace.getSnapshot().workspace;
   if (matches().some(session => !exact(session)) ||
       (existing ? !current.sessions.some(session => session.id === existing.id && sameTarget(session, existing))
-        : matches().length > 0 || current.sessions.length >= 64)) return 'conflict';
+        : matches().length > 0)) return 'conflict';
+  if (!existing && current.sessions.length >= 64) return 'workspace-full';
   if (!exact(next) || next.source !== 'published' || next.publisher !== publisher || next.appId !== appId) throw new Error('Prepared launch mismatch');
   attempt.created = !existing;
   attempt.target = next;
@@ -191,7 +198,7 @@ async function openExact(ports: Ports, launch: Launch, attempt: Attempt, active:
   return waitForMount(ports, launch, next, active, signal);
 }
 
-async function runLaunch(ports: Ports, launch: Launch): Promise<DiscoveryOpenStatus> {
+async function runLaunch(ports: Ports, launch: Launch): Promise<DiscoveryOpenOutcome> {
   const { source, workspace, captured, live } = launch;
   const { origin, revision, focusRevision } = captured;
   const controller = new AbortController();
@@ -211,7 +218,7 @@ async function runLaunch(ports: Ports, launch: Launch): Promise<DiscoveryOpenSta
   const check = () => { try { active(); } catch { abort(); } };
   const deadline = setTimeout(abort, DISCOVERY_LEASE_MS - 5_000);
   const release: (() => void)[] = [];
-  let status: DiscoveryOpenStatus = 'failed';
+  let status: DiscoveryOpenOutcome = 'failed';
   try {
     release.push(ports.identity.subscribe(check), workspace.subscribe(check));
     release.push(ports.native.subscribe(check));
@@ -220,8 +227,9 @@ async function runLaunch(ports: Ports, launch: Launch): Promise<DiscoveryOpenSta
     if (status === 'opened') active();
     return status;
   } catch (error) {
-    status = signal.aborted || error instanceof ShellStorageError && error.code === 'REVOKED'
-      ? 'cancelled' : attempt.declined ? 'rejected' : lookupStatus(error);
+    try { active(); } catch { status = 'cancelled'; return status; }
+    status = error instanceof ShellStorageError && error.code === 'REVOKED'
+      ? 'cancelled' : attempt.declined ? 'rejected' : failureOutcome(error);
     return status;
   } finally {
     clearTimeout(deadline);
@@ -234,7 +242,7 @@ async function runLaunch(ports: Ports, launch: Launch): Promise<DiscoveryOpenSta
 /** One reviewed exact launch per process. The captured source remains the only reply recipient. */
 export function createDiscoveryOpenBroker(ports: Ports) {
   let pending = false;
-  const launch = async (request: Launch): Promise<DiscoveryOpenStatus> => {
+  const launch = async (request: Launch): Promise<DiscoveryOpenOutcome> => {
     if (pending) return 'busy';
     pending = true;
     try { return await runLaunch(ports, request); }

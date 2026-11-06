@@ -445,7 +445,11 @@ test('exact discovery review binds staging, then transfers lifetime to the mount
   const { database, sqlite } = await setup(t);
   let workspace = emptyWorkspace();
   const calls: string[] = [];
-  const leases = Object.assign(new NativeLeases(), native(calls));
+  const transfer = native(calls);
+  let register = true;
+  const leases = Object.assign(new NativeLeases(), transfer, {
+    registerPublishedSession: (id: string) => register && transfer.registerPublishedSession(id),
+  });
   const identity = {
     sessionAuthority: () => ({ user: USER, epoch: 1, assertActive: () => {} }),
     getSnapshot: () => ({ session: { epoch: 1, workspace: { getSnapshot: () => ({ workspace, error: null }) } } }),
@@ -508,5 +512,8 @@ test('exact discovery review binds staging, then transfers lifetime to the mount
     assert.equal(changesAccess, false);
     return false;
   }, descriptor));
+  register = false;
+  await assert.rejects(owner.prepareDiscovered(artifact, new AbortController().signal, sourceActive, async () => true, descriptor),
+    {code: 'PUBLISHED_TRANSFER_FAILED'});
   assert.equal(calls.filter(call => call.startsWith('register:')).length, 1);
 });

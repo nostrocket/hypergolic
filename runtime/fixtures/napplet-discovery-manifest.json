@@ -13,11 +13,11 @@
     [
       "path",
       "/index.html",
-      "20a271df8b057b7fa5926fba9113648af83ca98a30c76dd8259d52effaec6e22"
+      "d67db79dfa4e73afff4c38defb8abbde2d9cbc53ee488d4b8943242f63cd94ad"
     ],
     [
       "x",
-      "388c5b99b75a8f9e8ee228eca5d81b3a0d96597a41710bbb69eea315b8a347fa",
+      "f07c32a2bf46d5c84b403356f4183bfe0e310148d1585cc9a7fc1b9639a6cfd6",
       "aggregate"
     ],
     [
@@ -29,5 +29,5 @@
       "resource"
     ]
   ],
-  "aggregateHash": "388c5b99b75a8f9e8ee228eca5d81b3a0d96597a41710bbb69eea315b8a347fa"
+  "aggregateHash": "f07c32a2bf46d5c84b403356f4183bfe0e310148d1585cc9a7fc1b9639a6cfd6"
 }

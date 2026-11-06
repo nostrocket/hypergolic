@@ -9,6 +9,7 @@ const previousSupportVersion = 'd580bdedb19857d66a4b5f2928016c3f756960f42e56f7d9
 const previousDiscoveryVersions = [
   '6eb956ead5bc710d70c3511715bf1dab281314d4979ff4bd99d9d1785176655c',
   'ec8f1cb8dddca04865f59105f86e6b9741e4e2d6c1f3cab586bcaf48645fae0a',
+  '388c5b99b75a8f9e8ee228eca5d81b3a0d96597a41710bbb69eea315b8a347fa',
 ] as const;
 
 function compatiblePackagedVersion(variant: BundledVariant, version: string): boolean {
