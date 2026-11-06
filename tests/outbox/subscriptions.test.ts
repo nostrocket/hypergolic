@@ -3,6 +3,7 @@ import {test} from 'node:test';
 import {finalizeEvent} from 'nostr-tools/pure';
 import {createOutboxSubscriptions} from '../../src/outbox/subscriptions.ts';
 import {parseOutboxSubscribe,parseOutboxClose,type OutboxSubscriptionMessage} from '../../src/outbox/subscription-contract.ts';
+import {QUERY_LIMITS} from '../../src/network/relay-query-contract.ts';
 import type {NativeRelayStreamPort} from '../../src/network/relay-subscriptions.ts';
 import type {NativeRegistration} from '../../src/runtime/capability-protocol.ts';
 import type {OutboxReadService} from '../../src/outbox/read-service.ts';
@@ -14,8 +15,8 @@ const close=(subId='live')=>({type:'outbox.close',id:'close-'+subId,subId});
 const flush=()=>new Promise(resolve=>setTimeout(resolve,5));
 function harness(relays=['wss://one.nostr.net']) {
   let sequence=0,active=true,routes=relays;
-  const calls:{url:string;sub:string;id:string;stopped:number;frame:(text:string)=>void}[]=[],messages:OutboxSubscriptionMessage[]=[],plans:{refresh:boolean;signal:AbortSignal}[]=[];
-  const port:NativeRelayStreamPort={newInstanceId:()=>`00000000-0000-4000-8000-${String(++sequence).padStart(12,'0')}`,open(id,url,_wire,sub,frame){const call={url,sub,id,frame,stopped:0};calls.push(call);return()=>{call.stopped++;};}};
+  const calls:{url:string;sub:string;id:string;wire:string;stopped:number;frame:(text:string)=>void}[]=[],messages:OutboxSubscriptionMessage[]=[],plans:{refresh:boolean;signal:AbortSignal}[]=[];
+  const port:NativeRelayStreamPort={newInstanceId:()=>`00000000-0000-4000-8000-${String(++sequence).padStart(12,'0')}`,open(id,url,wire,sub,frame){const call={url,sub,id,wire,frame,stopped:0};calls.push(call);return()=>{call.stopped++;};}};
   const reads:OutboxReadService={async query(){throw Error('wrong service');},async plan(_input,user,signal,assertActive,refresh){assert.equal(user,owner().user);assertActive();plans.push({refresh:!!refresh,signal});return {relays:routes,source:'cache',missingAuthors:[],incomplete:false};}};
   const manager=createOutboxSubscriptions(port,reads),session=manager.session({registration:owner(),assertActive(){if(!active)throw Error('identity changed');}});
   const send=(message:OutboxSubscriptionMessage)=>{messages.push(message);return true;};
@@ -40,6 +41,19 @@ test('planned fanout retains every validated relay, globally caps backfill and k
     assert.deepEqual(h.messages.map(m=>m.type),['outbox.event','relay.eose','outbox.event','outbox.event']);
     const first=h.messages[0];assert.ok(first?.type==='outbox.event');assert.deepEqual(first.result.sidecar?.relayHints,['wss://one.nostr.net']);
     assert.ok(h.messages.every(m=>!m.type.startsWith('outbox.eose')));
+  }finally{h.manager.revokeAll();}
+});
+test('larger subscription limits keep native backfill bounded and preserve live delivery',async()=> {
+  const h=harness();
+  try {
+    const large={...input('large',128),filters:{kinds:[1],limit:500}};
+    h.session.subscribe(large,h.send,'native-token');await flush();
+    const call=h.calls[0]!;
+    assert.deepEqual(JSON.parse(call.wire),['REQ',call.sub,{kinds:[1],limit:QUERY_LIMITS.events}]);
+    for(let index=0;index<=QUERY_LIMITS.events;index++)h.event(0,'backfill-'+index);
+    assert.equal(h.messages.length,QUERY_LIMITS.events);
+    h.eose(0);h.event(0,'live');
+    assert.deepEqual(h.messages.slice(QUERY_LIMITS.events).map(message=>message.type),['relay.eose','outbox.event']);
   }finally{h.manager.revokeAll();}
 });
 test('zero stored backfill still permits future signed events including a filter with limit zero',async()=> {

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {finalizeEvent, getPublicKey} from 'nostr-tools/pure';
+import {parseRelayQuery, QUERY_LIMITS} from '../../src/network/relay-query-contract.ts';
 import {createOutboxReadService} from '../../src/outbox/read-service.ts';
 import {parseOutboxQuery,parseOutboxEvent,parseOutboxResolve} from '../../src/outbox/query-contract.ts';
 import {parseOutboxRelayList} from '../../src/outbox/relay-list.ts';
@@ -40,9 +41,30 @@ test('query options are immutable and reject guest authority, private relays and
   const input = {...request,options:{authors:[author],relays:['wss://nos.lol'],limit:1,timeoutMs:1000}};
   const selected = parseOutboxQuery(input); input.options.relays[0]='wss://relay.damus.io';
   assert.deepEqual(selected.options.relays,['wss://nos.lol']); assert.ok(Object.isFrozen(selected.options));
-  for (const options of [{user:author},{relays:['wss://127.0.0.1']},{limit:33},{timeoutMs:0},{timeoutMs:15001}]) assert.throws(()=>parseOutboxQuery({...request,options}));
+  for (const options of [{user:author},{relays:['wss://127.0.0.1']},{limit:-1},{limit:1.5},{limit:Number.MAX_SAFE_INTEGER+1},{timeoutMs:0},{timeoutMs:15001}]) assert.throws(()=>parseOutboxQuery({...request,options}));
   let called = false;
   assert.throws(()=>parseOutboxQuery({...request,options:{get authors() {called=true; return [author];}}})); assert.equal(called,false);
+});
+test('larger Outbox requests stay bounded on the relay wire and flag saturated results', async () => {
+  const h = harness({async resolve(){return {list,source:'nip65',incomplete:false};}});
+  const large = {...request,filters:{...request.filters,limit:500},options:{limit:128}};
+  const parsed = parseOutboxQuery(large);
+  assert.equal(parsed.filters[0]?.limit,500);
+  assert.equal(parsed.options.limit,128);
+  assert.throws(()=>parseRelayQuery({type:'relay.query',id:request.id,filters:[large.filters]}));
+  assert.throws(()=>parseOutboxQuery({...large,filters:{...large.filters,limit:1.5}}));
+
+  const fixtures = Array.from({length:QUERY_LIMITS.events},(_,index) =>
+    finalizeEvent({kind:1,created_at:index+1,tags:[],content:'bounded'},key));
+  for (const size of [QUERY_LIMITS.events, 1]) {
+    h.native.queryPublishedRelay = async (_id,_relay,wire,sub) => {
+      assert.deepEqual(JSON.parse(wire),['REQ',sub,{...request.filters,limit:QUERY_LIMITS.events}]);
+      return [...fixtures.slice(0,size).map(row=>JSON.stringify(['EVENT',sub,row])),JSON.stringify(['EOSE',sub])];
+    };
+    const result = await h.service.query(parsed,author,signal(),()=>{});
+    assert.equal(result.events.length,size);
+    assert.equal(result.incomplete,size===QUERY_LIMITS.events);
+  }
 });
 test('routing overflow and revoked source produce zero data relay requests', async () => {
   const many = parseOutboxRelayList(JSON.parse(JSON.stringify(finalizeEvent({kind:10002,created_at:1,content:'',tags:Array.from({length:16},(_,i)=>['r',`wss://relay${i}.nostr.net`,'write'])},key))),author);

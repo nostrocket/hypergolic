@@ -1,7 +1,8 @@
 import {createRelaySubscriptions, type NativeRelayStreamPort, type RelaySubscriptionOwner} from '../network/relay-subscriptions.ts';
 import {decodeNativeRegistration} from '../runtime/capability-protocol.ts';
+import {QUERY_LIMITS} from '../network/relay-query-contract.ts';
 import {SUBSCRIPTION_LIMITS} from '../network/relay-subscription-contract.ts';
-import {OutboxQueryError} from './query-contract.ts';
+import {capOutboxFilters, OutboxQueryError} from './query-contract.ts';
 import type {OutboxReadService} from './read-service.ts';
 import {parseOutboxSubscribe, parseOutboxClose, type OutboxSubscribeRequest, type OutboxSubscriptionMessage} from './subscription-contract.ts';
 type Emit = (message:OutboxSubscriptionMessage) => boolean | 'paused';
@@ -62,7 +63,7 @@ export function createOutboxSubscriptions(port:NativeRelayStreamPort,reads:Outbo
         else {
           const timeoutMs=row.request.options.timeoutMs-(Date.now()-startedAt);
           if(timeoutMs<1)throw new OutboxQueryError('relay timeout');
-          transport.subscribePlanned({type:'relay.subscribe',id:row.request.id,subId:row.request.subId,filters:row.request.filters},message=>forward(row,message),row.token,plan.relays,row.request.options.limit,timeoutMs);
+          transport.subscribePlanned({type:'relay.subscribe',id:row.request.id,subId:row.request.subId,filters:capOutboxFilters(row.request.filters)},message=>forward(row,message),row.token,plan.relays,Math.min(row.request.options.limit,QUERY_LIMITS.events),timeoutMs);
           row.started=true;
         }
       } catch {

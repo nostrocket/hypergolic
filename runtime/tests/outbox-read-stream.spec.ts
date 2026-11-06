@@ -39,6 +39,21 @@ test('original getEvent and resolveRelays use their native overrides and origina
   const requests=await page.evaluate(()=>(window as any).outboxTest.requests.filter((e:any)=>e.type==='capability').map((e:any)=>JSON.parse(e.message)));
   expect(requests.map((r:any)=>r.type)).toEqual(['outbox.getEvent','outbox.resolveRelays']);expect(requests[0]).toMatchObject({eventId:'a'.repeat(64),options:{author:'b'.repeat(64)}});expect(requests[1]).toMatchObject({target:{pubkey:'b'.repeat(64),direction:'write'}});
 });
+test('original SDK carries larger Outbox limits to the native broker for bounded execution',async({page})=> {
+  const frame=await open(page);
+  await frame.evaluate(()=>{
+    const outbox=(window as any).napplet.outbox;
+    void outbox.query({kinds:[1],limit:500},{limit:128});
+    outbox.subscribe({kinds:[1],limit:500},{limit:128});
+  });
+  const requests=()=>page.evaluate(()=>(window as any).outboxTest.requests
+    .filter((envelope:any)=>['capability','relay-stream'].includes(envelope.type))
+    .map((envelope:any)=>JSON.parse(envelope.message)));
+  await expect.poll(requests).toEqual(expect.arrayContaining([
+    expect.objectContaining({type:'outbox.query',filters:[expect.objectContaining({limit:500})],options:expect.objectContaining({limit:128})}),
+    expect.objectContaining({type:'outbox.subscribe',filters:[expect.objectContaining({limit:500})],options:expect.objectContaining({limit:128})}),
+  ]));
+});
 test('Outbox stream validates signed live events, consumes private EOSE and sends original Outbox close',async({page})=> {
   const h=await subscribe(page);
   const push=async(response:any)=>page.evaluate(({envelope,response})=>(window as any).outboxTest.push(envelope,response),{envelope:h.envelope,response});

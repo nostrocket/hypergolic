@@ -3,7 +3,7 @@ import type {NativePublishedRelayPort} from '../napplets/native-published-relay.
 import type {RelaySettingsSnapshot} from '../network/relay-settings.ts';
 import {QUERY_LIMITS} from '../network/relay-query-contract.ts';
 import type {OutboxAuthorResolver} from './author-resolver.ts';
-import {parseOutboxQuery, parseOutboxEvent, parseOutboxResolve, OutboxQueryError, type OutboxQueryRequest} from './query-contract.ts';
+import {capOutboxFilters, parseOutboxQuery, parseOutboxEvent, parseOutboxResolve, OutboxQueryError, type OutboxQueryRequest} from './query-contract.ts';
 import {resolveOutboxPlan, type OutboxReadPlan} from './route-plan.ts';
 export type {OutboxReadPlan} from './route-plan.ts';
 export type OutboxEventRow = Readonly<RelayQueryResult['events'][number] & {sidecar?: Readonly<{relayHints: readonly string[]}>}>;
@@ -51,12 +51,15 @@ export function createOutboxReadService(resolver: OutboxAuthorResolver,
     return bounded(request.options.timeoutMs,signal,assertActive,async (leased,active,remaining) => {
       const plan = await route(request,user,leased,active); active();
       const transport = createNativeRelayQuery(native,() => plan.relays,remaining(),{allowPartialOnLimit:true});
-      const result = await transport.queryDetailed(request.filters,leased,active); active();
+      const result = await transport.queryDetailed(capOutboxFilters(request.filters),leased,active); active();
+      const capped = result.events.length === QUERY_LIMITS.events &&
+        (request.options.limit > QUERY_LIMITS.events ||
+          request.options.limit === QUERY_LIMITS.events && request.filters.some(filter => (filter.limit as number) > QUERY_LIMITS.events));
       const events = result.events.slice(0,request.options.limit).map(row => {
         const hints = result.relayHints?.[row.event.id];
         return Object.freeze({...row,...(hints?.length ? {sidecar:Object.freeze({relayHints:hints})} : {})});
       });
-      return Object.freeze({events:Object.freeze(events),incomplete:plan.incomplete || result.incomplete,plan});
+      return Object.freeze({events:Object.freeze(events),incomplete:plan.incomplete || result.incomplete || capped,plan});
     });
   }
   return Object.freeze({

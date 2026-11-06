@@ -37,12 +37,16 @@ export function parseOutboxQuery(input: unknown): OutboxQueryRequest {
     const options = Object.hasOwn(source, 'options') ? outboxRecord(source.options) : {};
     if (Object.keys(options).some(key => !['authors','relays','limit','timeoutMs'].includes(key))) return fail();
     return Object.freeze({type: 'outbox.query', id: text(source.id, 128),
-      filters: parseQueryFilters(Array.isArray(source.filters) ? source.filters : [source.filters]),
+      filters: parseQueryFilters(Array.isArray(source.filters) ? source.filters : [source.filters], Number.MAX_SAFE_INTEGER),
       options: Object.freeze({authors: Object.hasOwn(options,'authors') ? outboxList(options.authors, OUTBOX_LIST_LIMITS.authors, publicKey) : Object.freeze([]),
         relays: Object.hasOwn(options,'relays') ? outboxList(options.relays, OUTBOX_LIST_LIMITS.relays, normalizeRelayUrl) : Object.freeze([]),
-        limit: Object.hasOwn(options,'limit') ? outboxUint(options.limit, 0, QUERY_LIMITS.events) : QUERY_LIMITS.events,
+        limit: Object.hasOwn(options,'limit') ? outboxUint(options.limit, 0, Number.MAX_SAFE_INTEGER) : QUERY_LIMITS.events,
         timeoutMs: Object.hasOwn(options,'timeoutMs') ? outboxUint(options.timeoutMs, 1, QUERY_LIMITS.timeoutMs) : QUERY_LIMITS.timeoutMs})});
   } catch { return fail(); }
+}
+
+export function capOutboxFilters(filters: readonly QueryFilter[]): readonly QueryFilter[] {
+  return filters.map(filter => (filter.limit as number) > QUERY_LIMITS.events ? {...filter, limit: QUERY_LIMITS.events} : filter);
 }
 
 export function outboxQueryFailure(input: unknown, error: string): Readonly<{type: 'outbox.query.result'; id: string; events: readonly never[]; error: string}> | null {

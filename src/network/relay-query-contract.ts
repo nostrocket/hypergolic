@@ -34,7 +34,7 @@ function dense(value: unknown, max: number): unknown[] {
   }
   return output;
 }
-export function parseQueryFilters(input: unknown): readonly QueryFilter[] {
+export function parseQueryFilters(input: unknown, maximumLimit: number = QUERY_LIMITS.events): readonly QueryFilter[] {
   const filters = dense(input, QUERY_LIMITS.filters);
   if (filters.length === 0) return fail();
   const result = filters.map(value => {
@@ -42,7 +42,7 @@ export function parseQueryFilters(input: unknown): readonly QueryFilter[] {
     if (Object.keys(source).length > 32) return fail();
     for (const [key, item] of Object.entries(source)) {
       if (['since', 'until', 'limit'].includes(key)) {
-        if (!integer(item) || (key === 'limit' && item > QUERY_LIMITS.events)) return fail();
+        if (!integer(item) || (key === 'limit' && item > maximumLimit)) return fail();
         filter[key] = item;
       } else {
         if (!['ids', 'authors', 'kinds'].includes(key) && !/^#[a-zA-Z]$/.test(key)) return fail();
