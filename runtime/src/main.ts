@@ -1,4 +1,5 @@
 import './legacy-webview';
+import { injectAndroidEditorReveal } from './android-editor-reveal';
 import { createDiscoveryOpenReceiver, injectDiscoveryOpen } from './discovery-open';
 import { DISCOVERY_OPEN } from '../../src/napplets/discovery-open-contract';
 import { installCloseCheck, CLOSE_CHECK_SERVICE } from './close-check';
@@ -360,7 +361,8 @@ function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
   const [prefix, withCsp] = artifact.published
     ? publishedCspParts(rawHtml, policy) : ['', injectCsp(rawHtml, policy)] as const;
   const html = discoveryToken ? injectDiscoveryOpen(withCsp, discoveryToken) : withCsp;
-  frame.srcdoc = prefix + injectNappletNamespacePrelude(injectSupportReport(injectResourceMediaGate(html)), {
+  const guest = injectAndroidEditorReveal(injectResourceMediaGate(html));
+  frame.srcdoc = prefix + injectNappletNamespacePrelude(injectSupportReport(guest), {
     ...environment.capabilities,
     requestTimeoutsMs: approvalTimeouts(artifact),
   });
