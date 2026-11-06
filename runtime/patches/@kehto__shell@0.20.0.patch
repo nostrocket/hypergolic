@@ -23,7 +23,7 @@ index 0ec36f0a861a096c6391bdae988ba8243bb3f021..a6bdd59f250582b9bf37cac8704465fc
  /**
   * Render the host-owned NIP-5D bootstrap that exposes available NAP domains
 diff --git a/dist/index.js b/dist/index.js
-index 523bcf16686659726604376dea98363a06f86049..f7618d8add1c51ec77f9baa68f395d5499ff4623 100644
+index 523bcf16686659726604376dea98363a06f86049..d45e72aeeb0c96efe176d887d040450e895f8885 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -312,6 +312,7 @@ function adaptHooks(shellHooks, deps) {
@@ -99,7 +99,7 @@ index 523bcf16686659726604376dea98363a06f86049..f7618d8add1c51ec77f9baa68f395d54
          });
          fire({ type: "config.subscribe" });
          return subscriptionHandle(() => {
-@@ -2071,18 +2086,36 @@ function nappletNamespacePrelude(domains) {
+@@ -2071,18 +2086,42 @@ function nappletNamespacePrelude(domains) {
    }
    function makeResource() {
      const objectUrls = /* @__PURE__ */ new Set();
@@ -119,12 +119,18 @@ index 523bcf16686659726604376dea98363a06f86049..f7618d8add1c51ec77f9baa68f395d54
 +      });
 +      return Promise.race([work, cancelled]).finally(() => signal.removeEventListener("abort", abort));
 +    }
-+    const bytes = (url, options) => resourceRequest("resource.bytes", { url }, (msg) => msg.blob, options);
++    const bytes = (url, options) => {
++      const fields = options?.servers === void 0 ? { url } : { url, servers: options.servers };
++      return resourceRequest("resource.bytes", fields, (msg) => msg.blob, options);
++    };
      return {
        info: () => request({ type: "resource.info" }, "resource.info.result", (msg) => msg.info),
        bytes,
 -      bytesMany: (urls) => request({ type: "resource.bytesMany", urls }, "resource.bytesMany.result", (msg) => Array.isArray(msg.items) ? msg.items : []),
-+      bytesMany: (urls, options) => resourceRequest("resource.bytesMany", { urls }, (msg) => Array.isArray(msg.items) ? msg.items : [], options),
++      bytesMany: (items, options) => {
++        const fields = typeof items?.[0] === "string" ? { urls: items } : { requests: items };
++        return resourceRequest("resource.bytesMany", fields, (msg) => Array.isArray(msg.items) ? msg.items : [], options);
++      },
        bytesAsObjectURL(url) {
          let objectUrl = "";
 +        let revoked = false;
@@ -138,7 +144,7 @@ index 523bcf16686659726604376dea98363a06f86049..f7618d8add1c51ec77f9baa68f395d54
              if (objectUrl) {
                URL.revokeObjectURL(objectUrl);
                objectUrls.delete(objectUrl);
-@@ -2090,14 +2123,17 @@ function nappletNamespacePrelude(domains) {
+@@ -2090,14 +2129,17 @@ function nappletNamespacePrelude(domains) {
              }
            }
          };
@@ -157,7 +163,7 @@ index 523bcf16686659726604376dea98363a06f86049..f7618d8add1c51ec77f9baa68f395d54
          for (const url of objectUrls) URL.revokeObjectURL(url);
          objectUrls.clear();
        }
-@@ -2367,7 +2403,10 @@ function nappletNamespacePrelude(domains) {
+@@ -2367,7 +2409,10 @@ function nappletNamespacePrelude(domains) {
        open: (url, options) => request(
          { type: "link.open", url, ...options ? { options } : {} },
          "link.open.result",

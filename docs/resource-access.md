@@ -4,9 +4,9 @@ Phase 2.3 implements a selected profile of [NAP-RESOURCE PR13 head 8c0645d](http
 
 ## Public contract and authority
 
-The genuine guest SDK 0.27.2 calls the Kehto injected resource facade. The packaged NAP resource shim is not the active resolver. The pinned Kehto shell/runtime patches route only `resource.info`, `resource.bytes`, `resource.bytesMany` and `resource.cancel` through ACL/firewall admission to the original native recipient.
+Guest SDKs call the Kehto injected resource facade. It accepts the SDK 0.27.2 URL-list form and the SDK 0.33.0 single-resource and per-item hint forms. [SDK 0.33.0 Resource wrapper](https://github.com/napplet/web/blob/efd5aa103359f1b150dfbb8870fa23e90fbc5540/packages/sdk/src/config.ts) The pinned Kehto shell/runtime patches route only `resource.info`, `resource.bytes`, `resource.bytesMany` and `resource.cancel` through ACL/firewall admission to the original native recipient.
 
-Requests contain `type`, bounded opaque `id`, and `url` or ordered `urls` where applicable. The SDK receives actual complete `Blob` objects and a required `mime` field matching each successful Blob type. Success is the request type plus `.result` and matching ID; failure is the request type plus `.error`, matching ID and canonical error string. Cancel uses the original ID, has no ACK, is idempotent, and the SDK suppresses late results. Individual bulk failures preserve input order and successful siblings. A cancelled root cancels the whole bulk request.
+Requests contain `type` and a bounded opaque `id`. Single-resource requests add `url` and optional `servers`. Batch requests add either an ordered `urls` list of strings or an ordered `requests` list of objects with the single-resource fields. The SDK receives actual complete `Blob` objects and a required `mime` field matching each successful Blob type. Success is the request type plus `.result` and matching ID; failure is the request type plus `.error`, matching ID and canonical error string. Cancel uses the original ID, has no ACK, is idempotent, and the SDK suppresses late results. Individual bulk failures preserve input order and successful siblings. A cancelled root cancels the whole bulk request.
 
 Caller scope, fetch options, cookies, authorization headers, response headers/status, byte ranges, streams and progress are absent. Correlation IDs confer no authority. The native registry captures identity epoch, publisher, app/version, instance, renderer generation and granted domains. The production broker checks that immutable registration, owner lifetime and claimed native lease before work and delivery. Close, identity transition, replacement and renderer loss revoke the old broker, memory cache and pending/private byte handles. Background revokes native in-flight leases before the React Native lifecycle mirror.
 
@@ -17,14 +17,14 @@ A resource grant permits any validated public HTTPS hostname. Each connection re
 | Scheme | Behavior |
 | --- | --- |
 | `https:` | Native bounded HTTPS GET, at most two public HTTPS redirects under the original deadline. Every hop repeats URL, DNS/address and TLS checks. Loop, private destination, mixed DNS, downgrade, credentials and hop overflow fail closed. |
-| `blossom:sha256:<lowercase hex>` | Try the trusted ordered download-server origins and verify complete SHA-256 bytes before admission. Resource hints cannot select servers. |
+| `blossom:sha256:<hash>`, `blossom:<hash>.<extension>` | Fetch by lowercase SHA-256 from configured HTTPS origins and verify the complete bytes. Advisory `servers` move matching configured origins earlier in the search. An unmatched hint confers no destination authority. The extension has no effect on the verified MIME type. |
 | `nostr:note…`, `nostr:nevent…`, `nostr:naddr…` | One query through the configured shell relays; strictly verify the signed event/filter and return UTF-8 JSON. Do not follow content URLs, relay hints, decrypt or recursively resolve. Kinds 4 and 1059 are denied. This is a selected public-event representation, not generic encrypted-resource support. |
 | `data:` | Decode through the trusted broker, then apply the same byte/MIME limits. MIME labels are untrusted. |
 | `htree:` | Explicit `unsupported-scheme`; revisit after Phase 4. |
 
 Default Blossom download origins are `https://blossom.primal.net` and `https://cdn.satellite.earth`, editable in trusted Settings. Up to four distinct public HTTPS origins are saved in the dedicated native SQLite settings database; an empty list disables Blossom. These public device settings apply across identities and persist after restart. They do not select an upload provider. Unavailable settings disable Blossom without blocking identity startup or other resource schemes.
 
-The defaults follow the [BUD-01 examples pinned at b5bd280](https://github.com/hzrd149/blossom/blob/b5bd2801d1763aa635fc8fea7a76597e0eb18990/buds/01.md). Actual default-server availability must be checked with native receipts. The bounded redirect profile was selected after a canonical Primal hash URL returned HTTP 302 to public object storage. The original zero-redirect candidate could not complete that real download. Published HTML retrieval retains its existing separate policy and 2 MiB bound.
+The hash-and-extension form follows the bare [BUD-10 URI at b5bd280](https://github.com/hzrd149/blossom/blob/b5bd2801d1763aa635fc8fea7a76597e0eb18990/buds/10.md). This profile resolves through configured HTTPS origins and takes server hints from the bounded Resource fields. The defaults follow the [BUD-01 examples pinned at b5bd280](https://github.com/hzrd149/blossom/blob/b5bd2801d1763aa635fc8fea7a76597e0eb18990/buds/01.md). Actual default-server availability must be checked with native receipts. The bounded redirect profile was selected after a canonical Primal hash URL returned HTTP 302 to public object storage. The original zero-redirect candidate could not complete that real download. Published HTML retrieval retains its existing separate policy and 2 MiB bound.
 
 Resource response headers never reach guests. Repeated informational headers, such as the two `x-goog-hash` values observed on the audio sample, are ignored; repeated framing, encoding, redirect or connection fields remain denied. Header/body framing bounds remain independent. Compression is not supported. This follows the need to avoid ambiguous message framing while allowing irrelevant repeated metadata; see [HTTP field semantics](https://www.rfc-editor.org/rfc/rfc9110.html#section-5.2).
 
@@ -33,7 +33,7 @@ Resource response headers never reach guests. Repeated informational headers, su
 | Bound | Selected value |
 | --- | --- |
 | Complete file / successful bulk aggregate | 10 MiB |
-| URLs per bulk call | 8 |
+| URLs per bulk call / advisory server origins per resource | 8 / 4 |
 | URL / data-URL bytes | 8 KiB / 64 KiB |
 | Concurrent retrievals per realm / process | 2 / 4 |
 | URL attempts per realm per minute, including cache hits | 60 |

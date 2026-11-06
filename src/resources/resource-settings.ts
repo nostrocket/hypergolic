@@ -1,14 +1,12 @@
-import { publicResourceHttps, ResourceError } from './resource-contract.ts';
+import { RESOURCE_LIMITS, resourceServerOrigin, ResourceError } from './resource-contract.ts';
 import type { RelaySettingsStoragePort } from '../network/relay-settings.ts';
 export const RESOURCE_SETTINGS_KEY = 'trusted-resource-servers-v1';
 export const DEFAULT_RESOURCE_SERVERS = Object.freeze(['https://blossom.primal.net', 'https://cdn.satellite.earth']);
 export function normalizeResourceServers(input: unknown): readonly string[] {
-  if (!Array.isArray(input) || input.length > 4) throw new ResourceError('blocked-by-policy');
+  if (!Array.isArray(input) || input.length > RESOURCE_LIMITS.blossomServers) throw new ResourceError('blocked-by-policy');
   const servers = input.map(value => {
     if (typeof value !== 'string') throw new ResourceError('blocked-by-policy');
-    const url = new URL(publicResourceHttps(value));
-    if (url.pathname !== '/' || url.search !== '') throw new ResourceError('blocked-by-policy');
-    return url.origin;
+    return resourceServerOrigin(value);
   });
   if (new Set(servers).size !== servers.length) throw new ResourceError('invalid-request');
   return Object.freeze(servers);

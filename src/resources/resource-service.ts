@@ -5,8 +5,8 @@ import type { RelayQueryService } from '../network/native-relay-query.ts';
 import { parseQueryFilters, verifyQueryEvent } from '../network/relay-query-contract.ts';
 import { decodeNativePublishedBody } from '../napplets/native-published-https.ts';
 import { classifyResourceBytes } from './resource-mime.ts';
-import { ResourceError, RESOURCE_LIMITS, parseResourceURL, publicResourceHttps, resourceInfo,
-  type ResourceRequest, type ResourceBytes, type ResourceErrorCode } from './resource-contract.ts';
+import { ResourceError, RESOURCE_LIMITS, parseResourceURL, resourceServerOrigin, resourceInfo,
+  type ResourceRequest, type ResourceTarget, type ResourceBytes, type ResourceErrorCode } from './resource-contract.ts';
 
 export type ResourceAuthority = Readonly<{ nativeToken: string; assertActive(): void }>;
 export interface ResourceResolvers {
@@ -23,7 +23,7 @@ type CacheEntry = { value: ResourceBytes; used: number };
 type Active = (signal?: AbortSignal, authority?: ResourceAuthority) => void;
 async function executeResource(request: ResourceRequest, authority: ResourceAuthority, active: Active,
   pending: Map<string, AbortController>, seen: Set<string>, info: () => ReturnType<typeof resourceInfo>,
-  bytes: (url: string, signal: AbortSignal, authority: ResourceAuthority) => Promise<ResourceBytes>)
+  bytes: (target: ResourceTarget, signal: AbortSignal, authority: ResourceAuthority) => Promise<ResourceBytes>)
   : Promise<Readonly<Record<string, unknown>> | null> {
 active(undefined, authority);
 if (request.type === 'resource.cancel') { pending.get(request.id)?.abort(); return null; }
@@ -34,10 +34,11 @@ const controller = new AbortController(); pending.set(request.id, controller);
 const timer = setTimeout(() => controller.abort(), RESOURCE_LIMITS.requestMs);
 const watcher = setInterval(() => { try { active(undefined, authority); } catch { controller.abort(); } }, 25);
 try {
-  if (request.type === 'resource.bytes') return { type: 'resource.bytes.result', id: request.id, value: await bytes(request.url, controller.signal, authority) };
-  const resolved = await mapResourceItems(request.urls, async url => {
+  if (request.type === 'resource.bytes') return { type: 'resource.bytes.result', id: request.id, value: await bytes(request, controller.signal, authority) };
+  const resolved = await mapResourceItems(request.requests, async item => {
+    const {url} = item;
     active(controller.signal, authority);
-    try { return {url, ok:true, value:await bytes(url, controller.signal, authority)} as const; }
+    try { return {url, ok:true, value:await bytes(item, controller.signal, authority)} as const; }
     catch(error) { active(controller.signal, authority); return {url, ok:false,
       error:error instanceof ResourceError ? error.code : 'network-error'} as const; }
   });
@@ -66,8 +67,8 @@ async function nostr(resolvers: ResourceResolvers, active: Active, reference: st
   if (event.kind === 4 || event.kind === 1059) throw new ResourceError('blocked-by-policy');
   return new TextEncoder().encode(JSON.stringify(event));
 }
-async function resolve(resolvers: ResourceResolvers, active: Active, url: string, signal: AbortSignal, authority: ResourceAuthority): Promise<Uint8Array<ArrayBuffer>> {
-  const target = parseResourceURL(url);
+async function resolve(resolvers: ResourceResolvers, active: Active, request: ResourceTarget, signal: AbortSignal, authority: ResourceAuthority): Promise<Uint8Array<ArrayBuffer>> {
+  const target = parseResourceURL(request.url);
   if (target.scheme === 'https') return resolvers.https(target.url, signal, () => active(signal, authority), authority.nativeToken);
   if (target.scheme === 'nostr') return nostr(resolvers, active, target.reference, signal, authority);
   if (target.scheme === 'data') {
@@ -90,14 +91,15 @@ async function resolve(resolvers: ResourceResolvers, active: Active, url: string
     } catch { throw new ResourceError('decode-failed'); }
   }
   const configured = resolvers.servers();
-  if (!Array.isArray(configured) || configured.length === 0 || configured.length > 4) throw new ResourceError('blocked-by-policy');
+  if (!Array.isArray(configured) || configured.length === 0 || configured.length > RESOURCE_LIMITS.blossomServers) throw new ResourceError('blocked-by-policy');
+  const hinted = new Set(request.servers);
+  const servers = [...configured].sort((left, right) => Number(hinted.has(right)) - Number(hinted.has(left)));
   let failure: ResourceErrorCode = 'not-found';
-  for (const server of configured) {
+  for (const server of servers) {
     active(signal, authority);
     try {
-      const base = new URL(publicResourceHttps(server));
-      if (base.pathname !== '/' || base.search !== '') throw new ResourceError('blocked-by-policy');
-      const bytes = await resolvers.https(new URL('/' + target.hash, base).href, signal, () => active(signal, authority), authority.nativeToken);
+      const origin = resourceServerOrigin(server);
+      const bytes = await resolvers.https(new URL('/' + target.hash, origin).href, signal, () => active(signal, authority), authority.nativeToken);
       active(signal, authority);
       if (await resolvers.sha256(bytes) !== target.hash) throw new ResourceError('decode-failed');
       active(signal, authority); return bytes;
@@ -143,7 +145,8 @@ function bindResourceSession(resolvers: ResourceResolvers, process: ResourceProc
         deliveredBytes += value.bytes.byteLength;
         return Object.freeze({ mime: value.mime, bytes: new Uint8Array(value.bytes) });
       }
-      async function bytes(url: string, signal: AbortSignal, authority: ResourceAuthority): Promise<ResourceBytes> {
+      async function bytes(request: ResourceTarget, signal: AbortSignal, authority: ResourceAuthority): Promise<ResourceBytes> {
+        const {url} = request;
         active(signal, authority); countURL(); parseResourceURL(url);
         const hit = cache.get(url);
         if (hit) { cache.delete(url); hit.used = ++process.revision; cache.set(url, hit); return charge(hit.value); }
@@ -154,7 +157,7 @@ function bindResourceSession(resolvers: ResourceResolvers, process: ResourceProc
         signal.addEventListener('abort', cancelURL, { once: true });
         if (signal.aborted) cancelURL();
         const timeout = setTimeout(cancelURL, RESOURCE_LIMITS.urlMs);
-        const work = resolve(resolvers, active, url, scoped.signal, authority);
+        const work = resolve(resolvers, active, request, scoped.signal, authority);
         const settled = work.finally(() => { fetching--; process.fetching--; });
         // Timeout drops delivery; an uncooperative resolver retains its reservation until it really settles.
         let abort!: () => void;

@@ -45,6 +45,26 @@ test('strict current wire rejects extra authority, getters, sparse and altered a
   assert.throws(() => parseResourceRequest({type:'resource.bytesMany',id:'a',urls:Array(9).fill('a')}),error('too-large'));
   assert.equal(resourceFailure({type:'resource.cancel',id:'a'},'timeout'),null);
 });
+test('modern Resource inputs share legacy bounds and reject injected authority', () => {
+  const url = 'blossom:' + 'a'.repeat(64) + '.png';
+  const targets = [{url, servers: ['https://assets.example.com:443/']}, {url: 'data:,hello'}];
+  const modern = {type: 'resource.bytesMany', id: 'modern', requests: targets};
+  assert.deepEqual(parseResourceRequest(modern), {...modern, requests: [{url, servers: ['https://assets.example.com']}, targets[1]]});
+  for (const requests of [
+    [null],
+    [url],
+    [{url, scope: 'other'}],
+    [{url, servers: new Array(1)}],
+    [{url, get servers() { throw Error('getter executed'); }}],
+  ]) assert.throws(() => parseResourceRequest({...modern, requests}), error('invalid-request'));
+  assert.throws(() => parseResourceRequest({...modern, urls: [url]}), error('invalid-request'));
+  assert.throws(() => parseResourceRequest({...modern, requests: Array(9).fill({url})}), error('too-large'));
+  assert.throws(() => parseResourceRequest({type: 'resource.bytes', id: 'many', url, servers: Array(5).fill('https://one.example.com')}), error('too-large'));
+  assert.throws(() => parseResourceRequest({type: 'resource.bytes', id: 'unsafe', url, servers: ['https://127.0.0.1/']}), error('blocked-by-policy'));
+  assert.deepEqual(parseResourceURL(url), {scheme: 'blossom', hash: 'a'.repeat(64)});
+  assert.throws(() => parseResourceURL(url + '?xs=private.local'), error('invalid-request'));
+});
+
 test('public URL preflight rejects private spellings, credentials, fragments and unknown schemes', () => {
   for (const url of ['https://127.0.0.1/a','https://2130706433/a','https://[::1]/a','https://localhost/a',
     'https://a.local/a','https://a.home.arpa/a','https://user:pass@a.example.com/a','https://@a.example.com/a',
@@ -90,6 +110,37 @@ test('Blossom verifies bytes on fallback and does not let hints choose servers',
   await assert.rejects(b.execute(bytes('bad','blossom:sha256:'+digest)),error('decode-failed'));
   h.service.revokeAll();bad.service.revokeAll();
 });
+test('advisory Blossom hints prefer an exact configured origin and preserve configured fallback', async () => {
+  const body = text('verified');
+  const digest = hash(body);
+  const url = `blossom:${digest}.png`;
+  const attempts: string[] = [];
+  const h = setup({servers: () => ['https://one.example.com', 'https://two.example.com'], https: async target => {
+    attempts.push(target);
+    return target.startsWith('https://one.example.com/') ? body : text('wrong hash');
+  }});
+  try {
+    const request = parseResourceRequest({type: 'resource.bytes', id: 'hint', url,
+      servers: ['https://outside.example.com', 'https://one.example.com.evil.org', 'https://two.example.com:443/']});
+    await h.bind().execute(request);
+    assert.deepEqual(attempts, [`https://two.example.com/${digest}`, `https://one.example.com/${digest}`]);
+
+    attempts.length = 0;
+    const result = await h.bind().execute(parseResourceRequest({type: 'resource.bytesMany', id: 'modern', requests: [
+      {url: 'htree://unsupported'}, {url, servers: ['https://one.example.com.evil.org']}, {url: 'data:,verified'},
+    ]})) as {items: {url: string; ok: boolean}[]};
+    assert.deepEqual(result.items.map(item => item.ok), [false, true, true]);
+    assert.deepEqual(attempts, [`https://one.example.com/${digest}`]);
+  } finally { h.service.revokeAll(); }
+
+  const disabled = setup({servers: () => []});
+  try {
+    await assert.rejects(disabled.bind().execute(parseResourceRequest({type: 'resource.bytes', id: 'disabled', url,
+      servers: ['https://one.example.com']})), error('blocked-by-policy'));
+    assert.equal(disabled.calls(), 0);
+  } finally { disabled.service.revokeAll(); }
+});
+
 test('Nostr resolves one validated event without following content or relay hints', async () => {
   const secret=new Uint8Array(32);secret[31]=1;
   const event=finalizeEvent({kind:1,created_at:1,tags:[],content:'https://private.local/never-fetch'},secret);

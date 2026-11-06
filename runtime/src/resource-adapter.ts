@@ -46,11 +46,11 @@ async function project(native: NativeResourceClient, request: ReturnType<typeof 
     return { type: result.type, id: request.id, blob, mime: blob.type };
   }
   if (request.type === 'resource.bytesMany') {
-    if (Object.keys(result).length !== 3 || !Array.isArray(result.items) || result.items.length !== request.urls.length) throw new ResourceError('decode-failed');
+    if (Object.keys(result).length !== 3 || !Array.isArray(result.items) || result.items.length !== request.requests.length) throw new ResourceError('decode-failed');
     let total = 0;
     const descriptors = result.items.map((value, index) => {
       const item = object(value);
-      if (Object.keys(item).length !== 3 || item.url !== request.urls[index]) throw new ResourceError('decode-failed');
+      if (Object.keys(item).length !== 3 || item.url !== request.requests[index]?.url) throw new ResourceError('decode-failed');
       if (item.ok === false && RESOURCE_ERRORS.includes(item.error as never)) return item;
       if (item.ok !== true) throw new ResourceError('decode-failed');
       const descriptor = object(item.transfer);

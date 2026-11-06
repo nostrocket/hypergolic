@@ -51,6 +51,21 @@ test('bulk adapter preserves exact order, canonical per-item errors and complete
     assert.equal(items.some(item=>'transfer' in item),false);
   } finally {h.finish();}
 });
+test('modern resource requests do not grant a missing resource capability', async () => {
+  const service = createResourceService({
+    https: async () => assert.fail('A request without the resource grant reached HTTPS'),
+    servers: () => ['https://assets.public.org'],
+    sha256: async () => '',
+  });
+  const broker = createResourceBroker({service, transfers: createResourceTransfers(randomUUID)},
+    {registration: {...registration, domains: ['theme']}, assertActive() {}});
+  try {
+    assert.equal(await broker.dispatch({type: 'resource.bytes', id: 'single',
+      url: `blossom:${'a'.repeat(64)}.png`, servers: ['https://assets.public.org']}, authority), null);
+    assert.equal(await broker.dispatch({type: 'resource.bytesMany', id: 'batch',
+      requests: [{url: 'https://assets.public.org/image.png'}]}, authority), null);
+  } finally { broker.revoke(); }
+});
 test('private handles cannot cross realms, skip a cursor or survive root cancel',()=>{
   const pool=createResourceTransfers(randomUUID); const a=pool.bind(()=>{}),b=pool.bind(()=>{});
   try {
