@@ -215,3 +215,33 @@ test('modern admission rejects mixed formats, ambiguous declarations and unsuppo
     await rejects(() => verifyManifest(coordinate(), legacy));
   }
 });
+
+test('admits signed inline SVG graphics with HTML integration and return to SVG', async () => {
+  const html = new TextEncoder().encode(`<!doctype html><html><head><title>Vector</title></head><body><button>
+    <svg viewBox="0 0 24 24"><g><path d="M0 0 L1 1" /><circle cx="1" cy="1" r="1"/></g>
+      <foreignObject><div><svg><rect/></svg></div></foreignObject><line />
+    </svg></button></body></html>`);
+  const event = signed([['d', 'hello'], ['x', await sha(html)]], {content: 'Vector controls'});
+  const manifest = await verifyManifest(coordinate(), event);
+  assert.deepEqual((await verifyArtifact(manifest, html)).htmlBytes, html);
+});
+
+test('rejects self-closing HTML, namespace breakouts and active SVG syntax', async () => {
+  for (const body of [
+    '<div/>',
+    '<path d="M0 0" />',
+    '<svg><foreignObject><div /></foreignObject></svg>',
+    '<svg><foreignObject><path/></foreignObject></svg>',
+    '<svg><desc><circle/></desc></svg>',
+    '<svg><title><circle/></title></svg>',
+    '<svg><div></div><path /></svg>',
+    '<svg><font color="red"></font><path /></svg>',
+    '<svg><script href="https://example.org/script.js"/></svg>',
+    '<svg><circle r=2/></svg>',
+    '<math><svg><path /></svg></math>',
+  ]) {
+    const html = new TextEncoder().encode(`<!doctype html><html><head></head><body>${body}</body></html>`);
+    const manifest = await verifyManifest(coordinate(), signed(await fixtureTags({html})));
+    await rejects(() => verifyArtifact(manifest, html));
+  }
+});

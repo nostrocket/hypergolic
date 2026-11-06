@@ -203,6 +203,23 @@ export async function verifyManifest(coordinate: NappletCoordinate, signedEvent:
 
 const VOID_ELEMENTS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr']);
 const RAW_TEXT_ELEMENTS = new Set(['script', 'style', 'textarea', 'title']);
+const SVG_GRAPHICS = new Set(['circle', 'ellipse', 'line', 'path', 'polygon', 'polyline', 'rect', 'stop', 'use']);
+const SVG_HTML_INTEGRATION = new Set(['desc', 'foreignobject', 'title']);
+const SVG_HTML_BREAKOUT = new Set([
+  'b', 'big', 'blockquote', 'body', 'br', 'center', 'code', 'dd', 'div', 'dl', 'dt', 'em', 'embed',
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'head', 'hr', 'i', 'img', 'li', 'listing', 'menu', 'meta',
+  'nobr', 'ol', 'p', 'pre', 'ruby', 's', 'small', 'span', 'strong', 'strike', 'sub', 'sup', 'table', 'tt', 'u', 'ul', 'var',
+]);
+type Namespace = 'html' | 'svg' | 'math';
+
+function breaksSvgContext(name: string, tagText: string): boolean {
+  if (SVG_HTML_BREAKOUT.has(name)) return true;
+  return name === 'font' && /\s(?:color|face|size)[\s=/>]/i.test(tagText.replace(/"[^"]*"|'[^']*'/g, '""'));
+}
+
+function explicitSelfClosing(tagText: string): boolean {
+  return /[\s"']\/\s*>$/.test(tagText) || /^<[a-z][a-z0-9:-]*\/\s*>$/i.test(tagText);
+}
 
 /** Accepts a conservative, explicitly balanced HTML document envelope. */
 function validateHtmlEnvelope(html: string): void {
@@ -211,7 +228,7 @@ function validateHtmlEnvelope(html: string): void {
   // publisher markup. Reject documents that could execute before that point.
   if (!/^\uFEFF?\s*<!doctype\s+html\s*>\s*<html(?:\s+[a-z][a-z0-9:-]*\s*=\s*(?:"[^"<>]*"|'[^'<>]*'))*\s*>\s*<head(?:\s+[a-z][a-z0-9:-]*\s*=\s*(?:"[^"<>]*"|'[^'<>]*'))*\s*>/i.test(html)) return fail();
   const doctype = /^\uFEFF?\s*<!doctype\s+html\s*>/i.exec(html)!;
-  const stack: string[] = [];
+  const stack: {name: string; children: Namespace}[] = [];
   let cursor = doctype[0].length;
   let htmlCount = 0; let headCount = 0; let bodyCount = 0; let bodySeen = false;
   while (cursor < html.length) {
@@ -229,7 +246,7 @@ function validateHtmlEnvelope(html: string): void {
     const closing = /^<\/([a-z][a-z0-9:-]*)\s*>/i.exec(html.slice(open));
     if (closing) {
       const name = closing[1]!.toLowerCase();
-      if (stack.pop() !== name) return fail();
+      if (stack.pop()?.name !== name) return fail();
       cursor = open + closing[0].length; continue;
     }
     if (/^<!|^<\?/.test(html.slice(open))) return fail();
@@ -247,13 +264,20 @@ function validateHtmlEnvelope(html: string): void {
     }
     if (end >= html.length || quote) return fail();
     const tagText = html.slice(open, end + 1);
-    if (/\s\/\s*>$/.test(tagText) && !VOID_ELEMENTS.has(name)) return fail();
+    const parent = stack.at(-1);
+    const context = parent?.children ?? 'html';
+    const namespace = context === 'html' && (name === 'svg' || name === 'math') ? name : context;
+    const inSvg = namespace === 'svg';
+    if (inSvg && breaksSvgContext(name, tagText)) return fail();
+    const isVoid = !inSvg && VOID_ELEMENTS.has(name);
+    const selfClosing = explicitSelfClosing(tagText);
+    if (selfClosing && !isVoid && !(inSvg && SVG_GRAPHICS.has(name) && tagText.endsWith('/>'))) return fail();
     if (name === 'html') { htmlCount++; if (htmlCount !== 1 || stack.length !== 0) return fail(); }
-    if (name === 'head') { headCount++; if (headCount !== 1 || stack.at(-1) !== 'html' || bodySeen) return fail(); }
-    if (name === 'body') { bodyCount++; bodySeen = true; if (bodyCount !== 1 || stack.at(-1) !== 'html' || headCount !== 1) return fail(); }
-    if (!VOID_ELEMENTS.has(name)) stack.push(name);
+    if (name === 'head') { headCount++; if (headCount !== 1 || parent?.name !== 'html' || bodySeen) return fail(); }
+    if (name === 'body') { bodyCount++; bodySeen = true; if (bodyCount !== 1 || parent?.name !== 'html' || headCount !== 1) return fail(); }
+    if (!isVoid && !selfClosing) stack.push({name, children: inSvg && SVG_HTML_INTEGRATION.has(name) ? 'html' : namespace});
     cursor = end + 1;
-    if (RAW_TEXT_ELEMENTS.has(name) && !VOID_ELEMENTS.has(name)) {
+    if (RAW_TEXT_ELEMENTS.has(name) && !(inSvg && name === 'title')) {
       const endTag = new RegExp(`</${name}\\s*>`, 'ig'); endTag.lastIndex = cursor;
       const match = endTag.exec(html); if (!match) return fail();
       cursor = match.index;
