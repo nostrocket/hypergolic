@@ -28,6 +28,8 @@ Attachment fixtures are generated outside source with `tests/native/upload/creat
 
 One request per realm; eight pending/staging reviews and two approved transfers/process; 10 MiB file; 256 KiB private chunks; ten-minute review and 60-second approved transfer lifetimes. Monotonic regression revokes authority. Authorization stays strictly past and unexpired even if wall time moves backward. Foreground loaded-view switching permits approved transfer; background, requester close/replacement, renderer loss and account changes revoke it. Cancel cannot delete a public server copy.
 
+The SDK receives a pending result after native staging and before file approval. Malformed public requests with a bounded ID receive a failure before staging.
+
 Status goes only to captured renderer recipients; WebKit initial reply is one-use and progress uses a separate captured-world lane. Native progress/Cancel occupies shell space outside guest controls. A focused new hidden peer cannot steal review.
 
 ## Durable uncertainty and recovery

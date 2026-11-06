@@ -323,6 +323,22 @@ test('published Relay promptly rejects a missing timestamp without opening nativ
   expect(await publishedApprovalCalls(page)).toEqual([]);
 });
 
+test('published Upload promptly rejects malformed requests before native staging', async ({page}) => {
+  await openPublished(page, 'upload-domain');
+  const guest = await publishedGuest(page);
+  await guest.evaluate(() => {
+    const state = window as any;
+    const fail = (error: Error) => error.message;
+    void Promise.all([
+      state.napplet.upload.upload({data: new Uint8Array([1])}).catch(fail),
+      state.napplet.upload.upload({data: new ArrayBuffer(1), rail: 'nip96'}).catch(fail),
+    ]).then(failures => { state.__uploadFailures = failures; });
+  });
+  await expect.poll(() => guest.evaluate(() => (window as any).__uploadFailures), {timeout: 2_000}).toEqual(['invalid request', 'unsupported rail']);
+  expect(await page.evaluate(() => (window as any).__publishedTest.requests
+    .filter((entry: any) => entry.type === 'capability' && JSON.parse(entry.message).type.startsWith('upload.')))).toEqual([]);
+});
+
 test('published Approval Lab SDK survives both short deadlines and receives one correlated delayed denial', async ({page}) => {
   await page.clock.install({time: new Date('2026-01-01T00:00:00Z')});
   await page.clock.pauseAt(new Date('2026-01-01T00:00:01Z'));

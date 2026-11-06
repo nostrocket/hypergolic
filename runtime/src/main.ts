@@ -14,7 +14,8 @@ import { parseRoutingMessage } from '../../src/routing/routing-contract';
 import { createLinkAdapter } from './link-adapter';
 import { linkRequestId } from '../../src/links/link-contract';
 import { createUploadAdapter } from './upload-adapter';
-import { parseUploadRequest } from '../../src/uploads/upload-contract';
+import { parseUploadRequest, UploadError, UPLOAD_LIMITS } from '../../src/uploads/upload-contract';
+import { text } from '../../src/storage/codec';
 import { bindResourceMedia, injectResourceMediaGate } from './resource-media';
 import { createResourceAdapter } from './resource-adapter';
 import { parseRelaySubscribe, parseRelayClose } from '../../src/network/relay-subscription-contract';
@@ -235,6 +236,15 @@ function rejectEnvelope(event: MessageEvent, source: Window, domains: readonly s
         if (typeof id === 'string' && id.length > 0 && id.length <= 128 &&
           new TextEncoder().encode(id).length <= 128) {
           source.postMessage({type: 'relay.publish.result', id, ok: false, error: 'Invalid event template.'}, '*');
+        }
+        return;
+      }
+      const type = event.data?.type;
+      if (domains.includes('upload') && (type === 'upload.info' || type === 'upload.upload' || type === 'upload.status')) {
+        let id: string;
+        try { id = text(event.data.id, UPLOAD_LIMITS.idBytes); } catch { return; }
+        try { parseUploadRequest(event.data); } catch (error) {
+          source.postMessage({type: type + '.result', id, error: error instanceof UploadError ? error.code : 'invalid request'}, '*');
         }
         return;
       }
