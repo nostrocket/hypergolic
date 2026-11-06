@@ -62,3 +62,30 @@ final class RoutingEndpointRegistry: @unchecked Sendable {
     lock.lock(); defer { lock.unlock() }; return (ownerUser, ownerEpoch, counter, foreground && ownerAvailable && counter < Self.max, ownerAvailable, foreground)
   }
 }
+
+struct RoutingPushCredits {
+  private var pending: [UInt64: Bool] = [:]
+  private var parked: [UInt64: String] = [:]
+  private var lastOrdinaryAck: UInt64 = 0
+  mutating func reserve(_ id: UInt64, envelope: String?) -> Bool {
+    guard pending.count < 4, pending[id] == nil else { return false }
+    pending[id] = envelope != nil
+    parked[id] = envelope
+    return true
+  }
+  func contains(_ id: UInt64) -> Bool { pending[id] != nil }
+  mutating func release(_ id: UInt64) { pending.removeValue(forKey: id) }
+  mutating func expire(_ id: UInt64) { if pending[id] == false { release(id) } }
+  mutating func pause() { pending = pending.filter { $0.value } }
+  func parkedIds() -> [UInt64] { parked.keys.sorted() }
+  mutating func takeParked(_ id: UInt64) -> String? {
+    guard parked.keys.min() == id else { return nil }
+    return parked.removeValue(forKey: id)
+  }
+  mutating func clear() { pending.removeAll(); parked.removeAll() }
+  mutating func acknowledge(_ id: UInt64) {
+    guard let retained = pending[id], parked[id] == nil, retained || id > lastOrdinaryAck else { return }
+    release(id)
+    if !retained { lastOrdinaryAck = id }
+  }
+}

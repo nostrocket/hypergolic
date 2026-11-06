@@ -8,8 +8,7 @@ final class RoutingTransportRegistry: @unchecked Sendable {
     let config: CapabilityConfiguration
     var push: Push?
     var delivery: UInt64 = 0
-    var acknowledged: UInt64 = 0
-    var pending: Set<UInt64> = []
+    var credits = RoutingPushCredits()
   }
   private let endpoints = RoutingEndpointRegistry()
   private let lock = NSRecursiveLock()
@@ -23,16 +22,39 @@ final class RoutingTransportRegistry: @unchecked Sendable {
     return String(decoding: data, as: UTF8.self)
   } }
   func synchronizeOwner(_ user: String, epoch: UInt64, available: Bool) -> Bool { lock.withLock {
-    let before = endpoints.state().revision
+    let before = endpoints.state()
     guard endpoints.synchronizeOwner(user, epoch: epoch, available: available) else { return false }
-    if before != endpoints.state().revision { clearPending(); sink?(state()) }
+    if before.revision != endpoints.state().revision {
+      if before.user != user || before.epoch != epoch {
+        for generation in Array(rows.keys) { rows[generation]?.credits.clear() }
+      } else { resumeIntents() }
+      sink?(state())
+    }
     return true
   } }
   func foreground(_ value: Bool) { lock.withLock {
     let before = endpoints.state().revision; endpoints.setForeground(value)
-    if before != endpoints.state().revision { clearPending(); sink?(state()) }
+    if before != endpoints.state().revision { resumeIntents(); sink?(state()) }
   } }
-  private func clearPending() { for generation in Array(rows.keys) { rows[generation]?.pending.removeAll() } }
+  private func resumeIntents() {
+    let available = endpoints.state().available
+    for generation in Array(rows.keys) {
+      guard let row = rows[generation] else { continue }
+      rows[generation]?.credits.pause()
+      if available { for delivery in row.credits.parkedIds() { scheduleIntent(generation, delivery: delivery) } }
+    }
+  }
+  private func scheduleIntent(_ generation: String, delivery: UInt64) {
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      self.lock.withLock {
+        guard self.mayDeliver(generation, revision: self.endpoints.state().revision, domain: "intent"),
+          let push = self.rows[generation]?.push,
+          let envelope = self.rows[generation]?.credits.takeParked(delivery) else { return }
+        push(envelope)
+      }
+    }
+  }
   func register(_ generation: String, config: CapabilityConfiguration) -> Bool { lock.withLock {
     let trackPublished = config.fixture == "published"
     guard trackPublished || config.publishedOpen || config.domains.contains("intent") || config.domains.contains("inc") ||
@@ -77,24 +99,33 @@ final class RoutingTransportRegistry: @unchecked Sendable {
     guard var row = rows[generation], let message = try? UploadWire.object(raw, limit: 36 * 1024, maximumDepth: 40),
       let type = message["type"] as? String, ["intent.changed", "intent.deliver", "inc.event", "inc.channel.opened", "inc.channel.event", "inc.channel.closed", "notify.action", "notify.clicked", "notify.dismissed", "notify.controls", "config.values", "config.schemaError"].contains(type),
       let domain = type.split(separator: ".").first.map(String.init), mayDeliver(generation, revision: revision, domain: domain),
-      row.push != nil, row.pending.count < 4, row.delivery < 9_007_199_254_740_991 else { return false }
-    row.delivery += 1; let delivery = row.delivery; row.pending.insert(delivery); rows[generation] = row
+      row.push != nil, row.delivery < 9_007_199_254_740_991 else { return false }
+    let delivery = row.delivery + 1, retained = type == "intent.deliver"
     let value: [String: Any] = ["type": "routing.event", "sessionId": generation, "delivery": delivery, "response": raw]
-    guard let bytes = try? JSONSerialization.data(withJSONObject: value) else { rows[generation]?.pending.remove(delivery); return false }
+    guard let bytes = try? JSONSerialization.data(withJSONObject: value) else { return false }
     let envelope = String(decoding: bytes, as: UTF8.self)
-    Task { @MainActor [weak self] in
+    guard row.credits.reserve(delivery, envelope: retained ? envelope : nil) else { return false }
+    row.delivery = delivery
+    rows[generation] = row
+    if retained {
+      scheduleIntent(generation, delivery: delivery)
+      return true
+    }
+    DispatchQueue.main.async { [weak self] in
       guard let self else { return }
       self.lock.withLock {
-        guard let current = self.rows[generation], current.pending.contains(delivery), self.mayDeliver(generation, revision: revision, domain: domain) else { self.rows[generation]?.pending.remove(delivery); return }
+        guard let current = self.rows[generation], current.credits.contains(delivery), self.mayDeliver(generation, revision: revision, domain: domain) else { self.rows[generation]?.credits.release(delivery); return }
         current.push?(envelope)
       }
     }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 25) { [weak self] in self?.lock.withLock { _ = self?.rows[generation]?.pending.remove(delivery) } }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 25) { [weak self] in self?.lock.withLock { self?.rows[generation]?.credits.expire(delivery) } }
     return true
   } }
   func acknowledge(_ generation: String, delivery: UInt64) { lock.withLock {
-    guard var row = rows[generation], delivery > row.acknowledged, row.pending.remove(delivery) != nil else { return }
-    row.acknowledged = delivery; rows[generation] = row
+    guard var row = rows[generation] else { return }
+    row.credits.acknowledge(delivery)
+    rows[generation] = row
   } }
+
 }
 enum RoutingTransport { static let shared = RoutingTransportRegistry() }

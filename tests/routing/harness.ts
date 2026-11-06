@@ -19,7 +19,7 @@ export async function setup(t: {after(action: () => void | Promise<void>): void}
   let state: RoutingNativeState = {user, epoch: 0, revision: 1, available: true, ownerAvailable: true, foreground: true};
   const revoked = new Set<string>(), live = new Set<string>(), slots = new Map<string, string>(), replies = new Map<string, unknown>();
   const sent: {generation: string; message: Readonly<Record<string, unknown>>}[] = [], activated: string[] = [];
-  let deniedPush = false;
+  let deniedPush = false, rejectActivation = false;
   let counter = 0, focus = source.generation, lifecycle = () => {}, targetReady = true;
   const native = {
     state: () => state,
@@ -30,7 +30,7 @@ export async function setup(t: {after(action: () => void | Promise<void>): void}
   };
   const capability = {take(token: string) {const raw = slots.get(token) ?? null; slots.delete(token); return raw;}, isActive: (token: string) => live.has(token), finish(token: string, response: string | null) {live.delete(token); replies.set(token, response === null ? null : JSON.parse(response));}};
   const reviews = new RoutingReviewService();
-  const broker = new RoutingBroker(capability, native, catalog, reviews, {async activate(handler) {activated.push(handler.publisher); return target.sessionId;}}); t.after(() => broker.stop());
+  const broker = new RoutingBroker(capability, native, catalog, reviews, {async activate(handler) {if (rejectActivation) return null; activated.push(handler.publisher); return target.sessionId;}}); t.after(() => broker.stop());
   function dispatch(registration: NativeRegistration, message: unknown, patch: Partial<NativeRegistration> = {}, wrapperId?: string) {
     const token = 'token-' + ++counter; live.add(token); slots.set(token, JSON.stringify({registration: {...registration, ...patch}, request: JSON.stringify({type: 'routing.call', id: wrapperId ?? 'call-' + counter, message, revision: state.revision})}));
     const promise = broker.dispatch(token, {registration, assertActive() {if (revoked.has(registration.generation)) throw Error('Revoked');}});
@@ -43,7 +43,7 @@ export async function setup(t: {after(action: () => void | Promise<void>): void}
     await tick(); const review = reviews.getSnapshot(); assert.equal(review?.request.kind, 'topic'); reviews.decide(review!.id, {allow: true}); await result.promise;
     assert.deepEqual(result.reply(), {type: 'inc.subscribe.result', id: 'sub-' + (Number(result.token.split('-')[1]) - 1)}); focus = source.generation;
   }
-  return {expire(token: string) {live.delete(token); reviews.refresh();}, denyPush(value: boolean) {deniedPush = value;}, catalog, a, b, source, target, broker, reviews, native, sent, activated, dispatch, register, subscribeTarget, revoke(generation: string) {revoked.add(generation); reviews.refresh();}, setFocus(generation: string) {focus = generation; reviews.refresh();}, lifecycle(next: Partial<RoutingNativeState>) {state = {...state, ...next, revision: state.revision + 1}; lifecycle();}, targetReady(value: boolean) {targetReady = value;}};
+  return {rejectActivation() {rejectActivation = true;}, expire(token: string) {live.delete(token); reviews.refresh();}, denyPush(value: boolean) {deniedPush = value;}, catalog, a, b, source, target, broker, reviews, native, sent, activated, dispatch, register, subscribeTarget, revoke(generation: string) {revoked.add(generation); reviews.refresh();}, setFocus(generation: string) {focus = generation; reviews.refresh();}, lifecycle(next: Partial<RoutingNativeState>) {state = {...state, ...next, revision: state.revision + 1}; lifecycle();}, targetReady(value: boolean) {targetReady = value;}};
 }
 export async function tick() {await new Promise<void>(resolve => setTimeout(resolve, 0));}
 export async function reviewReady(reviews: RoutingReviewService) {for (let i = 0; i < 50; i++) {const review = reviews.getSnapshot(); if (review) return review; await tick();} throw Error('No review');}

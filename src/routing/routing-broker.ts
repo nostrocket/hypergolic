@@ -6,7 +6,7 @@ import type { CatalogHandler, CatalogSnapshot, RoutingCatalog } from './routing-
 import type { RoutingNativePort } from './routing-port.ts';
 import { RoutingChannels } from './routing-channels.ts';
 import { RoutingReviewService } from './routing-review.ts';
-export type RoutingTargetPort = Readonly<{ activate(handler: CatalogHandler, request: IntentRequest, signal: AbortSignal, assertActive: () => void, origin: NativeRegistration, revision: number): Promise<string> }>;
+export type RoutingTargetPort = Readonly<{ activate(handler: CatalogHandler, request: IntentRequest, signal: AbortSignal, assertActive: () => void, origin: NativeRegistration, revision: number): Promise<string | null> }>;
 type Endpoint = { registration: NativeRegistration; assertActive(): void; seen: Set<string>; topics: Set<string> };
 const revoked = (): never => { throw new ShellStorageError('REVOKED'); };
 const sameHandler = (a: Readonly<{ publisher: string; appId: string; eventId: string }>, b: Readonly<{ publisher: string; appId: string; eventId: string }>) => a.publisher === b.publisher && a.appId === b.appId && a.eventId === b.eventId;
@@ -154,10 +154,11 @@ export class RoutingBroker {
       if (!compatible(handler, request)) return failure('unsupported convention');
       if (decision.remember) { const owner = this.owner(endpoint, revision, 'intent'); await this.catalog.prefer(owner, request.archetype, handler, { signal }); active(); await this.catalogChanged(owner, [request.archetype]); active(); }
       const sessionId = await this.targets.activate(handler, request, signal, active, endpoint.registration, revision); active();
+      if (sessionId === null) return failure('handler requires focus');
       const target = await this.waitFor(() => [...this.endpoints.values()].find(value => value.registration.sessionId === sessionId && value.registration.publisher === handler.publisher && value.registration.appId === handler.appId && value.registration.version === handler.version) ?? null, active, signal);
       const delivered = await this.deliver(endpoint, target, revision, request, convention, role.contracts !== undefined, active, signal);
       const handlerId = role.contracts ? namedIntentId(handler.publisher, handler.appId) : handler.appId;
-      return delivered ? Object.freeze({ ...base, convention, ok: true, handled: true, handler: handlerId, windowId: sessionId }) : failure('invoke failed');
+      return delivered ? Object.freeze({ ...base, convention, ok: true, handled: true, handler: handlerId, windowId: sessionId }) : failure(role.contracts ? 'handler delivery unavailable' : 'invoke failed');
     } catch { return failure('invoke failed'); }
   }
   private async operate(endpoint: Endpoint, revision: number, message: RoutingMessage, active: () => void, signal: AbortSignal): Promise<Readonly<Record<string, unknown>> | null> {

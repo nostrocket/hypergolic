@@ -9,6 +9,7 @@ import {parseConfigMessage} from '../../src/presentation/config-contract';
 import {createNotifyAdapter} from './notify-adapter';
 import {captureNotifyRejection, parseNotifyMessage} from '../../src/presentation/notify-contract';
 import { createRoutingAdapter } from './routing-adapter';
+import { createGuestRouting } from './intent-delivery';
 import { parseRoutingMessage } from '../../src/routing/routing-contract';
 import { createLinkAdapter } from './link-adapter';
 import { linkRequestId } from '../../src/links/link-contract';
@@ -254,36 +255,35 @@ function createGuestEndpoint(artifact: RuntimeArtifact, hooks: ShellAdapter) {
 }
 
 function mount(artifact: RuntimeArtifact): void {
-  let routingContext: ServiceRuntimeContext | null = null;
+  const live = () => !stopped && ready && frame.contentWindow === source && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) !== undefined;
+  const routing = createGuestRouting(artifact.domains, sessionId, live,
+    () => { void native.routing({type: 'routing.__register'}).catch(() => {}); }, () => fail('runtime-bootstrap'));
   const native = createNativeClient(hostWindow.HypergolicHost!, sessionId,
-    { requestTimeoutsMs: approvalTimeouts(artifact),
-      onRouting: message => {
-        if (stopped || !ready || frame.contentWindow !== source || !bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId)) return;
-        const domain = message.type.split('.')[0]!;
-        if (artifact.domains.includes(domain)) routingContext?.sendToEligibleNapplet(sessionId, message);
-      } });
+    {requestTimeoutsMs: approvalTimeouts(artifact), onRouting: routing.deliver});
   const shellTheme = createShellTheme(theme => bridge.publishTheme(theme));
   const hooks = makeHooks(native, () => {
     const entry = bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId);
     return () => !stopped && entry !== undefined && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) === entry;
-  }, artifact, shellTheme.theme, context => { routingContext = context; });
+  }, artifact, shellTheme.theme, routing.setContext);
   const { bridge, frame, source, media, environment, policy } = createGuestEndpoint(artifact, hooks);
   let ready = false;
   let frameLoaded = false;
   let operations = 0;
   let windowStart = performance.now();
-  const closeCheck = installCloseCheck(source, () => !stopped && ready && frame.contentWindow === source &&
-    bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) !== undefined,
+  const closeCheck = installCloseCheck(source, live,
     (id, state) => hostWindow.HypergolicHost?.postMessage(JSON.stringify({type: 'close-check.result', sessionId, id, state})));
   const discoveryToken = artifact.discoveryOpen ? crypto.randomUUID() : null;
-  const discoveryOpen = discoveryToken ? createDiscoveryOpenReceiver(source, native, discoveryToken, () =>
-    !stopped && ready && frame.contentWindow === source && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) !== undefined) : null;
+  const discoveryOpen = discoveryToken ? createDiscoveryOpenReceiver(source, native, discoveryToken, live) : null;
   const deadline = window.setTimeout(() => fail('runtime-timeout'), 10_000);
 
   const receive = (event: MessageEvent): void => {
     if (stopped || !event.isTrusted || event.source !== source || frame.contentWindow !== source) return;
     if (performance.now() - windowStart > 1000) { operations = 0; windowStart = performance.now(); }
-    if (++operations > 64) return;
+    if (++operations > 64) {
+      for (const port of event.ports) port.close();
+      return;
+    }
+    if (routing.connect(event)) return;
     if (event.data?.type === DISCOVERY_OPEN) {
       discoveryOpen?.(event.data);
       return;
@@ -299,7 +299,7 @@ function mount(artifact: RuntimeArtifact): void {
       window.clearTimeout(deadline);
       diagnostic({ type: 'ready', sessionId });
       if (artifact.domains.includes('notify')) void native.notify({type: 'notify.__register'}).catch(() => {});
-      if (artifact.domains.includes('intent') || artifact.domains.includes('inc')) void native.routing({type: 'routing.__register'}).catch(() => {});
+      routing.ready();
     }
   };
   const loaded = (): void => {
@@ -313,6 +313,7 @@ function mount(artifact: RuntimeArtifact): void {
   cleanup = (): void => {
     shellTheme.close();
     closeCheck();
+    routing.close();
     media.close();
     window.clearTimeout(deadline);
     window.removeEventListener('message', receive);

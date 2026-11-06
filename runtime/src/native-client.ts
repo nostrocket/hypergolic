@@ -19,7 +19,7 @@ const maxBytes = 2 * 1024 * 1024;
 const ordinaryTimeoutMs = 27_000;
 type StreamState={domain:'relay'|'outbox';subId:string; filters:readonly QueryFilter[]; timer:number; delivery:number; eose:boolean; controlRevision:number; deliver:(message:NappletMessage)=>void};
 type StreamEnvelope={sequence:number;delivery:number;response:unknown};
-type NativeClientOptions = Readonly<{ requestTimeoutsMs?: Readonly<Record<string, number>>; onRouting?: (message: NappletMessage) => void }>;
+type NativeClientOptions = Readonly<{ requestTimeoutsMs?: Readonly<Record<string, number>>; onRouting?: (message: NappletMessage, acknowledge: () => void) => void }>;
 function receiveStream(envelope:StreamEnvelope,streams:Map<number,StreamState>,stopStream:(counter:number,notify:boolean)=>void,acknowledge:(envelope:StreamEnvelope)=>void):void {
   const stream=streams.get(envelope.sequence);if(!stream)return;
   try {
@@ -118,9 +118,11 @@ function createRoutingReceiver(generation: string, deliver: NativeClientOptions[
     try {
       const raw = JSON.parse(envelope.response);
       const message = typeof raw?.type === 'string' && raw.type.startsWith('notify.') ? captureNotifyPush(raw) : typeof raw?.type === 'string' && raw.type.startsWith('config.') ? captureConfigPush(raw) : captureRoutingPush(raw);
-      routingDelivery = envelope.delivery as number;
-      deliver?.(message);
-      acknowledge(routingDelivery);
+      const sequence = envelope.delivery as number;
+      routingDelivery = sequence;
+      const confirm = () => acknowledge(sequence);
+      deliver?.(message, confirm);
+      if (message.type !== 'intent.deliver') confirm();
     } catch { /* An invalid event never enters the SDK. */ }
     return true;
   };

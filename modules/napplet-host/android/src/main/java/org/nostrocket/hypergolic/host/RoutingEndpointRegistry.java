@@ -60,3 +60,30 @@ public final class RoutingEndpointRegistry {
   public synchronized boolean available() { return foreground && available && revision < MAX; }
   private static boolean hex(String value) { return value != null && value.matches("[0-9a-f]{64}"); }
 }
+
+final class RoutingPushCredits {
+  private final java.util.Map<Long, Boolean> pending = new java.util.HashMap<>();
+  private final java.util.TreeMap<Long, String> parked = new java.util.TreeMap<>();
+  private long lastOrdinaryAck;
+  boolean reserve(long id, String envelope) {
+    if (pending.size() >= 4 || pending.containsKey(id)) return false;
+    pending.put(id, envelope != null);
+    if (envelope != null) parked.put(id, envelope);
+    return true;
+  }
+  boolean contains(long id) { return pending.containsKey(id); }
+  void release(long id) { pending.remove(id); }
+  void expire(long id) { if (Boolean.FALSE.equals(pending.get(id))) release(id); }
+  void pause() { pending.values().removeIf(retained -> !retained); }
+  java.util.Set<Long> parkedIds() { return parked.navigableKeySet(); }
+  String takeParked(long id) {
+    return !parked.isEmpty() && parked.firstKey() == id ? parked.remove(id) : null;
+  }
+  void clear() { pending.clear(); parked.clear(); }
+  void acknowledge(long id) {
+    Boolean retained = pending.get(id);
+    if (retained == null || parked.containsKey(id) || (!retained && id <= lastOrdinaryAck)) return;
+    release(id);
+    if (!retained) lastOrdinaryAck = id;
+  }
+}

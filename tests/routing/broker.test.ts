@@ -133,3 +133,21 @@ test('modern Intent advertisements cannot grant a recipient domain or allow a fo
   assert.equal(request.reply().result.ok, false);
   assert.deepEqual(h.sent, []);
 });
+
+test('native Intent pressure and unavailable unfocused handlers produce explicit unsuccessful results', async t => {
+  const h = await setup(t, await modernHandler(), ['intent']);
+  await h.register(h.target); h.denyPush(true);
+  const invoke = () => h.dispatch(h.source, {type: 'intent.invoke', id: 'capacity', request: {
+    archetype: 'napptest', action: 'open', convention: 'napplet:napptest/open', behavior: {focus: false},
+  }});
+  const full = invoke();
+  h.reviews.decide((await reviewReady(h.reviews)).id, {allow: true}); await full.promise;
+  assert.equal(full.reply().result.ok, false);
+  assert.equal(full.reply().result.error, 'handler delivery unavailable');
+  h.rejectActivation();
+  const cold = invoke();
+  h.reviews.decide((await reviewReady(h.reviews)).id, {allow: true}); await cold.promise;
+  assert.equal(cold.reply().result.ok, false);
+  assert.equal(cold.reply().result.error, 'handler requires focus');
+  assert.deepEqual(h.sent, []);
+});

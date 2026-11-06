@@ -64,6 +64,20 @@ public final class RoutingCoreTests {
     expect(!leases.isActive(open)); expect(!leases.finish(open));
     open = leases.admitPublishedOpen("catalog", 3, "{}"); expect(leases.take(open) != null);
     clock.addAndGet(120_000); expect(!leases.isActive(open));
+    RoutingPushCredits credits = new RoutingPushCredits();
+    expect(credits.reserve(1, "first")); expect(credits.reserve(2, "second"));
+    expect(credits.reserve(3, null)); expect(credits.reserve(4, "fourth"));
+    expect(!credits.reserve(5, "overflow"));
+    credits.acknowledge(2); credits.expire(1);
+    expect(!credits.reserve(5, "overflow")); expect(credits.takeParked(2) == null);
+    credits.pause(); expect(!credits.contains(3));
+    expect(credits.parkedIds().equals(java.util.Set.of(1L, 2L, 4L)));
+    expect("first".equals(credits.takeParked(1))); expect(credits.takeParked(1) == null);
+    expect("second".equals(credits.takeParked(2))); expect("fourth".equals(credits.takeParked(4)));
+    expect(credits.reserve(5, null)); credits.acknowledge(5);
+    credits.expire(1); expect(credits.contains(1)); credits.acknowledge(1);
+    expect(!credits.contains(1)); expect(credits.reserve(6, "next"));
+    credits.clear(); expect(!credits.contains(6)); expect(credits.parkedIds().isEmpty());
     System.out.println("Android routing core " + count + " assertions passed");
   }
 }

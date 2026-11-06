@@ -23,7 +23,7 @@ index 0ec36f0..a6bdd59 100644
  /**
   * Render the host-owned NIP-5D bootstrap that exposes available NAP domains
 diff --git a/dist/index.js b/dist/index.js
-index 523bcf1..36d79f9 100644
+index 523bcf1..3595c82 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -312,6 +312,7 @@ function adaptHooks(shellHooks, deps) {
@@ -163,7 +163,7 @@ index 523bcf1..36d79f9 100644
          for (const url of objectUrls) URL.revokeObjectURL(url);
          objectUrls.clear();
        }
-@@ -2265,25 +2307,73 @@ function nappletNamespacePrelude(domains) {
+@@ -2265,25 +2307,85 @@ function nappletNamespacePrelude(domains) {
          ...Object.keys(sanitizedBehavior).length === 0 ? {} : { behavior: sanitizedBehavior }
        };
      };
@@ -201,19 +201,27 @@ index 523bcf1..36d79f9 100644
 +      return { ...result, payload: Object.fromEntries(fields) };
 +    };
 +    const deliveryHandlers = new Set();
-+    const pendingDeliveries = [];
++    const pendingDeliveries = new Map();
++    const storeDelivery = pendingDeliveries.set.bind(pendingDeliveries);
++    const eachDelivery = pendingDeliveries.forEach.bind(pendingDeliveries);
++    const dropDelivery = pendingDeliveries.delete.bind(pendingDeliveries);
 +    const notify = (handler, delivery) => {
 +      try { handler(delivery); } catch { /* Other subscriptions still receive their delivery. */ }
      };
-+    listen((event) => {
-+      if (!event.isTrusted || !isParentMessage(event) || event.data?.type !== "intent.deliver") return;
-+      const delivery = Object.freeze(event.data.delivery);
++    const channel = new MessageChannel();
++    const consume = channel.port1.postMessage.bind(channel.port1);
++    const readData = Function.call.bind(Object.getOwnPropertyDescriptor(MessageEvent.prototype, "data").get);
++    channel.port1.onmessage = (event) => {
++      const { receipt, message } = readData(event);
++      const delivery = Object.freeze(message.delivery);
 +      if (deliveryHandlers.size === 0) {
-+        if (pendingDeliveries.length < 16) pendingDeliveries.push(delivery);
++        storeDelivery(receipt, delivery);
 +        return;
 +      }
 +      for (const handler of [...deliveryHandlers]) notify(handler, delivery);
-+    });
++      consume(receipt);
++    };
++    target.parent.postMessage({ type: "hypergolic.intent.delivery-port" }, "*", [channel.port2]);
 +    const invokeRequest = (value, modern) => request(
 +      { type: "intent.invoke", request: normalizeRequest(value) },
 +      "intent.invoke.result",
@@ -247,13 +255,17 @@ index 523bcf1..36d79f9 100644
 +        if (typeof callback !== "function" || deliveryHandlers.size >= 32) throw new TypeError("Invalid intent subscription");
 +        const handler = (delivery) => callback(delivery);
 +        deliveryHandlers.add(handler);
-+        for (const delivery of pendingDeliveries.splice(0)) notify(handler, delivery);
++        eachDelivery((delivery, receipt) => {
++          dropDelivery(receipt);
++          notify(handler, delivery);
++          consume(receipt);
++        });
 +        return subscriptionHandle(() => deliveryHandlers.delete(handler));
 +      },
        available: (archetype) => request(
          { type: "intent.available", archetype },
          "intent.available.result",
-@@ -2367,7 +2457,10 @@ function nappletNamespacePrelude(domains) {
+@@ -2367,7 +2469,10 @@ function nappletNamespacePrelude(domains) {
        open: (url, options) => request(
          { type: "link.open", url, ...options ? { options } : {} },
          "link.open.result",

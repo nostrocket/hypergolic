@@ -67,6 +67,20 @@ private final class TestClock: @unchecked Sendable {
     expect(!leases.isActive(open)); expect(!leases.finish(open))
     let next = leases.admit("catalog", sequence: 3, snapshot: "{}", publishedOpen: true)!
     expect(leases.take(next) != nil); clock.advance(120); expect(!leases.isActive(next))
+    var credits = RoutingPushCredits()
+    expect(credits.reserve(1, envelope: "first")); expect(credits.reserve(2, envelope: "second"))
+    expect(credits.reserve(3, envelope: nil)); expect(credits.reserve(4, envelope: "fourth"))
+    expect(!credits.reserve(5, envelope: "overflow"))
+    credits.acknowledge(2); credits.expire(1)
+    expect(!credits.reserve(5, envelope: "overflow")); expect(credits.takeParked(2) == nil)
+    credits.pause(); expect(!credits.contains(3))
+    expect(credits.parkedIds() == [1, 2, 4])
+    expect(credits.takeParked(1) == "first"); expect(credits.takeParked(1) == nil)
+    expect(credits.takeParked(2) == "second"); expect(credits.takeParked(4) == "fourth")
+    expect(credits.reserve(5, envelope: nil)); credits.acknowledge(5)
+    credits.expire(1); expect(credits.contains(1)); credits.acknowledge(1)
+    expect(!credits.contains(1)); expect(credits.reserve(6, envelope: "next"))
+    credits.clear(); expect(!credits.contains(6)); expect(credits.parkedIds().isEmpty)
     print("iOS routing core \(count) assertions passed")
   }
 }

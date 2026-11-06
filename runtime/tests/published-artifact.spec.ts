@@ -39,11 +39,17 @@ async function openPublished(page: Page, mode: Mode = 'normal', extraQuery = '')
   await page.addInitScript(({ generation, htmlBase64, htmlLength, identity, badHashVersion, mode }) => {
     if (window !== window.top) return;
     let delivery = 0;
+    const held = new Set<number>();
     const state = { requests: [] as unknown[], diagnostics: [] as unknown[],
       pushIntent(message: unknown, target = generation) {
+        const sequence = ++delivery;
         for (const listener of listenerSet) listener({data: JSON.stringify({
-          type: 'routing.event', sessionId: target, delivery: ++delivery, response: JSON.stringify(message),
+          type: 'routing.event', sessionId: target, delivery: sequence, response: JSON.stringify(message),
         })});
+      },
+      offerIntent(message: unknown) {
+        if (held.size === 4) return false;
+        held.add(delivery + 1); state.pushIntent(message); return true;
       },
       reply(sequence: number, response: unknown) {
         for (const listener of listenerSet) listener({data: JSON.stringify({
@@ -79,6 +85,7 @@ async function openPublished(page: Page, mode: Mode = 'normal', extraQuery = '')
       postMessage(raw: string) {
         const request = JSON.parse(raw);
         state.requests.push(request);
+        if (request.type === 'routing-ack') held.delete(request.delivery);
         if (request.type === 'artifact.read') { emit(request.sequence); return; }
         if (request.type === 'ready' || request.type === 'error') state.diagnostics.push(request);
         if (request.type === 'capability') {
@@ -363,38 +370,46 @@ test('verified Intent-only guest invokes modern URIs through the existing native
   expect(requests).toEqual([normalized, normalized]);
 });
 
-test('verified Intent-only guest buffers trusted native delivery and ignores forged or mismatched messages', async ({page}) => {
+test('verified Intent-only guest holds four credits until consumption and cannot forge a receipt', async ({page}) => {
   await openPublished(page, 'intent-only');
   const output = page.frameLocator('#napplet').locator('#deliveries');
   await expect(output).toBeAttached();
   const guest = page.frames().find(frame => frame.parentFrame() === page.mainFrame())!;
-  const valid = {type: 'intent.deliver', delivery: {
-    sender: 'native-attested-caller', archetype: 'napptest', action: 'open',
-    convention: 'napplet:napptest/open', payload: {msg: 'hello+world'},
-  }};
+  const nativeAcks = () => page.evaluate(() => (window as any).__publishedTest.requests.filter((value: any) => value.type === 'routing-ack').length);
+  await expect.poll(() => page.evaluate(() => (window as any).__publishedTest.requests.some((value: any) =>
+    value.type === 'capability' && JSON.parse(value.message).message?.type === 'routing.__register'))).toBe(true);
+  const valid = {type: 'intent.deliver', delivery: {sender: 'native-attested-caller', archetype: 'napptest', action: 'open',
+    convention: 'napplet:napptest/open', payload: {msg: 'hello+world'}}};
   await guest.evaluate(message => {
-    const forged = {...message, delivery: {...message.delivery, sender: 'forged'}};
-    window.dispatchEvent(new MessageEvent('message', {source: parent, data: forged}));
-    window.postMessage(forged, '*');
-    parent.postMessage(forged, '*');
+    window.dispatchEvent(new MessageEvent('message', {source: parent, data: message}));
+    window.postMessage(message, '*');
+    parent.postMessage(message, '*');
+    const forged = new MessageChannel();
+    parent.postMessage({type: 'hypergolic.intent.delivery-port'}, '*', [forged.port2]);
+    forged.port1.postMessage(1);
   }, valid);
-  await page.evaluate(message => {
-    const push = (window as any).__publishedTest.pushIntent;
-    push(message, 'wrong-generation');
-    push({...message, delivery: {...message.delivery, convention: 'napplet:wrong/open'}});
-    push(message);
+  const admitted = await page.evaluate(message => {
+    const host = (window as any).__publishedTest;
+    host.pushIntent(message, 'wrong-generation');
+    host.pushIntent({...message, delivery: {...message.delivery, convention: 'napplet:wrong/open'}});
+    return [1, 2, 3, 4, 5].map(index => host.offerIntent({...message, delivery: {...message.delivery, payload: {index}}}));
   }, valid);
-  await expect.poll(() => page.evaluate(() => (window as any).__publishedTest.requests
-    .filter((value: any) => value.type === 'routing-ack').length)).toBe(1);
+  expect(admitted).toEqual([true, true, true, true, false]);
+  expect(await nativeAcks()).toBe(0);
   await guest.evaluate(() => {
-    const intent = (window as any).napplet.intent;
-    const subscription = intent.onDelivery((delivery: unknown) => {document.getElementById('deliveries')!.textContent += JSON.stringify(delivery);});
-    subscription.close();
+    const subscription = (window as any).napplet.intent.onDelivery((delivery: {payload: {index: number}}) => {
+      document.getElementById('deliveries')!.textContent += String(delivery.payload.index);
+      if (delivery.payload.index === 2) throw Error('Guest callback failed after invocation');
+    });
     subscription.close();
   });
-  await expect(output).toHaveText(JSON.stringify(valid.delivery));
-  await page.evaluate(message => (window as any).__publishedTest.pushIntent(message), valid);
-  await expect.poll(() => page.evaluate(() => (window as any).__publishedTest.requests
-    .filter((value: any) => value.type === 'routing-ack').length)).toBe(2);
-  await expect(output).toHaveText(JSON.stringify(valid.delivery));
+  await expect(output).toHaveText('1234');
+  await expect.poll(nativeAcks).toBe(4);
+  expect(await page.evaluate(message => (window as any).__publishedTest.offerIntent(message), valid)).toBe(true);
+  expect(await nativeAcks()).toBe(4);
+  await guest.evaluate(() => (window as any).napplet.intent.onDelivery((delivery: {payload: {msg: string}}) => {
+    document.getElementById('deliveries')!.textContent += delivery.payload.msg;
+  }));
+  await expect(output).toHaveText('1234hello+world');
+  await expect.poll(nativeAcks).toBe(5);
 });
