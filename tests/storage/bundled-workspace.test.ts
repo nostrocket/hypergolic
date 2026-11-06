@@ -60,12 +60,14 @@ test('the exact prior Support descriptor survives upgrade without reseeding or c
   assert.throws(() => resolveBundledSession(other), /Unavailable saved napplet/);
 });
 
-test('the exact prior bundled Discover card restores under the current packaged authority', async t => {
+for (const version of [
+  '6eb956ead5bc710d70c3511715bf1dab281314d4979ff4bd99d9d1785176655c',
+  'ec8f1cb8dddca04865f59105f86e6b9741e4e2d6c1f3cab586bcaf48645fae0a',
+]) test(`the bundled Discover card at ${version.slice(0, 8)} restores under the current packaged authority`, async t => {
   const {database} = await setup(t);
   const instance = '58274370-ec8f-4058-a4cc-b63e7e75ca4b';
   const previous: NappletDescriptor = {id: 'napplet-discovery-' + instance, title: 'Discover',
-    appId: 'napplet-discovery', publisher: 'bundled-unsigned-fixture', source: 'bundled',
-    version: '6eb956ead5bc710d70c3511715bf1dab281314d4979ff4bd99d9d1785176655c'};
+    appId: 'napplet-discovery', publisher: 'bundled-unsigned-fixture', source: 'bundled', version};
   const current = bundledDescriptor('napplet-discovery', 1, instance);
   assert.notEqual(current.version, previous.version);
   const original = openNapplet(initialTestWorkspace(), previous);

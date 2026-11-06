@@ -6,11 +6,14 @@ const variants: readonly BundledVariant[] = ['napplet-discovery', 'close-lab', '
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 // Retained bundled descriptors can load reviewed packaged replacements with the same authority.
 const previousSupportVersion = 'd580bdedb19857d66a4b5f2928016c3f756960f42e56f7d98f8fb98df90f1653';
-const previousDiscoveryVersion = '6eb956ead5bc710d70c3511715bf1dab281314d4979ff4bd99d9d1785176655c';
+const previousDiscoveryVersions = [
+  '6eb956ead5bc710d70c3511715bf1dab281314d4979ff4bd99d9d1785176655c',
+  'ec8f1cb8dddca04865f59105f86e6b9741e4e2d6c1f3cab586bcaf48645fae0a',
+] as const;
 
 function compatiblePackagedVersion(variant: BundledVariant, version: string): boolean {
   if (variant === 'nap-support') return version === previousSupportVersion;
-  return variant === 'napplet-discovery' && version === previousDiscoveryVersion &&
+  return variant === 'napplet-discovery' && previousDiscoveryVersions.some(previous => previous === version) &&
     BUNDLED_FIXTURES['napplet-discovery'].domains.join(',') === 'relay,resource,theme';
 }
 export function bundledDescriptor(variant: BundledVariant, number: number, instance = String(number)): NappletDescriptor {
