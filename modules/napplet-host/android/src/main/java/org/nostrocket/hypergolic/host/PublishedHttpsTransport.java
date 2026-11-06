@@ -38,6 +38,12 @@ import javax.net.ssl.SSLSocketFactory;
 /** Bounded HTTPS-only retrieval for published napplet artifacts. */
 public final class PublishedHttpsTransport {
   public static final int MAX_BODY_BYTES = 2 * 1024 * 1024;
+  static final int MAX_ARTIFACT_BYTES = 8 * 1024 * 1024;
+  enum ReadProfile {
+    AVATAR(MAX_BODY_BYTES, 0), RESOURCE(10 * 1024 * 1024, 2), ARTIFACT(MAX_ARTIFACT_BYTES, 3);
+    final int maxBytes, redirects;
+    ReadProfile(int maxBytes, int redirects) { this.maxBytes = maxBytes; this.redirects = redirects; }
+  }
   public static final int MAX_RESPONSE_HEADER_BYTES = 32 * 1024;
   public static final int CONNECT_TIMEOUT_MS = 8_000;
   public static final int READ_TIMEOUT_MS = 12_000;
@@ -72,29 +78,46 @@ public final class PublishedHttpsTransport {
   static byte[] getWithTransport(String rawUrl, AddressPolicy policy, Cancellation cancellation,
       HostResolver resolver, ThreadPoolExecutor executor, SSLSocketFactory socketFactory,
       HostnameVerifier hostnameVerifier) throws IOException {
-    return getBoundedWithTransport(rawUrl, policy, cancellation, resolver, executor, socketFactory, hostnameVerifier, MAX_BODY_BYTES, TOTAL_TIMEOUT_MS);
+    return getBoundedWithTransport(rawUrl, policy, cancellation, resolver, executor, socketFactory, hostnameVerifier, ReadProfile.AVATAR, TOTAL_TIMEOUT_MS);
   }
 
-  /** Separate app-only resource profile; the published-loader entry point remains bounded at 2 MiB. */
+  /** Published HTML uses its own immutable content and connection budget. */
+  static byte[] getArtifact(String rawUrl, AddressPolicy policy, Cancellation cancellation) throws IOException {
+    return getArtifactWithTransport(rawUrl, policy, cancellation, InetAddress::getAllByName, DNS,
+        defaultSocketFactory(), HttpsURLConnection.getDefaultHostnameVerifier());
+  }
+
+  static byte[] getArtifactWithTransport(String rawUrl, AddressPolicy policy, Cancellation cancellation,
+      HostResolver resolver, ThreadPoolExecutor executor, SSLSocketFactory socketFactory,
+      HostnameVerifier hostnameVerifier) throws IOException {
+    URL initial = validateRequest(rawUrl, policy);
+    if (initial.getQuery() != null || !initial.getPath().matches("/[0-9a-f]{64}")) {
+      throw new IOException("Published artifact requires an exact SHA-256 path");
+    }
+    return getBoundedWithTransport(rawUrl, policy, cancellation, resolver, executor, socketFactory, hostnameVerifier,
+        ReadProfile.ARTIFACT, 15_000);
+  }
+
+  /** Separate app-only resource profile. */
   static byte[] getResource(String rawUrl, AddressPolicy policy, Cancellation cancellation) throws IOException {
     return getBoundedWithTransport(rawUrl, policy, cancellation, InetAddress::getAllByName, DNS,
-        defaultSocketFactory(), HttpsURLConnection.getDefaultHostnameVerifier(), 10 * 1024 * 1024, 15_000);
+        defaultSocketFactory(), HttpsURLConnection.getDefaultHostnameVerifier(), ReadProfile.RESOURCE, 15_000);
   }
   static byte[] getResourceWithTransport(String rawUrl, AddressPolicy policy, Cancellation cancellation,
       HostResolver resolver, ThreadPoolExecutor executor, SSLSocketFactory socketFactory,
       HostnameVerifier hostnameVerifier) throws IOException {
-    return getBoundedWithTransport(rawUrl, policy, cancellation, resolver, executor, socketFactory, hostnameVerifier, 10 * 1024 * 1024, 15_000);
+    return getBoundedWithTransport(rawUrl, policy, cancellation, resolver, executor, socketFactory, hostnameVerifier, ReadProfile.RESOURCE, 15_000);
   }
   private static byte[] getBoundedWithTransport(String rawUrl, AddressPolicy policy, Cancellation cancellation,
       HostResolver resolver, ThreadPoolExecutor executor, SSLSocketFactory socketFactory,
-      HostnameVerifier hostnameVerifier, int maximumBytes, int timeoutMs) throws IOException {
+      HostnameVerifier hostnameVerifier, ReadProfile profile, int timeoutMs) throws IOException {
     if (cancellationRequested(cancellation)) throw new IOException("Request cancelled");
     Deadline deadline = Deadline.afterMillis(timeoutMs);
     AbortMonitor abort = new AbortMonitor(cancellation, deadline);
     String current = rawUrl;
     java.util.Set<String> visited = new java.util.HashSet<>();
     try {
-      for (int hop = 0; hop <= 2; hop++) {
+      for (int hop = 0; hop <= profile.redirects; hop++) {
         abort.check();
         URL url = validateRequest(current, policy);
         if (!visited.add(url.toExternalForm())) throw new PublishedHttpsResponseReader.ResourceFailure("blocked-by-policy", "Resource redirect loop");
@@ -106,11 +129,11 @@ public final class PublishedHttpsTransport {
         try (SSLSocket closeable = socket) {
           closeable.setSoTimeout(deadline.timeoutMs(READ_TIMEOUT_MS));
           sendRequest(closeable.getOutputStream(), uri, url);
-          byte[] body = PublishedHttpsResponseReader.readBounded(new DeadlineInputStream(closeable.getInputStream(), closeable, deadline), cancellation, maximumBytes);
+          byte[] body = PublishedHttpsResponseReader.readGet(new DeadlineInputStream(closeable.getInputStream(), closeable, deadline), cancellation, profile);
           abort.check();
           return body;
         } catch (PublishedHttpsResponseReader.ResourceRedirect redirect) {
-          if (maximumBytes <= MAX_BODY_BYTES || hop == 2) throw new PublishedHttpsResponseReader.ResourceFailure("blocked-by-policy", "Resource redirect limit");
+          if (hop == profile.redirects) throw new PublishedHttpsResponseReader.ResourceFailure("blocked-by-policy", "Resource redirect limit");
           try { current = uri.resolve(redirect.location).toString(); validateRequest(current, policy); }
           catch (IOException | IllegalArgumentException invalid) {
             throw new PublishedHttpsResponseReader.ResourceFailure("blocked-by-policy", "Invalid resource redirect target");

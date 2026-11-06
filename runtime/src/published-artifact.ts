@@ -1,6 +1,5 @@
+import { MAX_HTML_BYTES } from '../../src/napplets/artifact-limits';
 import type { NativeHost } from './native-client';
-
-const MAX_HTML_BYTES = 2 * 1024 * 1024;
 const CHUNK_BYTES = 48 * 1024;
 const HEX64 = /^[0-9a-f]{64}$/;
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
@@ -36,9 +35,8 @@ function metadata(value: Record<string, unknown>): PublishedMetadata {
       domains.some((domain, index) => index > 0 && domains[index - 1] >= domain)) throw new Error('Invalid artifact metadata');
   return Object.freeze({ publisher, appId, eventId, version, htmlHash, domains: Object.freeze([...domains]), ...(publishedOpen === true ? { publishedOpen } : {}) });
 }
-async function sha256(bytes: Uint8Array): Promise<string> {
-  const copy = new Uint8Array(bytes);
-  const hash = await crypto.subtle.digest('SHA-256', copy);
+async function sha256(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
+  const hash = await crypto.subtle.digest('SHA-256', bytes);
   return Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
@@ -79,7 +77,7 @@ export async function readPublishedArtifact(native: NativeHost, generation: stri
   const started = performance.now();
   let total = 0;
   let claims: PublishedMetadata | null = null;
-  const chunks: Uint8Array[] = [];
+  let bytes: Uint8Array<ArrayBuffer> | undefined;
   try {
     for (let sequence = 0; sequence < Math.ceil(MAX_HTML_BYTES / CHUNK_BYTES); sequence++) {
       const remainingTime = 15_000 - (performance.now() - started);
@@ -91,26 +89,27 @@ export async function readPublishedArtifact(native: NativeHost, generation: stri
       const nextClaims = metadata(value);
       if (claims && JSON.stringify(claims) !== JSON.stringify(nextClaims)) throw new Error('Artifact claims changed');
       claims = nextClaims;
+      if (bytes && value.totalBytes !== bytes.length) throw new Error('Artifact length changed');
       const chunk = decodeBase64(value.base64);
-      if (value.byteLength !== chunk.length || total + chunk.length > value.totalBytes) throw new Error('Artifact length mismatch');
+      bytes ??= new Uint8Array(value.totalBytes);
+      if (value.byteLength !== chunk.length || chunk.length !== Math.min(CHUNK_BYTES, bytes.length - total)) {
+        chunk.fill(0);
+        throw new Error('Artifact length mismatch');
+      }
+      bytes.set(chunk, total);
       total += chunk.length;
-      chunks.push(chunk);
-      if (value.done !== (total === value.totalBytes)) throw new Error('Artifact completion mismatch');
+      chunk.fill(0);
+      if (value.done !== (total === bytes.length)) throw new Error('Artifact completion mismatch');
       if (value.done) {
-        const bytes = new Uint8Array(total);
-        let offset = 0;
-        for (const part of chunks) { bytes.set(part, offset); offset += part.length; part.fill(0); }
-        try {
-          const htmlHash = await sha256(bytes);
-          const version = await sha256(new TextEncoder().encode(`${htmlHash} /index.html\n`));
-          if (htmlHash !== claims.htmlHash || version !== claims.version) throw new Error('Artifact hash mismatch');
-          const html = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-          return Object.freeze({ metadata: claims, html });
-        } finally { bytes.fill(0); }
+        const htmlHash = await sha256(bytes);
+        const version = await sha256(new TextEncoder().encode(`${htmlHash} /index.html\n`));
+        if (htmlHash !== claims.htmlHash || version !== claims.version) throw new Error('Artifact hash mismatch');
+        const html = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+        return Object.freeze({ metadata: claims, html });
       }
     }
     throw new Error('Artifact exceeded chunk limit');
-  } finally { for (const part of chunks) part.fill(0); }
+  } finally { bytes?.fill(0); }
 }
 
 /** CSP must be the first element in the head, before any publisher markup runs. */

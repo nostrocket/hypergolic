@@ -52,6 +52,27 @@ import Foundation
       try noHeaderEnd.append(Data(repeating: 0x61, count: 5))
       throw NSError(domain: "unbounded header accepted", code: 1)
     } catch is PublishedHTTPResponse.Failure { checks += 1 }
+    let artifactCap = PublishedHTTPResponse.maximumArtifactBodyBytes
+    for count in [artifactCap - 1, artifactCap] {
+      let wire = data("HTTP/1.1 200 OK\r\nContent-Length: \(count)\r\n\r\n") + Data(repeating: 0x61, count: count)
+      let artifact = try PublishedHTTPResponse.parse(wire, maximumBodyBytes: artifactCap, artifactProfile: true)
+      guard artifact.body.count == count else { throw NSError(domain: "artifact byte limit", code: 1) }
+      checks += 1
+    }
+    do {
+      _ = try PublishedHTTPResponse.parse(data("HTTP/1.1 200 OK\r\nContent-Length: \(artifactCap + 1)\r\n\r\n"),
+          maximumBodyBytes: artifactCap, artifactProfile: true)
+      throw NSError(domain: "oversized artifact accepted", code: 1)
+    } catch is PublishedHTTPResponse.Failure { checks += 1 }
+    do {
+      let redirect = data("HTTP/1.1 302 Found\r\nLocation: https://cdn.example.net/asset.html\r\nContent-Length: 0\r\n\r\n")
+      let reader = try PublishedHTTPResponseAccumulator(maximumBodyBytes: artifactCap, artifactProfile: true)
+      try reader.append(redirect)
+      throw NSError(domain: "artifact redirect not classified", code: 1)
+    } catch PublishedHTTPResponse.Failure.resourceRedirect(let location) {
+      guard location == "https://cdn.example.net/asset.html" else { throw NSError(domain: "incorrect redirect URL", code: 1) }
+      checks += 1
+    }
     var retry = VettedAddressCursor(["first", "second"])
     guard retry.next() == "first", retry.next() == "second", retry.next() == nil else {
       throw NSError(domain: "vetted address exhaustion", code: 1)

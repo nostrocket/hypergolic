@@ -42,8 +42,9 @@ enum PublishedPinnedHTTPS {
     let target: String
     let resourceProfile: Bool
     let recoveryProfile: Bool
+    let artifactProfile: Bool
 
-    init(_ input: String, resourceProfile: Bool = false, recoveryProfile: Bool = false) throws {
+    init(_ input: String, resourceProfile: Bool = false, recoveryProfile: Bool = false, artifactProfile: Bool = false) throws {
       guard input.utf8.count <= 8192, !input.contains("\\"),
             let components = URLComponents(string: input), components.scheme == "https",
             components.user == nil, components.password == nil, components.fragment == nil,
@@ -70,11 +71,11 @@ enum PublishedPinnedHTTPS {
       self.host = host
       self.port = UInt16(components.port ?? 443)
       self.target = target
-      guard !(resourceProfile && recoveryProfile) else { throw Failure.invalidURL }
+      guard [resourceProfile, recoveryProfile, artifactProfile].filter({ $0 }).count <= 1 else { throw Failure.invalidURL }
       if recoveryProfile {
         guard components.query == nil, target.range(of: "^/[0-9a-f]{64}(\\.[A-Za-z0-9]{1,16})?$", options: .regularExpression) != nil else { throw Failure.invalidURL }
       }
-      self.resourceProfile = resourceProfile; self.recoveryProfile = recoveryProfile
+      self.resourceProfile = resourceProfile; self.recoveryProfile = recoveryProfile; self.artifactProfile = artifactProfile
     }
 
     var wire: Data {
@@ -137,11 +138,22 @@ enum PublishedPinnedHTTPS {
     return operation
   }
 
+  /// The original URL names a signed hash. Redirects have a shared deadline and independently pinned hops.
+  static func fetchArtifact(_ input: String,
+    completion: @escaping @Sendable (Result<PublishedHTTPResponse, Error>) -> Void) throws -> Operation {
+    let request = try Request(input, artifactProfile: true)
+    guard request.target.range(of: "^/[0-9a-f]{64}$", options: .regularExpression) != nil else { throw Failure.invalidURL }
+    let operation = try Operation(request: request, maximumBodyBytes: PublishedHTTPResponse.maximumArtifactBodyBytes,
+                                  timeout: 15, completion: completion)
+    operation.start()
+    return operation
+  }
+
   /// Separate app-only fixed-hash recovery parser; published/resource policies are unchanged.
   static func fetchRecovery(_ input: String, active: @escaping @Sendable () -> Bool,
     completion: @escaping @Sendable (Result<PublishedHTTPResponse, Error>) -> Void) throws -> Operation {
     let request = try Request(input, recoveryProfile: true)
-    let operation = try Operation(request: request, maximumBodyBytes: NativeUploadAuthority.maxBytes, timeout: 60, active: active, completion: completion)
+    let operation = try Operation(request: request, maximumBodyBytes: PublishedHTTPResponse.maximumResourceBodyBytes, timeout: 60, active: active, completion: completion)
     operation.start(); return operation
   }
 
@@ -158,11 +170,11 @@ enum PublishedPinnedHTTPS {
 #if HYPERGOLIC_NETWORK_PROOF
   /// Host-only proof seam. Production builds never compile address or trust overrides.
   static func fetchForProof(_ input: String, maximumBodyBytes: Int, timeout: TimeInterval = 5,
-                            addresses: [Address], anchorDER: Data?, resolverForProof: (@Sendable (String) throws -> [Address])? = nil, recoveryProfile: Bool = false, active: @escaping @Sendable () -> Bool = {true},
+                            addresses: [Address], anchorDER: Data?, resolverForProof: (@Sendable (String) throws -> [Address])? = nil, recoveryProfile: Bool = false, artifactProfile: Bool = false, active: @escaping @Sendable () -> Bool = {true},
                             completion: @escaping @Sendable (Result<PublishedHTTPResponse, Error>) -> Void) throws -> Operation {
-    let request = try Request(input, recoveryProfile: recoveryProfile)
-    guard (1...(recoveryProfile ? PublishedHTTPResponse.maximumResourceBodyBytes : PublishedHTTPResponse.maximumBodyBytes)).contains(maximumBodyBytes),
-          timeout > 0, timeout <= 60, !addresses.isEmpty else { throw Failure.invalidURL }
+    let request = try Request(input, recoveryProfile: recoveryProfile, artifactProfile: artifactProfile)
+    guard PublishedHTTPResponse.validLimit(maximumBodyBytes, resource: false, upload: false,
+          recovery: recoveryProfile, artifact: artifactProfile), timeout > 0, timeout <= 60, !addresses.isEmpty else { throw Failure.invalidURL }
     let operation = try Operation(request: request, maximumBodyBytes: maximumBodyBytes,
                                   timeout: timeout, completion: completion)
     operation.setActiveForProof(active)
@@ -201,7 +213,7 @@ enum PublishedPinnedHTTPS {
       self.visited.insert(request.source)
       self.timeout = timeout
       self.completion = completion
-      self.accumulator = try PublishedHTTPResponseAccumulator(maximumBodyBytes: maximumBodyBytes, resourceProfile: request.resourceProfile, recoveryProfile: request.recoveryProfile)
+      self.accumulator = try PublishedHTTPResponseAccumulator(maximumBodyBytes: maximumBodyBytes, resourceProfile: request.resourceProfile, recoveryProfile: request.recoveryProfile, artifactProfile: request.artifactProfile)
     }
 
 #if HYPERGOLIC_NETWORK_PROOF
@@ -336,18 +348,19 @@ enum PublishedPinnedHTTPS {
     }
 
     private func followRedirect(_ location: String) {
-      guard active(), request.resourceProfile || request.recoveryProfile, redirects < 2,
+      guard active(), request.resourceProfile || request.recoveryProfile || request.artifactProfile,
+        redirects < (request.artifactProfile ? 3 : 2),
         let base = URL(string: request.source), let url = URL(string: location, relativeTo: base)?.absoluteURL,
         !visited.contains(url.absoluteString) else { finish(.failure(PublishedHTTPResponse.Failure.resourcePolicy)); return }
       do {
-        let next = try Request(url.absoluteString, resourceProfile: request.resourceProfile, recoveryProfile: request.recoveryProfile)
+        let next = try Request(url.absoluteString, resourceProfile: request.resourceProfile, recoveryProfile: request.recoveryProfile, artifactProfile: request.artifactProfile)
         if request.recoveryProfile {
           let hash = originalRequest.target.dropFirst().prefix(64)
           guard next.target.dropFirst().prefix(64) == hash else { throw Failure.invalidURL }
         }
         connection?.stateUpdateHandler = nil;connection?.cancel();connection = nil
         redirects += 1;visited.insert(next.source);request = next
-        accumulator = try PublishedHTTPResponseAccumulator(maximumBodyBytes:maximumBodyBytes,resourceProfile:next.resourceProfile,recoveryProfile:next.recoveryProfile)
+        accumulator = try PublishedHTTPResponseAccumulator(maximumBodyBytes:maximumBodyBytes,resourceProfile:next.resourceProfile,recoveryProfile:next.recoveryProfile,artifactProfile:next.artifactProfile)
         addresses = nil
         resolveCurrent()
       } catch { finish(.failure(error)) }
@@ -356,6 +369,7 @@ enum PublishedPinnedHTTPS {
     private func finish(_ result: Result<PublishedHTTPResponse, Error>) {
       guard !ended else { return }
       ended = true; recoveryTimer?.cancel(); recoveryTimer = nil
+      accumulator.discard()
       connection?.stateUpdateHandler = nil
       connection?.cancel()
       connection = nil

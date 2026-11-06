@@ -43,19 +43,23 @@ final class PublishedHttpsResponseReader {
     UploadStatus(int status) { super("Upload response status " + status); this.status = status; }
   }
   static UploadResponse readUpload(InputStream input, PublishedHttpsTransport.Cancellation cancellation) throws IOException {
-    return readProfile(input, cancellation, 32 * 1024, true, false);
+    return readProfile(input, cancellation, 32 * 1024, false, true, false);
   }
   static byte[] read(InputStream input, PublishedHttpsTransport.Cancellation cancellation) throws IOException {
-    return readBounded(input, cancellation, PublishedHttpsTransport.MAX_BODY_BYTES);
+    return readGet(input, cancellation, PublishedHttpsTransport.ReadProfile.AVATAR);
   }
   static byte[] readBounded(InputStream input, PublishedHttpsTransport.Cancellation cancellation, int maximumBytes) throws IOException {
-    return readProfile(input, cancellation, maximumBytes, false, false).body;
+    return readProfile(input, cancellation, maximumBytes, true, false, false).body;
+  }
+  static byte[] readGet(InputStream input, PublishedHttpsTransport.Cancellation cancellation,
+      PublishedHttpsTransport.ReadProfile profile) throws IOException {
+    return readProfile(input, cancellation, profile.maxBytes, profile.redirects > 0, false, false).body;
   }
   /** Purpose-specific fixed-hash reconciliation; only complete 200/404 responses can resolve uncertainty. */
   static UploadResponse readRecovery(InputStream input, PublishedHttpsTransport.Cancellation cancellation, int maximumBytes) throws IOException {
-    return readProfile(input, cancellation, maximumBytes, false, true);
+    return readProfile(input, cancellation, maximumBytes, false, false, true);
   }
-  private static UploadResponse readProfile(InputStream input, PublishedHttpsTransport.Cancellation cancellation, int maximumBytes, boolean uploadProfile, boolean recoveryProfile) throws IOException {
+  private static UploadResponse readProfile(InputStream input, PublishedHttpsTransport.Cancellation cancellation, int maximumBytes, boolean redirectsAllowed, boolean uploadProfile, boolean recoveryProfile) throws IOException {
     if (maximumBytes < 1 || maximumBytes > 10 * 1024 * 1024) throw new ResourceFailure("too-large", "Invalid HTTPS body limit");
     HeaderBlock block = readHeaders(input, PublishedHttpsTransport.MAX_RESPONSE_HEADER_BYTES);
     String[] lines = block.text.split("\r\n", -1);
@@ -67,7 +71,7 @@ final class PublishedHttpsResponseReader {
       if ((c < 0x20 && c != '\t') || c == 0x7f) throw new IOException("Malformed HTTPS status line");
     }
     int status = Integer.parseInt(lines[0].substring(9, 12));
-    if (!uploadProfile && !recoveryProfile && maximumBytes > PublishedHttpsTransport.MAX_BODY_BYTES &&
+    if (redirectsAllowed &&
         (status == 301 || status == 302 || status == 303 || status == 307 || status == 308)) {
       String location = uniqueHeader(parseHeaders(lines), "location");
       if (location == null || location.isEmpty() || location.length() > 8192) throw new ResourceFailure("blocked-by-policy", "Invalid resource redirect");
@@ -81,7 +85,7 @@ final class PublishedHttpsResponseReader {
     if (status >= 300 && status < 400) throw new ResourceFailure("blocked-by-policy", "HTTPS redirects are not followed");
     if (!uploadProfile && !recoveryProfile && status != 200) throw new ResourceFailure(status == 404 ? "not-found" : status == 401 || status == 403 ? "blocked-by-policy" : "network-error", "HTTPS response status " + status);
     Map<String, List<String>> headers = parseHeaders(lines);
-    boolean resourceProfile = uploadProfile || recoveryProfile || maximumBytes > PublishedHttpsTransport.MAX_BODY_BYTES;
+    boolean resourceProfile = uploadProfile || recoveryProfile || redirectsAllowed;
     if ((uploadProfile || recoveryProfile) && uniqueHeader(headers, "location") != null) throw new ResourceFailure("blocked-by-policy", "Upload Location headers are not followed");
     if (resourceProfile) uniqueHeader(headers, "connection");
     String encoding = resourceProfile ? uniqueHeader(headers, "content-encoding") : singleHeader(headers, "content-encoding");

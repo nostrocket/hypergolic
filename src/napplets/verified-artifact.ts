@@ -1,8 +1,10 @@
 import { getEventHash, verifyEvent } from 'nostr-tools/pure';
+import { MAX_HTML_BYTES } from './artifact-limits.ts';
 import { isNappletIdentifier, type NappletCoordinate } from './resolve-link.ts';
 
 export const MAX_MANIFEST_BYTES = 64 * 1024;
-export const MAX_HTML_BYTES = 2 * 1024 * 1024;
+
+export { MAX_HTML_BYTES } from './artifact-limits.ts';
 
 export class NappletVerificationError extends Error {
   readonly code = 'INVALID_NAPPLET_ARTIFACT';

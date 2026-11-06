@@ -70,6 +70,7 @@ public final class PublishedHttpsTlsProof {
       rejectsRedirectAfterTls(serverContext, trusted, dns);
       cancelsBlockedResponse(serverContext, trusted, dns);
       boundedResourceRedirects(serverContext, trusted, dns);
+      boundedArtifactRedirects(serverContext, trusted, dns);
     } finally {
       dns.shutdownNow();
       check(dns.awaitTermination(2, TimeUnit.SECONDS));
@@ -184,6 +185,66 @@ public final class PublishedHttpsTlsProof {
       throwsIo(() -> resource(first,proofPolicy,host->{calls.incrementAndGet();return host.equals("mixed.example.org") ? new InetAddress[]{InetAddress.getByAddress(new byte[]{8,8,8,8}),InetAddress.getByAddress(new byte[]{10,0,0,1})}:new InetAddress[]{LOOPBACK};},dns,trusted));equal(2,calls.get());
     }
   }
+  private static void boundedArtifactRedirects(SSLContext context, SSLSocketFactory trusted,
+      ThreadPoolExecutor dns) throws Exception {
+    PublishedHttpsTransport.AddressPolicy policy = new PublishedHttpsTransport.AddressPolicy() {
+      @Override public boolean isAllowedHost(String host) { return true; }
+      @Override public boolean isAllowedAddress(InetAddress address) { return address.isLoopbackAddress(); }
+    };
+    AtomicInteger lookups = new AtomicInteger();
+    PublishedHttpsTransport.HostResolver resolver = host -> { lookups.incrementAndGet(); return new InetAddress[]{LOOPBACK}; };
+    String hash = "a".repeat(64);
+    try (LocalServer last = new LocalServer(context, ok("artifact"), false);
+         LocalServer hop2 = new LocalServer(context, redirect("https://napplets.example.org:" + last.port() + "/uploads/" + hash + ".html"), false);
+         LocalServer hop1 = new LocalServer(context, redirect("https://napplets.example.org:" + hop2.port() + "/cdn"), false);
+         LocalServer first = new LocalServer(context, redirect("https://napplets.example.org:" + hop1.port() + "/mirror"), false)) {
+      byte[] body = artifact(first, hash, policy, () -> false, resolver, dns, trusted);
+      equal("artifact", new String(body, StandardCharsets.US_ASCII));
+      equal(4, lookups.get());
+      check(last.request.startsWith("GET /uploads/" + hash + ".html "));
+      throwsIo(() -> artifact(first, "bad-hash", policy, () -> false, resolver, dns, trusted));
+      equal(4, lookups.get());
+    }
+    for (String location : new String[]{"http://napplets.example.org/target", "https://127.0.0.1/target",
+        "https://user@napplets.example.org/target", "/" + hash, "https://printer.local/target"}) {
+      try (LocalServer first = new LocalServer(context, redirect(location), false)) {
+        lookups.set(0);
+        throwsIo(() -> artifact(first, hash, policy, () -> false, resolver, dns, trusted));
+        equal(1, lookups.get());
+      }
+    }
+    try (LocalServer last = new LocalServer(context, ok("late"), true);
+         LocalServer first = new LocalServer(context, redirect("https://napplets.example.org:" + last.port() + "/slow"), false)) {
+      AtomicBoolean cancelled = new AtomicBoolean();
+      FutureTask<Boolean> pending = new FutureTask<>(() -> {
+        try { artifact(first, hash, policy, cancelled::get, resolver, dns, trusted); return false; }
+        catch (IOException expected) { return true; }
+      });
+      Thread worker = new Thread(pending, "artifact-redirect-cancellation-proof");
+      worker.setDaemon(true);
+      worker.start();
+      check(last.requestArrived.await(2, TimeUnit.SECONDS));
+      cancelled.set(true);
+      check(pending.get(2, TimeUnit.SECONDS));
+    }
+    int cap = PublishedHttpsTransport.MAX_ARTIFACT_BYTES;
+    for (int length : new int[]{cap - 1, cap}) {
+      byte[] wire = ok("x".repeat(length)).getBytes(StandardCharsets.US_ASCII);
+      equal(length, PublishedHttpsResponseReader.readGet(new java.io.ByteArrayInputStream(wire), () -> false,
+          PublishedHttpsTransport.ReadProfile.ARTIFACT).length);
+    }
+    byte[] excess = ("HTTP/1.1 200 OK\r\nContent-Length: " + (cap + 1) + "\r\n\r\n").getBytes(StandardCharsets.US_ASCII);
+    throwsIo(() -> PublishedHttpsResponseReader.readGet(new java.io.ByteArrayInputStream(excess), () -> false,
+        PublishedHttpsTransport.ReadProfile.ARTIFACT));
+  }
+
+  private static byte[] artifact(LocalServer server, String hash, PublishedHttpsTransport.AddressPolicy policy,
+      PublishedHttpsTransport.Cancellation cancellation, PublishedHttpsTransport.HostResolver resolver,
+      ThreadPoolExecutor dns, SSLSocketFactory factory) throws IOException {
+    return PublishedHttpsTransport.getArtifactWithTransport("https://napplets.example.org:" + server.port() + "/" + hash,
+        policy, cancellation, resolver, dns, factory, PROOF_HOSTNAME_VERIFIER);
+  }
+
   private static String redirect(String location) {return "HTTP/1.1 302 Found\r\nLocation: " + location + "\r\nContent-Length: 0\r\n\r\n";}
   private static byte[] resource(LocalServer server, PublishedHttpsTransport.AddressPolicy policy,
       PublishedHttpsTransport.HostResolver resolver, ThreadPoolExecutor dns, SSLSocketFactory factory) throws IOException {

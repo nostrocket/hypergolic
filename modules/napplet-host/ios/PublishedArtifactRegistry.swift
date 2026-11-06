@@ -4,7 +4,7 @@ import Foundation
 /// Private, one-use transfer of already verified HTML into a native host generation.
 /// This registry checks bytes and ownership claims; it does not verify Nostr signatures.
 final class PublishedArtifactRegistry: @unchecked Sendable {
-  static let maximumHTMLBytes = 2 * 1024 * 1024
+  static let maximumHTMLBytes = 8 * 1024 * 1024
   static let maximumPending = 4
   static let lifetime: Duration = .seconds(60)
 

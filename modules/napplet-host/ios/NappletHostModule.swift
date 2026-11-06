@@ -107,6 +107,12 @@ public final class NappletHostModule: Module {
     AsyncFunction("fetchPublishedHttps") { (operationId: String, url: String) async throws -> String in
       try await publishedHTTPS.fetch(operationId: operationId, url: url)
     }
+    AsyncFunction("fetchPublishedArtifactHttps") { (operationId: String, url: String) async throws -> Int in
+      try await publishedHTTPS.fetchArtifact(operationId: operationId, url: url)
+    }
+    Function("readPublishedArtifactHttpsChunk") { (operationId: String, offset: Int) -> String? in
+      try? publishedHTTPS.readArtifactChunk(operationId: operationId, offset: offset)
+    }
     Function("cancelPublishedHttps") { (operationId: String) in
       publishedHTTPS.cancel(operationId: operationId)
     }

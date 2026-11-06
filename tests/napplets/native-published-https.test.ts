@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { createNativePublishedHttpsFetch, decodeNativePublishedBody, type NativePublishedHttpsPort } from '../../src/napplets/native-published-https.ts';
+import { MAX_HTML_BYTES } from '../../src/napplets/artifact-limits.ts';
+import { createNativePublishedArtifactHttpsFetch, createNativePublishedHttpsFetch, type NativePublishedArtifactHttpsPort, decodeNativePublishedBody, type NativePublishedHttpsPort } from '../../src/napplets/native-published-https.ts';
 import { createNativePublishedArtifactSource, type BoundedFetchInit } from '../../src/napplets/published-source.ts';
 
 const ID = 'd2398c45-e6db-48a4-ab51-e83828f0eb91';
@@ -86,4 +87,55 @@ test('invalid operation identity and request semantics never call native fetch',
     ...init(new AbortController().signal), redirect: 'follow',
   } as unknown as BoundedFetchInit));
   assert.equal(called, false);
+});
+
+test('artifact chunk reader verifies and copies 8 MiB without widening avatar Base64', async () => {
+  const chunkSize = 48 * 1024;
+  const length = MAX_HTML_BYTES;
+  const url = 'https://blossom.example.org/' + 'a'.repeat(64);
+  const expected = Buffer.alloc(length, 0x71);
+  let nextOffset = 0;
+  const port: NativePublishedArtifactHttpsPort = {
+    newInstanceId: () => ID,
+    async fetchPublishedArtifactHttps(id, target) {
+      assert.equal(id, ID);
+      assert.equal(target, url);
+      return length;
+    },
+    readPublishedArtifactHttpsChunk(id, offset) {
+      assert.equal(id, ID);
+      assert.equal(offset, nextOffset);
+      nextOffset += chunkSize;
+      return expected.subarray(offset, offset + chunkSize).toString('base64');
+    },
+    cancelPublishedHttps() { assert.fail('unexpected cancellation'); },
+  };
+  const response = await createNativePublishedArtifactHttpsFetch(port)(url, init(new AbortController().signal));
+  assert.equal(response.headers.get('content-length'), String(length));
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()), expected);
+  assert.throws(() => decodeNativePublishedBody(expected.subarray(0, 2 * 1024 * 1024 + 1).toString('base64')));
+});
+
+test('artifact chunk read rejects invalid length, truncated chunk and revocation, releasing the lease', async () => {
+  const url = 'https://blossom.example.org/' + 'a'.repeat(64);
+  for (const mode of ['invalid-length', 'truncated', 'aborted']) {
+    const controller = new AbortController();
+    const cancelled: string[] = [];
+    let reads = 0;
+    const port: NativePublishedArtifactHttpsPort = {
+      newInstanceId: () => ID,
+      async fetchPublishedArtifactHttps() {
+        return mode === 'invalid-length' ? MAX_HTML_BYTES + 1 : 48 * 1024;
+      },
+      readPublishedArtifactHttpsChunk() {
+        reads++;
+        if (mode === 'aborted') controller.abort();
+        return mode === 'truncated' ? 'YQ==' : Buffer.alloc(48 * 1024).toString('base64');
+      },
+      cancelPublishedHttps(id) { cancelled.push(id); },
+    };
+    await assert.rejects(createNativePublishedArtifactHttpsFetch(port)(url, init(controller.signal)));
+    assert.equal(reads, mode === 'invalid-length' ? 0 : 1);
+    assert.ok(cancelled.length > 0 && cancelled.every(id => id === ID));
+  }
 });

@@ -159,6 +159,16 @@ class NappletHostModule : Module() {
         Base64.encodeToString(bytes, Base64.NO_WRAP)
       }
     }
+    AsyncFunction("fetchPublishedArtifactHttps") Coroutine { operationId: String, url: String ->
+      val job = currentCoroutineContext()[Job]
+      withContext(Dispatchers.IO) {
+        PublishedHttpsRequestOwner.INSTANCE.fetchArtifact(operationId, url) { job?.isActive == true }
+      }
+    }
+    Function("readPublishedArtifactHttpsChunk") { operationId: String, offset: Int ->
+      try { Base64.encodeToString(PublishedHttpsRequestOwner.INSTANCE.readArtifactChunk(operationId, offset), Base64.NO_WRAP) }
+      catch (_: java.io.IOException) { null }
+    }
     Function("cancelPublishedHttps") { operationId: String ->
       PublishedHttpsRequestOwner.INSTANCE.cancel(operationId)
     }

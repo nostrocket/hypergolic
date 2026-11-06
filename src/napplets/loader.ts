@@ -1,3 +1,4 @@
+import { MAX_HTML_BYTES } from './artifact-limits.ts';
 import { resolveNappletLink, type NappletCoordinate } from './resolve-link.ts';
 import { MAX_RELAYS_PER_ROLE, normalizeRelayUrl } from '../network/relay-settings.ts';
 import { UnsupportedNappletManifestError, verifyArtifact, verifyManifest, type VerifiedNappletArtifact, type VerifiedNappletManifest } from './verified-artifact.ts';
@@ -34,7 +35,7 @@ export class PublishedLoadError extends Error {
   }
 }
 const MAX_MANIFESTS = 32;
-export const MAX_NAPPLET_HTML_BYTES = 2 * 1024 * 1024;
+export const MAX_NAPPLET_HTML_BYTES = MAX_HTML_BYTES;
 const HEX64 = /^[0-9a-f]{64}$/;
 function lookupRelay(value: unknown): string {
   try { return normalizeRelayUrl(value); } catch { throw new PublishedLoadError(); }
