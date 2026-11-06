@@ -131,6 +131,67 @@ test('Discover reports a persistently incomplete empty response as a failure', a
   assert.deepEqual(fixture.calls.map(call => call.url), [relayA, relayB, relayA]);
 });
 
+test('Discover keeps a matched EOSE reply at the deadline and cancels only the outstanding peer', async () => {
+  const hit = event('a'.repeat(64)), late = deferred<string[]>();
+  const fixture = harness((url, _wire, sub) => url === relayA ? [eventFrame(sub, hit), eose(sub)] : late.promise);
+  const lookup = createNativePublishedRelayLookup(fixture.port, 5);
+  const result = await lookup.query(coordinate, [relayA, relayB], null, new AbortController().signal, true);
+  const pending = fixture.calls[1]!;
+  assert.deepEqual(fixture.cancelled, [pending.id]);
+  late.resolve([eventFrame(pending.subscriptionId, event('b'.repeat(64))), eose(pending.subscriptionId)]);
+  await Promise.resolve();
+  assert.deepEqual(result, [hit]);
+  assert.equal(fixture.calls.length, 2);
+});
+
+test('the shared deadline rejects incomplete, empty, unattempted and ordinary lookup cases', async () => {
+  const relays = Array.from({length: 6}, (_, index) => `wss://relay-${index}.example.org`);
+  for (const {destinations, discovery, response} of [
+    {destinations: [relayA, relayB], discovery: true as const, response: 'incomplete'},
+    {destinations: [relayA, relayB], discovery: true as const, response: 'empty'},
+    {destinations: relays, discovery: true as const, response: 'complete'},
+    {destinations: [relayA, relayB], discovery: undefined, response: 'complete'},
+  ]) {
+    const wait = deferred<string[]>();
+    const fixture = harness((url, _wire, sub) => {
+      if (url !== destinations[0]) return wait.promise;
+      if (response === 'empty') return [eose(sub)];
+      const frame = eventFrame(sub, event('a'.repeat(64)));
+      return response === 'complete' ? [frame, eose(sub)] : [frame];
+    });
+    await assert.rejects(createNativePublishedRelayLookup(fixture.port, 5).query(
+      coordinate, destinations, null, new AbortController().signal, discovery), NativePublishedRelayError);
+    if (destinations === relays) assert.equal(fixture.calls.length, 5);
+    assert.deepEqual(fixture.cancelled, fixture.calls.slice(1).map(call => call.id));
+  }
+});
+
+test('a relay whose operation ID was rejected does not count as an attempted peer', async () => {
+  const wait = deferred<string[]>();
+  let index = 0;
+  const fixture = harness((url, _wire, sub) => url === relayA
+    ? [eventFrame(sub, event('a'.repeat(64))), eose(sub)] : wait.promise, {
+    newInstanceId() { return [ids[0]!, 'invalid', ids[1]!][index++]!; },
+  });
+  const relayC = 'wss://relay-c.example.org';
+  await assert.rejects(createNativePublishedRelayLookup(fixture.port, 5).query(
+    coordinate, [relayA, relayB, relayC], null, new AbortController().signal, true), NativePublishedRelayError);
+  assert.deepEqual(fixture.calls.map(call => call.url), [relayA, relayC]);
+  assert.deepEqual(fixture.cancelled, [fixture.calls[1]!.id]);
+});
+
+test('Discover abort after a completed reply cannot return its candidates', async () => {
+  const controller = new AbortController();
+  const wait = deferred<string[]>();
+  const fixture = harness((url, _wire, sub) => url === relayA
+    ? [eventFrame(sub, event('a'.repeat(64))), eose(sub)] : wait.promise);
+  const operation = createNativePublishedRelayLookup(fixture.port, 50).query(coordinate, [relayA, relayB], null, controller.signal, true);
+  await Promise.resolve();
+  controller.abort();
+  await assert.rejects(operation, NativePublishedRelayError);
+  assert.deepEqual(fixture.cancelled, [fixture.calls[1]!.id]);
+});
+
 test('Discover uses the existing fan-out for the bounded union of both roles', async () => {
   const fixture = harness((_url, _request, sub) => [eose(sub)]);
   const lookup = createNativePublishedRelayLookup(fixture.port);

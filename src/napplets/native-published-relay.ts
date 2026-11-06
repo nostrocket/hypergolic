@@ -104,6 +104,7 @@ export function createNativePublishedRelayLookup(
 
       return new Promise((resolve, reject) => {
         const outstanding = new Set<string>();
+        const attempted = new Set<string>();
         const usedIds = new Set<string>();
         const events: unknown[] = [];
         let totalBytes = 0;
@@ -119,15 +120,16 @@ export function createNativePublishedRelayLookup(
           clearTimeout(timer);
           signal.removeEventListener('abort', abort);
         };
-        const finishError = (): void => {
+        const finish = (success: boolean): void => {
           if (closed) return;
           closed = true;
           cleanup();
           cancelOutstanding();
-          reject(new NativePublishedRelayError());
+          if (success && !signal.aborted) resolve(Object.freeze(events));
+          else reject(new NativePublishedRelayError());
         };
-        const abort = (): void => finishError();
-        timer = setTimeout(finishError, timeoutMs);
+        const abort = (): void => finish(false);
+        timer = setTimeout(() => finish(discovery === true && attempted.size === relays.length && events.length > 0), timeoutMs);
         signal.addEventListener('abort', abort, { once: true });
         if (signal.aborted) { abort(); return; }
 
@@ -137,6 +139,7 @@ export function createNativePublishedRelayLookup(
           if (typeof id !== 'string' || !UUID.test(id) || usedIds.has(id)) return false;
           usedIds.add(id);
           outstanding.add(id);
+          attempted.add(relay);
           let frames: string[];
           try { frames = await port.queryPublishedRelay(id, relay, request.wire, request.subscriptionId); }
           catch { outstanding.delete(id); return false; }
@@ -148,7 +151,7 @@ export function createNativePublishedRelayLookup(
           for (const event of relayEvents) {
             const eventByteLength = encodedSize(event);
             if (events.length >= MAX_MANIFESTS_PER_QUERY || totalBytes > MAX_PUBLISHED_QUERY_BYTES - eventByteLength) {
-              finishError(); return false;
+              finish(false); return false;
             }
             totalBytes += eventByteLength;
             events.push(event);
@@ -171,14 +174,9 @@ export function createNativePublishedRelayLookup(
           let failed = await queryRound(relays);
           if (discovery && !closed && events.length === 0 && failed.length > 0) failed = await queryRound(failed);
           if (closed || signal.aborted) return;
-          if (failed.length === relays.length || (discovery && events.length === 0 && failed.length > 0)) {
-            finishError(); return;
-          }
-          closed = true;
-          cleanup();
-          resolve(Object.freeze(events));
+          finish(failed.length !== relays.length && (!discovery || events.length > 0 || failed.length === 0));
         };
-        void complete().catch(finishError);
+        void complete().catch(() => finish(false));
       });
     },
   });

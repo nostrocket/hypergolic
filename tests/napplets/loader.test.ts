@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { naddrEncode } from 'nostr-tools/nip19';
 import { finalizeEvent, getPublicKey } from 'nostr-tools/pure';
 import { loadPublishedArtifact, PublishedLoadError, type PublishedArtifactSource } from '../../src/napplets/loader.ts';
+import { createNativePublishedRelayLookup } from '../../src/napplets/native-published-relay.ts';
 
 const secret = Uint8Array.from([...new Uint8Array(31), 2]);
 const pubkey = getPublicKey(secret);
@@ -147,6 +148,37 @@ test('only exact Discover requests use the normalized union of selected relay ro
     { relays: [shared, networkOnly], discovery: true },
     { relays: [shared, networkOnly], discovery: true },
   ]);
+});
+
+test('Discover deadline candidates still need valid signatures and the exact newest event before HTML', async () => {
+  const displayed = manifest(1_700_000_001), latest = modern(1_700_000_002);
+  const network = 'wss://network.example.org';
+  for (const {events, code} of [
+    {events: [displayed], code: null},
+    {events: [{...displayed, sig: '0'.repeat(128)}], code: 'PUBLISHED_LOAD_FAILED'},
+    {events: [displayed, latest], code: 'PUBLISHED_REVISION_CHANGED'},
+    {events: [displayed, modern(displayed.created_at)], code: 'PUBLISHED_REVISION_CONFLICT'},
+  ]) {
+    let blobReads = 0;
+    const lookup = createNativePublishedRelayLookup({
+      newInstanceId: randomUUID,
+      queryPublishedRelay(_id, relay, _wire, sub) {
+        return relay === network ? Promise.resolve([
+          ...events.map(event => JSON.stringify(['EVENT', sub, event])), JSON.stringify(['EOSE', sub]),
+        ]) : new Promise(() => {});
+      },
+      cancelPublishedRelay() {},
+      revokeAllPublishedRelay() {},
+    }, 5);
+    const operation = loadPublishedArtifact(link, {
+      source: {query: lookup.query, async readHtml() {blobReads++; return html;}},
+      lookupRelays, networkRelays: [network], signal: new AbortController().signal,
+      expectedEventId: displayed.id, assertActive() {},
+    });
+    if (code) await assert.rejects(operation, {code});
+    else assert.equal((await operation).manifest.id, displayed.id);
+    assert.equal(blobReads, code ? 0 : 1);
+  }
 });
 
 test('discovery separates empty results, authentic unsupported manifests and same-time conflicts', async () => {
