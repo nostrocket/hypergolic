@@ -1,5 +1,5 @@
 diff --git a/dist/index.d.ts b/dist/index.d.ts
-index 0ec36f0a861a096c6391bdae988ba8243bb3f021..a6bdd59f250582b9bf37cac8704465fc35a222f8 100644
+index 0ec36f0..a6bdd59 100644
 --- a/dist/index.d.ts
 +++ b/dist/index.d.ts
 @@ -350,6 +350,8 @@ interface ShellEnvironment {
@@ -23,7 +23,7 @@ index 0ec36f0a861a096c6391bdae988ba8243bb3f021..a6bdd59f250582b9bf37cac8704465fc
  /**
   * Render the host-owned NIP-5D bootstrap that exposes available NAP domains
 diff --git a/dist/index.js b/dist/index.js
-index 523bcf16686659726604376dea98363a06f86049..d45e72aeeb0c96efe176d887d040450e895f8885 100644
+index 523bcf1..36d79f9 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -312,6 +312,7 @@ function adaptHooks(shellHooks, deps) {
@@ -163,7 +163,97 @@ index 523bcf16686659726604376dea98363a06f86049..d45e72aeeb0c96efe176d887d040450e
          for (const url of objectUrls) URL.revokeObjectURL(url);
          objectUrls.clear();
        }
-@@ -2367,7 +2409,10 @@ function nappletNamespacePrelude(domains) {
+@@ -2265,25 +2307,73 @@ function nappletNamespacePrelude(domains) {
+         ...Object.keys(sanitizedBehavior).length === 0 ? {} : { behavior: sanitizedBehavior }
+       };
+     };
+-    const invoke = (value) => {
+-      const normalized = normalizeRequest(value);
+-      return request(
+-        {
+-          type: "intent.invoke",
+-          request: normalized
+-        },
+-        "intent.invoke.result",
+-        (msg) => fieldOrThrow(msg, "result", "intent.invoke.result missing result")
+-      );
++    const fromUri = (uri, options = {}) => {
++      if (!options || typeof options !== "object" || Array.isArray(options) ||
++          Object.keys(options).some((key) => !["payload", "handler", "behavior"].includes(key))) {
++        throw new TypeError("Invalid intent options");
++      }
++      if (uri.length > 512 || uri.includes("#")) throw new TypeError("Invalid intent URI");
++      const queryAt = uri.indexOf("?");
++      const convention = queryAt < 0 ? uri : uri.slice(0, queryAt);
++      const match = /^napplet:([a-z0-9][a-z0-9-]{0,63})\/([a-z0-9][a-z0-9-]{0,63})$/.exec(convention);
++      if (!match || match[0] !== convention) throw new TypeError("Invalid intent convention");
++      const result = { ...options, archetype: match[1], action: match[2], convention };
++      if (queryAt < 0) return result;
++      if (hasOwn(options, "payload")) throw new TypeError("Intent query and explicit payload cannot be combined");
++      const fields = new Map();
++      for (const pair of uri.slice(queryAt + 1).split("&")) {
++        const equals = pair.indexOf("=");
++        if (equals < 1) throw new TypeError("Invalid intent query");
++        const name = decodeURIComponent(pair.slice(0, equals));
++        if (fields.has(name)) throw new TypeError("Duplicate intent query name");
++        fields.set(name, decodeURIComponent(pair.slice(equals + 1)));
++      }
++      return { ...result, payload: Object.fromEntries(fields) };
++    };
++    const deliveryHandlers = new Set();
++    const pendingDeliveries = [];
++    const notify = (handler, delivery) => {
++      try { handler(delivery); } catch { /* Other subscriptions still receive their delivery. */ }
+     };
++    listen((event) => {
++      if (!event.isTrusted || !isParentMessage(event) || event.data?.type !== "intent.deliver") return;
++      const delivery = Object.freeze(event.data.delivery);
++      if (deliveryHandlers.size === 0) {
++        if (pendingDeliveries.length < 16) pendingDeliveries.push(delivery);
++        return;
++      }
++      for (const handler of [...deliveryHandlers]) notify(handler, delivery);
++    });
++    const invokeRequest = (value, modern) => request(
++      { type: "intent.invoke", request: normalizeRequest(value) },
++      "intent.invoke.result",
++      (msg) => {
++        const result = fieldOrThrow(msg, "result", "intent.invoke.result missing result");
++        if (!modern) return result;
++        if (!result.ok) return { ok: false, error: result.error };
++        const { archetype, action, convention, handler } = result;
++        return { ok: true, archetype, action, convention, handler };
++      }
++    );
++    const invoke = (value, options) => typeof value === "string"
++      ? invokeRequest(fromUri(value, options), true) : invokeRequest(value, false);
+     return {
+       invoke,
+-      open: (archetype, payload, opts) => invoke({
+-        archetype,
+-        action: "open",
+-        ...payload === void 0 ? {} : { payload },
+-        ...opts
+-      }),
++      open: (archetype, payload, opts) => {
++        if (typeof archetype === "string" && archetype.startsWith("napplet:")) {
++          const request2 = fromUri(archetype, payload);
++          if (request2.action !== "open" || opts !== void 0) throw new TypeError("Invalid intent.open arguments");
++          return invokeRequest(request2, true);
++        }
++        return invoke({ archetype, action: "open", ...payload === void 0 ? {} : { payload }, ...opts });
++      },
++      onDelivery(callback) {
++        if (typeof callback !== "function" || deliveryHandlers.size >= 32) throw new TypeError("Invalid intent subscription");
++        const handler = (delivery) => callback(delivery);
++        deliveryHandlers.add(handler);
++        for (const delivery of pendingDeliveries.splice(0)) notify(handler, delivery);
++        return subscriptionHandle(() => deliveryHandlers.delete(handler));
++      },
+       available: (archetype) => request(
+         { type: "intent.available", archetype },
+         "intent.available.result",
+@@ -2367,7 +2457,10 @@ function nappletNamespacePrelude(domains) {
        open: (url, options) => request(
          { type: "link.open", url, ...options ? { options } : {} },
          "link.open.result",

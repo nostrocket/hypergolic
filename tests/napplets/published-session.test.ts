@@ -8,9 +8,11 @@ import { EMBEDDED_TEST_COORDINATE, EMBEDDED_TEST_EVENT, EMBEDDED_TEST_PUBLISHER,
   getEmbeddedTestHtmlBytes } from '../../src/napplets/embedded-test-fixture.ts';
 import { createPublishedSessionCoordinator, type PublishedSessionDependencies } from '../../src/napplets/published-session.ts';
 import type { NativePublishedTransferPort } from '../../src/napplets/native-transfer.ts';
-import { setup } from '../storage/harness.ts';
+import { registration, setup } from '../storage/harness.ts';
+import { descriptorForPublishedArtifact } from '../../src/napplets/published-host-input.ts';
+import { verifyArtifact, verifyManifest } from '../../src/napplets/verified-artifact.ts';
 import { createRuntimeOwner } from '../../src/runtime/runtime-owner.ts';
-import { emptyWorkspace, openNapplet, closeNapplet, replacePublishedNapplet } from '../../src/shell/workspace.ts';
+import { emptyWorkspace, openNapplet, closeNapplet, replacePublishedNapplet, restoreWorkspace, snapshotWorkspace } from '../../src/shell/workspace.ts';
 import { NativeLeases } from '../runtime/native-leases.ts';
 import type { IdentityTransition } from '../../src/security/identity-transition.ts';
 import { createApprovalOwner, createUploadOwner } from '../../src/security/approval-owner.ts';
@@ -79,6 +81,53 @@ test('first open verifies, reviews, caches and stages; pinned restart uses cache
   reopened.revoke();
   epoch++;
   assert.throws(() => reopened.assertActive());
+});
+
+
+test('restored exact pins retain prior game access and require approval before staging Intent', async t => {
+  const {database, sqlite} = await setup(t);
+  const html = getEmbeddedTestHtmlBytes(), hash = createHash('sha256').update(html).digest('hex');
+  const makeEvent = (appId: string, domain: string, seed: number) => finalizeEvent({
+    kind: 35129, created_at: 1_800_000_001, content: appId,
+    tags: [['d', appId], ['x', hash], ['R', domain]],
+  }, new Uint8Array(32).fill(seed));
+  const game = makeEvent('saved-game', 'theme', 3);
+  const handler = makeEvent('saved-handler', 'intent', 4);
+  const register = async (event: typeof game, domain: string, id: string) => {
+    const appId = event.tags[0]![1]!;
+    const owner = registration({user: USER, publisher: event.pubkey, appId});
+    const store = database.bindApp(owner).port;
+    const review = JSON.stringify({profile: 'hypergolic-native-2026-11-06-v1', requested: [domain], domains: [domain]});
+    await store.replaceAccessGrant([domain], null, {}, review);
+    const manifest = await verifyManifest({kind: 35129, pubkey: event.pubkey, identifier: appId, relayHints: []}, event);
+    return {store, review, descriptor: descriptorForPublishedArtifact(await verifyArtifact(manifest, html), id)};
+  };
+  const oldGame = await register(game, 'theme', SESSION);
+  const oldHandler = await register(handler, 'intent', '911fab48-6875-4df7-94f4-62dafbfa03ac');
+  const restored = restoreWorkspace(JSON.parse(JSON.stringify(snapshotWorkspace(
+    openNapplet(openNapplet(emptyWorkspace(), oldGame.descriptor), oldHandler.descriptor),
+  ))));
+  const calls: string[] = [];
+  const service = createPublishedSessionCoordinator({database, sqlite, native: native(calls),
+    newInstanceId: () => SESSION, lookupRelays: () => ['wss://relay.example.org'],
+    identity: {sessionAuthority: () => ({user: USER, epoch: 1, assertActive() {}}),
+      getSnapshot: () => ({session: {epoch: 1}})} as PublishedSessionDependencies['identity'],
+    source: {query: async coordinate => [coordinate.identifier === 'saved-game' ? game : handler], readHtml: async () => html},
+  });
+  const signal = new AbortController().signal;
+  const loaded = await service.reopenPinned(restored.sessions[0]!, signal, async () => assert.fail('prior game grant must reopen'));
+  assert.equal(loaded.descriptor.eventId, game.id); loaded.revoke();
+  const before = calls.slice();
+  await assert.rejects(service.reopenPinned(restored.sessions[1]!, signal, async request => {
+    assert.equal(request.eventId, handler.id);
+    assert.deepEqual(request.domains, ['intent']);
+    return false;
+  }));
+  assert.deepEqual(calls, before);
+  assert.equal((await oldHandler.store.readAccessGrant())?.supportReview, oldHandler.review);
+  const accepted = await service.reopenPinned(restored.sessions[1]!, signal, async () => true);
+  assert.deepEqual(JSON.parse(JSON.parse(accepted.hostInput).configuration).domains, ['intent']);
+  accepted.revoke();
 });
 
 test('unsupported requested capabilities warn and launch without native grants; denial prevents launch', async t => {

@@ -70,7 +70,7 @@ internal object RoutingTransport {
     val message = runCatching { UploadWire.objectValue(raw, 36 * 1024, maximumDepth = 40) }.getOrNull() ?: return false
     val type = message.opt("type") as? String ?: return false
     val domain = type.substringBefore('.')
-    if (type !in setOf("intent.changed", "inc.event", "inc.channel.opened", "inc.channel.event", "inc.channel.closed", "notify.action", "notify.clicked", "notify.dismissed", "notify.controls", "config.values", "config.schemaError") ||
+    if (type !in setOf("intent.changed", "intent.deliver", "inc.event", "inc.channel.opened", "inc.channel.event", "inc.channel.closed", "notify.action", "notify.clicked", "notify.dismissed", "notify.controls", "config.values", "config.schemaError") ||
       !mayDeliver(generation, revision, domain) || row.push == null || row.pending.size >= 4 || row.delivery >= 9_007_199_254_740_991L) return false
     val delivery = ++row.delivery; row.pending.add(delivery)
     val envelope = JSONObject().put("type", "routing.event").put("sessionId", generation).put("delivery", delivery).put("response", raw).toString()

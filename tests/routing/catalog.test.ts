@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { artifact } from './fixtures.ts';
+import { artifact, modernHandler } from './fixtures.ts';
 import { openRoutingCatalog, ROUTING_DATABASE } from '../../src/routing/routing-catalog.ts';
 import { deferred, DiskSQLite } from '../storage/harness.ts';
 const first = '01'.repeat(32), second = '02'.repeat(32);
@@ -77,4 +77,27 @@ test('unacknowledged preferences fail and do not silently save a default', async
   sqlite.faults.push({ prefix: 'INSERT INTO routing_defaults', mode: 'omit' });
   await assert.rejects(catalog.prefer(owner(), 'note', { publisher: a.manifest.pubkey, appId: 'notes' }), { code: 'STORAGE_FAILURE' });
   assert.deepEqual((await catalog.list(owner())).defaults, []); await catalog.close();
+});
+
+test('modern signed advertisements require matching roles and an Intent declaration', async t => {
+  const sqlite = new DiskSQLite();
+  const catalog = await openRoutingCatalog(sqlite, 'ios');
+  t.after(async () => { await catalog.close(); sqlite.cleanup(); });
+  const tags = [
+    ['i', 'napplet:napptest/open', 'msg'],
+    ['i', 'napplet:other/open', 'orphan'],
+    ['z', 'empty'],
+    ['z', 'napptest'],
+    ['i', 'napplet:napptest/edit', 'first'],
+    ['i', 'napplet:napptest/edit', 'conflicting'],
+    ['i', 'napplet:napptest/open?unexpected=query'],
+    ['i', 'napplet:napptest/' + 'a'.repeat(65)],
+  ];
+  const advertised = await modernHandler(tags), undeclared = await modernHandler(tags, ['theme'], 10);
+  await catalog.remember(owner(), advertised);
+  await catalog.remember(owner(), undeclared);
+  const {handlers} = await catalog.list(owner());
+  assert.deepEqual(handlers.find(handler => handler.publisher === advertised.manifest.pubkey)!.roles,
+    [{archetype: 'napptest', conventions: ['napplet:napptest/open'], contracts: [{convention: 'napplet:napptest/open', params: ['msg']}]}]);
+  assert.deepEqual(handlers.find(handler => handler.publisher === undeclared.manifest.pubkey)!.roles, []);
 });

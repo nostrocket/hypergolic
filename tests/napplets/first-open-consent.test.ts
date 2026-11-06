@@ -231,3 +231,28 @@ test('modern review separates optional access and binds only approved supported 
     return false;
   }), FirstOpenConsentError);
 });
+
+test('Intent requires explicit renewal while an unchanged non-Intent baseline grant still reopens', async t => {
+  const {database} = await setup(t); const {owner, storage} = control(database);
+  const signal = new AbortController().signal;
+  const profile = 'hypergolic-native-2026-11-06-v1';
+  const previousReview = (domains: string[]) => JSON.stringify({profile, requested: domains, domains});
+  const game = await artifact(['theme'], []);
+  await storage.replaceAccessGrant(['theme'], null, {}, previousReview(['theme']));
+  await requestFirstOpenConsent(game, owner, storage, signal, owner.assertActive, async () => assert.fail('unchanged grant must reopen'));
+
+  const baseline = (await storage.readAccessGrant())!;
+  const handler = await artifact(['theme'], ['intent']);
+  const intentReview = JSON.stringify([previousReview(['theme']), previousReview(['intent'])]);
+  await storage.replaceAccessGrant(['intent', 'theme'], baseline.revision, {}, intentReview);
+  const previous = await storage.readAccessGrant();
+  await assert.rejects(requestFirstOpenConsent(handler, owner, storage, signal, owner.assertActive, async request => {
+    assert.equal(request.eventId, handler.manifest.eventId);
+    assert.deepEqual(request.optionalDomains, ['intent']);
+    return false;
+  }), FirstOpenConsentError);
+  assert.deepEqual(await storage.readAccessGrant(), previous);
+  await requestFirstOpenConsent(handler, owner, storage, signal, owner.assertActive, async () => true);
+  assert.match((await storage.readAccessGrant())!.supportReview, /hypergolic-native-2026-11-06-intent-v1/);
+  await requestFirstOpenConsent(handler, owner, storage, signal, owner.assertActive, async () => assert.fail('renewed Intent grant must reopen'));
+});

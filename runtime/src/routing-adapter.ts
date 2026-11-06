@@ -7,12 +7,23 @@ function capturedMessage(row: Record<string, unknown>): NappletMessage {
 }
 const owns = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key);
 function candidate(value: unknown): void {
-  const row = routingRecord(value, ['dTag', 'actions', 'conventions'], ['title', 'isDefault']);
+  const row = routingRecord(value, ['dTag', 'actions', 'conventions'], ['title', 'isDefault', 'id', 'contracts']);
   routingText(row.dTag, ROUTING_LIMITS.handler);
   if (owns(row, 'title')) routingText(row.title, 128);
   if (owns(row, 'isDefault') && typeof row.isDefault !== 'boolean') throw new Error('Invalid default');
   if (!Array.isArray(row.actions) || !Array.isArray(row.conventions) || row.actions.length > 16 || row.conventions.length > 16) throw new Error('Invalid handler');
   row.actions.forEach(routingRole); row.conventions.forEach(stableConvention);
+  if (owns(row, 'id') !== owns(row, 'contracts')) throw new Error('Incomplete intent candidate');
+  if (owns(row, 'id')) {
+    routingText(row.id, ROUTING_LIMITS.handler);
+    if (!Array.isArray(row.contracts) || row.contracts.length === 0 || row.contracts.length > 16) throw new Error('Invalid intent contracts');
+    for (const contract of row.contracts) {
+      const item = routingRecord(contract, ['convention', 'params']);
+      stableConvention(item.convention);
+      if (!Array.isArray(item.params) || item.params.length > 16) throw new Error('Invalid intent parameters');
+      item.params.forEach(param => routingText(param, 128));
+    }
+  }
 }
 function availability(value: unknown): void {
   const row = routingRecord(value, ['archetype', 'available', 'candidates', 'hasDefault']);
@@ -21,7 +32,7 @@ function availability(value: unknown): void {
   row.candidates.forEach(candidate);
 }
 export function captureRoutingPush(value: unknown): NappletMessage {
-  const input = routingRecord(value, ['type'], ['topic', 'sender', 'payload', 'channelId', 'peer', 'reason', 'availability']);
+  const input = routingRecord(value, ['type'], ['topic', 'sender', 'payload', 'channelId', 'peer', 'reason', 'availability', 'delivery']);
   if (input.type === 'inc.event' || input.type === 'inc.channel.event') {
     const row = routingRecord(value, ['type', input.type === 'inc.event' ? 'topic' : 'channelId', 'sender'], ['payload']);
     routingText(row.sender, ROUTING_LIMITS.handler);
@@ -34,6 +45,15 @@ export function captureRoutingPush(value: unknown): NappletMessage {
   }
   if (input.type === 'inc.channel.closed') {
     const row = routingRecord(value, ['type', 'channelId'], ['reason']); routingText(row.channelId, ROUTING_LIMITS.id); if (owns(row, 'reason')) routingText(row.reason, 256); return Object.freeze({...row, type: input.type});
+  }
+  if (input.type === 'intent.deliver') {
+    const row = routingRecord(value, ['type', 'delivery']);
+    const delivery = routingRecord(row.delivery, ['sender', 'archetype', 'action', 'convention'], ['payload']);
+    routingText(delivery.sender, ROUTING_LIMITS.handler);
+    const archetype = routingRole(delivery.archetype), action = routingRole(delivery.action);
+    if (stableConvention(delivery.convention) !== `napplet:${archetype}/${action}`) throw new Error('Invalid intent convention');
+    if (owns(delivery, 'payload')) delivery.payload = routingPayload(delivery.payload);
+    return Object.freeze({type: input.type, delivery: Object.freeze(delivery)});
   }
   if (input.type === 'intent.changed') {
     const row = routingRecord(value, ['type', 'availability']); availability(row.availability); return capturedMessage(row);

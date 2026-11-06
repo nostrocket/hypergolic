@@ -12,10 +12,11 @@ const identity = {
   publisher: '1'.repeat(64), appId: 'published-test', eventId: '2'.repeat(64), version, htmlHash,
 };
 
-type Mode = 'normal' | 'bad-hash' | 'malformed-base64' | 'replayed-sequence' | 'unknown-domain' | 'relay-domain' | 'attributed-head' | 'commented-head' | 'unsafe-head-comment' | 'upload-domain' | 'all-domains' | 'outbox-domain' | 'outbox-only' | 'published-approval';
+type Mode = 'normal' | 'bad-hash' | 'malformed-base64' | 'replayed-sequence' | 'unknown-domain' | 'relay-domain' | 'attributed-head' | 'commented-head' | 'unsafe-head-comment' | 'upload-domain' | 'all-domains' | 'outbox-domain' | 'outbox-only' | 'published-approval' | 'intent-only';
 
 function artifactFor(mode: Mode): Buffer {
   if (mode === 'published-approval') return approvalHtml;
+  if (mode === 'intent-only') return Buffer.from('<!doctype html><html><head><title>Intent</title></head><body><output id="deliveries"></output></body></html>');
   const source = html.toString();
   if (mode === 'attributed-head') return Buffer.from(source.replace('<head>', '<HEAD data-fixture="attribute">'));
   if (mode === 'commented-head') {
@@ -37,7 +38,13 @@ async function openPublished(page: Page, mode: Mode = 'normal', extraQuery = '')
   const artifactIdentity = {...identity,htmlHash:artifactHash,version:digest(`${artifactHash} /index.html\n`)};
   await page.addInitScript(({ generation, htmlBase64, htmlLength, identity, badHashVersion, mode }) => {
     if (window !== window.top) return;
+    let delivery = 0;
     const state = { requests: [] as unknown[], diagnostics: [] as unknown[],
+      pushIntent(message: unknown, target = generation) {
+        for (const listener of listenerSet) listener({data: JSON.stringify({
+          type: 'routing.event', sessionId: target, delivery: ++delivery, response: JSON.stringify(message),
+        })});
+      },
       reply(sequence: number, response: unknown) {
         for (const listener of listenerSet) listener({data: JSON.stringify({
           type: 'capability.result', sessionId: generation, sequence,
@@ -61,7 +68,7 @@ async function openPublished(page: Page, mode: Mode = 'normal', extraQuery = '')
         type: 'artifact.chunk', sessionId: generation,
         sequence: mode === 'replayed-sequence' ? sequence + 1 : sequence,
         base64, byteLength: payload.length, totalBytes: htmlLength,
-        ...claims, domains: mode === 'published-approval' ? ['identity', 'relay', 'theme'] : mode === 'unknown-domain' ? ['future-domain'] : mode === 'outbox-domain' ? ['outbox', 'relay', 'theme'] : mode === 'outbox-only' ? ['outbox', 'theme'] : mode === 'relay-domain' ? ['relay', 'theme'] : mode === 'upload-domain' ? ['upload'] : mode === 'all-domains' ? ['config', 'identity', 'inc', 'intent', 'link', 'notify', 'outbox', 'relay', 'resource', 'storage', 'theme', 'upload'] : ['theme'],
+        ...claims, domains: mode === 'intent-only' ? ['intent'] : mode === 'published-approval' ? ['identity', 'relay', 'theme'] : mode === 'unknown-domain' ? ['future-domain'] : mode === 'outbox-domain' ? ['outbox', 'relay', 'theme'] : mode === 'outbox-only' ? ['outbox', 'theme'] : mode === 'relay-domain' ? ['relay', 'theme'] : mode === 'upload-domain' ? ['upload'] : mode === 'all-domains' ? ['config', 'identity', 'inc', 'intent', 'link', 'notify', 'outbox', 'relay', 'resource', 'storage', 'theme', 'upload'] : ['theme'],
         done: (sequence + 1) * 48 * 1024 >= htmlLength,
       };
       for (const listener of listenerSet) listener({ data: JSON.stringify(envelope) });
@@ -77,7 +84,14 @@ async function openPublished(page: Page, mode: Mode = 'normal', extraQuery = '')
         if (request.type === 'capability') {
           const wire = JSON.parse(request.message);
           let response;
-          if (wire.type === 'identity.getPublicKey') response = {type: 'identity.getPublicKey.result', id: wire.id, pubkey: '1'.repeat(64)};
+          if (mode === 'intent-only' && wire.type === 'routing.call') {
+            const {message} = wire;
+            const {archetype, action, convention} = message.request ?? {};
+            const result = message.type === 'intent.invoke' ? {type: 'intent.invoke.result', id: message.id,
+              result: {ok: true, handled: true, archetype, action, convention, handler: 'native-handler'}} : null;
+            response = {type: 'routing.call.result', id: wire.id, response: result};
+          }
+          else if (wire.type === 'identity.getPublicKey') response = {type: 'identity.getPublicKey.result', id: wire.id, pubkey: '1'.repeat(64)};
           else if (wire.type === 'outbox.query') response = {type: 'outbox.query.result', id: wire.id, events: []};
           else if (wire.type === 'outbox.publish') response = {type: 'outbox.publish.result', id: wire.id, ok: false, error: 'user rejected'};
           if (response) for (const listener of listenerSet) listener({data: JSON.stringify({type: 'capability.result', sessionId: generation, sequence: request.sequence, response: JSON.stringify(response)})});
@@ -316,4 +330,71 @@ test('published Approval Lab remains bounded by the original 660-second response
   await expect(ui.locator('.request[data-sequence="1"]')).toHaveAttribute('data-state', 'failed');
   await expect(ui.locator('#pending')).toHaveText('0');
   expect(await publishedApprovalCalls(page)).toEqual(original);
+});
+
+test('verified Intent-only guest invokes modern URIs through the existing native request', async ({page}) => {
+  await openPublished(page, 'intent-only');
+  await expect(page.frameLocator('#napplet').locator('#deliveries')).toBeAttached();
+  const guest = page.frames().find(frame => frame.parentFrame() === page.mainFrame())!;
+  const results = await guest.evaluate(async () => {
+    const {intent, inc} = (window as any).napplet;
+    const outcomes = await Promise.all([
+      intent.invoke('napplet:napptest/open?msg=hello%2Bworld'),
+      intent.open('napplet:napptest/open?msg=hello+world'),
+    ]);
+    const rejected = [];
+    for (const call of [
+      () => intent.invoke('napplet:napptest/open?msg=one&%6dsg=two'),
+      () => intent.invoke('napplet:napptest/open?msg=one', {payload: {msg: 'two'}}),
+      () => intent.open('napplet:napptest/edit'),
+      () => intent.invoke('napplet:napptest/open?msg=%xx'),
+      () => intent.invoke('napplet:napptest/open#untrusted-hint'),
+    ]) {
+      try { await call(); rejected.push(false); } catch { rejected.push(true); }
+    }
+    return {outcomes, rejected, exposesInc: inc !== undefined};
+  });
+  const accepted = {ok: true, archetype: 'napptest', action: 'open', convention: 'napplet:napptest/open', handler: 'native-handler'};
+  expect(results).toEqual({outcomes: [accepted, accepted], rejected: [true, true, true, true, true], exposesInc: false});
+  const requests = await page.evaluate(() => (window as any).__publishedTest.requests
+    .filter((value: any) => value.type === 'capability').map((value: any) => JSON.parse(value.message).message)
+    .filter((value: any) => value.type === 'intent.invoke').map((value: any) => value.request));
+  const normalized = {archetype: 'napptest', action: 'open', convention: 'napplet:napptest/open', payload: {msg: 'hello+world'}};
+  expect(requests).toEqual([normalized, normalized]);
+});
+
+test('verified Intent-only guest buffers trusted native delivery and ignores forged or mismatched messages', async ({page}) => {
+  await openPublished(page, 'intent-only');
+  const output = page.frameLocator('#napplet').locator('#deliveries');
+  await expect(output).toBeAttached();
+  const guest = page.frames().find(frame => frame.parentFrame() === page.mainFrame())!;
+  const valid = {type: 'intent.deliver', delivery: {
+    sender: 'native-attested-caller', archetype: 'napptest', action: 'open',
+    convention: 'napplet:napptest/open', payload: {msg: 'hello+world'},
+  }};
+  await guest.evaluate(message => {
+    const forged = {...message, delivery: {...message.delivery, sender: 'forged'}};
+    window.dispatchEvent(new MessageEvent('message', {source: parent, data: forged}));
+    window.postMessage(forged, '*');
+    parent.postMessage(forged, '*');
+  }, valid);
+  await page.evaluate(message => {
+    const push = (window as any).__publishedTest.pushIntent;
+    push(message, 'wrong-generation');
+    push({...message, delivery: {...message.delivery, convention: 'napplet:wrong/open'}});
+    push(message);
+  }, valid);
+  await expect.poll(() => page.evaluate(() => (window as any).__publishedTest.requests
+    .filter((value: any) => value.type === 'routing-ack').length)).toBe(1);
+  await guest.evaluate(() => {
+    const intent = (window as any).napplet.intent;
+    const subscription = intent.onDelivery((delivery: unknown) => {document.getElementById('deliveries')!.textContent += JSON.stringify(delivery);});
+    subscription.close();
+    subscription.close();
+  });
+  await expect(output).toHaveText(JSON.stringify(valid.delivery));
+  await page.evaluate(message => (window as any).__publishedTest.pushIntent(message), valid);
+  await expect.poll(() => page.evaluate(() => (window as any).__publishedTest.requests
+    .filter((value: any) => value.type === 'routing-ack').length)).toBe(2);
+  await expect(output).toHaveText(JSON.stringify(valid.delivery));
 });

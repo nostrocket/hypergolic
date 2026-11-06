@@ -69,6 +69,8 @@ export function transposeConvention(uri: string, explicitPayload: boolean): Read
   }
   return Object.freeze({ convention: stableConvention(uri.slice(0, queryAt)), payload: routingPayload(Object.fromEntries(fields)) });
 }
+export type IntentContract = Readonly<{ convention: string; params: readonly string[] }>;
+export const namedIntentId = (publisher: string, appId: string): string => `35129:${publisher}:${appId}`;
 export type IntentBehavior = Readonly<{ focus?: boolean; newWindow?: boolean; reuse?: boolean }>;
 export type IntentRequest = Readonly<{ archetype: string; action: string; convention?: string; payload?: JsonValue; handler?: string; behavior?: IntentBehavior }>;
 export function parseIntentRequest(value: unknown): IntentRequest {

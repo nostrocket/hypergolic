@@ -75,7 +75,7 @@ final class RoutingTransportRegistry: @unchecked Sendable {
   }
   func send(_ generation: String, revision: UInt64, raw: String) -> Bool { lock.withLock {
     guard var row = rows[generation], let message = try? UploadWire.object(raw, limit: 36 * 1024, maximumDepth: 40),
-      let type = message["type"] as? String, ["intent.changed", "inc.event", "inc.channel.opened", "inc.channel.event", "inc.channel.closed", "notify.action", "notify.clicked", "notify.dismissed", "notify.controls", "config.values", "config.schemaError"].contains(type),
+      let type = message["type"] as? String, ["intent.changed", "intent.deliver", "inc.event", "inc.channel.opened", "inc.channel.event", "inc.channel.closed", "notify.action", "notify.clicked", "notify.dismissed", "notify.controls", "config.values", "config.schemaError"].contains(type),
       let domain = type.split(separator: ".").first.map(String.init), mayDeliver(generation, revision: revision, domain: domain),
       row.push != nil, row.pending.count < 4, row.delivery < 9_007_199_254_740_991 else { return false }
     row.delivery += 1; let delivery = row.delivery; row.pending.insert(delivery); rows[generation] = row

@@ -6,14 +6,16 @@ import type { RoutingNativeState } from '../../src/routing/routing-port.ts';
 import type { NativeRegistration } from '../../src/runtime/capability-protocol.ts';
 import { DiskSQLite } from '../storage/harness.ts';
 import { artifact } from './fixtures.ts';
+import type { VerifiedNappletArtifact } from '../../src/napplets/verified-artifact.ts';
 export const user = '01'.repeat(32);
-export async function setup(t: {after(action: () => void | Promise<void>): void}) {
+export async function setup(t: {after(action: () => void | Promise<void>): void},
+  selected?: VerifiedNappletArtifact, domains: readonly string[] = ['inc']) {
   const sqlite = new DiskSQLite();
   const catalog = await openRoutingCatalog(sqlite, 'ios'); t.after(async () => {try {await catalog.close();} finally {sqlite.cleanup();}});
-  const a = await artifact(), b = await artifact(10);
+  const a = selected ?? await artifact(), b = await artifact(10);
   await catalog.remember({user, assertActive() {}}, a);
   const source: NativeRegistration = {user, epoch: 0, publisher: '03'.repeat(32), appId: 'caller', version: '04'.repeat(32), sessionId: 'caller-view', generation: 'source-generation', instanceId: 'caller-view', fixture: 'published', domains: ['intent', 'inc']};
-  const target: NativeRegistration = {...source, publisher: a.manifest.pubkey, appId: 'notes', version: a.manifest.versionId, sessionId: 'handler-view', generation: 'handler-generation', instanceId: 'handler-view', domains: ['inc']};
+  const target: NativeRegistration = {...source, publisher: a.manifest.pubkey, appId: a.manifest.tags.find(tag => tag[0] === 'd')![1]!, version: a.manifest.versionId, sessionId: 'handler-view', generation: 'handler-generation', instanceId: 'handler-view', domains};
   let state: RoutingNativeState = {user, epoch: 0, revision: 1, available: true, ownerAvailable: true, foreground: true};
   const revoked = new Set<string>(), live = new Set<string>(), slots = new Map<string, string>(), replies = new Map<string, unknown>();
   const sent: {generation: string; message: Readonly<Record<string, unknown>>}[] = [], activated: string[] = [];
@@ -21,9 +23,9 @@ export async function setup(t: {after(action: () => void | Promise<void>): void}
   let counter = 0, focus = source.generation, lifecycle = () => {}, targetReady = true;
   const native = {
     state: () => state,
-    mayDeliver: (generation: string, revision: number, domain: string) => state.available && revision === state.revision && !revoked.has(generation) && (generation !== target.generation || targetReady) && (generation === source.generation || domain === 'inc'),
+    mayDeliver: (generation: string, revision: number, domain: string) => state.available && revision === state.revision && !revoked.has(generation) && (generation !== target.generation || targetReady) && (generation === source.generation ? source.domains.includes(domain) : generation === target.generation ? target.domains.includes(domain) : domain === 'inc'),
     reviewRevision: () => 1, mayReview: (generation: string, revision: number) => state.available && revision === state.revision && focus === generation && !revoked.has(generation),
-    send(generation: string, revision: number, message: Readonly<Record<string, unknown>>) {if (deniedPush || !this.mayDeliver(generation, revision, message.type === 'intent.changed' ? 'intent' : 'inc')) return false; sent.push({generation, message}); return true;},
+    send(generation: string, revision: number, message: Readonly<Record<string, unknown>>) {if (deniedPush || !this.mayDeliver(generation, revision, String(message.type).startsWith('intent.') ? 'intent' : 'inc')) return false; sent.push({generation, message}); return true;},
     subscribe(listener: () => void) {lifecycle = listener; return () => {};}, newChannelId: () => 'channel-' + ++counter,
   };
   const capability = {take(token: string) {const raw = slots.get(token) ?? null; slots.delete(token); return raw;}, isActive: (token: string) => live.has(token), finish(token: string, response: string | null) {live.delete(token); replies.set(token, response === null ? null : JSON.parse(response));}};

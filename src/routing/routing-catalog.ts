@@ -3,13 +3,13 @@ import { publicKey, utf8Bytes } from '../storage/codec.ts';
 import { configure } from '../storage/schema.ts';
 import { fail, type RequestOptions, type SQLiteModule, type TrustedUser } from '../storage/ports.ts';
 import { assertVerifiedArtifact, MAX_MANIFEST_BYTES, verifyManifest, type VerifiedNappletArtifact, type VerifiedNappletManifest } from '../napplets/verified-artifact.ts';
-import { routingRole, routingText, stableConvention } from './routing-contract.ts';
+import { routingRole, routingText, stableConvention, type IntentContract } from './routing-contract.ts';
 
 export const ROUTING_DATABASE = 'hypergolic-routing-v1.db';
 export const CATALOG_LIMITS = Object.freeze({ perIdentity: 64, total: 256, bytes: 4 * 1024 * 1024 });
 const CATALOG = 'CREATE TABLE routing_catalog (user TEXT NOT NULL, publisher TEXT NOT NULL, app_id TEXT NOT NULL, event_id TEXT NOT NULL, signed_event TEXT NOT NULL CHECK (length(CAST(signed_event AS BLOB)) <= 65536), PRIMARY KEY (user, publisher, app_id)) WITHOUT ROWID';
 const DEFAULTS = 'CREATE TABLE routing_defaults (user TEXT NOT NULL, archetype TEXT NOT NULL, publisher TEXT NOT NULL, app_id TEXT NOT NULL, PRIMARY KEY (user, archetype), FOREIGN KEY (user, publisher, app_id) REFERENCES routing_catalog (user, publisher, app_id) ON DELETE CASCADE) WITHOUT ROWID';
-export type HandlerRole = Readonly<{ archetype: string; conventions: readonly string[] }>;
+export type HandlerRole = Readonly<{ archetype: string; conventions: readonly string[]; contracts?: readonly IntentContract[] }>;
 export type CatalogHandler = Readonly<{ publisher: string; appId: string; eventId: string; version: string; title: string; roles: readonly HandlerRole[]; manifest: VerifiedNappletManifest }>;
 export type HandlerPreference = Readonly<{ archetype: string; publisher: string; appId: string }>;
 export type CatalogSnapshot = Readonly<{ handlers: readonly CatalogHandler[]; defaults: readonly HandlerPreference[] }>;
@@ -20,9 +20,7 @@ export interface RoutingCatalog {
   remove(owner: TrustedUser, handler: Readonly<{ publisher: string; appId: string }>, options?: RequestOptions): Promise<void>;
   close(): Promise<void>;
 }
-/** Role metadata is taken only from a verified manifest, never from a guest request. */
-function handlerFrom(manifest: VerifiedNappletManifest): CatalogHandler {
-  const appId = routingText(manifest.tags.find(tag => tag[0] === 'd')?.[1], 255);
+function legacyRoles(manifest: VerifiedNappletManifest): readonly HandlerRole[] {
   const roles = new Map<string, Set<string>>();
   for (const tag of manifest.tags) {
     if (tag[0] !== 'archetype') continue;
@@ -33,13 +31,52 @@ function handlerFrom(manifest: VerifiedNappletManifest): CatalogHandler {
     roles.set(archetype, conventions);
     if (roles.size > 16 || conventions.size > 16) return fail('QUOTA_EXCEEDED');
   }
+  return Object.freeze([...roles].map(([archetype, conventions]) => Object.freeze({ archetype, conventions: Object.freeze([...conventions]) })));
+}
+
+function modernRoles(manifest: VerifiedNappletManifest): readonly HandlerRole[] {
+  if (!manifest.requiredDomains.includes('intent') && !manifest.optionalDomains.includes('intent')) return [];
+  const roles = new Map<string, Map<string, IntentContract | null>>();
+  for (const tag of manifest.tags) {
+    if (tag[0] !== 'z' || tag.length !== 2) continue;
+    try {
+      const role = routingRole(tag[1]);
+      if (roles.size < 16 && !roles.has(role)) roles.set(role, new Map());
+    } catch { /* Unusable advertisements do not invalidate the manifest. */ }
+  }
+  for (const tag of manifest.tags) {
+    if (tag[0] !== 'i' || tag.length < 2 || tag.length > 18) continue;
+    try {
+      const convention = stableConvention(tag[1]);
+      const separator = convention.indexOf('/');
+      const contracts = roles.get(convention.slice('napplet:'.length, separator));
+      if (!contracts) continue;
+      routingRole(convention.slice(separator + 1));
+      const params = Object.freeze(tag.slice(2).map(param => routingText(param, 128)));
+      const existing = contracts.get(convention);
+      if (existing === undefined && contracts.size < 16) contracts.set(convention, Object.freeze({convention, params}));
+      else if (existing && JSON.stringify(existing.params) !== JSON.stringify(params)) contracts.set(convention, null);
+    } catch { /* Unusable advertisements do not invalidate the manifest. */ }
+  }
+  const result: HandlerRole[] = [];
+  for (const [archetype, byConvention] of roles) {
+    const contracts = Object.freeze([...byConvention.values()].filter(contract => contract !== null));
+    if (contracts.length) result.push(Object.freeze({archetype, contracts, conventions: Object.freeze(contracts.map(contract => contract.convention))}));
+  }
+  return Object.freeze(result);
+}
+
+/** Role metadata is taken only from a verified manifest, never from a guest request. */
+function handlerFrom(manifest: VerifiedNappletManifest): CatalogHandler {
+  const appId = routingText(manifest.tags.find(tag => tag[0] === 'd')?.[1], 255);
+  const roles = manifest.format === 'nip-5d' ? modernRoles(manifest) : legacyRoles(manifest);
   let title = '';
   for (const character of appId) {
     if (utf8Bytes(title + character) > 128) break;
     title += character;
   }
   return Object.freeze({ publisher: manifest.pubkey, appId, eventId: manifest.eventId, version: manifest.versionId, title,
-    roles: Object.freeze([...roles].map(([archetype, conventions]) => Object.freeze({ archetype, conventions: Object.freeze([...conventions]) }))), manifest });
+    roles, manifest });
 }
 const signedEvent = (manifest: VerifiedNappletManifest) => JSON.stringify({ id: manifest.id, pubkey: manifest.pubkey, created_at: manifest.created_at, kind: manifest.kind, tags: manifest.tags, content: manifest.content, sig: manifest.sig });
 type Row = { publisher: string; app_id: string; event_id: string; signed_event: string };

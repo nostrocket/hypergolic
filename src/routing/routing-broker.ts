@@ -1,7 +1,7 @@
 import { decodeNativeRegistration, decodeNativeRequest, CAPABILITY_LIMITS, type NativeRegistration } from '../runtime/capability-protocol.ts';
 import type { NativeCapabilityPort, CapabilityOwner } from '../runtime/capability-broker.ts';
 import { ShellStorageError, type TrustedUser } from '../storage/ports.ts';
-import { parseRoutingMessage, routingRecord, routingText, ROUTING_LIMITS, type IntentRequest, type RoutingMessage } from './routing-contract.ts';
+import { namedIntentId, parseRoutingMessage, routingRecord, routingText, ROUTING_LIMITS, type IntentContract, type IntentRequest, type RoutingMessage } from './routing-contract.ts';
 import type { CatalogHandler, CatalogSnapshot, RoutingCatalog } from './routing-catalog.ts';
 import type { RoutingNativePort } from './routing-port.ts';
 import { RoutingChannels } from './routing-channels.ts';
@@ -16,14 +16,20 @@ const actions = (handler: CatalogHandler, role: string): readonly string[] => {
 };
 function compatible(handler: CatalogHandler, request: IntentRequest): boolean {
   const role = handler.roles.find(value => value.archetype === request.archetype);
-  return !!role && actions(handler, request.archetype).includes(request.action) && (request.convention === undefined || role.conventions.length === 0 || role.conventions.includes(request.convention));
+  if (!role || !actions(handler, request.archetype).includes(request.action)) return false;
+  if (!role.contracts) return request.convention === undefined || role.conventions.length === 0 || role.conventions.includes(request.convention);
+  const convention = `napplet:${request.archetype}/${request.action}`;
+  return (request.convention === undefined || request.convention === convention) && role.conventions.includes(convention);
 }
+type Candidate = Readonly<{dTag: string; id?: string; title: string; actions: readonly string[]; conventions: readonly string[]; contracts?: readonly IntentContract[]; isDefault: boolean}>;
 function availability(catalog: CatalogSnapshot, archetype: string) {
   const preferred = catalog.defaults.find(value => value.archetype === archetype);
-  const candidates: Readonly<{dTag: string; title: string; actions: readonly string[]; conventions: readonly string[]; isDefault: boolean}>[] = [];
+  const candidates: Candidate[] = [];
   for (const handler of catalog.handlers) {
     const role = handler.roles.find(value => value.archetype === archetype);
-    if (role) candidates.push(Object.freeze({dTag: handler.appId, title: handler.title, actions: actions(handler, archetype), conventions: role.conventions, isDefault: preferred?.publisher === handler.publisher && preferred.appId === handler.appId}));
+    if (role) candidates.push(Object.freeze({dTag: handler.appId, title: handler.title, actions: actions(handler, archetype), conventions: role.conventions,
+      ...(role.contracts ? {id: namedIntentId(handler.publisher, handler.appId), contracts: role.contracts} : {}),
+      isDefault: preferred?.publisher === handler.publisher && preferred.appId === handler.appId}));
   }
   return Object.freeze({ archetype, available: candidates.length > 0, candidates: Object.freeze(candidates), hasDefault: candidates.some(value => value.isDefault) });
 }
@@ -100,6 +106,23 @@ export class RoutingBroker {
     }
     throw new Error('Handler not ready');
   }
+  private async deliver(endpoint: Endpoint, target: Endpoint, revision: number, request: IntentRequest,
+    convention: string, modern: boolean, active: () => void, signal: AbortSignal): Promise<boolean> {
+    const domain = modern ? 'intent' : 'inc';
+    if (!target.registration.domains.includes(domain)) return false;
+    if (!modern) {
+      await this.waitFor(() => target.topics.has(convention) ? true : null,
+        () => { active(); this.active(target, revision, domain); }, signal);
+    }
+    active(); this.active(target, revision, domain);
+    const source = endpoint.registration;
+    const payload = Object.prototype.hasOwnProperty.call(request, 'payload') ? {payload: request.payload} : {};
+    const sender = source.fixture === 'published' ? namedIntentId(source.publisher, source.appId) : `bundled:${source.appId}`;
+    const message = modern
+      ? {type: 'intent.deliver', delivery: {sender, archetype: request.archetype, action: request.action, convention, ...payload}}
+      : {type: 'inc.event', topic: convention, sender: source.appId, ...payload};
+    return this.native.send(target.registration.generation, revision, message);
+  }
   private async invoke(endpoint: Endpoint, revision: number, request: IntentRequest, active: () => void, signal: AbortSignal): Promise<Readonly<Record<string, unknown>>> {
     const base = { archetype: request.archetype, action: request.action, ...(request.convention === undefined ? {} : { convention: request.convention }) };
     const failure = (error: string) => Object.freeze({ ...base, ok: false, handled: false, error });
@@ -108,7 +131,8 @@ export class RoutingBroker {
       let candidates = catalog.handlers.filter(handler => handler.roles.some(role => role.archetype === request.archetype));
       if (!candidates.length) return failure('no handler');
       const explicit = request.handler !== undefined && request.handler !== 'choose' && request.handler !== 'default';
-      if (explicit) candidates = candidates.filter(handler => handler.appId === request.handler);
+      if (explicit) candidates = candidates.filter(handler => (handler.manifest.format === 'nip-5d'
+        ? namedIntentId(handler.publisher, handler.appId) : handler.appId) === request.handler);
       if (!candidates.length) return failure('no handler');
       if (explicit && candidates.length !== 1) return failure('ambiguous handler');
       const preferred = catalog.defaults.find(value => value.archetype === request.archetype);
@@ -127,14 +151,13 @@ export class RoutingBroker {
       if (!role) return failure('no handler');
       const conventions = role.conventions;
       const convention = request.convention ?? conventions.find(value => value.endsWith('/' + request.action)) ?? `napplet:${request.archetype}/${request.action}`;
-      if (conventions.length && !conventions.includes(convention)) return failure('unsupported convention');
+      if (!compatible(handler, request)) return failure('unsupported convention');
       if (decision.remember) { const owner = this.owner(endpoint, revision, 'intent'); await this.catalog.prefer(owner, request.archetype, handler, { signal }); active(); await this.catalogChanged(owner, [request.archetype]); active(); }
       const sessionId = await this.targets.activate(handler, request, signal, active, endpoint.registration, revision); active();
       const target = await this.waitFor(() => [...this.endpoints.values()].find(value => value.registration.sessionId === sessionId && value.registration.publisher === handler.publisher && value.registration.appId === handler.appId && value.registration.version === handler.version) ?? null, active, signal);
-      await this.waitFor(() => target.topics.has(convention) ? true : null, () => { active(); this.active(target, revision, 'inc'); }, signal);
-      active(); this.active(target, revision, 'inc');
-      const delivered = this.native.send(target.registration.generation, revision, { type: 'inc.event', topic: convention, sender: endpoint.registration.appId, ...(Object.prototype.hasOwnProperty.call(request, 'payload') ? { payload: request.payload } : {}) });
-      return delivered ? Object.freeze({ ...base, convention, ok: true, handled: true, handler: handler.appId, windowId: sessionId }) : failure('invoke failed');
+      const delivered = await this.deliver(endpoint, target, revision, request, convention, role.contracts !== undefined, active, signal);
+      const handlerId = role.contracts ? namedIntentId(handler.publisher, handler.appId) : handler.appId;
+      return delivered ? Object.freeze({ ...base, convention, ok: true, handled: true, handler: handlerId, windowId: sessionId }) : failure('invoke failed');
     } catch { return failure('invoke failed'); }
   }
   private async operate(endpoint: Endpoint, revision: number, message: RoutingMessage, active: () => void, signal: AbortSignal): Promise<Readonly<Record<string, unknown>> | null> {
