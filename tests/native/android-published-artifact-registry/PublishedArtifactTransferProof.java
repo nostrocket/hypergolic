@@ -169,6 +169,29 @@ public final class PublishedArtifactTransferProof {
     check(claim != null && Arrays.equals(claim.takeHtmlBytes(), bytes));
   }
 
+  private static void boundsReservedAndStagedArtifactBytes() {
+    Fixture f = new Fixture();
+    Claims large = new Claims(new byte[16 * 1024 * 1024]);
+    Claims small = new Claims(new byte[] {'a'});
+    String one = "max-one", two = "max-two", three = "max-three";
+    check(f.transfer.registerPublishedSession(one));
+    check(f.transfer.registerPublishedSession(two));
+    check(f.transfer.registerPublishedSession(three));
+    String first = large.begin(f, one);
+    String second = large.begin(f, two);
+    check(first != null && second != null);
+    check(small.begin(f, three) == null);
+    f.transfer.cancelPublishedArtifact(first);
+    check(small.begin(f, three) != null);
+
+    check(f.registry.stage(large.bytes, one, PUBLISHER, "published-test", EVENT, large.aggregateHash, large.htmlHash) != null);
+    check(f.registry.stage(large.bytes, two, PUBLISHER, "published-test", EVENT, large.aggregateHash, large.htmlHash) != null);
+    check(f.registry.stage(small.bytes, three, PUBLISHER, "published-test", EVENT, small.aggregateHash, small.htmlHash) == null);
+    f.registry.revokeSession(one);
+    check(f.registry.stage(small.bytes, three, PUBLISHER, "published-test", EVENT, small.aggregateHash, small.htmlHash) != null);
+    f.transfer.revokeAllPublishedArtifacts();
+  }
+
   public static void main(String[] args) {
     check(PublishedArtifactTransfer.INSTANCE.registerPublishedSession("default-transfer-test"));
     PublishedArtifactTransfer.INSTANCE.revokePublishedSession("default-transfer-test");
@@ -177,6 +200,7 @@ public final class PublishedArtifactTransferProof {
     lengthIntegrityAndLifecycle();
     admissionCapacityAndExpiry();
     exactMaximumUsesBoundedChunks();
+    boundsReservedAndStagedArtifactBytes();
     System.out.println("{\"status\":\"passed\",\"assertions\":" + assertions + "}");
   }
 }

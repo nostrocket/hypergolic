@@ -1,7 +1,9 @@
 package org.nostrocket.hypergolic.host;
 
 import java.nio.ByteBuffer;
-import java.nio.charset.CharacterCodingException;
+import java.nio.CharBuffer;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CoderResult;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -16,7 +18,8 @@ import java.util.function.LongSupplier;
 
 /** One-use, app-process-only handoff for bytes already verified by the trusted shell. */
 public final class PublishedArtifactRegistry {
-  public static final int MAX_HTML_BYTES = 8 * 1024 * 1024;
+  public static final int MAX_HTML_BYTES = 16 * 1024 * 1024;
+  static final int MAX_PENDING_BYTES = 32 * 1024 * 1024;
   public static final int MAX_PENDING = 4;
   public static final long MAX_LIFETIME_MS = 60_000L;
   private static final int MAX_SESSIONS = 64;
@@ -119,6 +122,9 @@ public final class PublishedArtifactRegistry {
         originalUtf8Bytes.length > MAX_HTML_BYTES) return null;
     prune(now);
     if (pending.size() >= MAX_PENDING || now > Long.MAX_VALUE - MAX_LIFETIME_MS) return null;
+    int reserved = originalUtf8Bytes.length;
+    for (Entry entry : pending.values()) reserved += entry.html.length;
+    if (reserved > MAX_PENDING_BYTES) return null;
 
     byte[] privateCopy = originalUtf8Bytes.clone();
     if (!isStrictUtf8(privateCopy) || !constantTimeEquals(hex(sha256(privateCopy)), htmlHashHex64) ||
@@ -248,11 +254,16 @@ public final class PublishedArtifactRegistry {
   }
 
   private static boolean isStrictUtf8(byte[] bytes) {
-    try {
-      StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
-          .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes));
-      return true;
-    } catch (CharacterCodingException e) { return false; }
+    CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
+        .onUnmappableCharacter(CodingErrorAction.REPORT);
+    ByteBuffer input = ByteBuffer.wrap(bytes);
+    CharBuffer output = CharBuffer.allocate(4096);
+    for (;;) {
+      CoderResult result = decoder.decode(input, output, true);
+      if (result.isError()) return false;
+      output.clear();
+      if (result.isUnderflow()) return decoder.flush(output).isUnderflow();
+    }
   }
 
   private static byte[] sha256(byte[] bytes) {

@@ -58,8 +58,9 @@ final class PublishedArtifactTransfer: @unchecked Sendable {
       aggregateHash: aggregateHash, htmlHash: htmlHash)
     return lock.withLock {
       pruneLocked()
+      let reserved = uploads.values.reduce(byteLength) { $0 + $1.byteLength }
       guard registry.isSessionRegistered(sessionId), uploads.count < Self.maximumUploads,
-        !uploads.values.contains(where: { $0.claims.sessionId == sessionId }) else { return nil }
+        reserved <= PublishedArtifactRegistry.maximumPendingBytes, !uploads.values.contains(where: { $0.claims.sessionId == sessionId }) else { return nil }
       var uploadId: String
       repeat { uploadId = UUID().uuidString.lowercased() } while uploads[uploadId] != nil
       uploads[uploadId] = Upload(claims: claims, byteLength: byteLength,

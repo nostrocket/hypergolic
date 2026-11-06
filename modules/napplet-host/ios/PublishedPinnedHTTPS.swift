@@ -272,6 +272,7 @@ enum PublishedPinnedHTTPS {
       connection?.stateUpdateHandler = nil
       connection?.cancel()
       connection = nil
+      accumulator.discard()
       connect(address)
     }
 
@@ -311,6 +312,7 @@ enum PublishedPinnedHTTPS {
           guard self.active() else { self.finish(.failure(Failure.cancelled)); return }
           guard self.addresses?.markReady() == true else { return }
           connection.send(content: self.request.wire, completion: .contentProcessed { error in
+            guard !self.ended, self.connection === connection else { return }
             if error != nil { self.finish(.failure(Failure.connection)) }
             else { self.receive() }
           })
@@ -325,7 +327,7 @@ enum PublishedPinnedHTTPS {
       guard !ended, let connection else { return }
       guard active() else { finish(.failure(Failure.cancelled)); return }
       connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { data, _, complete, error in
-        guard !self.ended else { return }
+        guard !self.ended, self.connection === connection else { return }
         guard self.active() else { self.finish(.failure(Failure.cancelled)); return }
         if error != nil { self.finish(.failure(Failure.connection)); return }
         do {

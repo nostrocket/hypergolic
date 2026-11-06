@@ -49,6 +49,7 @@ final class PublishedHttpsResponseReader {
     return readGet(input, cancellation, PublishedHttpsTransport.ReadProfile.AVATAR);
   }
   static byte[] readBounded(InputStream input, PublishedHttpsTransport.Cancellation cancellation, int maximumBytes) throws IOException {
+    requireResourceLimit(maximumBytes);
     return readProfile(input, cancellation, maximumBytes, true, false, false).body;
   }
   static byte[] readGet(InputStream input, PublishedHttpsTransport.Cancellation cancellation,
@@ -57,10 +58,18 @@ final class PublishedHttpsResponseReader {
   }
   /** Purpose-specific fixed-hash reconciliation; only complete 200/404 responses can resolve uncertainty. */
   static UploadResponse readRecovery(InputStream input, PublishedHttpsTransport.Cancellation cancellation, int maximumBytes) throws IOException {
+    requireResourceLimit(maximumBytes);
     return readProfile(input, cancellation, maximumBytes, false, false, true);
   }
+  private static void requireResourceLimit(int maximumBytes) throws IOException {
+    if (maximumBytes < 1 || maximumBytes > PublishedHttpsTransport.ReadProfile.RESOURCE.maxBytes) {
+      throw new ResourceFailure("too-large", "Invalid HTTPS body limit");
+    }
+  }
   private static UploadResponse readProfile(InputStream input, PublishedHttpsTransport.Cancellation cancellation, int maximumBytes, boolean redirectsAllowed, boolean uploadProfile, boolean recoveryProfile) throws IOException {
-    if (maximumBytes < 1 || maximumBytes > 10 * 1024 * 1024) throw new ResourceFailure("too-large", "Invalid HTTPS body limit");
+    if (maximumBytes < 1 || maximumBytes > PublishedHttpsTransport.MAX_ARTIFACT_BYTES) {
+      throw new ResourceFailure("too-large", "Invalid HTTPS body limit");
+    }
     HeaderBlock block = readHeaders(input, PublishedHttpsTransport.MAX_RESPONSE_HEADER_BYTES);
     String[] lines = block.text.split("\r\n", -1);
     if (lines.length < 1 || !lines[0].matches("HTTP/1\\.[01] [0-9]{3}( .*)?")) {

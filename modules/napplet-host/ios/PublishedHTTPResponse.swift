@@ -6,7 +6,7 @@ struct PublishedHTTPResponse {
   static let maximumHeaderBytes = 16 * 1024
   static let maximumFramingBytes = 64 * 1024
   static let maximumBodyBytes = 2 * 1024 * 1024
-  static let maximumArtifactBodyBytes = 8 * 1024 * 1024
+  static let maximumArtifactBodyBytes = 16 * 1024 * 1024
   static let maximumUploadBodyBytes = 32 * 1024
   static let maximumResourceBodyBytes = 10 * 1024 * 1024
 

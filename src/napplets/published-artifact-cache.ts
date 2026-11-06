@@ -138,10 +138,11 @@ export async function openPublishedArtifactCache(
         if (identifier !== appId) return fail('INVALID_INPUT');
         const signedEvent = JSON.stringify(eventFrom(artifact));
         const eventBytes = new TextEncoder().encode(signedEvent);
-        const htmlBytes = artifact.htmlBytes;
-        const byteCount = eventBytes.byteLength + htmlBytes.byteLength;
-        if (eventBytes.byteLength > MAX_MANIFEST_BYTES || htmlBytes.byteLength > MAX_HTML_BYTES || byteCount > MAX_STORED_ROW_BYTES) return fail('QUOTA_EXCEEDED');
+        const byteCount = eventBytes.byteLength + artifact.htmlByteLength;
+        if (eventBytes.byteLength > MAX_MANIFEST_BYTES || artifact.htmlByteLength > MAX_HTML_BYTES || byteCount > MAX_STORED_ROW_BYTES) return fail('QUOTA_EXCEEDED');
         await request(options, async io => {
+          if (byteCount > PUBLISHED_ARTIFACT_CACHE_MAX_BYTES) return;
+          const htmlBytes = artifact.htmlBytes;
           await io.run('DELETE FROM verified_published_artifacts WHERE user = ? AND publisher = ? AND identifier = ? AND event_id = ?',
             user, publisher, identifier, artifact.manifest.eventId);
           await io.run(`INSERT INTO verified_published_artifacts (user, publisher, identifier, event_id, signed_event, html, byte_count)

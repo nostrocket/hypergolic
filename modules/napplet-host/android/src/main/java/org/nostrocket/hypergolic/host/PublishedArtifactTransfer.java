@@ -70,7 +70,12 @@ public final class PublishedArtifactTransfer {
         !PublishedArtifactRegistry.validClaims(publisher, identifier, eventId, aggregateHash, htmlHash)) return null;
     prune(time);
     if (uploads.size() >= MAX_ACTIVE_UPLOADS) return null;
-    for (Upload upload : uploads.values()) if (upload.sessionId.equals(sessionId)) return null;
+    int reserved = byteLength;
+    for (Upload upload : uploads.values()) {
+      if (upload.sessionId.equals(sessionId)) return null;
+      reserved += upload.bytes.length;
+    }
+    if (reserved > PublishedArtifactRegistry.MAX_PENDING_BYTES) return null;
     String uploadId = newUploadId();
     if (uploadId == null) return null;
     uploads.put(uploadId, new Upload(sessionId, publisher, identifier, eventId,

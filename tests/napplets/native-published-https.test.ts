@@ -89,9 +89,10 @@ test('invalid operation identity and request semantics never call native fetch',
   assert.equal(called, false);
 });
 
-test('artifact chunk reader verifies and copies 8 MiB without widening avatar Base64', async () => {
+test('artifact chunk reader verifies and copies 16 MiB without widening avatar Base64', async () => {
   const chunkSize = 48 * 1024;
-  const length = MAX_HTML_BYTES;
+  const length = 16 * 1024 * 1024;
+  assert.equal(MAX_HTML_BYTES, length);
   const url = 'https://blossom.example.org/' + 'a'.repeat(64);
   const expected = Buffer.alloc(length, 0x71);
   let nextOffset = 0;

@@ -37,6 +37,7 @@ export type VerifiedNappletManifest = Readonly<{
 export type VerifiedNappletArtifact = Readonly<{
   manifest: VerifiedNappletManifest;
   htmlBytes: Uint8Array;
+  htmlByteLength: number;
   htmlHash: string;
   aggregateHash: string;
 }>;
@@ -104,16 +105,14 @@ function validServerBase(value: string): boolean {
   } catch { return false; }
 }
 
-async function sha256(bytes: Uint8Array): Promise<string> {
+async function sha256(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
   const subtle = globalThis.crypto?.subtle;
-  const stableBuffer = new ArrayBuffer(bytes.byteLength);
-  new Uint8Array(stableBuffer).set(bytes);
   let digest: ArrayBuffer;
   if (subtle) {
-    digest = await subtle.digest('SHA-256', stableBuffer);
+    digest = await subtle.digest('SHA-256', bytes);
   } else {
     const { digest: expoDigest, CryptoDigestAlgorithm } = await import('expo-crypto');
-    digest = await expoDigest(CryptoDigestAlgorithm.SHA256, new Uint8Array(stableBuffer));
+    digest = await expoDigest(CryptoDigestAlgorithm.SHA256, bytes);
   }
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
 }
@@ -301,10 +300,10 @@ export async function verifyArtifact(manifest: VerifiedNappletManifest, htmlByte
     const aggregateInput = new TextEncoder().encode(`${htmlHash} /index.html\n`);
     const aggregateHash = await sha256(aggregateInput);
     if (aggregateHash !== manifest.aggregateHash) return fail();
-    const verifiedBytes = new Uint8Array(copy);
     const artifact = Object.freeze({
       manifest,
-      get htmlBytes(): Uint8Array { return new Uint8Array(verifiedBytes); },
+      htmlByteLength: copy.byteLength,
+      get htmlBytes(): Uint8Array { return new Uint8Array(copy); },
       htmlHash,
       aggregateHash,
     });

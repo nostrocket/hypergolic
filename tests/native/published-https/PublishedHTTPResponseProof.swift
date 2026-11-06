@@ -52,7 +52,8 @@ import Foundation
       try noHeaderEnd.append(Data(repeating: 0x61, count: 5))
       throw NSError(domain: "unbounded header accepted", code: 1)
     } catch is PublishedHTTPResponse.Failure { checks += 1 }
-    let artifactCap = PublishedHTTPResponse.maximumArtifactBodyBytes
+    let artifactCap = 16 * 1024 * 1024
+    guard artifactCap == PublishedHTTPResponse.maximumArtifactBodyBytes else { throw NSError(domain: "artifact profile cap", code: 1) }
     for count in [artifactCap - 1, artifactCap] {
       let wire = data("HTTP/1.1 200 OK\r\nContent-Length: \(count)\r\n\r\n") + Data(repeating: 0x61, count: count)
       let artifact = try PublishedHTTPResponse.parse(wire, maximumBodyBytes: artifactCap, artifactProfile: true)

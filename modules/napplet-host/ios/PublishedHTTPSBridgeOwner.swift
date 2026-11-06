@@ -5,12 +5,16 @@ import UIKit
 final class PublishedHTTPSBridgeOwner: @unchecked Sendable {
   enum Failure: Error { case invalidOperation, busy, inactive }
   private static let artifactChunkBytes = 48 * 1024
+  private static let maximumReservedBodyBytes = 32 * 1024 * 1024
 
   private enum Reply {
     case avatar(CheckedContinuation<String, Error>)
     case artifact(CheckedContinuation<Int, Error>)
 
     var isArtifact: Bool { if case .artifact = self { return true }; return false }
+    var maximumBytes: Int {
+      isArtifact ? PublishedHTTPResponse.maximumArtifactBodyBytes : PublishedHTTPResponse.maximumBodyBytes
+    }
     func reject(_ error: Error) {
       switch self {
       case .avatar(let continuation): continuation.resume(throwing: error)
@@ -22,6 +26,8 @@ final class PublishedHTTPSBridgeOwner: @unchecked Sendable {
   private struct Pending {
     let reply: Reply
     var operation: PublishedPinnedHTTPS.Operation?
+    var starting = false
+    var cancelled = false
   }
   private struct Ready {
     let body: Data
@@ -68,7 +74,10 @@ final class PublishedHTTPSBridgeOwner: @unchecked Sendable {
       return
     }
     let admitted = lock.withLock {
-      guard foreground, pending.count + ready.count < 4, used.count < 65_536,
+      let reserved = ready.values.reduce(reply.maximumBytes) { $0 + $1.body.count } +
+        pending.values.reduce(0) { $0 + $1.reply.maximumBytes }
+      guard foreground, reserved <= Self.maximumReservedBodyBytes,
+            pending.count + ready.count < 4, used.count < 65_536,
             used.insert(operationId).inserted else { return false }
       pending[operationId] = Pending(reply: reply)
       return true
@@ -82,7 +91,13 @@ final class PublishedHTTPSBridgeOwner: @unchecked Sendable {
   }
 
   private func startOperation(operationId: String, url: String) {
-    guard let isArtifact = lock.withLock({ foreground ? pending[operationId]?.reply.isArtifact : nil }) else { return }
+    let artifact = lock.withLock { () -> Bool? in
+      guard foreground, var current = pending[operationId], !current.cancelled else { return nil }
+      current.starting = true
+      pending[operationId] = current
+      return current.reply.isArtifact
+    }
+    guard let isArtifact = artifact else { return }
     let completion: @Sendable (Result<PublishedHTTPResponse, Error>) -> Void = { [weak self] result in
       self?.complete(operationId: operationId, result: result)
     }
@@ -93,7 +108,7 @@ final class PublishedHTTPSBridgeOwner: @unchecked Sendable {
         guard var current = pending[operationId] else { return false }
         current.operation = operation
         pending[operationId] = current
-        return true
+        return !current.cancelled
       }
       if !retained { operation.cancel() }
     } catch { complete(operationId: operationId, result: .failure(error)) }
@@ -117,7 +132,7 @@ final class PublishedHTTPSBridgeOwner: @unchecked Sendable {
     let current = lock.withLock {
       if used.count < 65_536 { used.insert(operationId) }
       ready.removeValue(forKey: operationId)
-      return pending.removeValue(forKey: operationId)
+      return cancelLocked(operationId)
     }
     current?.operation?.cancel()
     current?.reply.reject(Failure.inactive)
@@ -125,15 +140,25 @@ final class PublishedHTTPSBridgeOwner: @unchecked Sendable {
 
   func revokeAll() {
     let all = lock.withLock {
-      let all = Array(pending.values)
-      pending.removeAll()
       ready.removeAll()
-      return all
+      return Array(pending.keys).compactMap { cancelLocked($0) }
     }
     for current in all {
       current.operation?.cancel()
       current.reply.reject(Failure.inactive)
     }
+  }
+
+  // Keep an in-flight reservation until its network callback releases the accumulator.
+  private func cancelLocked(_ operationId: String) -> Pending? {
+    guard var current = pending[operationId], !current.cancelled else { return nil }
+    if current.starting {
+      current.cancelled = true
+      pending[operationId] = current
+    } else {
+      pending.removeValue(forKey: operationId)
+    }
+    return current
   }
 
   private func setForeground(_ value: Bool) {
@@ -143,7 +168,7 @@ final class PublishedHTTPSBridgeOwner: @unchecked Sendable {
 
   private func complete(operationId: String, result: Result<PublishedHTTPResponse, Error>) {
     lock.lock()
-    guard let current = pending.removeValue(forKey: operationId) else { lock.unlock(); return }
+    guard let current = pending.removeValue(forKey: operationId), !current.cancelled else { lock.unlock(); return }
     guard foreground else { lock.unlock(); current.reply.reject(Failure.inactive); return }
     switch (current.reply, result) {
     case (.artifact(let continuation), .success(let response)):

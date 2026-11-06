@@ -227,7 +227,8 @@ public final class PublishedHttpsTlsProof {
       cancelled.set(true);
       check(pending.get(2, TimeUnit.SECONDS));
     }
-    int cap = PublishedHttpsTransport.MAX_ARTIFACT_BYTES;
+    int cap = 16 * 1024 * 1024;
+    equal(cap, PublishedHttpsTransport.MAX_ARTIFACT_BYTES);
     for (int length : new int[]{cap - 1, cap}) {
       byte[] wire = ok("x".repeat(length)).getBytes(StandardCharsets.US_ASCII);
       equal(length, PublishedHttpsResponseReader.readGet(new java.io.ByteArrayInputStream(wire), () -> false,

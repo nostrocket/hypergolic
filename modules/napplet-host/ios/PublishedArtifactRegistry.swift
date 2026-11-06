@@ -4,7 +4,8 @@ import Foundation
 /// Private, one-use transfer of already verified HTML into a native host generation.
 /// This registry checks bytes and ownership claims; it does not verify Nostr signatures.
 final class PublishedArtifactRegistry: @unchecked Sendable {
-  static let maximumHTMLBytes = 8 * 1024 * 1024
+  static let maximumHTMLBytes = 16 * 1024 * 1024
+  static let maximumPendingBytes = 32 * 1024 * 1024
   static let maximumPending = 4
   static let lifetime: Duration = .seconds(60)
 
@@ -57,12 +58,13 @@ final class PublishedArtifactRegistry: @unchecked Sendable {
     let htmlHash = Self.sha256(input)
     guard htmlHash == claims.htmlHash,
       Self.sha256(Data("\(htmlHash) /index.html\n".utf8)) == claims.aggregateHash else { return nil }
-    // Allocate a separate backing store before acquiring the lock. The caller may reuse its buffer.
-    let copy = Self.copy(input)
     return lock.withLock {
       pruneLocked()
-      guard activeSessions.contains(claims.sessionId),
+      let reserved = pending.values.reduce(input.count) { $0 + $1.htmlBytes.count }
+      guard activeSessions.contains(claims.sessionId), reserved <= Self.maximumPendingBytes,
         pending.count < Self.maximumPending else { return nil }
+      // The caller may reuse its buffer. Copy only after reserving budget.
+      let copy = Self.copy(input)
       var handle: String
       repeat { handle = UUID().uuidString.lowercased() } while pending[handle] != nil
       pending[handle] = Pending(claims: claims, htmlBytes: copy, expires: now().advanced(by: Self.lifetime))

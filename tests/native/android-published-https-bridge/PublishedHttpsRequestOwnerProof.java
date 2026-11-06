@@ -19,6 +19,7 @@ public final class PublishedHttpsRequestOwnerProof {
     cancellationAndBackgroundRevokeRunningReads();
     appliesTheProductionAddressPolicy();
     artifactChunksAreOneUseAndCleared();
+    preservesBodyBudgetUntilCancelledFetchUnwinds();
     System.out.println("PublishedHttpsRequestOwnerProof: " + assertions.get() + " assertions passed");
   }
 
@@ -149,6 +150,56 @@ public final class PublishedHttpsRequestOwnerProof {
     owner.setForeground(false);
     equal(0, retained[0]);
     throwsIo(() -> owner.readArtifactChunk(backgrounded, 0));
+  }
+
+  private static void preservesBodyBudgetUntilCancelledFetchUnwinds() throws Exception {
+    CountDownLatch started = new CountDownLatch(2);
+    CountDownLatch sawCancellation = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    AtomicInteger attempts = new AtomicInteger();
+    PublishedHttpsRequestOwner owner = new PublishedHttpsRequestOwner((url, cancellation) -> {
+      if (attempts.incrementAndGet() > 2) return new byte[] { 1 };
+      started.countDown();
+      waitForCancellation(cancellation);
+      sawCancellation.countDown();
+      await(release);
+      throw new IOException("cancelled");
+    });
+    owner.setForeground(true);
+    String target = "https://napplets.example.org/" + "a".repeat(64);
+    String first = UUID.randomUUID().toString(), second = UUID.randomUUID().toString();
+    Thread one = new Thread(() -> startPendingArtifact(owner, first, target));
+    Thread two = new Thread(() -> startPendingArtifact(owner, second, target));
+    one.setDaemon(true); two.setDaemon(true);
+    one.start(); two.start();
+    check(started.await(2, TimeUnit.SECONDS));
+    throwsIo(() -> owner.fetchArtifact(UUID.randomUUID().toString(), target, () -> true));
+    check(owner.cancel(first));
+    check(sawCancellation.await(2, TimeUnit.SECONDS));
+    throwsIo(() -> owner.fetchArtifact(UUID.randomUUID().toString(), target, () -> true));
+    release.countDown();
+    one.join(2_000);
+    check(!one.isAlive());
+    check(owner.cancel(second));
+    two.join(2_000);
+    check(!two.isAlive());
+
+    PublishedHttpsRequestOwner retained = new PublishedHttpsRequestOwner((url, cancellation) ->
+        new byte[16 * 1024 * 1024]);
+    retained.setForeground(true);
+    String third = UUID.randomUUID().toString();
+    equal(16 * 1024 * 1024, retained.fetchArtifact(first, target, () -> true));
+    equal(16 * 1024 * 1024, retained.fetchArtifact(second, target, () -> true));
+    throwsIo(() -> retained.fetchArtifact(third, target, () -> true));
+    check(retained.cancel(first));
+    equal(16 * 1024 * 1024, retained.fetchArtifact(third, target, () -> true));
+    retained.revokeAll();
+    throwsIo(() -> retained.readArtifactChunk(second, 0));
+  }
+
+  private static void startPendingArtifact(PublishedHttpsRequestOwner owner, String id, String url) {
+    try { owner.fetchArtifact(id, url, () -> true); }
+    catch (IOException expected) { assertions.incrementAndGet(); }
   }
 
   private static void await(CountDownLatch latch) throws IOException {

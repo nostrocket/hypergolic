@@ -5,7 +5,7 @@ import { finalizeEvent, getPublicKey } from 'nostr-tools/pure';
 import { naddrEncode } from 'nostr-tools/nip19';
 import { resolveNappletLink } from '../../src/napplets/resolve-link.ts';
 import { verifyArtifact, verifyManifest } from '../../src/napplets/verified-artifact.ts';
-import { openPublishedArtifactCache, PUBLISHED_ARTIFACT_CACHE_DATABASE } from '../../src/napplets/published-artifact-cache.ts';
+import { openPublishedArtifactCache, PUBLISHED_ARTIFACT_CACHE_DATABASE, PUBLISHED_ARTIFACT_CACHE_MAX_BYTES } from '../../src/napplets/published-artifact-cache.ts';
 import { registration } from '../storage/harness.ts';
 import { DiskSQLite } from '../storage/harness.ts';
 
@@ -13,13 +13,13 @@ const SECRET = new Uint8Array(32); SECRET[31] = 27;
 const publisher = getPublicKey(SECRET), user = '12'.repeat(32), html = new TextEncoder().encode('<!doctype html><html><head><title>Cache</title></head><body>ok</body></html>');
 const hex = (bytes: Uint8Array) => Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
 async function sha(bytes: Uint8Array) { return hex(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))); }
-async function makeArtifact(identifier = 'cached') {
-  const htmlHash = await sha(html), aggregate = await sha(new TextEncoder().encode(`${htmlHash} /index.html\n`));
+async function makeArtifact(identifier = 'cached', content = html) {
+  const htmlHash = await sha(content), aggregate = await sha(new TextEncoder().encode(`${htmlHash} /index.html\n`));
   const event = finalizeEvent({ kind: 35129, created_at: 1_800_000_000, content: '', tags: [
     ['d', identifier], ['path', '/index.html', htmlHash], ['x', aggregate, 'aggregate'], ['requires', 'theme'],
   ] }, SECRET);
   const coordinate = resolveNappletLink(naddrEncode({ kind: 35129, pubkey: publisher, identifier }));
-  return verifyArtifact(await verifyManifest(coordinate, JSON.parse(JSON.stringify(event))), html);
+  return verifyArtifact(await verifyManifest(coordinate, JSON.parse(JSON.stringify(event))), content);
 }
 const deferred = () => { let resolve!: () => void; const promise = new Promise<void>(done => { resolve = done; }); return { promise, resolve }; };
 
@@ -58,6 +58,22 @@ test('duplicate put atomically replaces the cache row', async t => {
   const db = new DatabaseSync(`${sqlite.directory}/${PUBLISHED_ARTIFACT_CACHE_DATABASE}`);
   assert.equal((db.prepare('SELECT count(*) AS count FROM verified_published_artifacts').get() as { count: number }).count, 1);
   db.close();
+  await cache.close();
+});
+
+test('skips an artifact whose full row cannot fit without evicting the saved pin', async t => {
+  const sqlite = new DiskSQLite(); t.after(() => sqlite.cleanup());
+  const owner = registration({ user, publisher, appId: 'cached' });
+  const cache = await openPublishedArtifactCache(sqlite, { owner, epoch: 1, currentEpoch: () => 1 });
+  const pin = await makeArtifact();
+  await cache.put(pin);
+  const start = '<!doctype html><html><head></head><body>';
+  const end = '</body></html>';
+  const size = PUBLISHED_ARTIFACT_CACHE_MAX_BYTES;
+  const big = await makeArtifact('cached', new TextEncoder().encode(start + 'x'.repeat(size - start.length - end.length) + end));
+  await cache.put(big);
+  assert.equal(await cache.get('cached', big.manifest.eventId), null);
+  assert.ok(await cache.get('cached', pin.manifest.eventId));
   await cache.close();
 });
 

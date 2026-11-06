@@ -18,6 +18,7 @@ public final class PublishedHttpsRequestOwner {
   private static final int MAX_CONCURRENT_REQUESTS = 4;
   private static final int MAX_PROCESS_OPERATIONS = 65_536;
   private static final int ARTIFACT_CHUNK_BYTES = 48 * 1024;
+  private static final int MAX_RESERVED_BODY_BYTES = 32 * 1024 * 1024;
   private static final ScheduledThreadPoolExecutor expiry = new ScheduledThreadPoolExecutor(1, task -> {
     Thread thread = new Thread(task, "napplet-artifact-https-expiry");
     thread.setDaemon(true);
@@ -66,14 +67,17 @@ public final class PublishedHttpsRequestOwner {
     }
   }
 
-  private Operation begin(String operationId) throws IOException {
+  private Operation begin(String operationId, int maximumBytes) throws IOException {
     validateOperationId(operationId);
-    Operation operation = new Operation();
+    Operation operation = new Operation(maximumBytes);
     synchronized (lock) {
       if (!foreground) throw new IOException("Published HTTPS transport is inactive");
       if (consumed.contains(operationId)) throw new IOException("Published HTTPS operation id was already used");
       if (active.size() >= MAX_CONCURRENT_REQUESTS) throw new IOException("Too many published HTTPS requests");
       if (consumed.size() >= MAX_PROCESS_OPERATIONS) throw new IOException("Published HTTPS operation limit reached");
+      int reserved = maximumBytes;
+      for (Operation existing : active.values()) reserved += existing.reservedBytes();
+      if (reserved > MAX_RESERVED_BODY_BYTES) throw new IOException("Published HTTPS body budget exhausted");
       consumed.add(operationId);
       active.put(operationId, operation);
     }
@@ -81,7 +85,7 @@ public final class PublishedHttpsRequestOwner {
   }
 
   public byte[] fetch(String operationId, String url, JobState job) throws IOException {
-    Operation operation = begin(operationId);
+    Operation operation = begin(operationId, PublishedHttpsTransport.MAX_BODY_BYTES);
     try {
       return fetcher.fetch(url, () -> operation.cancelled || job == null || !job.isActive());
     } finally {
@@ -91,7 +95,7 @@ public final class PublishedHttpsRequestOwner {
 
   /** Starts the artifact transport and retains at most one bounded body for sequential app-only reads. */
   public int fetchArtifact(String operationId, String url, JobState job) throws IOException {
-    Operation operation = begin(operationId);
+    Operation operation = begin(operationId, PublishedHttpsTransport.MAX_ARTIFACT_BYTES);
     byte[] bytes = null;
     try {
       bytes = artifactFetcher.fetch(url, () -> operation.cancelled || job == null || !job.isActive());
@@ -176,8 +180,11 @@ public final class PublishedHttpsRequestOwner {
   }
 
   private static final class Operation {
+    final int maximumBytes;
     volatile boolean cancelled;
     byte[] bytes;
+    Operation(int maximumBytes) { this.maximumBytes = maximumBytes; }
+    int reservedBytes() { return bytes == null ? maximumBytes : bytes.length; }
     int cursor;
     ScheduledFuture<?> expiry;
     void clear() {
