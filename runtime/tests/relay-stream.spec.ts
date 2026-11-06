@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { finalizeEvent } from 'nostr-tools/pure';
 import { readFileSync } from 'node:fs';
 const event=JSON.parse(readFileSync(new URL('../../tests/native/feed-query/events.json',import.meta.url),'utf8'))[0];
 // Native-port double: genuine SDK/Kehto, signed validation and captured recipient only.
@@ -56,6 +57,17 @@ test('SDK subscriptions requesting more initial history reach the native owner w
   await page.evaluate(({envelope, subId}) => (window as any).streamTest.push(envelope, {type: 'relay.eose', subId}), {envelope, subId});
   await expect.poll(() => frame.evaluate(() => (window as any).eose)).toBe(1);
 });
+test('runtime independently verifies and delivers a signed event with long tags', async ({page}) => {
+  const {frame,envelope,subId} = await open(page);
+  const secret = new Uint8Array(32); secret[31] = 1;
+  const event = finalizeEvent({kind:1,created_at:100,content:'generic fixture',
+    tags:[['proofmode','p'.repeat(10_959)],['alt','é'.repeat(1539)]]},secret);
+  await page.evaluate(({envelope,subId,event}) => (window as any).streamTest.push(envelope, {
+    type:'relay.event',subId,result:{event},
+  }), {envelope,subId,event});
+  await expect.poll(() => frame.evaluate(() => (window as any).events)).toEqual([event.id]);
+});
+
 test('trusted peer-live delivery works before aggregate EOSE and keeps private metadata out of the guest', async ({page}) => {
   const {frame, envelope, subId} = await open(page, 0);
   const response = {type: 'relay.event', subId, live: true, result: {event}};

@@ -92,26 +92,53 @@ export function queryMatches(event: NostrEvent, filter: QueryFilter, phase: Quer
     return event.tags.some(tag => tag[0] === key.slice(1) && tag[1] !== undefined && (value as readonly string[]).includes(tag[1]));
   });
 }
+// Count JSON string contents before allocating a serialization, including escape amplification.
+function consumeJsonText(value: string, remaining: number, allowUnpaired = false): number {
+  if (value.length > remaining) return fail();
+  for (let index = 0; index < value.length; index++) {
+    const point = value.codePointAt(index)!;
+    if (point > 0xffff) { remaining -= 4; index++; }
+    else if (point >= 0xd800 && point <= 0xdfff) {
+      if (!allowUnpaired) return fail();
+      remaining -= 6;
+    } else if (point < 0x20) remaining -= point >= 8 && point <= 13 && point !== 11 ? 2 : 6;
+    else if (point === 0x22 || point === 0x5c) remaining -= 2;
+    else remaining -= point <= 0x7f ? 1 : point <= 0x7ff ? 2 : 3;
+    if (remaining < 0) return fail();
+  }
+  return remaining;
+}
+
 /** Fresh exact event fields prevent cached verifyEvent symbols from blessing mutated input. */
 export function verifyQueryEvent(input: unknown, filters: readonly QueryFilter[], phase: QueryPhase = 'stored'): NostrEvent {
   const value = record(input);
   if (typeof value.id !== 'string' || !hex64.test(value.id) || typeof value.pubkey !== 'string' || !hex64.test(value.pubkey) ||
       typeof value.sig !== 'string' || !/^[0-9a-f]{128}$/.test(value.sig) ||
       !integer(value.kind) || value.kind > 65535 || !integer(value.created_at) || typeof value.content !== 'string') return fail();
-  const tags = dense(value.tags, 256).map(item => {
+  const event: NostrEvent = { id: value.id, pubkey: value.pubkey, kind: value.kind,
+    created_at: value.created_at, content: value.content, tags: [], sig: value.sig };
+  // The fixed header is ASCII. Its empty content and tags include their outer delimiters.
+  const available = QUERY_LIMITS.eventBytes - JSON.stringify({ ...event, content: '' }).length;
+  let remaining = consumeJsonText(event.content, available, true);
+  const tags = dense(value.tags, 256);
+  remaining -= Math.max(0, tags.length - 1);
+  for (const item of tags) {
     const tag = dense(item, 64);
-    if (!tag.every(field => typeof field === 'string' && utf8Bytes(field) <= 1024)) return fail();
-    return tag as string[];
-  });
-  const event: NostrEvent = { id: value.id as string, pubkey: value.pubkey as string,
-    kind: value.kind, created_at: value.created_at, content: value.content, tags, sig: value.sig };
-  if (utf8Bytes(JSON.stringify(event)) > QUERY_LIMITS.eventBytes || !filters.some(filter => queryMatches(event, filter, phase))) return fail();
+    remaining -= 2 + tag.length * 2 + Math.max(0, tag.length - 1);
+    if (remaining < 0) return fail();
+    for (const field of tag) {
+      if (typeof field !== 'string') return fail();
+      remaining = consumeJsonText(field, remaining);
+    }
+    event.tags.push(tag as string[]);
+  }
+  if (!filters.some(filter => queryMatches(event, filter, phase))) return fail();
   try { if (getEventHash(event) !== event.id || !verifyEvent(event)) return fail(); } catch { return fail(); }
   // Remove verification cache symbols; downstream code receives only NIP-01 fields.
   const clean = { id: event.id, pubkey: event.pubkey, kind: event.kind, created_at: event.created_at,
     content: event.content, tags: event.tags, sig: event.sig };
-  for (const tag of tags) Object.freeze(tag);
-  Object.freeze(tags);
+  for (const tag of event.tags) Object.freeze(tag);
+  Object.freeze(event.tags);
   return Object.freeze(clean);
 }
 export function selectQueryEvents(events: readonly NostrEvent[], filters: readonly QueryFilter[]): readonly Readonly<{ event: NostrEvent }>[] {

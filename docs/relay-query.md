@@ -19,9 +19,9 @@ validation failure is never represented as an empty successful result.
 | Boundary | Selected limit/behavior |
 | --- | --- |
 | Filters | 1–4; ids/authors/kinds/since/until/limit and single-letter tag filters |
-| Lists | 1–64 entries; exact lowercase hex64 for ids/authors/#e/#p |
+| Filter values | 1–64 entries per list, up to 1 KiB per string. Exact lowercase hex64 for ids/authors/#e/#p |
 | Request | 16 KiB; limit defaults to 32; nonnegative safe integers above 32 are capped to 32 |
-| Events | 32 raw events/relay and 32 unique aggregate events; 64 KiB/event; 512 KiB aggregate event bytes |
+| Events | 32 raw events/relay and 32 unique aggregate events; 64 KiB per serialized event, including escaped content and tags. 512 KiB aggregate event bytes |
 | Transport | Up to 16 selected public WSS Network relays, sequentially; 64 frames/relay |
 | Lifetime | One 15-second total deadline; two concurrent queries per service and per broker |
 | Selection | Filter conditions AND; filters OR; newest timestamp first, then ascending id; per-filter limits |

@@ -43,7 +43,8 @@ broker reports a policy denial only through its exact accepted native token.
 Guest close, renderer teardown, or the original deadline removes the waiting
 start. Unscoped and mixed Outbox streams keep their immediate quota behavior.
 
-Event size is bounded to 64 KiB, raw text to 66 KiB, native frame delivery to one
+Serialized event size includes escaped content and tags and is bounded to 64 KiB.
+The shared raw WSS frame ceiling is 66,560 bytes. Native frame delivery stays at one
 unacknowledged frame per connection and renderer delivery to four messages/256
 KiB per token. Native rolling wire bounds are 64 frames and 2 MiB per second.
 The coordinator retains 1,024 recent event IDs and at most five consecutive failed

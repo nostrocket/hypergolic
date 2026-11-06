@@ -6,7 +6,7 @@ import { parseRelaySubscribe, parseRelayClose, SUBSCRIPTION_LIMITS, type RelaySu
 import type { NativeRegistration } from '../../src/runtime/capability-protocol.ts';
 
 const secret=new Uint8Array(32);secret[31]=1;
-const signed=(content='known',kind=1)=>JSON.parse(JSON.stringify(finalizeEvent({kind,created_at:100,content,tags:[]},secret)));
+const signed=(content='known',kind=1,tags:string[][]=[])=>JSON.parse(JSON.stringify(finalizeEvent({kind,created_at:100,content,tags},secret)));
 const request=(subId='caller')=>({type:'relay.subscribe',id:'request-'+subId,subId,filters:[{kinds:[1],limit:2}]});
 const close=(subId='caller')=>({type:'relay.close',id:'close-'+subId,subId});
 const registration=(generation='generation-1'):NativeRegistration=>({sessionId:generation,generation,epoch:0,user:'1'.repeat(64),publisher:'2'.repeat(64),appId:'feed-lab',version:'3'.repeat(64),instanceId:generation,fixture:'feed-lab',domains:['relay']});
@@ -131,6 +131,26 @@ test('invalid signature, signed mismatch and foreign subscription fail closed',(
     assert.equal(h.calls[0]!.stopped,1);h.event();h.eose();assert.equal(h.messages.length,1);
   }
 });
+test('signed long video tags leave history and live delivery intact, while a bad signature is terminal', () => {
+  const h = harness();
+  const proof = signed('proof',34236,[['proofmode','p'.repeat(10_959)]]);
+  const alt = signed('description',34235,[['alt','é'.repeat(1539)]]);
+  const later = signed('later',34236);
+  h.session.subscribe({...request(),filters:[{kinds:[34235,34236],limit:32}]},h.send);
+  h.event(0,proof); h.event(0,alt); h.event(0,later); h.eose();
+  const live = signed('live',34236,[['alt','a'.repeat(3000)]]);
+  h.event(0,live);
+  assert.deepEqual(h.messages,[
+    ...[proof,alt,later].map(event=>({type:'relay.event',subId:'caller',result:{event}})),
+    {type:'relay.eose',subId:'caller'},{type:'relay.event',subId:'caller',result:{event:live}},
+  ]);
+  assert.equal(h.calls[0]?.stopped,0);
+  h.event(0,{...signed('forged',34236,[['proofmode','p'.repeat(10_959)]]),sig:'0'.repeat(128)});
+  h.event(0,signed('ignored after close',34236));
+  assert.deepEqual(h.messages.slice(5),[{type:'relay.closed',subId:'caller',reason:'invalid or excessive relay stream'}]);
+  assert.equal(h.calls[0]?.stopped,1);
+});
+
 test('explicit close invalidates callbacks before stopping and rejects caller-ID reuse',()=> {
   const h=harness();h.session.subscribe(request(),h.send);h.session.close(close());
   h.event();h.eose();h.calls[0]!.failed();assert.deepEqual(h.messages,[]);assert.equal(h.calls[0]!.stopped,1);
