@@ -108,7 +108,11 @@
       "babel-plugin-polyfill-corejs2@0.4.17>semver": "7.8.5",
       "@expo/config@58.0.8>deepmerge": "-",
       "@expo/cli@58.1.15>zod": "4.6.6",
-      "node-forge": "1.4.2"
+      "node-forge": "1.4.2",
+      "glob": "14.0.3",
+      "minimatch": "11.0.2",
+      "minimatch@11.0.2>@isaacs/nonrecursive-glob-match": "1.0.2",
+      "glob@14.0.3>path-scurry": "3.0.0"
     },
     "patchedDependencies": {
       "braces@3.0.3": "tools/quality/patches/braces@3.0.3.patch",

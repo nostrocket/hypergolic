@@ -25,8 +25,8 @@ checks when updating it.
 
 Root overrides pin compatible security or tooling updates for fast-uri,
 ip-address, brace-expansion, source-map-js, proxy-addr, compression, shell-quote,
-MCP SDK, Hono, Zod, qs, body-parser, Hono's Node server, Fallow, xcode's uuid and
-node-forge.
+MCP SDK, Hono, Zod, qs, body-parser, Hono's Node server, Fallow, xcode's uuid,
+node-forge, glob, minimatch and their traversal/optimizer dependencies.
 The manifests are the version authority. Runtime and lab projects have separate
 lockfiles and pins; review all ten installed projects when auditing the repository.
 
@@ -36,8 +36,8 @@ RSA DigestInfo encodings and restores PEM Buffer input, which regressed in 1.4.1
 Expo certificate APIs and CLI parser with disposable certificates.
 [Upstream changelog](https://github.com/digitalbazaar/forge/blob/v1.4.2/CHANGELOG.md).
 
-Two substitutions cross the consumers' declared major ranges and need their
-specific compatibility checks:
+The following substitutions cross consumers' declared major ranges and need
+their specific compatibility checks:
 
 - `@expo/cli@58.1.15>zod` selects 4.6.6 for the CLI's actual schemas and MCP
   integration. Diagnostic structures differ from Zod 3, non-JSON Infinity is
@@ -48,6 +48,14 @@ specific compatibility checks:
   runtime range `<0.0.0` has an intentional intersection difference. Keep the
   actual-consumer and Expo/Metro/Worklets checks; do not generalize the override
   to every SemVer 6 caller.
+- Expo and ESLint consumers select glob 14.0.3 and minimatch 11.0.2, with
+  path-scurry 3.0.0 and the nonrecursive matcher 1.0.2. These releases bound
+  optimizer expansion and stop directory traversal after cancellation.
+  `pnpm run test:quality` checks the actual consumer APIs, discovery and ignore
+  rules, default CJS/ESM bundles, expansion limits and cancellation. Expansion
+  ceilings affect unusually complex patterns; these checks establish compatibility
+  for the exercised consumers. Keep both native prebuilds and Metro exports in
+  the update checks.
 
 The tracked scene-lifecycle plugin configures the single iOS scene in the Expo
 template. Keep the native source-build settings in `app.json` when updating
