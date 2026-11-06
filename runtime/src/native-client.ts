@@ -1,3 +1,4 @@
+import {canDeferCapability, parseCapabilityRequest} from '../../src/runtime/capability-protocol';
 import {parseOutboxSubscribe,parseOutboxClose} from '../../src/outbox/subscription-contract';
 import {normalizeRelayUrl} from '../../src/network/relay-settings';
 import {captureConfigPush, captureConfigReply, type ConfigMessage} from '../../src/presentation/config-contract';
@@ -17,6 +18,10 @@ export interface NativeHost {
 }
 const maxBytes = 2 * 1024 * 1024;
 const ordinaryTimeoutMs = 27_000;
+function deferredRequest(message: NappletMessage): boolean {
+  if (!canDeferCapability(message.type)) return false;
+  try {parseCapabilityRequest(message); return true;} catch {return false;}
+}
 type StreamState={domain:'relay'|'outbox';subId:string; filters:readonly QueryFilter[]; timer:number; delivery:number; eose:boolean; controlRevision:number; deliver:(message:NappletMessage)=>void};
 type StreamEnvelope={sequence:number;delivery:number;response:unknown};
 type NativeClientOptions = Readonly<{ requestTimeoutsMs?: Readonly<Record<string, number>>; onRouting?: (message: NappletMessage, acknowledge: () => void) => void }>;
@@ -195,14 +200,16 @@ export function createNativeClient(native: NativeHost, generation: string, optio
     native.postMessage(JSON.stringify({type:'relay-stream-ack',sessionId:generation,sequence:++sequence,streamSequence:envelope.sequence,delivery:envelope.delivery}));
   };
   function request(message: NappletMessage, upload?: Readonly<{uploadId: string; onStatus(message: NappletMessage): void}>, timeoutMs?: number): Promise<NappletMessage> {
-      if (disposed || pending.size >= 4 || sequence >= Number.MAX_SAFE_INTEGER || !('id' in message) || typeof message.id !== 'string') {
+      const deferred = deferredRequest(message);
+      if (disposed || pending.size >= (deferred ? 12 : 4) || sequence >= Number.MAX_SAFE_INTEGER || !('id' in message) || typeof message.id !== 'string') {
         return Promise.reject(new Error('Native capability unavailable'));
       }
       if (upload && (message.type !== 'upload.__seal' || uploads.size >= 2 || typeof upload.uploadId !== 'string' ||
         upload.uploadId.length === 0 || upload.uploadId.length > 128)) return Promise.reject(new Error('Native upload unavailable'));
       const id = message.id;
       const counter = sequence + 1;
-      const encoded = JSON.stringify({ type: 'capability', sessionId: generation, sequence: counter, message: JSON.stringify(message) });
+      const encoded = JSON.stringify({ type: 'capability', sessionId: generation, sequence: counter,
+        message: JSON.stringify(message), ...(deferred ? {deferred: true} : {}) });
       if (new TextEncoder().encode(encoded).length > maxBytes) return Promise.reject(new Error('Native request too large'));
       sequence = counter;
       return enqueueRequest(native, pending, uploads, {counter, encoded, id, type: message.type, timeoutMs: timeoutMs ?? options.requestTimeoutsMs?.[message.type] ?? ordinaryTimeoutMs, ...(upload ? {upload} : {})});

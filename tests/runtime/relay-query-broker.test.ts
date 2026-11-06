@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCapabilityBroker } from '../../src/runtime/capability-broker.ts';
 import type { NativeRegistration } from '../../src/runtime/capability-protocol.ts';
+import { identityResult } from '../../src/runtime/capability-protocol.ts';
 import { NativeLeases } from './native-leases.ts';
 import { setup, hex } from '../storage/harness.ts';
 const registration = (patch: Partial<NativeRegistration> = {}): NativeRegistration => ({ sessionId: 'feed-lab-1', generation: 'generation-1', epoch: 0,
@@ -48,4 +49,48 @@ for (const reason of ['broker', 'native', 'identity']) test(`in-flight ${reason}
   const token = native.add(owner, request()), dispatch = broker.dispatch(token);
   if (reason === 'broker') broker.revoke(); else if (reason === 'native') native.revoke(token); else active = false;
   await dispatch; assert.equal(aborted, true); assert.equal(native.results.get(token), null);
+});
+
+test('public startup reads wait behind two active reads while a protected request still fails promptly', async t => {
+  const {database} = await setup(t), native = new NativeLeases(), owner = registration({domains: ['identity','relay']});
+  const started: string[] = [], release: Array<() => void> = [];
+  const hold = (name: string) => new Promise<void>(resolve => {started.push(name); release.push(resolve);});
+  const broker = createCapabilityBroker(database, native, {registration: owner, assertActive() {}}, {
+    async query() {await hold('relay.query'); return [];},
+  }, undefined, undefined, {
+    async read(wire) {await hold(wire.type); return identityResult(wire, owner.user);},
+  });
+  const token = (type: string) => native.add(owner, {type, id: type});
+  const profile = broker.dispatch(token('identity.getProfile')), relays = broker.dispatch(token('identity.getRelays'));
+  const followsToken = token('identity.getFollows'), follows = broker.dispatch(followsToken);
+  const queryToken = native.add(owner, request()), query = broker.dispatch(queryToken);
+  const protectedToken = token('identity.getMutes');
+  await broker.dispatch(protectedToken);
+  assert.equal((native.results.get(protectedToken) as {error: string}).error, 'identity data busy');
+  assert.deepEqual(started, ['identity.getProfile','identity.getRelays']);
+  release[0]!(); await profile;
+  assert.deepEqual(started, ['identity.getProfile','identity.getRelays','identity.getFollows']);
+  release[1]!(); await relays;
+  assert.deepEqual(started, ['identity.getProfile','identity.getRelays','identity.getFollows','relay.query']);
+  release[2]!(); release[3]!();
+  await Promise.all([follows,query]);
+  assert.deepEqual(native.results.get(followsToken), {type:'identity.getFollows.result',id:'identity.getFollows',pubkeys:[]});
+  assert.deepEqual(native.results.get(queryToken), {type:'relay.query.result',id:'query',events:[]});
+});
+
+test('a queued public read whose original native lease expires never starts', async t => {
+  const {database} = await setup(t), native = new NativeLeases(), owner = registration();
+  const release: Array<() => void> = [];
+  const broker = createCapabilityBroker(database, native, {registration:owner, assertActive() {}}, {
+    async query() {await new Promise<void>(resolve => release.push(resolve)); return [];},
+  });
+  const first = broker.dispatch(native.add(owner, request('first')));
+  const second = broker.dispatch(native.add(owner, request('second')));
+  const revoked = native.add(owner, request('revoked'));
+  const waiting = broker.dispatch(revoked);
+  native.revoke(revoked);
+  release[0]!(); release[1]!();
+  await Promise.all([first, second, waiting]);
+  assert.equal(release.length, 2);
+  assert.equal(native.results.get(revoked), null);
 });

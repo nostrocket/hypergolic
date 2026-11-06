@@ -11,6 +11,13 @@ export const IDENTITY_OPERATIONS = ['identity.getPublicKey', 'identity.getRelays
   'identity.getFollows', 'identity.getMutes', 'identity.getBlocked', 'identity.getList',
   'identity.getZaps', 'identity.getBadges'] as const;
 export const STORAGE_OPERATIONS = ['storage.get', 'storage.set', 'storage.remove', 'storage.keys'] as const;
+export const DEFERRED_IDENTITY_OPERATIONS: readonly string[] = Object.freeze([
+  'identity.getPublicKey', 'identity.getProfile', 'identity.getRelays', 'identity.getFollows', 'identity.getBadges',
+]);
+export function canDeferCapability(type: string): boolean {
+  return DEFERRED_IDENTITY_OPERATIONS.includes(type) || type === 'relay.query' ||
+    STORAGE_OPERATIONS.some(operation => operation === type);
+}
 export type IdentityOperation = typeof IDENTITY_OPERATIONS[number];
 export type StorageOperation = typeof STORAGE_OPERATIONS[number];
 export type CapabilityOperation = IdentityOperation | StorageOperation | 'relay.query' | 'outbox.query' | 'outbox.getEvent' | 'outbox.resolveRelays';

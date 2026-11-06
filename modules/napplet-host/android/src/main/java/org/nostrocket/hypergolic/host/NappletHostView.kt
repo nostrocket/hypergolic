@@ -180,12 +180,13 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
             return@addWebMessageListener
           }
           if (data.optString("type") == "capability") {
+            val responseSequence = data.optLong("sequence")
             receiveCapability(data, { envelope ->
               if (live && !disposed && view === webView && view.url == expectedUrl) reply.postMessage(envelope)
             }) { response ->
               if (live && !disposed && view === webView && view.url == expectedUrl) {
                 val result = JSONObject().put("type", "capability.result").put("sessionId", generation)
-                  .put("sequence", data.getLong("sequence")).put("response", response ?: JSONObject.NULL)
+                  .put("sequence", responseSequence).put("response", response ?: JSONObject.NULL)
                 reply.postMessage(result.toString())
               }
             }
@@ -467,9 +468,25 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     onHostEvent(mapOf("type" to "capability", "lane" to (if (outbox) "outbox-subscription" else "subscription"), "sessionId" to config.sessionId, "generation" to generation, "token" to token))
   }
 
+  private fun mayDeferCapability(request: JSONObject?, config: CapabilityConfiguration): Boolean {
+    if (request == null) return false
+    val type = request.opt("type") as? String ?: return false
+    val id = request.opt("id") as? String ?: return false
+    if (id.isEmpty() || id.toByteArray(Charsets.UTF_8).size > 128) return false
+    return when (type) {
+      "identity.getPublicKey", "identity.getProfile", "identity.getRelays", "identity.getFollows", "identity.getBadges" ->
+        "identity" in config.grantedDomains && request.length() == 2
+      "relay.query" -> config.allowsRelay
+      "storage.get", "storage.keys", "storage.set", "storage.remove" -> "storage" in config.grantedDomains
+      else -> false
+    }
+  }
+
   private fun receiveCapability(data: JSONObject, push: (String) -> Unit, replyRaw: (String?) -> Unit) {
     val config = configuration ?: return
-    if (!ready || data.keys().asSequence().toSet() != setOf("type", "sessionId", "sequence", "message")) return
+    val deferred = data.opt("deferred") == true
+    val fields = setOf("type", "sessionId", "sequence", "message")
+    if (!ready || data.keys().asSequence().toSet() != (if (deferred) fields + "deferred" else fields)) return
     val number = data.get("sequence")
     if ((number !is Int && number !is Long) || data.get("message") !is String) return
     val sequence = (number as Number).toLong()
@@ -482,6 +499,17 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     else closeUnsafeUntil = now + 660000
     val reply: (String?) -> Unit = { response -> pendingNativeReplies.remove(operation); replyRaw(response) }
     val request = runCatching { UploadWire.objectValue(message, CapabilityLeaseRegistry.MAX_BYTES, maximumDepth = 40) }.getOrNull()
+    if (deferred) {
+      if (!mayDeferCapability(request, config) || !UploadJsonBounds.accepts(message, CapabilityLeaseRegistry.MAX_BYTES)) {
+        CapabilityTransport.leases.consumeSequence(generation, sequence)
+        reply(null)
+        return
+      }
+      CapabilityTransport.enqueue(generation, sequence, config.request(message), reply) { token ->
+        if (live && !disposed) onHostEvent(mapOf("type" to "capability", "sessionId" to config.sessionId, "generation" to generation, "token" to token))
+      }
+      return
+    }
     if (request?.optString("type") == "routing.call") {
       val token = RoutingTransport.receive(generation, sequence, message, push, reply) ?: return
       val type = request.optJSONObject("message")?.optString("type")

@@ -1,3 +1,4 @@
+import {CapabilityReadAdmission, CapabilityReadBusy} from './capability-read-admission.ts';
 import { CATALOG_PAGE, parseCatalogPageRequest } from '../napplets/catalog-page-contract.ts';
 import { createCatalogPaging } from '../napplets/catalog-paging.ts';
 import type { OutboxReadService } from '../outbox/read-service.ts';
@@ -9,7 +10,7 @@ import type { RelayQueryService } from '../network/native-relay-query.ts';
 import type { ShellDatabase } from '../storage/database.ts';
 import { ShellStorageError, type StringStorage } from '../storage/ports.ts';
 import { utf8Bytes } from '../storage/codec.ts';
-import { CAPABILITY_LIMITS, decodeNativeRegistration, decodeNativeRequest, identityResult,
+import { CAPABILITY_LIMITS, DEFERRED_IDENTITY_OPERATIONS, decodeNativeRegistration, decodeNativeRequest, identityResult,
   parseCapabilityRequest, storageFailure, queryFailure, type CapabilityReply, type CapabilityRequest,
   type NativeRegistration } from './capability-protocol.ts';
 
@@ -45,55 +46,49 @@ async function operate(storage: StringStorage, request: CapabilityRequest): Prom
     case 'storage.remove': await storage.remove(request.key!, request.scope); return base;
   }
 }
-/** Native expiry/background can precede the React Native lifecycle mirror. */
-async function watchedRead<T>(pending: Set<AbortController>, active: () => void, read: (signal: AbortSignal) => Promise<T>): Promise<T> {
-  const controller = new AbortController();
-  pending.add(controller);
-  const watcher = setInterval(() => { try { active(); } catch { controller.abort(); } }, 25);
-  try { return await read(controller.signal); }
-  finally { clearInterval(watcher); pending.delete(controller); }
+async function readQuery(request: Extract<CapabilityRequest, {type: 'relay.query'}>, queries: RelayQueryService | undefined, pending: CapabilityReadAdmission, active: () => void): Promise<CapabilityReply> {
+  if (!queries) return queryFailure(request, 'relay query unavailable or busy')!;
+  try { return {type: 'relay.query.result', id: request.id, events: await pending.schedule(active, signal => queries.query(request.filters, signal, active))}; }
+  catch (error) { return queryFailure(request, error instanceof CapabilityReadBusy ? 'relay query unavailable or busy' : 'relay query failed')!; }
 }
-async function readQuery(request: Extract<CapabilityRequest, {type: 'relay.query'}>, queries: RelayQueryService | undefined, pending: Set<AbortController>, active: () => void): Promise<CapabilityReply> {
-  if (!queries || pending.size >= 2) return queryFailure(request, 'relay query unavailable or busy')!;
-  try { return {type: 'relay.query.result', id: request.id, events: await watchedRead(pending, active, signal => queries.query(request.filters, signal, active))}; }
-  catch { return queryFailure(request, 'relay query failed')!; }
-}
-async function readOutboxQuery(request: OutboxReadRequest, service: OutboxReadService | undefined, registration: NativeRegistration, pending: Set<AbortController>, active: () => void): Promise<CapabilityReply> {
+async function readOutboxQuery(request: OutboxReadRequest, service: OutboxReadService | undefined, registration: NativeRegistration, pending: CapabilityReadAdmission, active: () => void): Promise<CapabilityReply> {
   if (!service || pending.size >= 2) return outboxReadFailure(request, 'policy denied')!;
   try {
     if (request.type === 'outbox.getEvent') {
       if (!service.getEvent) return outboxReadFailure(request,'policy denied')!;
-      const result = await watchedRead(pending,active,signal => service.getEvent!(request,registration.user,signal,active));
+      const result = await pending.run(active,signal => service.getEvent!(request,registration.user,signal,active));
       return {type:'outbox.getEvent.result',id:request.id,...result};
     }
     if (request.type === 'outbox.resolveRelays') {
       if (!service.resolveRelays) return outboxReadFailure(request,'policy denied')!;
-      const result = await watchedRead(pending,active,signal => service.resolveRelays!(request,registration.user,signal,active));
+      const result = await pending.run(active,signal => service.resolveRelays!(request,registration.user,signal,active));
       const {relays,source,missingAuthors} = result;
       return {type:'outbox.resolveRelays.result',id:request.id,plan:{relays,source,...(missingAuthors.length ? {missingAuthors} : {})}};
     }
-    const result = await watchedRead(pending, active, signal => service.query(request, registration.user, signal, active));
+    const result = await pending.run(active, signal => service.query(request, registration.user, signal, active));
     return {type: 'outbox.query.result', id: request.id, events: result.events, ...(result.incomplete ? {incomplete: true} : {})};
   } catch (error) {
     const allowed = ['invalid filter', 'relay timeout', 'relay list unavailable', 'policy denied', 'no authors', 'not found'];
     return outboxReadFailure(request, error instanceof OutboxQueryError && allowed.includes(error.message) ? error.message : 'relay list unavailable')!;
   }
 }
-async function readIdentity(request: IdentityRequest, service: IdentityDataPort | undefined, registration: NativeRegistration, pending: Set<AbortController>, active: () => void): Promise<CapabilityReply> {
+async function readIdentity(request: IdentityRequest, service: IdentityDataPort | undefined, registration: NativeRegistration, pending: CapabilityReadAdmission, active: () => void): Promise<CapabilityReply> {
   if (!service || request.type === 'identity.getPublicKey') return identityResult(request, registration.user);
-  if (pending.size >= 2) return identityFailure(request, 'identity data busy');
-  try { return await watchedRead(pending, active, signal => service.read(request, registration, signal, active)); }
-  catch { return identityFailure(request, 'identity data unavailable'); }
+  const deferred = DEFERRED_IDENTITY_OPERATIONS.includes(request.type);
+  if (!deferred && pending.size >= 2) return identityFailure(request, 'identity data busy');
+  const read = (signal: AbortSignal) => service.read(request, registration, signal, active);
+  try {return await (deferred ? pending.schedule(active, read) : pending.run(active, read));}
+  catch (error) {return identityFailure(request, error instanceof CapabilityReadBusy ? 'identity data busy' : 'identity data unavailable');}
 }
 async function readCatalogPage(value: unknown, catalog: ReturnType<typeof createCatalogPaging>,
-  seen: Set<string>, pending: Set<AbortController>, active: () => void): Promise<CapabilityReply> {
+  seen: Set<string>, pending: CapabilityReadAdmission, active: () => void): Promise<CapabilityReply> {
   const request = parseCatalogPageRequest(value);
   const key = JSON.stringify([request.type, request.id]);
   const reply = {type: CATALOG_PAGE + '.result', id: request.id};
   const failure = {...reply, error: 'Catalog paging unavailable'};
   if (seen.has(key) || seen.size >= CAPABILITY_LIMITS.sessionRequests || pending.size >= 2) return failure;
   seen.add(key);
-  try {return {...reply, result: await watchedRead(pending, active, signal => catalog(request, signal, active))};}
+  try {return {...reply, result: await pending.run(active, signal => catalog(request, signal, active))};}
   catch {return failure;}
 }
 function invalidRequestReply(payload: unknown, domains: readonly string[]): CapabilityReply | null {
@@ -118,13 +113,13 @@ export function createCapabilityBroker(database: ShellDatabase, native: NativeCa
   const catalog = discovery && registration.domains.includes('relay') && queries?.catalog ? createCatalogPaging(queries.catalog) : null;
   const seen = new Set<string>();
   let disposed = false;
-  const pending = new Set<AbortController>();
+  const pending = new CapabilityReadAdmission();
   const assertActive = (token: string): void => {
     if (disposed || !native.isActive(token)) throw new ShellStorageError('REVOKED');
     owner.assertActive();
   };
   return Object.freeze({
-    revoke: () => { disposed = true; resource?.revoke(); seen.clear(); for (const query of pending) query.abort(); pending.clear(); },
+    revoke: () => { disposed = true; resource?.revoke(); seen.clear(); pending.revoke(); },
     async dispatch(token: string): Promise<void> {
       let response: string | null = null;
       let claimed = false;

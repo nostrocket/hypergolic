@@ -3,6 +3,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.CountDownLatch;
 import java.util.ArrayList;
+import java.util.List;
 
 public final class CapabilityLeaseProof {
   private static int checks = 0;
@@ -10,6 +11,72 @@ public final class CapabilityLeaseProof {
     if (!value) throw new AssertionError(message);
     checks++;
   }
+  private static void waitingAdmission() {
+    AtomicLong clock = new AtomicLong(1000);
+    CapabilityLeaseRegistry owner = new CapabilityLeaseRegistry(clock::get);
+    owner.register("first"); owner.register("second");
+    List<String> active = new ArrayList<>();
+    for (int sequence = 1; sequence <= 4; sequence++) active.add(owner.admit("first", sequence, "held"));
+    String set = owner.enqueue("first", 5, "storage.set:k=v");
+    String get = owner.enqueue("first", 6, "storage.get:k");
+    String remove = owner.enqueue("first", 7, "storage.remove:k");
+    String other = owner.enqueue("second", 1, "other view");
+    check(owner.retained(set) && owner.take(set) == null && owner.borrowedSnapshot(set) == null, "waiting does not authorize work");
+    check(owner.promote().equals(List.of(other)), "a full view cannot block another eligible view");
+    check(owner.admit("first", 8, "fast direct") == null, "waiting does not increase active capacity");
+    owner.take(active.get(0)); owner.finish(active.get(0));
+    check(owner.promote().equals(List.of(set)), "first waiting storage snapshot");
+    check("storage.set:k=v".equals(owner.take(set)) && owner.finish(set), "exact set once");
+    check(owner.promote().equals(List.of(get)), "get stays behind set");
+    check("storage.get:k".equals(owner.take(get)) && owner.finish(get), "exact get once");
+    check(owner.promote().equals(List.of(remove)), "remove stays behind get");
+    check("storage.remove:k".equals(owner.take(remove)), "exact remove snapshot");
+    String waiting = owner.enqueue("first", 9, "old waiting mutation");
+    String unclaimed = owner.enqueue("second", 2, "promoted before background");
+    check(owner.promote().equals(List.of(unclaimed)), "other view promoted but not dispatched");
+    check(owner.setForeground(false).containsAll(List.of(waiting, remove, unclaimed)), "background invalidates waiting, claimed and promoted-unclaimed phases");
+    owner.setForeground(true);
+    check(owner.promote().isEmpty() && owner.take(waiting) == null && owner.take(unclaimed) == null &&
+        !owner.finish(remove), "resume cannot promote, take or commit old work");
+    check(owner.enqueue("first", 9, "replay") == null, "queued sequence was consumed");
+    String expired = owner.enqueue("first", 10, "expired set");
+    clock.addAndGet(24_999);
+    check(owner.promote().equals(List.of(expired)) && owner.take(expired) != null, "late promotion keeps original lease");
+    clock.incrementAndGet();
+    check(!owner.isActive(expired) && !owner.finish(expired), "promotion does not extend expiry");
+    String removed = owner.enqueue("first", 11, "closing view");
+    owner.revoke("first");
+    check(!owner.retained(removed) && owner.promote().isEmpty(), "close cancels waiting work");
+
+    String stale = owner.enqueue("second", 3, "independent expired set");
+    clock.addAndGet(1000);
+    String later = owner.enqueue("second", 4, "independent later get");
+    clock.addAndGet(24_000);
+    check(owner.promote().equals(List.of(later)) && owner.take(stale) == null, "expired write never executes before a later valid request");
+    check("independent later get".equals(owner.take(later)), "later independent request retains its own deadline");
+  }
+
+  private static void waitingBounds() {
+    CapabilityLeaseRegistry owner = new CapabilityLeaseRegistry(() -> 1000);
+    owner.register("first"); owner.register("second"); owner.register("third");
+    for (int sequence = 1; sequence <= 8; sequence++) {
+      check(owner.enqueue("first", sequence, "a") != null, "per-view waiting admit");
+      check(owner.enqueue("second", sequence, "b") != null, "process waiting admit");
+    }
+    check(owner.enqueue("first", 9, "too many") == null, "per-view waiting cap");
+    check(owner.enqueue("third", 1, "too many") == null, "process waiting cap");
+    check(owner.promote().size() == 8 && owner.promote().isEmpty(), "global active cap is still eight");
+    check(owner.admit("third", 2, "fast") == null, "fast path still denies at global cap");
+
+    CapabilityLeaseRegistry bytes = new CapabilityLeaseRegistry(() -> 1000);
+    bytes.register("first"); bytes.register("second");
+    String half = "🧪".repeat(CapabilityLeaseRegistry.MAX_BYTES / 8);
+    check(bytes.enqueue("first", 1, half) != null && bytes.enqueue("second", 1, half) != null, "exact queued UTF-8 byte budget");
+    check(bytes.enqueue("second", 2, "overflow") == null, "queued byte budget shared");
+    bytes.revoke("first");
+    check(bytes.enqueue("second", 3, half) != null, "revoked waiting bytes returned");
+  }
+
   public static void main(String[] args) throws Exception {
     AtomicLong clock = new AtomicLong(1000);
     CapabilityLeaseRegistry leases = new CapabilityLeaseRegistry(clock::get);
@@ -80,6 +147,8 @@ public final class CapabilityLeaseProof {
     check(lifetime.admit("loaded", 3, "replay") == null, "background sequence cannot replay");
     String fresh = lifetime.admit("loaded", 4, "fresh");
     check("fresh".equals(lifetime.take(fresh)) && lifetime.finish(fresh), "new foreground request succeeds");
+    waitingAdmission();
+    waitingBounds();
     System.out.println("{\"language\":\"Java\",\"checks\":" + checks + ",\"failed\":0}");
   }
 }

@@ -76,6 +76,23 @@ selection or undocumented SDK convenience-field reinterpretation is allowed.
 EOSE is nonterminal; explicit close/revocation is terminal. [Subscriptions](relay-subscriptions.md)
 and [Outbox](outbox-routing.md) own their routing/lifecycle extensions.
 
+## Startup admission
+
+Public Identity reads for the selected key, profile, relays, follows and badges,
+Relay query, and local Storage can wait briefly for a native capability lease.
+The original request and registration are captured once. Native permits at most
+four active leases per generation and eight per process. The separate waiting
+budget is eight requests per generation, sixteen per process and 2 MiB of
+serialized snapshots across all waiting requests. Waiting uses the original
+25-second native deadline. Close, generation revocation and background cancel
+waiting requests. Returning to the foreground requires a new request.
+
+Storage retains arrival order among eligible calls from the same generation.
+An expired call fails under its own correlation and is never resubmitted. Public
+Identity and Relay reads can wait behind the two active broker reads using their
+existing native leases. Public writes, review requests, protected Identity
+lists, uploads and subscriptions keep their existing immediate admission paths.
+
 ## Native ownership and storage continuity
 
 Bind each view to immutable session ID, fresh native generation, identity epoch,

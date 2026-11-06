@@ -131,26 +131,47 @@ enum CapabilityTransport {
     let generation: String
     let access: IdentityListAccess.Ticket?
     let reply: @MainActor @Sendable (String?) -> Void
+    var dispatch: (@MainActor @Sendable (String) -> Void)? = nil
   }
   private static var pending: [String: Pending] = [:]
+  static func enqueue(_ generation: String, sequence: UInt64, snapshot: String,
+                      reply: @escaping @MainActor @Sendable (String?) -> Void,
+                      dispatch: @escaping @MainActor @Sendable (String) -> Void) {
+    guard let token = leases.enqueue(generation, sequence: sequence, snapshot: snapshot) else { reply(nil); return }
+    remember(token, Pending(generation: generation, access: nil, reply: reply, dispatch: dispatch), lifetime: 25)
+    drain()
+  }
+  private static func drain() {
+    for token in leases.promote() {
+      guard let dispatch = pending[token]?.dispatch else { continue }
+      pending[token]?.dispatch = nil
+      if leases.retained(token) { dispatch(token) }
+    }
+  }
   static func admit(_ generation: String, sequence: UInt64, snapshot: String, publishedOpen: Bool = false,
                     reply: @escaping @MainActor @Sendable (String?) -> Void) -> String? {
     guard let token = leases.admit(generation, sequence: sequence, snapshot: snapshot, publishedOpen: publishedOpen) else { return nil }
     let access: IdentityListAccess.Ticket?
-    do {access = try IdentityListAccess.shared.captureJSON(snapshot)} catch {_ = leases.finish(token); return nil}
-    pending[token] = Pending(generation: generation, access: access, reply: reply)
-    DispatchQueue.main.asyncAfter(deadline: .now() + (publishedOpen ? 120 : 25)) {
-      // ContinuousClock in the registry, not this cleanup timer, controls expiry during sleep.
-      if !leases.isActive(token) { pending.removeValue(forKey: token)?.reply(nil) }
-    }
+    do {access = try IdentityListAccess.shared.captureJSON(snapshot)} catch {_ = leases.finish(token); drain(); return nil}
+    remember(token, Pending(generation: generation, access: access, reply: reply), lifetime: publishedOpen ? 120 : 25)
     return token
+  }
+  private static func remember(_ token: String, _ request: Pending, lifetime: Double) {
+    pending[token] = request
+    DispatchQueue.main.asyncAfter(deadline: .now() + lifetime) {
+      // ContinuousClock in the registry, not this cleanup timer, controls expiry during sleep.
+      if !leases.retained(token) { pending.removeValue(forKey: token)?.reply(nil) }
+      drain()
+    }
   }
   nonisolated static func finish(_ token: String, response: String?) {
     let bounded = response.flatMap { $0.utf8.count <= CapabilityLeaseRegistry.maxBytes ? $0 : nil }
     Task { @MainActor in
       let admitted = leases.finish(token)
-      guard let request = pending.removeValue(forKey: token) else { return }
-      request.reply(admitted && leases.sessionActive(request.generation) && IdentityListAccess.shared.permits(request.access) ? bounded : nil)
+      if let request = pending.removeValue(forKey: token) {
+        request.reply(admitted && leases.sessionActive(request.generation) && IdentityListAccess.shared.permits(request.access) ? bounded : nil)
+      }
+      drain()
     }
   }
   static func revoke(_ generation: String) {
@@ -161,6 +182,7 @@ enum CapabilityTransport {
     for token in pending.filter({ $0.value.generation == generation }).keys {
       pending.removeValue(forKey: token)?.reply(nil)
     }
+    drain()
   }
   #endif
 }

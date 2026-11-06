@@ -513,10 +513,25 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
       "generation": generation, "token": token])
   }
 
+  private func mayDeferCapability(_ message: String, configuration: CapabilityConfiguration) -> Bool {
+    guard let request = try? UploadWire.object(message, limit: CapabilityLeaseRegistry.maxBytes, maximumDepth: 40),
+      let type = request["type"] as? String, let id = request["id"] as? String, (1...128).contains(id.utf8.count) else { return false }
+    switch type {
+    case "identity.getPublicKey", "identity.getProfile", "identity.getRelays", "identity.getFollows", "identity.getBadges":
+      return configuration.domains.contains("identity") && request.count == 2
+    case "relay.query": return configuration.domains.contains("relay")
+    case "storage.get", "storage.keys", "storage.set", "storage.remove": return configuration.domains.contains("storage")
+    default: return false
+    }
+  }
+
   private func receiveCapability(_ value: [String: Any],
       reply: @escaping @MainActor @Sendable (Any?, String?) -> Void) {
+    let marker = value["deferred"] as? NSNumber
+    let deferred = marker.map { CFGetTypeID($0) == CFBooleanGetTypeID() && $0.boolValue } ?? false
+    let fields: Set<String> = ["type", "sessionId", "sequence", "message"]
     guard ready, let configuration,
-      Set(value.keys) == Set(["type", "sessionId", "sequence", "message"]),
+      Set(value.keys) == (deferred ? fields.union(["deferred"]) : fields),
       let sequence = value["sequence"] as? NSNumber, CFGetTypeID(sequence) != CFBooleanGetTypeID(),
       sequence.doubleValue.isFinite, sequence.doubleValue >= 1, sequence.doubleValue <= 9_007_199_254_740_991,
       sequence.doubleValue.rounded(.towardZero) == sequence.doubleValue,
@@ -536,6 +551,19 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
         "sequence": counter, "response": response as Any? ?? NSNull()]
       guard let bytes = try? JSONSerialization.data(withJSONObject: result) else { reply(nil, "Capability rejected"); return }
       reply(String(decoding: bytes, as: UTF8.self), nil)
+    }
+    if deferred {
+      guard mayDeferCapability(message, configuration: configuration) else {
+        _ = CapabilityTransport.leases.consumeSequence(generation, sequence: counter)
+        respond(nil)
+        return
+      }
+      let session = configuration.sessionId
+      CapabilityTransport.enqueue(generation, sequence: counter, snapshot: snapshot, reply: respond) { [weak self] token in
+        guard let self, self.live, !self.disposed else { return }
+        self.onEvent?(["type": "capability", "sessionId": session, "generation": self.generation, "token": token])
+      }
+      return
     }
     if let request = try? UploadWire.object(message, limit: 36 * 1024, maximumDepth: 40), request["type"] as? String == "routing.call" {
       guard let capturedView = webView, let capturedURL = expectedURL,
