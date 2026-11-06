@@ -164,6 +164,39 @@ test('accepts a balanced document containing raw-text script source and rejects 
   await rejects(() => verifyArtifact(beforeHeadManifest, beforeHead));
 });
 
+test('verified prefix comments preserve exact signed HTML bytes', async () => {
+  const html = new TextEncoder().encode(`<!doctype html>
+    <!-- Publisher notes: <head><meta http-equiv="Content-Security-Policy" content="default-src *"> -->
+    <html lang="en"><!-- more notes --><head><title>Harness</title></head><body>ready</body></html>`);
+  const event = signed([['d', 'hello'], ['x', await sha(html)]], {content: 'Harness'});
+  const manifest = await verifyManifest(coordinate(), event);
+  assert.deepEqual((await verifyArtifact(manifest, html)).htmlBytes, html);
+});
+
+test('signed prefix comments cannot hide tokens that a browser would parse before the head', async () => {
+  const early = '<script src="https://example.org/early.js"></script>';
+  for (const prefix of [
+    `<!-->${early}-->`, `<!--->${early}-->`, `<!-- note --!>${early}-->`,
+    '<!-- nested <!-- comment --> -->', '<!-- unterminated', '<!-- end <!--->',
+    '\u00a0', `<!-- valid -->${early}`,
+  ]) {
+    const html = new TextEncoder().encode(`<!doctype html>${prefix}<html><head></head><body>test</body></html>`);
+    const manifest = await verifyManifest(coordinate(), signed(await fixtureTags({html})));
+    await rejects(() => verifyArtifact(manifest, html));
+  }
+});
+
+test('only the UTF-8 decoder can consume a byte order mark before the doctype', async () => {
+  const document = '<!doctype html><html><head></head><body>test</body></html>';
+  const html = new TextEncoder().encode(`\uFEFF${document}`);
+  const manifest = await verifyManifest(coordinate(), signed(await fixtureTags({html})));
+  assert.deepEqual((await verifyArtifact(manifest, html)).htmlBytes, html);
+
+  const malformed = new TextEncoder().encode(`\uFEFF\uFEFF${document}`);
+  const badManifest = await verifyManifest(coordinate(), signed(await fixtureTags({html: malformed})));
+  await rejects(() => verifyArtifact(badManifest, malformed));
+});
+
 test('rejects a duplicate optional x tag and requires any included x to match', async () => {
   const base = await fixtureTags();
   await rejects(() => verifyManifest(coordinate(), signed([...base, ...base.filter(tag => tag[0] === 'x')])));

@@ -1,3 +1,4 @@
+import { publishedHtmlHead } from '../../src/napplets/html-envelope';
 import { MAX_HTML_BYTES } from '../../src/napplets/artifact-limits';
 import type { NativeHost } from './native-client';
 const CHUNK_BYTES = 48 * 1024;
@@ -112,10 +113,8 @@ export async function readPublishedArtifact(native: NativeHost, generation: stri
   } finally { bytes?.fill(0); }
 }
 
-/** CSP must be the first element in the head, before any publisher markup runs. */
-export function injectPublishedCsp(html: string, csp: string): string {
-  const start = /^\uFEFF?\s*<!doctype\s+html\s*>\s*<html(?:\s+[a-z][a-z0-9:-]*\s*=\s*(?:"[^"<>]*"|'[^'<>]*'))*\s*>\s*<head(?:\s+[a-z][a-z0-9:-]*\s*=\s*(?:"[^"<>]*"|'[^'<>]*'))*\s*>/i.exec(html);
-  if (!start) throw new Error('Unsafe published document head');
-  const headEnd = start[0].length;
-  return html.slice(0, headEnd) + `<meta http-equiv="Content-Security-Policy" content="${csp}">` + html.slice(headEnd);
+/** Keep untrusted prefix comments outside all CSP and bootstrap replacements. */
+export function publishedCspParts(html: string, csp: string): readonly [string, string] {
+  const {headEnd} = publishedHtmlHead(html);
+  return [html.slice(0, headEnd), `<meta http-equiv="Content-Security-Policy" content="${csp}">` + html.slice(headEnd)];
 }

@@ -1,4 +1,5 @@
 import { getEventHash, verifyEvent } from 'nostr-tools/pure';
+import { publishedHtmlHead } from './html-envelope.ts';
 import { MAX_HTML_BYTES } from './artifact-limits.ts';
 import { isNappletIdentifier, type NappletCoordinate } from './resolve-link.ts';
 
@@ -224,13 +225,9 @@ function explicitSelfClosing(tagText: string): boolean {
 
 /** Accepts a conservative, explicitly balanced HTML document envelope. */
 function validateHtmlEnvelope(html: string): void {
-  if (!/^\uFEFF?\s*<!doctype\s+html\s*>/i.test(html)) return fail();
-  // The trusted host inserts CSP as the first head child before mounting any
-  // publisher markup. Reject documents that could execute before that point.
-  if (!/^\uFEFF?\s*<!doctype\s+html\s*>\s*<html(?:\s+[a-z][a-z0-9:-]*\s*=\s*(?:"[^"<>]*"|'[^'<>]*'))*\s*>\s*<head(?:\s+[a-z][a-z0-9:-]*\s*=\s*(?:"[^"<>]*"|'[^'<>]*'))*\s*>/i.test(html)) return fail();
-  const doctype = /^\uFEFF?\s*<!doctype\s+html\s*>/i.exec(html)!;
+  const {doctypeEnd} = publishedHtmlHead(html);
   const stack: {name: string; children: Namespace}[] = [];
-  let cursor = doctype[0].length;
+  let cursor = doctypeEnd;
   let htmlCount = 0; let headCount = 0; let bodyCount = 0; let bodySeen = false;
   while (cursor < html.length) {
     const open = html.indexOf('<', cursor);

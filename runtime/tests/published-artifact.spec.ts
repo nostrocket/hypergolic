@@ -12,10 +12,27 @@ const identity = {
   publisher: '1'.repeat(64), appId: 'published-test', eventId: '2'.repeat(64), version, htmlHash,
 };
 
-type Mode = 'normal' | 'bad-hash' | 'malformed-base64' | 'replayed-sequence' | 'unknown-domain' | 'relay-domain' | 'attributed-head' | 'upload-domain' | 'all-domains' | 'outbox-domain' | 'outbox-only' | 'published-approval';
+type Mode = 'normal' | 'bad-hash' | 'malformed-base64' | 'replayed-sequence' | 'unknown-domain' | 'relay-domain' | 'attributed-head' | 'commented-head' | 'unsafe-head-comment' | 'upload-domain' | 'all-domains' | 'outbox-domain' | 'outbox-only' | 'published-approval';
+
+function artifactFor(mode: Mode): Buffer {
+  if (mode === 'published-approval') return approvalHtml;
+  const source = html.toString();
+  if (mode === 'attributed-head') return Buffer.from(source.replace('<head>', '<HEAD data-fixture="attribute">'));
+  if (mode === 'commented-head') {
+    const commented = source.replace('<!doctype html>', '<!doctype html>\n<!-- <head><meta http-equiv="Content-Security-Policy" content="default-src *"> -->');
+    return Buffer.from(commented.replace('<head>\n', `<!-- Before the real head --><head>
+      <script>
+        window.prefixProbe = {sdk: Boolean(window.napplet?.shell), support: Boolean(window.hypergolicSupportReport)};
+        fetch('/prefix-network-probe').then(() => prefixProbe.outcome = 'sent', () => prefixProbe.outcome = 'blocked');
+      </script>`));
+  }
+  if (mode === 'unsafe-head-comment') return Buffer.from(source.replace('<!doctype html>',
+    '<!doctype html><!--><script>fetch("/prefix-network-probe")</script>-->'));
+  return html;
+}
 
 async function openPublished(page: Page, mode: Mode = 'normal', extraQuery = '') {
-  const artifact = mode === 'published-approval' ? approvalHtml : mode === 'attributed-head' ? Buffer.from(html.toString().replace('<head>','<HEAD data-fixture="attribute">')) : html;
+  const artifact = artifactFor(mode);
   const artifactHash = digest(artifact);
   const artifactIdentity = {...identity,htmlHash:artifactHash,version:digest(`${artifactHash} /index.html\n`)};
   await page.addInitScript(({ generation, htmlBase64, htmlLength, identity, badHashVersion, mode }) => {
@@ -165,6 +182,33 @@ test('trusted media prelude preserves the leading CSP in a valid attributed uppe
   await expect(page.frameLocator('#napplet').getByTestId('lab')).toHaveAttribute('data-ready','true');
   const guest = await publishedGuest(page);
   expect(await guest.evaluate(()=>document.head.firstElementChild?.getAttribute('http-equiv'))).toBe('Content-Security-Policy');
+});
+
+test('the published head keeps trusted bootstraps and CSP ahead of publisher content after comments', async ({page}) => {
+  const requests: string[] = [];
+  await page.route('**/prefix-network-probe', route => {
+    requests.push(route.request().url());
+    return route.fulfill({body: 'probe', headers: {'access-control-allow-origin': '*'}});
+  });
+  await openPublished(page, 'commented-head');
+  const guest = await publishedGuest(page);
+  await expect.poll(() => guest.evaluate(() => (window as any).prefixProbe)).toEqual({
+    sdk: true, support: true, outcome: 'blocked',
+  });
+  expect(await guest.evaluate(() => document.head.firstElementChild?.getAttribute('content'))).toContain("connect-src 'none'");
+  expect(requests).toEqual([]);
+});
+
+test('a malformed comment cannot hide publisher execution before trusted CSP', async ({page}) => {
+  const requests: string[] = [];
+  await page.route('**/prefix-network-probe', route => {
+    requests.push(route.request().url());
+    return route.fulfill({body: 'probe'});
+  });
+  await openPublished(page, 'unsafe-head-comment');
+  await expect(page.getByRole('alert')).toHaveText('The napplet could not be loaded.');
+  await expect(page.locator('iframe')).toHaveCount(0);
+  expect(requests).toEqual([]);
 });
 
 for (const mode of ['upload-domain', 'all-domains'] as const) {

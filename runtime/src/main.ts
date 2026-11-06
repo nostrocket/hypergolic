@@ -26,7 +26,7 @@ import { createShellTheme } from './shell-theme';
 import type { HostOperationContext, NappletMessage, ServiceRuntimeContext } from '@kehto/runtime';
 import { identityFailure, identityResult, parseCapabilityRequest } from '../../src/runtime/capability-protocol';
 import { createNativeClient, type NativeHost } from './native-client';
-import { injectPublishedCsp, readPublishedArtifact } from './published-artifact';
+import { publishedCspParts, readPublishedArtifact } from './published-artifact';
 import { ensureSecureRandomUuid } from './secure-random-compat';
 
 type FailureCode = 'invalid-session' | 'bridge-unavailable' | 'fixture-integrity'
@@ -325,9 +325,10 @@ function mount(artifact: RuntimeArtifact): void {
   };
   window.addEventListener('message', receive);
   frame.addEventListener('load', loaded);
-  const withCsp = artifact.published ? injectPublishedCsp(artifact.html, policy) : injectCsp(artifact.html, policy);
+  const [prefix, withCsp] = artifact.published
+    ? publishedCspParts(artifact.html, policy) : ['', injectCsp(artifact.html, policy)] as const;
   const html = discoveryToken ? injectDiscoveryOpen(withCsp, discoveryToken) : withCsp;
-  frame.srcdoc = injectNappletNamespacePrelude(injectSupportReport(injectResourceMediaGate(html)), {
+  frame.srcdoc = prefix + injectNappletNamespacePrelude(injectSupportReport(injectResourceMediaGate(html)), {
     ...environment.capabilities,
     requestTimeoutsMs: approvalTimeouts(artifact),
   });
