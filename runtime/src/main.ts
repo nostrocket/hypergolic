@@ -230,6 +230,14 @@ function approvalTimeouts(artifact: RuntimeMetadata): Readonly<Record<string, nu
 }
 
 function rejectEnvelope(event: MessageEvent, source: Window, domains: readonly string[]): void {
+      if (domains.includes('relay') && event.data?.type === 'relay.publish') {
+        const id = event.data.id;
+        if (typeof id === 'string' && id.length > 0 && id.length <= 128 &&
+          new TextEncoder().encode(id).length <= 128) {
+          source.postMessage({type: 'relay.publish.result', id, ok: false, error: 'Invalid event template.'}, '*');
+        }
+        return;
+      }
       if (domains.includes('notify')) {
         const rejection = captureNotifyRejection(event.data);
         if (rejection !== null) source.postMessage({...rejection}, '*');

@@ -290,6 +290,39 @@ async function publishedApprovalCalls(page: Page) {
     .filter((entry: any) => entry.type === 'capability' && JSON.parse(entry.message).type === 'relay.publish'));
 }
 
+test('published Relay promptly rejects a missing timestamp without opening native approval', async ({page}) => {
+  await openPublished(page, 'relay-domain');
+  const guest = await publishedGuest(page);
+  await guest.evaluate(() => {
+    const state = window as any;
+    state.napplet.relay.publish({kind: 1, content: 'Invalid unsigned note', tags: []}).then(
+      () => { state.__publishOutcome = 'unexpected success'; },
+      (error: Error) => { state.__publishOutcome = error.message; });
+  });
+  await expect.poll(() => guest.evaluate(() => (window as any).__publishOutcome), {timeout: 2_000})
+    .toBe('Invalid event template.');
+
+  await guest.evaluate(() => {
+    const state = window as any;
+    state.__invalidPublishReplies = [];
+    addEventListener('message', event => {
+      if (event.source === parent && event.data?.type === 'relay.publish.result') {
+        state.__invalidPublishReplies.push(event.data.id);
+      }
+    });
+    parent.postMessage({type: 'relay.publish', id: 'é'.repeat(65), event: {}}, '*');
+  });
+  await page.evaluate(() => {
+    const source = document.querySelector<HTMLIFrameElement>('#napplet')?.contentWindow;
+    window.dispatchEvent(new MessageEvent('message', {
+      source, data: {type: 'relay.publish', id: 'synthetic-publish', event: {}},
+    }));
+  });
+  await guest.evaluate(() => (window as any).napplet.theme.get());
+  expect(await guest.evaluate(() => (window as any).__invalidPublishReplies)).toEqual([]);
+  expect(await publishedApprovalCalls(page)).toEqual([]);
+});
+
 test('published Approval Lab SDK survives both short deadlines and receives one correlated delayed denial', async ({page}) => {
   await page.clock.install({time: new Date('2026-01-01T00:00:00Z')});
   await page.clock.pauseAt(new Date('2026-01-01T00:00:01Z'));

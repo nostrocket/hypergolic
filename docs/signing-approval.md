@@ -12,9 +12,10 @@ generation and sequence checks. Private authority handles remain native; shared
 code claims a random token once and compares account, publisher, app, version,
 instance and generation. UI uses separate process-unique presentation IDs.
 
-Unsigned templates accept exactly kind, content, tags and created_at. Freeze a
-deep copy with selected public key, finalized timestamp and normalized native
-destinations. Validate integers, kinds, Unicode, tag structure and canonical
+Unsigned templates accept exactly kind, content, tags and created_at. A malformed
+Relay publish request with a bounded ID receives a failure before native approval.
+Freeze a deep copy with selected public key, finalized timestamp and normalized
+native destinations. Validate integers, kinds, Unicode, tag structure and canonical
 bytes under the [capability contract](capability-contract.md). Review identifies
 requesting app/publisher/account, action, content and destinations; exact details
 remain inspectable. Approve once consumes only this event.
