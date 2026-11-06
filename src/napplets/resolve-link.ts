@@ -29,6 +29,11 @@ function validPublicWssRelay(value: string): boolean {
   return host.split('.').every(label => DNS_LABEL.test(label));
 }
 
+export function isNappletIdentifier(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.trim() === value &&
+    !/[\u0000-\u001f\u007f]/.test(value) && new TextEncoder().encode(value).byteLength <= MAX_IDENTIFIER_BYTES;
+}
+
 /** Accepts lowercase NIP-19 coordinates regardless of valid TLV field ordering. */
 export function resolveNappletLink(input: unknown): NappletCoordinate {
   if (typeof input !== 'string' || input.length > MAX_LINK_CHARS) return fail();
@@ -38,9 +43,7 @@ export function resolveNappletLink(input: unknown): NappletCoordinate {
     const decoded = decode(encoded);
     if (decoded.type !== 'naddr') return fail();
     const { kind, pubkey, identifier, relays = [] } = decoded.data;
-    if (kind !== 35129 || !HEX64.test(pubkey) || typeof identifier !== 'string' || !identifier ||
-        identifier.trim() !== identifier || /[\u0000-\u001f\u007f]/.test(identifier) ||
-        new TextEncoder().encode(identifier).byteLength > MAX_IDENTIFIER_BYTES ||
+    if (kind !== 35129 || !HEX64.test(pubkey) || !isNappletIdentifier(identifier) ||
         !Array.isArray(relays) || !relays.every(relay => typeof relay === 'string' && validPublicWssRelay(relay))) return fail();
     return Object.freeze({ kind: 35129, pubkey, identifier, relayHints: Object.freeze([...relays]) });
   } catch { return fail(); }

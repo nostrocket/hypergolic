@@ -52,14 +52,14 @@ final class CapabilityLeaseRegistry: @unchecked Sendable {
     lock.withLock { consumeSequenceLocked(generation, sequence: sequence) }
   }
   /// Snapshot is complete JSON constructed by the host from native registration and the original serialized request.
-  func admit(_ generation: String, sequence: UInt64, snapshot: String) -> String? {
+  func admit(_ generation: String, sequence: UInt64, snapshot: String, publishedOpen: Bool = false) -> String? {
     lock.withLock {
       prune()
       guard consumeSequenceLocked(generation, sequence: sequence) else { return nil }
       guard foreground, snapshot.utf8.count <= Self.maxBytes, requests.count < 8,
         requests.values.filter({ $0.generation == generation }).count < 4 else { return nil }
       let token = UUID().uuidString.lowercased()
-      requests[token] = Request(generation: generation, snapshot: snapshot, expires: now().advanced(by: .seconds(25)))
+      requests[token] = Request(generation: generation, snapshot: snapshot, expires: now().advanced(by: .seconds(publishedOpen ? 120 : 25)))
       return token
     }
   }

@@ -42,15 +42,17 @@ final class PublishedArtifactReadOwner {
   private let generation: String
   private let totalBytes: Int
   private let domains: [String]
+  private let publishedOpen: Bool
   private var bytes: Data?
   private var offset = 0
   private var nextSequence = 0
 
-  init(claimed: PublishedArtifactRegistry.ClaimedArtifact, domains: Set<String>) {
+  init(claimed: PublishedArtifactRegistry.ClaimedArtifact, domains: Set<String>, publishedOpen: Bool = false) {
     claims = claimed.claims
     generation = claimed.viewGeneration
     totalBytes = claimed.htmlBytes.count
     self.domains = domains.sorted()
+    self.publishedOpen = publishedOpen
     bytes = claimed.htmlBytes
   }
 
@@ -60,7 +62,7 @@ final class PublishedArtifactReadOwner {
     guard end > offset else { clear(); return nil }
     let chunk = bytes[offset..<end]
     let done = end == totalBytes
-    let response: [String: Any] = [
+    var response: [String: Any] = [
       "type": "artifact.chunk", "sessionId": generation, "sequence": sequence,
       "base64": chunk.base64EncodedString(), "byteLength": chunk.count,
       "totalBytes": totalBytes, "publisher": claims.publisher,
@@ -68,6 +70,7 @@ final class PublishedArtifactReadOwner {
       "version": claims.aggregateHash, "htmlHash": claims.htmlHash, "done": done,
       "domains": domains
     ]
+    if publishedOpen { response["publishedOpen"] = true }
     guard let encoded = try? JSONSerialization.data(withJSONObject: response) else { clear(); return nil }
     offset = end
     nextSequence += 1

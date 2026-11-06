@@ -2,7 +2,7 @@ import { SUPPORTED_CAPABILITY_DOMAINS } from './capability-protocol.ts';
 
 export type SupportAvailability = 'available' | 'unavailable' | 'unknown';
 // Bump when public availability, operations or limits change: this identifies reviewed support.
-export const SUPPORT_PROFILE = 'hypergolic-native-2026-10-13-v1';
+export const SUPPORT_PROFILE = 'hypergolic-native-2026-11-06-v1';
 const notes: Readonly<Record<string, string>> = Object.freeze({
   shell: 'Handshake and scoped discovery are implemented. Availability is not a full conformance assessment.',
   theme: 'Shell colours are delivered; the selected theme profile is bounded.',

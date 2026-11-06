@@ -146,7 +146,7 @@ function SavedIdentities({session, transition, format, canDelete, onDelete}: {
       </View>)}
   </>;
 }
-function SettingsHome({session, onBackup, onCloseBackup, onDelete, onImport, onSignedLab, openBundledTest, openStateLab, openPublished, publishedSessions, checkPublishedUpdate}: Omit<SettingsActions, 'closeSettings'> & {
+function SettingsHome({session, onBackup, onCloseBackup, onDelete, onImport, onSignedLab, openDiscovery, openBundledTest, openStateLab, openPublished, publishedSessions, checkPublishedUpdate}: Omit<SettingsActions, 'closeSettings'> & {
   session: IdentitySession; onBackup(): void; onCloseBackup(): void; onDelete(pubkey: string): void; onImport(): void; onSignedLab(): void;
 }) {
   const { styles } = useShellStyles(createStyles);
@@ -155,6 +155,7 @@ function SettingsHome({session, onBackup, onCloseBackup, onDelete, onImport, onS
       <View style={styles.currentIdentity}><Text style={styles.identityLabel}>Your identity</Text>
         <Text selectable testID="settings-full-npub" style={styles.npub}>{formatNpub(session.vault.selectedPubkey)}</Text>
       </View>
+      {runtime && openDiscovery && <Action title="Discover napplets" testID="settings-open-discovery" onPress={openDiscovery} />}
       <PublishedNappletSettings available={Boolean(runtime)} openPublished={openPublished} publishedSessions={publishedSessions} checkPublishedUpdate={checkPublishedUpdate} />
       <View style={styles.sections}>
       <SettingsSection title="Identity" detail="Accounts, signing methods and backup" id="identity">
@@ -199,7 +200,7 @@ function SettingsHome({session, onBackup, onCloseBackup, onDelete, onImport, onS
       </View>
   </>;
 }
-export function IdentitySettings({ openBundledTest, openStateLab, openPublished, publishedSessions, checkPublishedUpdate }: SettingsActions) {
+export function IdentitySettings({ openDiscovery, openBundledTest, openStateLab, openPublished, publishedSessions, checkPublishedUpdate }: SettingsActions) {
   const { styles, colors } = useShellStyles(createStyles);
   const { transition, formatNpub, actions } = useIdentityOwner();
   const state = useSyncExternalStore(transition.subscribe, transition.getSnapshot);
@@ -254,7 +255,7 @@ export function IdentitySettings({ openBundledTest, openStateLab, openPublished,
     {importing ? <ImportIdentity transition={transition} onClose={closeImport} /> : <>
       <SettingsHome session={state.session} onBackup={() => setBackupReview(true)} onCloseBackup={() => setBackupReview(false)}
         onDelete={pubkey => setDeletion(Object.freeze({pubkey, session: state.session}))} onImport={() => setImporting(true)} onSignedLab={() => setSignedLab(true)}
-        openBundledTest={openBundledTest} openStateLab={openStateLab} openPublished={openPublished} publishedSessions={publishedSessions} checkPublishedUpdate={checkPublishedUpdate} />
+        openDiscovery={openDiscovery} openBundledTest={openBundledTest} openStateLab={openStateLab} openPublished={openPublished} publishedSessions={publishedSessions} checkPublishedUpdate={checkPublishedUpdate} />
     </>}
 
   </ScrollView>;

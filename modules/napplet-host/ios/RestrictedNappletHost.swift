@@ -203,8 +203,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     }
     configuration = publishedConfiguration
     configurationSource = input.configuration
-    publishedReader = PublishedArtifactReadOwner(claimed: claimed,
-      domains: publishedConfiguration?.domains ?? ["theme"])
+    publishedReader = PublishedArtifactReadOwner(claimed: claimed, domains: publishedConfiguration?.domains ?? ["theme"], publishedOpen: publishedConfiguration?.publishedOpen == true)
     publishedSource = raw
     // Loaded verified read views survive suspension. Native stream/approval/transfer
     // owners independently stop network work and sensitive authority on inactivity.
@@ -549,7 +548,15 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
               if case .failure = result { self?.fail("renderer-stopped") }
             }
           }, reply: respond) else { return }
-      onEvent?(["type": "capability", "lane": ((request["message"] as? [String: Any])?["type"] as? String)?.hasPrefix("notify.") == true ? "presentation" : ((request["message"] as? [String: Any])?["type"] as? String)?.hasPrefix("config.") == true ? "configuration" : "routing", "sessionId": configuration.sessionId, "generation": generation, "token": token])
+      let type = (request["message"] as? [String: Any])?["type"] as? String
+      let lane: String
+      switch type {
+      case RoutingTransportRegistry.publishedOpen: lane = "published-open"
+      case let type? where type.hasPrefix("notify."): lane = "presentation"
+      case let type? where type.hasPrefix("config."): lane = "configuration"
+      default: lane = "routing"
+      }
+      onEvent?(["type": "capability", "lane": lane, "sessionId": configuration.sessionId, "generation": generation, "token": token])
       return
     }
     if let request = try? UploadWire.object(message, limit: 16 * 1024), request["type"] as? String == "link.open" {

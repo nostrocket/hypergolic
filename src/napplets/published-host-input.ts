@@ -1,6 +1,5 @@
-import { SUPPORTED_CAPABILITY_DOMAINS } from '../runtime/capability-protocol.ts';
 import type { NappletDescriptor } from '../shell/workspace.ts';
-import { assertVerifiedNappletAdmission, type VerifiedNappletAdmission } from './first-open-consent.ts';
+import { assertVerifiedNappletAdmission, publishedCapabilityCompatibility, type VerifiedNappletAdmission } from './first-open-consent.ts';
 import { assertVerifiedArtifact, type VerifiedNappletArtifact } from './verified-artifact.ts';
 
 const HEX64 = /^[0-9a-f]{64}$/;
@@ -53,7 +52,7 @@ export function publishedHostInput(artifactInput: unknown, admissionInput: unkno
       admission.publisher !== verified.publisher || admission.appId !== verified.appId ||
       admission.eventId !== verified.eventId) return fail();
   const domains = [...admission.domains].sort();
-  const expected = artifact.manifest.requiredDomains.filter(domain => SUPPORTED_CAPABILITY_DOMAINS.includes(domain)).sort();
+  const expected = publishedCapabilityCompatibility(artifact.manifest.requiredDomains, artifact.manifest.optionalDomains).domains;
   if (domains.length !== expected.length || domains.some((domain, index) => domain !== expected[index])) return fail();
   const configuration = JSON.stringify({ sessionId: descriptor.id, epoch: authority.epoch,
     user: authority.user, publisher: verified.publisher, appId: verified.appId,

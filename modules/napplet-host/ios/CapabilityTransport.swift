@@ -28,6 +28,7 @@ struct CapabilityConfiguration {
   let sessionId: String
   let fixture: String
   let domains: Set<String>
+  let publishedOpen: Bool
   let publisher: String
   let appId: String
   let version: String
@@ -35,8 +36,13 @@ struct CapabilityConfiguration {
     enum Invalid: Error { case configuration }
     guard raw.utf8.count <= 8192, let bytes = raw.data(using: .utf8),
       var value = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
-      Set(value.keys) == Set(["sessionId", "epoch", "user", "publisher", "appId", "version", "instanceId", "fixture", "domains"])
+      Set(value.keys).subtracting(["publishedOpen"]) == Set(["sessionId", "epoch", "user", "publisher", "appId", "version", "instanceId", "fixture", "domains"])
       else { throw Invalid.configuration }
+    let open = value.removeValue(forKey: "publishedOpen")
+    if let open {
+      guard let flag = open as? NSNumber, CFGetTypeID(flag) == CFBooleanGetTypeID(), flag.boolValue,
+        value["fixture"] as? String == "published" else { throw Invalid.configuration }
+    }
     for name in ["sessionId", "instanceId", "fixture"] {
       guard let text = value[name] as? String, text.range(of: "^[A-Za-z0-9_-]{1,80}$", options: .regularExpression) != nil else { throw Invalid.configuration }
     }
@@ -54,6 +60,7 @@ struct CapabilityConfiguration {
     let expected: Set<String>
     switch fixture {
     case "ux-lab", "close-lab": expected = ["theme"]
+    case "napplet-discovery": expected = ["relay", "resource", "theme"]
     case "state-lab", "state-lab-peer": expected = ["identity", "storage", "theme"]
     case "approval-lab", "approval-lab-v1", "approval-lab-v2", "approval-lab-v3": expected = ["identity", "relay", "theme"]
     case "upload-lab", "upload-queue-lab": expected = ["upload", "theme"]
@@ -78,6 +85,7 @@ struct CapabilityConfiguration {
     self.sessionId = sessionId
     self.fixture = fixture
     self.domains = expected
+    self.publishedOpen = (fixture == "napplet-discovery" && appId == "napplet-discovery") || open != nil
     self.publisher = publisher
     self.appId = appId
     self.version = version
@@ -125,13 +133,13 @@ enum CapabilityTransport {
     let reply: @MainActor @Sendable (String?) -> Void
   }
   private static var pending: [String: Pending] = [:]
-  static func admit(_ generation: String, sequence: UInt64, snapshot: String,
+  static func admit(_ generation: String, sequence: UInt64, snapshot: String, publishedOpen: Bool = false,
                     reply: @escaping @MainActor @Sendable (String?) -> Void) -> String? {
-    guard let token = leases.admit(generation, sequence: sequence, snapshot: snapshot) else { return nil }
+    guard let token = leases.admit(generation, sequence: sequence, snapshot: snapshot, publishedOpen: publishedOpen) else { return nil }
     let access: IdentityListAccess.Ticket?
     do {access = try IdentityListAccess.shared.captureJSON(snapshot)} catch {_ = leases.finish(token); return nil}
     pending[token] = Pending(generation: generation, access: access, reply: reply)
-    DispatchQueue.main.asyncAfter(deadline: .now() + 25) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + (publishedOpen ? 120 : 25)) {
       // ContinuousClock in the registry, not this cleanup timer, controls expiry during sleep.
       if !leases.isActive(token) { pending.removeValue(forKey: token)?.reply(nil) }
     }

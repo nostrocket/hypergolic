@@ -76,12 +76,12 @@ export const Overview = forwardRef<OverviewHandle, Props>(function Overview({ se
         getItemLayout={(_data, row) => ({ index: row, length: stride, offset: headerHeight + row * stride })}
         ListHeaderComponent={sessions.length > 0 ? <View style={[styles.headingRow, { height: headerHeight }]}>
           <Text ref={heading} accessibilityRole="header" style={styles.heading}>Your napplets</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel="Open napplet" testID="overview-open" onPress={onOpen} style={styles.open}><Text style={styles.openText}>+ Open</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Discover napplets" testID="overview-open" onPress={onOpen} style={styles.open}><Text style={styles.openText}>Discover</Text></Pressable>
         </View> : undefined}
         ListEmptyComponent={<View style={[styles.empty, { paddingTop: Math.min(size.height * 0.42, 260) }]}><Text style={styles.emptyLabel}>Your space</Text>
           <Text accessibilityRole="header" style={styles.emptyTitle}>A place for{'\n'}your napplets.</Text>
-          <Text style={styles.emptyDetail}>Open a Nostr app with its address. Your identity stays with Hypergolic.</Text>
-          <Pressable accessibilityRole="button" testID="empty-open-napplet" onPress={onOpen} style={styles.emptyButton}><Text style={styles.emptyButtonText}>Open napplet</Text></Pressable>
+          <Text style={styles.emptyDetail}>Find a Napplet to try. Your identity stays with Hypergolic.</Text>
+          <Pressable accessibilityRole="button" testID="empty-open-napplet" onPress={onOpen} style={styles.emptyButton}><Text style={styles.emptyButtonText}>Discover napplets</Text></Pressable>
         </View>}
         renderItem={renderCard} />
     </GestureDetector>

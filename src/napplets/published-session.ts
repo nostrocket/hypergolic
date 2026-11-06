@@ -29,7 +29,7 @@ export interface PreparedPublishedSession {
 }
 export type PublishedUpdateReview = Readonly<{
   publisher: string; appId: string; previousEventId: string; nextEventId: string;
-  previousVersion: string; nextVersion: string; domains: readonly string[];
+  previousVersion: string; nextVersion: string; domains: readonly string[]; optionalDomains: readonly string[];
 }>;
 
 export interface PublishedSessionDependencies {
@@ -47,7 +47,9 @@ function identifier(artifact: VerifiedNappletArtifact): string {
 }
 
 type PrepareRequest = Readonly<{ link?: string; pinned?: NappletDescriptor;
-  candidate?: VerifiedNappletArtifact; updateOf?: NappletDescriptor }>;
+  candidate?: VerifiedNappletArtifact; updateOf?: NappletDescriptor; exactOpen?: ExactOpenPreparation }>;
+type ExactOpenPreparation = Readonly<{ existing?: NappletDescriptor; assertActive: () => void;
+  reviewLaunch: (changesAccess: boolean) => Promise<boolean> }>;
 type ConsentReview = (request: NappletConsentReview) => Promise<boolean>;
 type SessionAuthority = ReturnType<PublishedSessionDependencies['identity']['sessionAuthority']>;
 
@@ -83,7 +85,10 @@ async function preparePublishedSession(ports: PublishedSessionDependencies, requ
   else externalSignal.addEventListener('abort', cancel, { once: true });
   const active = () => {
     if (controller.signal.aborted) fail();
-    try { authority.assertActive(); } catch { fail(); }
+    try {
+      authority.assertActive();
+      if (!success) request.exactOpen?.assertActive();
+    } catch { fail(); }
     if (controller.signal.aborted) fail();
   };
   let registered: string | null = null;
@@ -95,18 +100,21 @@ async function preparePublishedSession(ports: PublishedSessionDependencies, requ
     const opensLink = request.link !== undefined && selected === undefined && request.candidate === undefined && updateOf === undefined;
     const reopensPin = request.link === undefined && selected !== undefined && request.candidate === undefined && updateOf === undefined;
     const appliesUpdate = request.link === undefined && selected === undefined && request.candidate !== undefined && updateOf !== undefined;
-    if (!opensLink && !reopensPin && !appliesUpdate) fail();
+    const exact = request.exactOpen;
+    const opensExact = exact !== undefined && request.candidate !== undefined && selected === undefined && updateOf === undefined;
+    if (!opensLink && !reopensPin && !appliesUpdate && !opensExact) fail();
     if (selected && (selected.source !== 'published' || !HEX64.test(selected.publisher) ||
         !HEX64.test(selected.version) || !HEX64.test(selected.eventId ?? '') || !selected.appId)) fail();
-    const coordinate = selected ?? updateOf;
-    const link = request.link ?? naddrEncode({ kind: 35129, pubkey: coordinate!.publisher, identifier: coordinate!.appId });
+    const coordinate = selected ?? updateOf ?? exact?.existing;
+    const link = request.link ?? (coordinate ? naddrEncode({ kind: 35129, pubkey: coordinate.publisher, identifier: coordinate.appId }) : '');
     const artifact = await loadSessionArtifact(ports, request, link, authority, controller.signal, active);
-    const id = selected?.id ?? ports.newInstanceId();
+    const id = selected?.id ?? exact?.existing?.id ?? ports.newInstanceId();
     if (!SESSION.test(id)) fail();
     const descriptor = descriptorForPublishedArtifact(artifact, id);
-    if (selected && (selected.publisher !== descriptor.publisher || selected.appId !== descriptor.appId ||
-        selected.version !== descriptor.version || selected.eventId !== descriptor.eventId ||
-        selected.title !== descriptor.title)) fail();
+    const expected = selected ?? exact?.existing;
+    if (expected && (expected.source !== 'published' || expected.publisher !== descriptor.publisher || expected.appId !== descriptor.appId ||
+        expected.version !== descriptor.version || expected.eventId !== descriptor.eventId ||
+        expected.title !== descriptor.title)) fail();
     if (updateOf && (updateOf.source !== 'published' || !HEX64.test(updateOf.version) ||
         !HEX64.test(updateOf.eventId ?? '') || updateOf.publisher !== descriptor.publisher ||
         updateOf.appId !== descriptor.appId || updateOf.eventId === descriptor.eventId)) fail();
@@ -114,9 +122,15 @@ async function preparePublishedSession(ports: PublishedSessionDependencies, requ
       appId: identifier(artifact), assertActive: active });
     const grant = ports.database.bindApp(owner);
     let admission;
+    let reviewed = false;
     try {
-      admission = await requestFirstOpenConsent(artifact, owner, grant.port, controller.signal, active, review);
+      admission = await requestFirstOpenConsent(artifact, owner, grant.port, controller.signal, active, exact ? async () => {
+        reviewed = true;
+        return exact.reviewLaunch(true);
+      } : review);
     } finally { grant.revoke(); }
+    active();
+    if (exact && !reviewed && await exact.reviewLaunch(false) !== true) fail();
     active();
     const cache = await openPublishedArtifactCache(ports.sqlite, {
       owner, epoch: authority.epoch, currentEpoch: () => ports.identity.getSnapshot().session.epoch,
@@ -182,7 +196,8 @@ async function preparePublishedUpdate(ports: PublishedSessionDependencies, selec
   const request = Object.freeze({ publisher: selected.publisher, appId: selected.appId,
     previousEventId: selected.eventId!, nextEventId: candidate.manifest.eventId,
     previousVersion: selected.version, nextVersion: candidate.aggregateHash,
-    domains: Object.freeze([...candidate.manifest.requiredDomains].sort()) });
+    domains: Object.freeze([...candidate.manifest.requiredDomains].sort()),
+    optionalDomains: Object.freeze([...candidate.manifest.optionalDomains].sort()) });
   if (await reviewUpdate(request) !== true) fail();
   active();
   return preparePublishedSession(ports, { candidate, updateOf: selected }, signal, reviewConsent);
@@ -193,6 +208,10 @@ export function createPublishedSessionCoordinator(ports: PublishedSessionDepende
   return Object.freeze({
     openLink: async (link: string, signal: AbortSignal, review: ConsentReview) =>
       (await preparePublishedSession(ports, { link }, signal, review)) ?? fail(),
+    resolveExact: (link: string, expectedEventId: string, signal: AbortSignal, assertActive: () => void) =>
+      loadPublishedArtifact(link, { source: ports.source, lookupRelays: ports.lookupRelays(), signal, assertActive, expectedEventId }),
+    prepareExact: (candidate: VerifiedNappletArtifact, exactOpen: ExactOpenPreparation, signal: AbortSignal) =>
+      preparePublishedSession(ports, { candidate, exactOpen }, signal, async () => false),
     reopenPinned: async (descriptor: NappletDescriptor, signal: AbortSignal, review: ConsentReview) =>
       (await preparePublishedSession(ports, { pinned: descriptor }, signal, review)) ?? fail(),
     prepareUpdate: (selected: NappletDescriptor, signal: AbortSignal,

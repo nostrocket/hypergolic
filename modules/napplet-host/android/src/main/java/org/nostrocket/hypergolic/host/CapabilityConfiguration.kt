@@ -8,6 +8,7 @@ internal class CapabilityConfiguration(raw: String, generation: String, allowPub
   val sessionId: String
   val fixture: String
   val allowsUpload: Boolean
+  val publishedOpen: Boolean
   val user: String
   val epoch: Long
   val allowsRelay: Boolean
@@ -19,7 +20,9 @@ internal class CapabilityConfiguration(raw: String, generation: String, allowPub
     require(raw.toByteArray(Charsets.UTF_8).size <= 8192)
     val value = JSONObject(raw)
     val names = setOf("sessionId", "epoch", "user", "publisher", "appId", "version", "instanceId", "fixture", "domains")
-    require(value.keys().asSequence().toSet() == names)
+    val open = value.has("publishedOpen")
+    require(value.keys().asSequence().toSet() == if (open) names + "publishedOpen" else names)
+    require(!open || value.remove("publishedOpen") == true)
     fun string(name: String): String = (value.get(name) as? String) ?: error("Invalid configuration")
     for (name in listOf("sessionId", "instanceId", "fixture")) require(string(name).matches(Regex("[A-Za-z0-9_-]{1,80}")))
     for (name in listOf("user", "publisher", "version")) require(string(name).matches(Regex("[0-9a-f]{64}")))
@@ -32,6 +35,7 @@ internal class CapabilityConfiguration(raw: String, generation: String, allowPub
     fixture = string("fixture")
     val expected = when (fixture) {
       "ux-lab", "close-lab" -> setOf("theme")
+      "napplet-discovery" -> setOf("relay", "resource", "theme")
       "state-lab", "state-lab-peer" -> setOf("identity", "storage", "theme")
       "approval-lab", "approval-lab-v1", "approval-lab-v2", "approval-lab-v3" -> setOf("identity", "relay", "theme")
       "upload-lab", "upload-queue-lab" -> setOf("upload", "theme")
@@ -56,6 +60,8 @@ internal class CapabilityConfiguration(raw: String, generation: String, allowPub
     sessionId = string("sessionId")
     publisher = string("publisher")
     appId = string("appId")
+    require(!open || (allowPublished && fixture == "published"))
+    publishedOpen = (fixture == "napplet-discovery" && appId == "napplet-discovery") || open
     version = string("version")
     value.put("generation", generation)
     snapshot = value.toString()

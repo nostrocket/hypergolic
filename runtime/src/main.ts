@@ -1,5 +1,7 @@
+import './legacy-webview';
+import { createDiscoveryOpenReceiver, injectDiscoveryOpen } from './discovery-open';
+import { DISCOVERY_OPEN } from '../../src/napplets/discovery-open-contract';
 import { installCloseCheck, CLOSE_CHECK_SERVICE } from './close-check';
-import { ensureObjectHasOwn } from './legacy-webview';
 import { injectSupportReport } from './support-report';
 import {parseOutboxSubscribe,parseOutboxClose} from '../../src/outbox/subscription-contract';
 import {createConfigAdapter} from './config-adapter';
@@ -39,7 +41,7 @@ const fixtureName = parameters.get('fixture') ?? 'ux-lab';
 const fixture = source === null && Object.prototype.hasOwnProperty.call(__BUNDLED_FIXTURES__, fixtureName) ? __BUNDLED_FIXTURES__[fixtureName] : undefined;
 type RuntimeArtifact = Readonly<{
   html: string; sha256: string; aggregateHash: string; appId: string; title: string;
-  domains: readonly string[]; publishTimeoutMs?: number; published: boolean;
+  domains: readonly string[]; publishTimeoutMs?: number; published: boolean; discoveryOpen: boolean;
 }>;
 let stopped = false;
 let cleanup: (() => void) | undefined;
@@ -236,6 +238,21 @@ function rejectEnvelope(event: MessageEvent, source: Window, domains: readonly s
       }
 }
 
+function createGuestEndpoint(artifact: RuntimeArtifact, hooks: ShellAdapter) {
+  const bridge = createShellBridge(hooks);
+  const identity = Object.freeze({ dTag: artifact.appId, aggregateHash: artifact.aggregateHash });
+  const resolved = resolveShellEnvironment(hooks, identity);
+  const environment = {...resolved, services: [...resolved.services, CLOSE_CHECK_SERVICE]};
+  const frame = createGuestFrame(artifact.title);
+  const source = frame.contentWindow;
+  if (!source) { bridge.destroy(); throw new Error('Frame unavailable'); }
+  const media = bindResourceMedia(source);
+  const policy = artifact.domains.includes('resource') ? csp.replace("media-src 'none'", 'media-src blob:') : csp;
+  originRegistry.register(source, sessionId, identity);
+  originRegistry.setEnvironment(source, environment);
+  return { bridge, frame, source, media, environment, policy };
+}
+
 function mount(artifact: RuntimeArtifact): void {
   let routingContext: ServiceRuntimeContext | null = null;
   const native = createNativeClient(hostWindow.HypergolicHost!, sessionId,
@@ -250,17 +267,7 @@ function mount(artifact: RuntimeArtifact): void {
     const entry = bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId);
     return () => !stopped && entry !== undefined && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) === entry;
   }, artifact, shellTheme.theme, context => { routingContext = context; });
-  const bridge = createShellBridge(hooks);
-  const identity = Object.freeze({ dTag: artifact.appId, aggregateHash: artifact.aggregateHash });
-  const resolved = resolveShellEnvironment(hooks, identity);
-  const environment = {...resolved, services: [...resolved.services, CLOSE_CHECK_SERVICE]};
-  const frame = createGuestFrame(artifact.title);
-  const source = frame.contentWindow;
-  if (!source) { bridge.destroy(); throw new Error('Frame unavailable'); }
-  const media = bindResourceMedia(source);
-  const policy = artifact.domains.includes('resource') ? csp.replace("media-src 'none'", 'media-src blob:') : csp;
-  originRegistry.register(source, sessionId, identity);
-  originRegistry.setEnvironment(source, environment);
+  const { bridge, frame, source, media, environment, policy } = createGuestEndpoint(artifact, hooks);
   let ready = false;
   let frameLoaded = false;
   let operations = 0;
@@ -268,12 +275,19 @@ function mount(artifact: RuntimeArtifact): void {
   const closeCheck = installCloseCheck(source, () => !stopped && ready && frame.contentWindow === source &&
     bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) !== undefined,
     (id, state) => hostWindow.HypergolicHost?.postMessage(JSON.stringify({type: 'close-check.result', sessionId, id, state})));
+  const discoveryToken = artifact.discoveryOpen ? crypto.randomUUID() : null;
+  const discoveryOpen = discoveryToken ? createDiscoveryOpenReceiver(source, native, discoveryToken, () =>
+    !stopped && ready && frame.contentWindow === source && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) !== undefined) : null;
   const deadline = window.setTimeout(() => fail('runtime-timeout'), 10_000);
 
   const receive = (event: MessageEvent): void => {
     if (stopped || !event.isTrusted || event.source !== source || frame.contentWindow !== source) return;
     if (performance.now() - windowStart > 1000) { operations = 0; windowStart = performance.now(); }
     if (++operations > 64) return;
+    if (event.data?.type === DISCOVERY_OPEN) {
+      discoveryOpen?.(event.data);
+      return;
+    }
     if (!validEnvelope(event.data)) {
       if (ready && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId)) rejectEnvelope(event, source, artifact.domains);
       return;
@@ -311,8 +325,9 @@ function mount(artifact: RuntimeArtifact): void {
   };
   window.addEventListener('message', receive);
   frame.addEventListener('load', loaded);
-  frame.srcdoc = injectNappletNamespacePrelude(injectSupportReport(injectResourceMediaGate(artifact.published
-    ? injectPublishedCsp(artifact.html, policy) : injectCsp(artifact.html, policy))), {
+  const withCsp = artifact.published ? injectPublishedCsp(artifact.html, policy) : injectCsp(artifact.html, policy);
+  const html = discoveryToken ? injectDiscoveryOpen(withCsp, discoveryToken) : withCsp;
+  frame.srcdoc = injectNappletNamespacePrelude(injectSupportReport(injectResourceMediaGate(html)), {
     ...environment.capabilities,
     requestTimeoutsMs: approvalTimeouts(artifact),
   });
@@ -324,7 +339,6 @@ async function start(): Promise<void> {
     fail('bridge-unavailable'); return;
   }
   try {
-    ensureObjectHasOwn();
     ensureSecureRandomUuid();
     let artifact: RuntimeArtifact;
     if (source === 'published') {
@@ -332,14 +346,14 @@ async function start(): Promise<void> {
       const document = await readPublishedArtifact(hostWindow.HypergolicHost!, sessionId);
       artifact = Object.freeze({ html: document.html, sha256: document.metadata.htmlHash,
         aggregateHash: document.metadata.version, appId: document.metadata.appId,
-        title: document.metadata.appId, domains: document.metadata.domains, published: true });
+        title: document.metadata.appId, domains: document.metadata.domains, published: true, discoveryOpen: document.metadata.publishedOpen === true });
     } else {
       if (source !== null || !fixture) { fail('fixture-integrity'); return; }
       const actual = await digest(fixture.html);
       if (actual !== fixture.sha256 || await digest(`${actual} /index.html\n`) !== fixture.aggregateHash) {
         fail('fixture-integrity'); return;
       }
-      artifact = Object.freeze({ ...fixture, published: false });
+      artifact = Object.freeze({ ...fixture, published: false, discoveryOpen: fixtureName === 'napplet-discovery' && fixture.appId === 'napplet-discovery' });
     }
     if (stopped) return;
     mount(artifact);

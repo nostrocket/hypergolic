@@ -12,22 +12,25 @@ import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 /** A trusted settings surface for one explicit naddr open, never rendered inside guest content. */
 export function OpenPublishedNapplet({ open }: { open: SettingsActions['openPublished'] }) {
   const { styles, colors } = useShellStyles(createStyles);
-  const insets = useSafeAreaInsets();
   const [link, setLink] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [review, setReview] = useState<NappletConsentReview | null>(null);
   const pending = useRef<AbortController | null>(null);
-  const decision = useRef<((accepted: boolean) => void) | null>(null);
-  useEffect(() => () => { pending.current?.abort(); decision.current?.(false); decision.current = null; }, []);
-  const decide = (accepted: boolean) => {
-    decision.current?.(accepted);
+  const decision = useRef<{review: NappletConsentReview; resolve(accepted: boolean): void} | null>(null);
+  useEffect(() => () => { pending.current?.abort(); decision.current?.resolve(false); decision.current = null; }, []);
+  const settle = (accepted: boolean) => {
+    const selected = decision.current;
     decision.current = null;
+    selected?.resolve(accepted);
     setReview(null);
+  };
+  const decide = (accepted: boolean) => {
+    if (decision.current?.review === review) settle(accepted);
   };
   const cancel = () => {
     pending.current?.abort(); pending.current = null;
-    decide(false); setBusy(false); setError('');
+    settle(false); setBusy(false); setError('');
   };
   const start = () => {
     if (busy || pending.current || !link.trim()) return;
@@ -40,7 +43,7 @@ export function OpenPublishedNapplet({ open }: { open: SettingsActions['openPubl
     setError('');
     void open(link.trim(), controller.signal, request => new Promise<boolean>(resolve => {
       if (controller.signal.aborted) { resolve(false); return; }
-      decision.current = resolve;
+      decision.current = {review: request, resolve};
       setReview(request);
     })).catch(() => {
       if (!controller.signal.aborted) setError('The napplet could not be verified or opened. Check your Lookup relays and connection, then try again.');
@@ -49,18 +52,7 @@ export function OpenPublishedNapplet({ open }: { open: SettingsActions['openPubl
       if (!controller.signal.aborted) setBusy(false);
     });
   };
-  if (review) return <Modal visible transparent animationType="none" onRequestClose={() => decide(false)}><View style={[styles.backdrop, { paddingTop: insets.top }]}><View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]} accessibilityViewIsModal><TrustedBand /><ScrollView contentContainerStyle={styles.review} testID="settings-napplet-review">
-    <Text accessibilityRole="header" style={styles.title}>Allow this napplet?</Text>
-    <Text style={styles.detail}>Publisher</Text><Text selectable style={styles.claim}>{review.publisher}</Text>
-    <Text style={styles.detail}>Napplet</Text><Text selectable style={styles.claim}>{review.appId}</Text>
-    <Text style={styles.detail}>Signed event</Text><Text selectable style={styles.claim}>{review.eventId}</Text>
-    {review.domains.includes('resource') && <Text style={styles.detail}>Resource access allows bounded downloads from public HTTPS sites and your configured Blossom servers. Files stay in memory while this napplet is loaded.</Text>}
-    {review.domains.includes('upload') && <Text style={styles.detail}>Upload access allows this napplet to read files you select. Every upload still needs your separate approval of the file, identity and server.</Text>}
-    <Text style={styles.detail}>Requested access: {review.domains.length ? review.domains.join(', ') : 'none'}</Text>
-    {review.unsupportedDomains.length > 0 && <Text testID="settings-napplet-unsupported" accessibilityLiveRegion="polite" style={styles.error}>Unavailable: {review.unsupportedDomains.join(', ')}. This napplet can open, but features using these capabilities will not work. They will not be granted.</Text>}
-    <Pressable accessibilityRole="button" testID="settings-napplet-approve" onPress={() => decide(true)} style={styles.action}><Text style={styles.actionText}>Allow and open</Text></Pressable>
-    <Pressable accessibilityRole="button" testID="settings-napplet-reject" onPress={() => decide(false)} style={styles.secondary}><Text style={styles.secondaryText}>Cancel</Text></Pressable>
-  </ScrollView></View></View></Modal>;
+  if (review) return <OpenAccessReview review={review} decide={decide} />;
   return <View style={styles.group}>
     <Text accessibilityRole="header" style={styles.title}>Open a napplet</Text>
     <Text style={styles.detail}>Paste a napplet address. We’ll check its signed version, then show you who published it and what access it needs.</Text>
@@ -69,12 +61,31 @@ export function OpenPublishedNapplet({ open }: { open: SettingsActions['openPubl
       autoCapitalize="none" autoCorrect={false} maxLength={8192} editable={!busy} placeholder="naddr1…" placeholderTextColor={colors.muted}
       style={styles.input} returnKeyType="done" onSubmitEditing={start} />
     {error !== '' && <Text testID="settings-napplet-error" accessibilityLiveRegion="polite" style={styles.error}>{error}</Text>}
-    {busy && !review && <Text testID="settings-napplet-loading" accessibilityLiveRegion="polite" style={styles.detail}>Finding and verifying the signed napplet…</Text>}
+    {busy && <Text testID="settings-napplet-loading" accessibilityLiveRegion="polite" style={styles.detail}>Finding and verifying the signed napplet…</Text>}
     <Pressable accessibilityRole="button" testID="settings-open-napplet" disabled={busy || !link.trim()} accessibilityState={{ disabled: busy || !link.trim() }} onPress={start} style={[styles.action, (busy || !link.trim()) && styles.disabled]}>
       {busy ? <ActivityIndicator color={colors.background} /> : <Text style={styles.actionText}>Verify and open</Text>}
     </Pressable>
     {busy && <Pressable accessibilityRole="button" testID="settings-napplet-cancel" onPress={cancel} style={styles.secondary}><Text style={styles.secondaryText}>Cancel opening</Text></Pressable>}
   </View>;
+}
+
+function OpenAccessReview({review, decide}: {review: NappletConsentReview; decide(accepted: boolean): void}) {
+  const { styles } = useShellStyles(createStyles);
+  const insets = useSafeAreaInsets();
+  return <Modal visible transparent animationType="none" onRequestClose={() => decide(false)}><View style={[styles.backdrop, { paddingTop: insets.top }]}><View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]} accessibilityViewIsModal><TrustedBand /><ScrollView contentContainerStyle={styles.review} testID="settings-napplet-review">
+    <Text accessibilityRole="header" style={styles.title}>Allow this napplet?</Text>
+    <Text style={styles.detail}>Publisher</Text><Text selectable style={styles.claim}>{review.publisher}</Text>
+    <Text style={styles.detail}>Napplet</Text><Text selectable style={styles.claim}>{review.appId}</Text>
+    <Text style={styles.detail}>Signed event</Text><Text selectable style={styles.claim}>{review.eventId}</Text>
+    {(review.domains.includes('resource') || review.optionalDomains.includes('resource')) && <Text style={styles.detail}>Resource access allows bounded downloads from public HTTPS sites and your configured Blossom servers. Files stay in memory while this napplet is loaded.</Text>}
+    {(review.domains.includes('upload') || review.optionalDomains.includes('upload')) && <Text style={styles.detail}>Upload access allows this napplet to read files you select. Every upload still needs your separate approval of the file, identity and server.</Text>}
+    <Text style={styles.detail}>{review.optionalDomains.length ? 'Required access · ' : 'Requested access: '}{review.domains.join(', ') || 'none'}</Text>
+    {review.optionalDomains.length > 0 && <Text style={styles.detail}>Optional access · {review.optionalDomains.join(', ')}</Text>}
+    {review.unsupportedDomains.length > 0 && <Text testID="settings-napplet-unsupported" accessibilityLiveRegion="polite" style={styles.error}>Required capabilities unavailable · {review.unsupportedDomains.join(', ')}. The napplet can open with limited features.</Text>}
+    {review.unsupportedOptionalDomains.length > 0 && <Text style={styles.detail}>Optional capabilities unavailable · {review.unsupportedOptionalDomains.join(', ')}</Text>}
+    <Pressable accessibilityRole="button" testID="settings-napplet-approve" onPress={() => decide(true)} style={styles.action}><Text style={styles.actionText}>Allow and open</Text></Pressable>
+    <Pressable accessibilityRole="button" testID="settings-napplet-reject" onPress={() => decide(false)} style={styles.secondary}><Text style={styles.secondaryText}>Cancel</Text></Pressable>
+  </ScrollView></View></View></Modal>;
 }
 
 const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.create({

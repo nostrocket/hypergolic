@@ -1,6 +1,6 @@
 import { resolveNappletLink, type NappletCoordinate } from './resolve-link.ts';
 import { MAX_RELAYS_PER_ROLE, normalizeRelayUrl } from '../network/relay-settings.ts';
-import { verifyArtifact, verifyManifest, type VerifiedNappletArtifact, type VerifiedNappletManifest } from './verified-artifact.ts';
+import { UnsupportedNappletManifestError, verifyArtifact, verifyManifest, type VerifiedNappletArtifact, type VerifiedNappletManifest } from './verified-artifact.ts';
 
 /** The source receives only the verified coordinate, never untrusted encoded relay hints. */
 export type NappletLookupCoordinate = Pick<NappletCoordinate, 'kind' | 'pubkey' | 'identifier'>;
@@ -17,12 +17,19 @@ export interface PublishedLoadOptions {
   readonly signal: AbortSignal;
   /** Reopening an installed version must never substitute a newer or older event. */
   readonly pinnedEventId?: string;
+  /** A discovery result must still match the latest eligible event from trusted Lookup. */
+  readonly expectedEventId?: string;
   /** Session/identity/epoch ownership is checked on each side of every await. */
   readonly assertActive: () => void;
 }
+type PublishedLoadCode = 'PUBLISHED_LOAD_FAILED' | 'PUBLISHED_NOT_FOUND' | 'PUBLISHED_UNSUPPORTED_MANIFEST' |
+  'PUBLISHED_REVISION_CONFLICT' | 'PUBLISHED_REVISION_CHANGED';
+
 export class PublishedLoadError extends Error {
-  readonly code = 'PUBLISHED_LOAD_FAILED';
-  constructor() { super('The published napplet could not be verified'); this.name = 'PublishedLoadError'; }
+  readonly code: PublishedLoadCode;
+  constructor(code: PublishedLoadCode = 'PUBLISHED_LOAD_FAILED') {
+    super('The published napplet could not be verified'); this.name = 'PublishedLoadError'; this.code = code;
+  }
 }
 const MAX_MANIFESTS = 32;
 export const MAX_NAPPLET_HTML_BYTES = 2 * 1024 * 1024;
@@ -40,7 +47,10 @@ function active(options: PublishedLoadOptions): void {
 export async function loadPublishedArtifact(link: unknown, options: PublishedLoadOptions): Promise<VerifiedNappletArtifact> {
   const coordinate = resolveNappletLink(link);
   if (!Array.isArray(options.lookupRelays) || options.lookupRelays.length < 1 || options.lookupRelays.length > MAX_RELAYS_PER_ROLE ||
-      (options.pinnedEventId !== undefined && !HEX64.test(options.pinnedEventId))) throw new PublishedLoadError();
+      (options.pinnedEventId !== undefined && !HEX64.test(options.pinnedEventId)) ||
+      (options.expectedEventId !== undefined && (options.pinnedEventId !== undefined || !HEX64.test(options.expectedEventId)))) {
+    throw new PublishedLoadError();
+  }
   const relays = Object.freeze(options.lookupRelays.map(lookupRelay));
   if (new Set(relays).size !== relays.length) throw new PublishedLoadError();
   active(options);
@@ -51,23 +61,30 @@ export async function loadPublishedArtifact(link: unknown, options: PublishedLoa
   }
   catch { throw new PublishedLoadError(); }
   active(options);
-  if (!Array.isArray(candidates) || candidates.length === 0 || candidates.length > MAX_MANIFESTS) throw new PublishedLoadError();
+  if (!Array.isArray(candidates) || candidates.length > MAX_MANIFESTS) throw new PublishedLoadError();
+  if (candidates.length === 0) throw new PublishedLoadError('PUBLISHED_NOT_FOUND');
   const verified: VerifiedNappletManifest[] = [];
-  const checks = await Promise.all(candidates.map(async (candidate) => {
+  const checks = await Promise.all(candidates.map(async candidate => {
     try { return await verifyManifest(coordinate, candidate); }
-    catch { return null; }
+    catch (error) { return error instanceof UnsupportedNappletManifestError ? 'unsupported' : null; }
   }));
+  active(options);
   for (const manifest of checks) {
-    if (manifest && (options.pinnedEventId === undefined || manifest.id === options.pinnedEventId)) verified.push(manifest);
+    if (manifest && manifest !== 'unsupported' &&
+        (options.pinnedEventId === undefined || manifest.id === options.pinnedEventId)) verified.push(manifest);
   }
-  if (verified.length === 0) throw new PublishedLoadError();
-  verified.sort((left, right) => right.created_at - left.created_at || right.id.localeCompare(left.id));
+  if (verified.length === 0) {
+    throw new PublishedLoadError(checks.includes('unsupported') ? 'PUBLISHED_UNSUPPORTED_MANIFEST' : 'PUBLISHED_LOAD_FAILED');
+  }
+  verified.sort((left, right) => right.created_at - left.created_at || left.id.localeCompare(right.id));
   const chosen = verified[0]!;
   // Distinct valid replies at the same timestamp are ambiguous replaceable events.
   if (options.pinnedEventId === undefined && verified.some(candidate => candidate.created_at === chosen.created_at && candidate.id !== chosen.id)) {
-    throw new PublishedLoadError();
+    throw new PublishedLoadError('PUBLISHED_REVISION_CONFLICT');
   }
-  active(options);
+  if (options.expectedEventId !== undefined && chosen.eventId !== options.expectedEventId) {
+    throw new PublishedLoadError('PUBLISHED_REVISION_CHANGED');
+  }
   let bytes: Uint8Array;
   try { bytes = await options.source.readHtml(chosen.expectedHtmlHash, chosen.serverHints, MAX_NAPPLET_HTML_BYTES, options.signal); }
   catch { throw new PublishedLoadError(); }

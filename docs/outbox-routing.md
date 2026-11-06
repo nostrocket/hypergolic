@@ -31,7 +31,7 @@ WSS upgrade permits repeated unconsumed metadata after syntax/size checks; criti
 
 ## Published admission
 
-Outbox is in the reviewed published-domain set under support profile `hypergolic-native-2026-10-13-v1`. Remembered narrower grants require fresh review; denial preserves the old grant. Outbox-only admission can load but acquires no Relay authority: usable SDK Outbox requires both grants. Exact operation-specific native review remains mandatory. Injected URL authority parameters, stale source/generation and wrong publisher/app/version/account epoch fail closed. Existing signed-list redistribution remains the documented draft extension.
+Outbox is in the reviewed published-domain set under support profile `hypergolic-native-2026-11-06-v1`. Remembered narrower grants require fresh review; denial preserves the old grant. Outbox-only admission can load but acquires no Relay authority: usable SDK Outbox requires both grants. Exact operation-specific native review remains mandatory. Injected URL authority parameters, stale source/generation and wrong publisher/app/version/account epoch fail closed. Existing signed-list redistribution remains the documented draft extension.
 
 Local and selected external methods use the same exact approval binding; [external signing](external-signing.md) defines method choice, explicit Resume, cancellation and uncertain outcomes. Production protected iOS identity is unavailable on Simulator; never substitute a fixture signer and call that production proof.
 

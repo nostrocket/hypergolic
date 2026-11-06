@@ -15,6 +15,8 @@ export type NappletConsentReview = Readonly<{
   eventId: string;
   domains: readonly string[];
   unsupportedDomains: readonly string[];
+  optionalDomains: readonly string[];
+  unsupportedOptionalDomains: readonly string[];
 }>;
 
 export type VerifiedNappletAdmission = Readonly<{
@@ -48,9 +50,21 @@ function sameSet(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
+/** Keep the single-set grant format for publications without optional domains. */
+export function publishedCapabilityCompatibility(required: readonly string[], optional: readonly string[]) {
+  const requiredSupport = capabilityCompatibility(required);
+  const optionalSupport = capabilityCompatibility(optional);
+  return Object.freeze({
+    domains: Object.freeze([...requiredSupport.domains, ...optionalSupport.domains].sort()),
+    unsupportedDomains: requiredSupport.unsupportedDomains,
+    unsupportedOptionalDomains: optionalSupport.unsupportedDomains,
+    review: optional.length ? JSON.stringify([requiredSupport.review, optionalSupport.review]) : requiredSupport.review,
+  });
+}
+
 /**
  * Admit a verifier-branded published artifact only after a trusted shell review
- * has accepted the exact publisher, signed d coordinate, and required NAP capabilities.
+ * has accepted the exact publisher, signed d coordinate, and requested NAP capabilities.
  * A revision conflict is deliberately a denial; the caller must start a fresh review.
  */
 export async function requestFirstOpenConsent(
@@ -73,7 +87,9 @@ export async function requestFirstOpenConsent(
   if (typeof ownerCheck !== 'function' || publisher !== ownerPublisher || appId !== identifier ||
       typeof user !== 'string' || typeof appId !== 'string') return fail();
   const requestedDomains = Object.freeze([...artifact.manifest.requiredDomains].sort());
-  const {domains, unsupportedDomains, review: supportReview} = capabilityCompatibility(requestedDomains);
+  const optionalDomains = Object.freeze([...artifact.manifest.optionalDomains].sort());
+  const {domains, unsupportedDomains, unsupportedOptionalDomains, review: supportReview} =
+    publishedCapabilityCompatibility(requestedDomains, optionalDomains);
   const identity = Object.freeze({ user, publisher: ownerPublisher, appId, check: ownerCheck });
   active(signal, owner, identity, assertActive);
 
@@ -86,7 +102,8 @@ export async function requestFirstOpenConsent(
   let admitted = current !== null && existing !== null && sameSet(existing, domains) && current.supportReview === supportReview;
 
   if (!admitted) {
-    const request = Object.freeze({ user, publisher, appId, eventId, domains: requestedDomains, unsupportedDomains });
+    const request = Object.freeze({ user, publisher, appId, eventId, domains: requestedDomains, unsupportedDomains,
+      optionalDomains, unsupportedOptionalDomains });
     let approved = false;
     try { approved = await review(request) === true; }
     catch { return fail(); }
@@ -117,6 +134,7 @@ export function assertVerifiedNappletAdmission(
   const artifact: VerifiedNappletArtifact = artifactInput;
   const verified = admission as VerifiedNappletAdmission;
   if (verified.publisher !== artifact.manifest.pubkey || verified.appId !== exactIdentifier(artifact) ||
-      verified.eventId !== artifact.manifest.eventId || !sameSet(verified.domains, capabilityCompatibility(artifact.manifest.requiredDomains).domains)) return fail();
+      verified.eventId !== artifact.manifest.eventId ||
+      !sameSet(verified.domains, publishedCapabilityCompatibility(artifact.manifest.requiredDomains, artifact.manifest.optionalDomains).domains)) return fail();
   verified.assertActive();
 }

@@ -69,6 +69,7 @@ test('verifies signed manifest, recomputes optional aggregate, and returns froze
     const event = signed(await fixtureTags({ x: includeX }));
     const manifest = await verifyManifest(coordinate(), event);
     assert.equal(manifest.id, event.id); assert.equal(manifest.eventId, event.id);
+    assert.equal(manifest.format, 'legacy-path');
     assert.equal(manifest.versionId, manifest.aggregateHash);
     assert.equal(manifest.expectedHtmlHash, await sha(HTML));
     assert.equal(Object.isFrozen(manifest), true); assert.equal(Object.isFrozen(manifest.tags), true);
@@ -169,4 +170,48 @@ test('rejects a duplicate optional x tag and requires any included x to match', 
   const noX = base.filter(tag => tag[0] !== 'x');
   const validNoX = await verifyManifest(coordinate(), signed(noX));
   await rejects(() => verifyArtifact(validNoX, new TextEncoder().encode('<!doctype html><html><head></head><body>tampered</body></html>')));
+});
+
+test('a modern named manifest binds original HTML and projects the legacy runtime version without rewriting signed tags', async () => {
+  const hash = await sha(HTML);
+  const tags = [
+    ['d', 'hello'], ['x', hash], ['R', 'relay'], ['O', 'theme'], ['O', 'unknown-domain'],
+    ['title', 'Literal <title>'], ['z', 'feed'], ['i', 'napplet:feed/edit', 'filters'], ['icon', 'unusable'],
+  ];
+  const event = signed(tags, {content: 'Read <b>feeds</b>'});
+  const manifest = await verifyManifest(coordinate(), event);
+  assert.equal(manifest.format, 'nip-5d');
+  assert.equal(manifest.id, event.id);
+  assert.equal(manifest.content, event.content);
+  assert.deepEqual(manifest.tags, event.tags);
+  assert.deepEqual(manifest.requiredDomains, ['relay']);
+  assert.deepEqual(manifest.optionalDomains, ['theme', 'unknown-domain']);
+  assert.equal(Object.isFrozen(manifest.tags[1]), true);
+  event.tags[1][1] = '0'.repeat(64);
+  assert.deepEqual(manifest.tags[1], ['x', hash]);
+
+  const artifact = await verifyArtifact(manifest, HTML);
+  const legacy = await verifyManifest(coordinate(), signed(await fixtureTags()));
+  assert.equal(artifact.htmlHash, hash);
+  assert.equal(artifact.aggregateHash, legacy.versionId);
+  assert.notEqual(artifact.aggregateHash, hash);
+  const altered = new TextEncoder().encode(new TextDecoder().decode(HTML).replace('ok', 'changed'));
+  await rejects(() => verifyArtifact(manifest, altered));
+});
+
+test('modern admission rejects mixed formats, ambiguous declarations and unsupported kinds', async () => {
+  const hash = await sha(HTML), base = [['d', 'hello'], ['x', hash]];
+  for (const extras of [
+    [['x', hash]], [['requires', 'relay']], [['description', 'Legacy']], [['archetype', 'feed']],
+    [['path', '/index.html', hash]], [['a', '35129:invalid']], [['A', '35129:invalid']],
+    [['R', 'relay'], ['O', 'relay']], [['R', 'relay'], ['R', 'relay']], [['O', 'theme'], ['O', 'theme']],
+    [['O', 'theme', 'unexpected']], [['R', 'NAP-RELAY']],
+  ]) await rejects(() => verifyManifest(coordinate(), signed([...base, ...extras], {content: 'Description'})));
+  await rejects(() => verifyManifest(coordinate(), signed(base, {content: '  '})));
+  await rejects(() => verifyManifest(coordinate(), signed([['d', 'hello'], ['x', hash.toUpperCase()]], {content: 'Description'})));
+  await rejects(() => verifyManifest(coordinate(), signed(base, {content: 'Description', kind: 5129})));
+  for (const tag of [['R', 'relay'], ['O', 'theme'], ['z', 'feed']]) {
+    const legacy = signed(await fixtureTags({extras: [tag]}));
+    await rejects(() => verifyManifest(coordinate(), legacy));
+  }
 });

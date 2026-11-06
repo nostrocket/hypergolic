@@ -152,6 +152,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
               .put("eventId", claims.eventId).put("version", claims.version)
               .put("htmlHash", claims.htmlHash).put("domains", JSONArray(configuration?.grantedDomains ?: listOf("theme")))
               .put("done", chunk.done)
+            if (configuration?.publishedOpen == true) result.put("publishedOpen", true)
             reply.postMessage(result.toString())
             return@addWebMessageListener
           }
@@ -421,7 +422,14 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     val request = runCatching { UploadWire.objectValue(message, CapabilityLeaseRegistry.MAX_BYTES, maximumDepth = 40) }.getOrNull()
     if (request?.optString("type") == "routing.call") {
       val token = RoutingTransport.receive(generation, sequence, message, push, reply) ?: return
-      onHostEvent(mapOf("type" to "capability", "lane" to (if (request.optJSONObject("message")?.optString("type")?.startsWith("notify.") == true) "presentation" else if (request.optJSONObject("message")?.optString("type")?.startsWith("config.") == true) "configuration" else "routing"), "sessionId" to config.sessionId, "generation" to generation, "token" to token))
+      val type = request.optJSONObject("message")?.optString("type")
+      val lane = when {
+        type == RoutingTransport.PUBLISHED_OPEN -> "published-open"
+        type?.startsWith("notify.") == true -> "presentation"
+        type?.startsWith("config.") == true -> "configuration"
+        else -> "routing"
+      }
+      onHostEvent(mapOf("type" to "capability", "lane" to lane, "sessionId" to config.sessionId, "generation" to generation, "token" to token))
       return
     }
     if (!UploadJsonBounds.accepts(message, CapabilityLeaseRegistry.MAX_BYTES)) { reply(null); return }

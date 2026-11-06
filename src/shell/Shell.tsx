@@ -1,3 +1,5 @@
+import { useWorkspaceDiscovery } from './useWorkspaceDiscovery';
+import { DiscoveryAccessReview } from './DiscoveryAccessReview';
 import { WorkspaceHeader } from './WorkspaceHeader';
 import { WorkspaceMenu } from './WorkspaceMenu';
 import { useWorkspaceMenu } from './useWorkspaceMenu';
@@ -30,6 +32,7 @@ import { initialTestWorkspace, type BundledVariant } from './fixtures';
 const noPending = new Set<string>();
 export interface SettingsActions {
   closeSettings: () => void;
+  openDiscovery?: () => void;
   openBundledTest: () => void;
   openStateLab: (variant: Exclude<BundledVariant, 'ux-lab'>) => void;
   openPublished: (link: string, signal: AbortSignal, review: (request: NappletConsentReview) => Promise<boolean>) => Promise<void>;
@@ -42,6 +45,7 @@ export interface ShellProps {
   blocked?: boolean;
   initialWorkspace?: Workspace;
   workspace?: Workspace;
+  getWorkspace?: () => Workspace;
   onWorkspaceChange?: (workspace: Workspace) => void;
   identity?: ShellIdentity;
   pendingApprovals?: ReadonlySet<string>;
@@ -63,7 +67,7 @@ function useReducedMotion(): boolean {
   return reduced;
 }
 
-export function Shell({ blocked = false, initialWorkspace, workspace: controlledWorkspace, onWorkspaceChange, identity, pendingApprovals, canCloseWithoutWarning, onBeforeClose, onHostEvent, footer, settingsComponent: SettingsContent }: ShellProps) {
+export function Shell({ blocked = false, initialWorkspace, workspace: controlledWorkspace, getWorkspace, onWorkspaceChange, identity, pendingApprovals, canCloseWithoutWarning, onBeforeClose, onHostEvent, footer, settingsComponent: SettingsContent }: ShellProps) {
   const { styles } = useShellStyles(createStyles);
   const runtime = useContext(RuntimeContext);
   const [localWorkspace, setLocalWorkspace] = useState(() => initialWorkspace ?? initialTestWorkspace());
@@ -90,7 +94,6 @@ export function Shell({ blocked = false, initialWorkspace, workspace: controlled
   const focused = workspace.sessions.find(session => session.id === workspace.focusedId);
   const { session: menuSession, visible: menuVisible, anchor: menuAnchor, dismiss: dismissMenu, open: openMenu, clear: clearMenu } =
     useWorkspaceMenu(focused, workspace.overview, { blocked, busy: busyRef, dragging: handleDragging, closeChecks });
-  const obscured = settings || menuVisible || closingId !== null;
   const navigationBlocked = blocked || busy || closeCheck !== null;
   const progress = useSharedValue(workspace.overview ? 1 : 0);
   const position = useSharedValue(focusedIndex);
@@ -178,20 +181,28 @@ export function Shell({ blocked = false, initialWorkspace, workspace: controlled
   });
   const openPublished: SettingsActions['openPublished'] = (...args) => publishedActions().openPublished(...args);
   const checkPublishedUpdate: SettingsActions['checkPublishedUpdate'] = (...args) => publishedActions().checkPublishedUpdate(...args);
+  const discovery = useWorkspaceDiscovery({runtime, workspace, getWorkspace, current, blocked, busy, dragging: handleDragging,
+    settings, menu: menuVisible, closing: closingId !== null, beforeClose: onBeforeClose,
+    canNavigate: () => !blocked && !busyRef.current && !closeChecks.isPending(),
+    position, progress, change, setSettings, openSettings,
+  });
+  const openDiscovery = discovery.open;
+  const obscured = settings || menuVisible || closingId !== null || discovery.review !== null;
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'right', 'bottom', 'left']}>
       <ShellBackdrop mood={workspace.overview ? 'shelf' : 'running'} />
-      <ReviewFocus sessionId={workspace.focusedId} overview={workspace.overview} busy={busy} dragging={handleDragging} blocked={blocked} settings={settings || menuVisible} closing={closingId !== null} />
+      <ReviewFocus sessionId={workspace.focusedId} overview={workspace.overview} busy={busy} dragging={handleDragging} blocked={blocked} settings={obscured} closing={closingId !== null} />
       <View accessibilityElementsHidden={obscured} importantForAccessibility={obscured ? 'no-hide-descendants' : 'auto'} style={styles.content}>
         <WorkspaceHeader overview={workspace.overview} focused={focused} identity={identity} disabled={navigationBlocked || handleDragging}
           menuAnchor={menuAnchor} onSettings={openSettings} onOverview={openOverview} onMenu={openMenu} />
         <WorkspaceStage closeCheck={closeCheck} workspace={workspace} progress={progress} position={position} scrollY={scrollY} swipeY={swipeY} swipeId={swipeId} busy={busy} blocked={navigationBlocked || obscured} interactive={!handleDragging}
-          pending={pendingApprovals ?? noPending} ref={overview} onHostEvent={receiveHostEvent} onFocus={focusSession} onClose={requestClose} onOpen={openSettings}
+          pending={pendingApprovals ?? noPending} ref={overview} onHostEvent={receiveHostEvent} onFocus={focusSession} onClose={requestClose} onOpen={openDiscovery}
           onDragEnd={(id, close) => { runAnimation(swipeY, 0, () => { swipeId.set(null); if (close) requestClose(id); }, 140); }}
           onHandleStart={() => { setHandleDragging(true); Keyboard.dismiss(); cancelAnimation(position); }}
           onHandleEnd={onHandleEnd} />
       </View>
       {footer}
+      <DiscoveryAccessReview review={discovery.review} decide={discovery.decide} />
       {menuSession && <WorkspaceMenu title={menuSession.title} disabled={navigationBlocked}
         onDismiss={dismissMenu} onOverview={() => { clearMenu(); openOverview(); }}
         onSettings={() => { clearMenu(); openSettings(); }} onClose={() => { clearMenu(); requestClose(menuSession.id); }} />}
@@ -199,7 +210,7 @@ export function Shell({ blocked = false, initialWorkspace, workspace: controlled
       <ShellSettings settings={settings} blocked={blocked} identity={identity} SettingsContent={SettingsContent}
         publishedSessions={workspace.sessions.filter(session => session.source === 'published')}
         openSettings={() => setSettings(false)} openBundledTest={openBundledTest} openFixture={openFixture}
-        openPublished={openPublished} checkPublishedUpdate={checkPublishedUpdate} />
+        openPublished={openPublished} checkPublishedUpdate={checkPublishedUpdate} openDiscovery={openDiscovery} />
     </SafeAreaView>
   );
 }
@@ -215,6 +226,7 @@ interface ShellSettingsProps {
   openFixture: (variant: BundledVariant) => void;
   openPublished: SettingsActions['openPublished'];
   checkPublishedUpdate: SettingsActions['checkPublishedUpdate'];
+  openDiscovery: () => void;
 }
 
 function handleWorkspaceGestureEnd({ side, result, blocked, busyRef, focusedIndex, current, position, openOverview, runAnimation, change, setHandleDragging }: {
@@ -260,7 +272,7 @@ function confirmWorkspaceNappletClose({ closingId, current, onBeforeClose, runti
   requestAnimationFrame(() => overview.current?.focusCard(null));
 }
 
-function ShellSettings({ settings, blocked, identity, SettingsContent, publishedSessions, openSettings, openBundledTest, openFixture, openPublished, checkPublishedUpdate }: ShellSettingsProps) {
+function ShellSettings({ settings, blocked, identity, SettingsContent, publishedSessions, openSettings, openBundledTest, openFixture, openPublished, checkPublishedUpdate, openDiscovery }: ShellSettingsProps) {
   const { styles } = useShellStyles(createStyles);
   const settingsClose = useRef<ViewInstance>(null);
   return (
@@ -271,7 +283,7 @@ function ShellSettings({ settings, blocked, identity, SettingsContent, published
       <SafeAreaProvider><SafeAreaView style={styles.settingsScreen}><ShellBackdrop mood="quiet" />
         <View style={styles.settingsHeader}><Text accessibilityRole="header" style={styles.settingsTitle}>Settings</Text><Pressable ref={settingsClose} disabled={blocked} accessibilityState={{ disabled: blocked }} accessibilityRole="button" testID="settings-done" onPress={openSettings} style={styles.done}><Text style={styles.doneText}>Done</Text></Pressable></View>
         {settings && (SettingsContent ? <SettingsContent closeSettings={openSettings} openBundledTest={openBundledTest} openStateLab={openFixture} openPublished={openPublished}
-          publishedSessions={publishedSessions} checkPublishedUpdate={checkPublishedUpdate} /> : <View style={styles.settingsBody}>
+          publishedSessions={publishedSessions} checkPublishedUpdate={checkPublishedUpdate} openDiscovery={openDiscovery} /> : <View style={styles.settingsBody}>
           <Text selectable testID="settings-full-npub" style={styles.settingsText}>{identity ? identity.npub : 'Identity is not configured in this build.'}</Text>
           <Text accessibilityRole="header" style={styles.settingsSection}>Bundled test napplets</Text>
           <Pressable testID="settings-open-ux-lab" accessibilityRole="button" onPress={openBundledTest} style={styles.openTest}><Text style={styles.openTestText}>Open UX Lab</Text><Text style={styles.addMark} accessible={false}>+</Text></Pressable>

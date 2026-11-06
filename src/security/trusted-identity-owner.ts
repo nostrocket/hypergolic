@@ -1,3 +1,4 @@
+import { createDiscoveryOpenBroker } from '../napplets/discovery-open-broker';
 import {createNativeFixturePublisher} from '../fixture-release/native-publisher';
 import type {FixturePublisher} from '../fixture-release/publisher';
 import {loadNativeOutboxSubscriptions} from '../outbox/native-subscription-port';
@@ -125,6 +126,7 @@ async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android
     });
     const capability = loadNativeCapabilityPort(), routingNative = loadRoutingNativePort();
     const reviews = new RoutingReviewService();
+    const discovery = createDiscoveryOpenBroker({ identity: transition, runtime: () => runtime, capability, native: routingNative, reviews });
     notifyBroker = new NotifyBroker(capability, routingNative, notifyPermissions);
     configBroker = new ConfigBroker(capability, routingNative, await openNativeConfigStore());
     routingBroker = new RoutingBroker(capability, routingNative, routingCatalog, reviews, createRoutingTargets(transition, () => runtime, reviews, routingNative));
@@ -138,7 +140,7 @@ async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android
         lookupRelays: () => relaySettings?.getSettings().lookupRelays ?? [] },
       queries,
       loadNativeRelaySubscriptions(() => relaySettings?.getSettings().networkRelays ?? []),
-      loadNativeResourceHost(() => resourceSettings?.servers() ?? [], queries), uploads, identityData, routing, notifyBroker, configBroker, outbox, loadNativeOutboxSubscriptions(outbox));
+      loadNativeResourceHost(() => resourceSettings?.servers() ?? [], queries), uploads, identityData, routing, notifyBroker, configBroker, outbox, loadNativeOutboxSubscriptions(outbox), discovery);
     const fixturePublisher=createNativeFixturePublisher(vault,transition);
     return { profileAvatar, fixturePublisher, notificationSettings: createNotificationSettings(transition, routingNative, notifyBroker), config: configBroker, notify: notifyBroker, routing, listAccess, transition, approvals, relaySettings, resourceSettings, uploadSettings, uploads, runtime };
   } catch {

@@ -93,3 +93,39 @@ test('lookup destinations are selected and bounded, never inherited from the lin
   await assert.rejects(loadPublishedArtifact(link, { source, lookupRelays: ['wss://localhost'], signal: new AbortController().signal,
     assertActive: () => undefined }), PublishedLoadError);
 });
+
+const modern = (created_at: number, tags: string[][] = []) => finalizeEvent({
+  kind: 35129, created_at, content: 'Modern named publication',
+  tags: [['d', 'loader-test'], ['x', htmlHash], ['server', 'https://blossom.example.org/'], ...tags],
+}, secret);
+
+test('discovery binds the latest eligible event across formats before fetching a blob', async () => {
+  const old = manifest(1_700_000_001);
+  const current = modern(1_700_000_002);
+  const calls: string[] = [];
+  const input = options([old, current], html, undefined, calls);
+  await assert.rejects(loadPublishedArtifact(link, {...input, expectedEventId: old.id}), {code: 'PUBLISHED_REVISION_CHANGED'});
+  assert.deepEqual(calls, ['query:loader-test:wss://relay.example.org:latest']);
+  const artifact = await loadPublishedArtifact(link, {...input, expectedEventId: current.id});
+  assert.equal(artifact.manifest.id, current.id);
+  assert.equal(artifact.manifest.format, 'nip-5d');
+  assert.equal(artifact.htmlHash, htmlHash);
+  assert.match(calls.at(-1)!, new RegExp('^blob:' + htmlHash));
+  assert.equal((await loadPublishedArtifact(link, options([old, current], html, undefined, [], old.id))).manifest.id, old.id);
+});
+
+test('discovery separates empty results, authentic unsupported manifests and same-time conflicts', async () => {
+  const current = modern(1_700_000_001);
+  const conflicting = manifest(1_700_000_001);
+  const unsupported = modern(1_700_000_002, [['path', '/index.html', htmlHash]]);
+  for (const {events, code} of [
+    {events: [], code: 'PUBLISHED_NOT_FOUND'},
+    {events: [unsupported], code: 'PUBLISHED_UNSUPPORTED_MANIFEST'},
+    {events: [{...unsupported, sig: '0'.repeat(128)}], code: 'PUBLISHED_LOAD_FAILED'},
+    {events: [current, conflicting], code: 'PUBLISHED_REVISION_CONFLICT'},
+  ]) {
+    const calls: string[] = [];
+    await assert.rejects(loadPublishedArtifact(link, {...options(events, html, undefined, calls), expectedEventId: current.id}), {code});
+    assert.equal(calls.length, 1);
+  }
+});

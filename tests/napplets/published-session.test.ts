@@ -355,3 +355,57 @@ test('published upload consent feeds the current workspace/native generation and
   for (const changed of [{...origin, generation: 'foreign'}, {...origin, publisher: 'f'.repeat(64)}, {...origin, appId: 'foreign'}, {...origin, version: 'f'.repeat(64)}, {...origin, instanceId: 'foreign'}, {...origin, user: 'f'.repeat(64)}, {...origin, epoch: 3}]) assert.throws(() => guard.assertActive(changed));
   binding.revoke(); assert.throws(() => guard.assertActive(origin));
 });
+
+test('exact discovery review binds staging, then transfers lifetime to the mounted published session', async t => {
+  const { database, sqlite } = await setup(t);
+  let workspace = emptyWorkspace();
+  const calls: string[] = [];
+  const leases = Object.assign(new NativeLeases(), native(calls));
+  const identity = {
+    sessionAuthority: () => ({ user: USER, epoch: 1, assertActive: () => {} }),
+    getSnapshot: () => ({ session: { epoch: 1, workspace: { getSnapshot: () => ({ workspace, error: null }) } } }),
+  } as unknown as Pick<IdentityTransition, 'sessionAuthority' | 'getSnapshot'>;
+  const owner = createRuntimeOwner(database, identity, leases, undefined, {
+    sqlite, native: leases, lookupRelays: () => ['wss://relay.example.org'],
+    source: { query: async (_coordinate, _relays, pinned) => {
+      assert.equal(pinned, null);
+      return [EMBEDDED_TEST_EVENT];
+    }, readHtml: async () => getEmbeddedTestHtmlBytes() },
+  });
+  let focused = true;
+  const sourceActive = () => { if (!focused) throw new Error('Caller unfocused'); };
+  const signal = new AbortController();
+  const artifact = await owner.resolveDiscovered(LINK, EMBEDDED_TEST_EVENT.id, signal.signal, sourceActive);
+  await assert.rejects(owner.prepareDiscovered(artifact, signal.signal, sourceActive, async changesAccess => {
+    assert.equal(changesAccess, true);
+    focused = false;
+    return true;
+  }));
+  assert.deepEqual(calls, []);
+
+  focused = true;
+  const descriptor = await owner.prepareDiscovered(artifact, signal.signal, sourceActive, async changesAccess => {
+    assert.equal(changesAccess, true);
+    return true;
+  });
+  assert.equal(descriptor.eventId, EMBEDDED_TEST_EVENT.id);
+  assert.deepEqual(calls, [`register:${descriptor.id}`, 'begin', 'append', 'finish']);
+  workspace = openNapplet(workspace, descriptor);
+  focused = false;
+  signal.abort();
+  const binding = await owner.openPublished(descriptor, new AbortController().signal, async () => {
+    assert.fail('The exact prepared artifact already owns the reviewed grant');
+  });
+  assert.equal(owner.publishedReadyGeneration(descriptor), null);
+  binding.ready('mounted-exact-target');
+  assert.equal(owner.publishedReadyGeneration(descriptor), 'mounted-exact-target');
+  binding.revoke();
+  assert.equal(owner.publishedReadyGeneration(descriptor), null);
+
+  focused = true;
+  await assert.rejects(owner.prepareDiscovered(artifact, new AbortController().signal, sourceActive, async changesAccess => {
+    assert.equal(changesAccess, false);
+    return false;
+  }, descriptor));
+  assert.equal(calls.filter(call => call.startsWith('register:')).length, 1);
+});

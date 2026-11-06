@@ -6,6 +6,7 @@ import org.json.JSONObject
 
 /** Native-attested endpoint registration, revision fencing and bounded captured-recipient pushes. */
 internal object RoutingTransport {
+  const val PUBLISHED_OPEN = "hypergolic.publishedOpen"
   private val endpoints = RoutingEndpointRegistry()
   private val main = Handler(Looper.getMainLooper())
   private data class Row(val config: CapabilityConfiguration, var push: ((String) -> Unit)? = null,
@@ -26,14 +27,16 @@ internal object RoutingTransport {
     if (before != endpoints.revision()) { rows.values.forEach { it.pending.clear() }; sink?.invoke(state()) }
   }
   @Synchronized fun register(generation: String, config: CapabilityConfiguration): Boolean {
-    if (config.grantedDomains.none { it == "intent" || it == "inc" || it == "notify" || it == "config" }) return true
-    if (!endpoints.register(generation, config.user, config.epoch, config.grantedDomains.contains("intent"), config.grantedDomains.contains("inc"), config.grantedDomains.contains("notify"), config.grantedDomains.contains("config"))) return false
+    val trackPublished = config.fixture == "published"
+    if (!trackPublished && !config.publishedOpen && config.grantedDomains.none { it == "intent" || it == "inc" || it == "notify" || it == "config" }) return true
+    if (!endpoints.register(generation, config.user, config.epoch, config.grantedDomains.contains("intent"), config.grantedDomains.contains("inc"),
+      config.grantedDomains.contains("notify"), config.grantedDomains.contains("config"), config.publishedOpen, trackPublished)) return false
     rows[generation] = Row(config); return true
   }
   @Synchronized fun ready(generation: String) { endpoints.ready(generation) }
   @Synchronized fun focus(generation: String, value: Boolean) { if (endpoints.focus(generation, value)) sink?.invoke(state()) }
   @Synchronized fun revoke(generation: String) { endpoints.revoke(generation); rows.remove(generation) }
-  @Synchronized fun mayReview(generation: String, revision: Long): Boolean = endpoints.matchesRevision(revision) && endpoints.mayReview(generation)
+  @Synchronized fun mayReview(generation: String, revision: Long): Boolean = endpoints.matchesRevision(revision) && endpoints.mayReview(generation) && CapabilityTransport.leases.sessionActive(generation)
   @Synchronized fun reviewRevision(generation: String, revision: Long): Long = if (endpoints.matchesRevision(revision)) endpoints.reviewRevision(generation) else -1
   @Synchronized fun mayDeliver(generation: String, revision: Long, domain: String): Boolean =
     endpoints.matchesRevision(revision) && endpoints.mayDeliver(generation, domain) && CapabilityTransport.leases.sessionActive(generation)
@@ -43,17 +46,24 @@ internal object RoutingTransport {
     val id = wrapper?.opt("id") as? String
     val message = wrapper?.opt("message") as? JSONObject
     val type = message?.opt("type") as? String
-    val domain = if (type == "notify.__register") "notify" else if (type == "routing.__register") row?.config?.grantedDomains?.firstOrNull { it == "intent" || it == "inc" || it == "notify" || it == "config" } else type?.substringBefore('.')
+    val discovery = type == PUBLISHED_OPEN
+    val domain = if (discovery) "published-open" else if (type == "notify.__register") "notify" else if (type == "routing.__register") row?.config?.grantedDomains?.firstOrNull { it == "intent" || it == "inc" || it == "notify" || it == "config" } else type?.substringBefore('.')
     val revision = endpoints.revision()
+    val focusRevision = if (discovery) reviewRevision(generation, revision) else -1
     val valid = row != null && wrapper != null && wrapper.keys().asSequence().toSet() == setOf("type", "id", "message") &&
-      wrapper.opt("type") == "routing.call" && id != null && id.matches(Regex("[A-Za-z0-9_-]{1,128}")) && domain != null && mayDeliver(generation, revision, domain) &&
+      wrapper.opt("type") == "routing.call" && id != null && id.matches(Regex("[A-Za-z0-9_-]{1,128}")) && domain != null && (discovery || domain != "published-open") && mayDeliver(generation, revision, domain) &&
+      (!discovery || (focusRevision >= 0 && mayReview(generation, revision) && message!!.keys().asSequence().toSet() == setOf("type", "id", "address", "expectedEventId"))) &&
       ((type != "routing.__register" && type != "notify.__register") || message!!.keys().asSequence().toSet() == setOf("type"))
     if (!valid) { CapabilityTransport.leases.consumeSequence(generation, sequence); reply(null); return null }
     row!!.push = push
     wrapper!!.put("revision", revision)
-    return CapabilityTransport.admit(generation, sequence, row.config.request(wrapper.toString())) { response ->
+    if (discovery) wrapper.put("focusRevision", focusRevision)
+    val snapshot = row.config.request(wrapper.toString())
+    val respond: (String?) -> Unit = { response ->
       synchronized(this) { reply(if (mayDeliver(generation, revision, domain!!)) response else null) }
-    }.also { if (it == null) reply(null) }
+    }
+    return (if (discovery) CapabilityTransport.admitPublishedOpen(generation, sequence, snapshot, respond)
+      else CapabilityTransport.admit(generation, sequence, snapshot, respond)).also { if (it == null) reply(null) }
   }
   @Synchronized fun send(generation: String, revision: Long, raw: String): Boolean {
     val row = rows[generation] ?: return false

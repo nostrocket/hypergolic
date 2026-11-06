@@ -81,7 +81,7 @@ Hosted Expo updates are disabled.
 | Runtime and capability authority | [Native contract](native-contract.md), [capability contract](capability-contract.md), [admission](nap-support.md) |
 | Identity and signing | [Identity storage](identity-storage.md), [account transitions](identity-switching.md), [signing core](signing-core.md), [external methods](external-signing.md), [approval](signing-approval.md) |
 | Workspace | [Storage](workspace-storage.md), [optional close check](close-check.md) |
-| Published artifacts | [Network boundary](published-network.md), [native registry](published-artifact-registry.md) |
+| Published artifacts | [Network boundary](published-network.md), [native registry](published-artifact-registry.md), [Discover](discovery.md), [opening from Discover](published-open.md) |
 | Relay operations | [Relay settings](relays.md), [query](relay-query.md), [subscriptions](relay-subscriptions.md), [Outbox](outbox-routing.md) |
 | Other capabilities | [Resources](resource-access.md), [uploads](upload-access.md), [identity data](public-identity-data.md), [links](external-links.md), [intent/INC](intent-inc.md), [notifications/configuration](notifications-configuration.md) |
 | Build dependencies | [Patches](dependency-patches.md), [notices and provenance](native-dependency-notices.md) |

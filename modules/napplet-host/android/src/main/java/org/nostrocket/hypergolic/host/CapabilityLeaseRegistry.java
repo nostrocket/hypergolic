@@ -52,15 +52,21 @@ public final class CapabilityLeaseRegistry {
   }
   /** Snapshot is a complete JSON string constructed by the host from native registration and the original serialized request. */
   public synchronized String admit(String generation, long sequence, String snapshot) {
+    return admit(generation, sequence, snapshot, LIFETIME_MS);
+  }
+  synchronized String admitPublishedOpen(String generation, long sequence, String snapshot) {
+    return admit(generation, sequence, snapshot, 120_000L);
+  }
+  private String admit(String generation, long sequence, String snapshot, long lifetimeMs) {
     prune();
     if (!consumeSequence(generation, sequence)) return null;
     if (!foreground || snapshot == null || snapshot.length() > MAX_BYTES || snapshot.getBytes(StandardCharsets.UTF_8).length > MAX_BYTES || requests.size() >= MAX_PENDING) return null;
     long ownPending = requests.values().stream().filter(request -> request.generation.equals(generation)).count();
     if (ownPending >= MAX_PER_SESSION) return null;
     long now = elapsedRealtime.getAsLong();
-    if (now < 0 || now > Long.MAX_VALUE - LIFETIME_MS) return null;
+    if (now < 0 || now > Long.MAX_VALUE - lifetimeMs) return null;
     String token = UUID.randomUUID().toString();
-    requests.put(token, new Request(generation, snapshot, now + LIFETIME_MS));
+    requests.put(token, new Request(generation, snapshot, now + lifetimeMs));
     return token;
   }
   /** Shared counter for ordinary and approval lanes; rejection still consumes an observed sequence. */

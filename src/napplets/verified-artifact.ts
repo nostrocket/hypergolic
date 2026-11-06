@@ -1,5 +1,5 @@
 import { getEventHash, verifyEvent } from 'nostr-tools/pure';
-import type { NappletCoordinate } from './resolve-link.ts';
+import { isNappletIdentifier, type NappletCoordinate } from './resolve-link.ts';
 
 export const MAX_MANIFEST_BYTES = 64 * 1024;
 export const MAX_HTML_BYTES = 2 * 1024 * 1024;
@@ -9,10 +9,15 @@ export class NappletVerificationError extends Error {
   constructor() { super('Napplet verification failed'); this.name = 'NappletVerificationError'; }
 }
 
+/** Only returned for an authentic event at the requested coordinate. */
+export class UnsupportedNappletManifestError extends NappletVerificationError {
+  constructor() { super(); this.name = 'UnsupportedNappletManifestError'; }
+}
+
 export type VerifiedNappletManifest = Readonly<{
   id: string;
   eventId: string;
-  /** Content identity from the NIP-5A path aggregate, stable across equivalent event publications. */
+  format: 'legacy-path' | 'nip-5d';
   versionId: string;
   pubkey: string;
   created_at: number;
@@ -24,6 +29,7 @@ export type VerifiedNappletManifest = Readonly<{
   aggregateHash: string;
   serverHints: readonly string[];
   requiredDomains: readonly string[];
+  optionalDomains: readonly string[];
 }>;
 
 export type VerifiedNappletArtifact = Readonly<{
@@ -35,6 +41,9 @@ export type VerifiedNappletArtifact = Readonly<{
 
 const HEX64 = /^[0-9a-f]{64}$/;
 const HEX128 = /^[0-9a-f]{128}$/;
+const DOMAIN = /^[a-z][a-z0-9-]{0,63}$/;
+const LEGACY_ONLY_TAGS = new Set(['requires', 'description', 'archetype']);
+const MODERN_ONLY_TAGS = new Set(['R', 'O', 'z']);
 const verifiedManifests = new WeakSet<object>();
 const verifiedArtifacts = new WeakSet<object>();
 const fail = (): never => { throw new NappletVerificationError(); };
@@ -111,6 +120,14 @@ function freezeTags(tags: readonly (readonly string[])[]): readonly (readonly st
   return Object.freeze(tags.map(tag => Object.freeze([...tag])));
 }
 
+function domainDeclarations(tags: readonly string[][], name: string): string[] {
+  const selected = tags.filter(tag => tag[0] === name);
+  if (selected.some(tag => tag.length !== 2 || !DOMAIN.test(tag[1]!))) return fail();
+  const domains = selected.map(tag => tag[1]!);
+  if (new Set(domains).size !== domains.length) return fail();
+  return domains;
+}
+
 /** Verifies and clones a kind-35129 manifest before any artifact fetch or execution. */
 export async function verifyManifest(coordinate: NappletCoordinate, signedEvent: unknown): Promise<VerifiedNappletManifest> {
   try {
@@ -120,47 +137,61 @@ export async function verifyManifest(coordinate: NappletCoordinate, signedEvent:
         typeof input.sig !== 'string' || !HEX128.test(input.sig) || typeof input.content !== 'string' ||
         typeof input.created_at !== 'number' || !Number.isSafeInteger(input.created_at) || input.created_at < 0 ||
         input.kind !== 35129 || coordinate.kind !== 35129 || input.pubkey !== coordinate.pubkey ||
-        typeof coordinate.identifier !== 'string' ||
+        !isNappletIdentifier(coordinate.identifier) ||
         new TextEncoder().encode(JSON.stringify({ ...input, tags })).byteLength > MAX_MANIFEST_BYTES) return fail();
 
-    const dTags: string[][] = [];
-    const pathTags: string[][] = [];
-    const xTags: string[][] = [];
-    const serverHints: string[] = [];
-    const requiredDomains: string[] = [];
-    for (const tag of tags) {
-      if (tag[0] === 'd') dTags.push(tag);
-      else if (tag[0] === 'path') pathTags.push(tag);
-      else if (tag[0] === 'x') xTags.push(tag);
-      else if (tag[0] === 'server') {
-        if (tag.length !== 2 || !validServerBase(tag[1]!)) return fail();
-        serverHints.push(new URL(tag[1]!).origin + '/');
-      } else if (tag[0] === 'requires') {
-        if (tag.length !== 2 || !/^[a-z][a-z0-9-]{0,63}$/.test(tag[1]!)) return fail();
-        requiredDomains.push(tag[1]!);
-      }
-    }
-    if (dTags.length !== 1 || dTags[0]!.length !== 2 || dTags[0]![1] !== coordinate.identifier ||
-        pathTags.length !== 1 || pathTags[0]!.length !== 3 || pathTags[0]![1] !== '/index.html' || !HEX64.test(pathTags[0]![2]!) ||
-        xTags.length > 1 || xTags.some(tag => tag.length !== 3 || tag[2] !== 'aggregate' || !HEX64.test(tag[1]!))) return fail();
-    const expectedHtmlHash = pathTags[0]![2]!;
-    const aggregateHash = await sha256(new TextEncoder().encode(`${expectedHtmlHash} /index.html\n`));
-    if (xTags.length === 1 && xTags[0]![1] !== aggregateHash) return fail();
-    if (new Set(serverHints).size !== serverHints.length || new Set(requiredDomains).size !== requiredDomains.length) return fail();
-
+    const dTags = tags.filter(tag => tag[0] === 'd');
+    if (dTags.length !== 1 || dTags[0]!.length !== 2 || dTags[0]![1] !== coordinate.identifier) return fail();
     // Verify a newly constructed plain object, so no nostr-tools verification cache can confer trust.
     const event = {
       id: input.id, pubkey: input.pubkey, created_at: input.created_at, kind: input.kind,
-      tags: tags.map(tag => [...tag]), content: input.content, sig: input.sig,
+      tags, content: input.content, sig: input.sig,
     };
     if (getEventHash(event) !== event.id || !verifyEvent(event)) return fail();
 
+    const paths = tags.filter(tag => tag[0] === 'path');
+    const hashes = tags.filter(tag => tag[0] === 'x');
+    const format = paths.length ? 'legacy-path' : 'nip-5d';
+    const [path] = paths;
+    const [hash] = hashes;
+    let expectedHtmlHash: string;
+    if (format === 'legacy-path') {
+      if (paths.length !== 1 || path?.length !== 3 || path[1] !== '/index.html' || !HEX64.test(path[2]!) ||
+          hashes.length > 1 || (hash && (hash.length !== 3 || hash[2] !== 'aggregate' || !HEX64.test(hash[1]!))) ||
+          tags.some(tag => MODERN_ONLY_TAGS.has(tag[0]!))) throw new UnsupportedNappletManifestError();
+      expectedHtmlHash = path[2]!;
+    } else {
+      if (hashes.length !== 1 || hash?.length !== 2 || !HEX64.test(hash[1]!) || !event.content.trim() ||
+          tags.some(tag => LEGACY_ONLY_TAGS.has(tag[0]!) || tag[0] === 'a' || tag[0] === 'A')) {
+        throw new UnsupportedNappletManifestError();
+      }
+      expectedHtmlHash = hash[1]!;
+    }
+
+    const requiredDomains = domainDeclarations(tags, format === 'legacy-path' ? 'requires' : 'R');
+    const optionalDomains = format === 'legacy-path' ? [] : domainDeclarations(tags, 'O');
+    const required = new Set(requiredDomains);
+    if (optionalDomains.some(domain => required.has(domain))) return fail();
+    const serverHints = new Set<string>();
+    for (const tag of tags) {
+      if (tag[0] !== 'server') continue;
+      if (tag.length !== 2 || !validServerBase(tag[1]!)) return fail();
+      const origin = new URL(tag[1]!).origin + '/';
+      if (serverHints.has(origin)) return fail();
+      serverHints.add(origin);
+    }
+
+    // Both formats project the same bytes to the same native runtime version.
+    const aggregateHash = await sha256(new TextEncoder().encode(`${expectedHtmlHash} /index.html\n`));
+    if (format === 'legacy-path' && hash && hash[1] !== aggregateHash) return fail();
+
     const frozenTags = freezeTags(event.tags);
     const manifest = Object.freeze({
-      id: event.id, eventId: event.id, versionId: aggregateHash, pubkey: event.pubkey, created_at: event.created_at,
+      id: event.id, eventId: event.id, format, versionId: aggregateHash, pubkey: event.pubkey, created_at: event.created_at,
       kind: 35129, tags: frozenTags, content: event.content, sig: event.sig,
       expectedHtmlHash, aggregateHash,
-      serverHints: Object.freeze([...serverHints]), requiredDomains: Object.freeze([...requiredDomains]),
+      serverHints: Object.freeze([...serverHints]), requiredDomains: Object.freeze(requiredDomains),
+      optionalDomains: Object.freeze(optionalDomains),
     });
     verifiedManifests.add(manifest);
     return manifest;

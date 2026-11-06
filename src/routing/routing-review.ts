@@ -1,3 +1,4 @@
+import type { NappletDescriptor } from '../shell/workspace.ts';
 import type { NappletConsentReview } from '../napplets/first-open-consent.ts';
 import type { NativeRegistration } from '../runtime/capability-protocol.ts';
 import type { IntentRequest } from './routing-contract.ts';
@@ -5,7 +6,11 @@ import type { CatalogHandler } from './routing-catalog.ts';
 export type RoutingReviewRequest = Readonly<{ kind: 'intent'; origin: NativeRegistration; request: IntentRequest; candidates: readonly CatalogHandler[]; selected: CatalogHandler | null; newInstance: boolean }>
   | Readonly<{ kind: 'topic'; origin: NativeRegistration; topic: string }>
   | Readonly<{ kind: 'channel'; origin: NativeRegistration; peer: NativeRegistration }>
-  | Readonly<{ kind: 'permissions'; origin: NativeRegistration; consent: NappletConsentReview }>;
+  | Readonly<{ kind: 'permissions'; origin: NativeRegistration; consent: NappletConsentReview }>
+  | Readonly<{ kind: 'published-open'; origin: NativeRegistration; source: NappletDescriptor; changesAccess: boolean;
+      target: Readonly<{ publisher: string; appId: string; eventId: string; version: string;
+        requiredDomains: readonly string[]; optionalDomains: readonly string[];
+        unsupportedDomains: readonly string[]; unsupportedOptionalDomains: readonly string[] }> }>;
 export type RoutingDecision = Readonly<{ allow: boolean; selected?: CatalogHandler; remember?: boolean }>;
 export type RoutingReviewItem = Readonly<{ id: string; request: RoutingReviewRequest }>;
 type Pending = RoutingReviewItem & { active(): void; mayReview(): boolean; resolve(value: RoutingDecision): void };

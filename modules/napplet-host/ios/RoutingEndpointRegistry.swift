@@ -4,7 +4,7 @@ import Foundation
 final class RoutingEndpointRegistry: @unchecked Sendable {
   private static let max: UInt64 = 9_007_199_254_740_991
   private struct Endpoint {
-    let user: String; let epoch: UInt64; let intent: Bool; let inc: Bool; let notify: Bool; let config: Bool
+    let user: String; let epoch: UInt64; let intent: Bool; let inc: Bool; let notify: Bool; let config: Bool; let publishedOpen: Bool
     var ready = false; var focused = false; var reviewRevision: UInt64 = 0
   }
   private let lock = NSLock()
@@ -28,12 +28,12 @@ final class RoutingEndpointRegistry: @unchecked Sendable {
     if value != foreground { if counter < Self.max { counter += 1 } else { ownerAvailable = false } }
     foreground = value
   }
-  func register(_ generation: String, user: String, epoch: UInt64, intent: Bool, inc: Bool, notify: Bool = false, config: Bool = false) -> Bool {
+  func register(_ generation: String, user: String, epoch: UInt64, intent: Bool, inc: Bool, notify: Bool = false, config: Bool = false, publishedOpen: Bool = false, trackPublished: Bool = false) -> Bool {
     lock.lock(); defer { lock.unlock() }
     guard counter < Self.max, generation.range(of: "^[A-Za-z0-9_-]{1,80}$", options: .regularExpression) != nil,
-      ownerAvailable, user == ownerUser, epoch == ownerEpoch, intent || inc || notify || config, endpoints[generation] == nil,
+      ownerAvailable, user == ownerUser, epoch == ownerEpoch, intent || inc || notify || config || publishedOpen || trackPublished, endpoints[generation] == nil,
       endpoints.count < 64 else { return false }
-    endpoints[generation] = Endpoint(user: user, epoch: epoch, intent: intent, inc: inc, notify: notify, config: config); return true
+    endpoints[generation] = Endpoint(user: user, epoch: epoch, intent: intent, inc: inc, notify: notify, config: config, publishedOpen: publishedOpen); return true
   }
   func ready(_ generation: String) { lock.lock(); defer { lock.unlock() }; endpoints[generation]?.ready = true }
   @discardableResult func focus(_ generation: String, _ value: Bool) -> Bool {
@@ -49,7 +49,7 @@ final class RoutingEndpointRegistry: @unchecked Sendable {
   func mayDeliver(_ generation: String, domain: String) -> Bool {
     lock.lock(); defer { lock.unlock() }
     guard active(generation), let endpoint = endpoints[generation] else { return false }
-    return (domain == "intent" && endpoint.intent) || (domain == "inc" && endpoint.inc) || (domain == "notify" && endpoint.notify) || (domain == "config" && endpoint.config)
+    return (domain == "intent" && endpoint.intent) || (domain == "inc" && endpoint.inc) || (domain == "notify" && endpoint.notify) || (domain == "config" && endpoint.config) || (domain == "published-open" && endpoint.publishedOpen)
   }
   func mayReview(_ generation: String) -> Bool { lock.lock(); defer { lock.unlock() }; return active(generation) && endpoints[generation]!.focused && endpoints[generation]!.reviewRevision < Self.max }
   func reviewRevision(_ generation: String) -> Int64 {

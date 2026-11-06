@@ -21,14 +21,23 @@ import type { ApprovalOrigin, ApprovalService } from '../security/approval-servi
 import { identifier } from '../storage/codec.ts';
 import { createPublishedSessionCoordinator, type PreparedPublishedSession, type PublishedSessionDependencies, type PublishedUpdateReview } from '../napplets/published-session.ts';
 import type { NappletConsentReview } from '../napplets/first-open-consent.ts';
+import { isDiscoveryEntry } from '../napplets/discovery-entry.ts';
+import type { DiscoveryOpenBroker } from '../napplets/discovery-open-broker.ts';
+import type { VerifiedNappletArtifact } from '../napplets/verified-artifact.ts';
 import type { NativeRegistration } from './capability-protocol.ts';
 
-export interface NativeCapabilityEvent { type: 'capability'; sessionId: string; generation: string; token: string; lane?: 'approval' | 'outbox-subscription' | 'subscription' | 'upload' | 'routing' | 'presentation' | 'configuration' }
+export interface NativeCapabilityEvent { type: 'capability'; sessionId: string; generation: string; token: string; lane?: 'approval' | 'outbox-subscription' | 'subscription' | 'upload' | 'routing' | 'presentation' | 'configuration' | 'published-open' }
 export interface RuntimeBinding { readonly configuration: string; receive(event: NativeCapabilityEvent): void; revoke(): void }
-export interface PublishedRuntimeBinding { readonly publishedArtifact: string; readonly requestedDomains: readonly string[]; receive(event: NativeCapabilityEvent): void; assertApproval(origin: ApprovalOrigin,domain?:'outbox'): void; assertUpload(origin: ApprovalOrigin): void; revoke(): void }
+type PublishedCapabilities = Readonly<{requiredDomains: readonly string[]; optionalDomains: readonly string[]}>;
+export interface PublishedRuntimeBinding { readonly publishedArtifact: string; readonly requestedDomains: PublishedCapabilities;
+  ready(generation: string): void; readyGeneration(): string | null; receive(event: NativeCapabilityEvent): void; assertApproval(origin: ApprovalOrigin,domain?:'outbox'): void; assertUpload(origin: ApprovalOrigin): void; revoke(): void }
 export interface RuntimeNativePort extends NativeCapabilityPort { newInstanceId(): string; subscriptions?: NativeRelaySubscriptionPort }
 export interface RuntimeOwner {
-  publishedCapabilities(session: NappletDescriptor): readonly string[] | null;
+  publishedCapabilities(session: NappletDescriptor): PublishedCapabilities | null;
+  resolveDiscovered(link: string, expectedEventId: string, signal: AbortSignal, active: () => void): Promise<VerifiedNappletArtifact>;
+  prepareDiscovered(artifact: VerifiedNappletArtifact, signal: AbortSignal, assertActive: () => void,
+    reviewLaunch: (changesAccess: boolean) => Promise<boolean>, existing?: NappletDescriptor): Promise<NappletDescriptor>;
+  publishedReadyGeneration(session: NappletDescriptor): string | null;
   open(session: NappletDescriptor): RuntimeBinding;
   descriptor(variant: Exclude<BundledVariant, 'ux-lab'>, number: number): NappletDescriptor;
   openPublishedLink(link: string, signal: AbortSignal, review: (request: NappletConsentReview) => Promise<boolean>): Promise<NappletDescriptor>;
@@ -53,7 +62,8 @@ function configurationUser(ready: PreparedPublishedSession): string {
 
 function capabilityReceiver(database: ShellDatabase, native: RuntimeNativePort,
   approvals: Readonly<{ service: ApprovalService; destinations: () => readonly string[] }> | undefined,
-  sessionId: string, configuration: Omit<NativeRegistration, 'generation'>, assertActive: () => void, queries?: RelayQueryService, subscriptions?: ReturnType<typeof createRelaySubscriptions>, resources?: ResourceHost, uploads?: UploadService, identityData?: IdentityDataPort, routing?: RoutingBroker, notify?: NotifyBroker, config?: ConfigBroker, outbox?: OutboxReadService, outboxStreams?:ReturnType<typeof createOutboxSubscriptions>) {
+  sessionId: string, configuration: Omit<NativeRegistration, 'generation'>, assertActive: () => void, queries?: RelayQueryService, subscriptions?: ReturnType<typeof createRelaySubscriptions>, resources?: ResourceHost, uploads?: UploadService, identityData?: IdentityDataPort, routing?: RoutingBroker, notify?: NotifyBroker, config?: ConfigBroker, outbox?: OutboxReadService, outboxStreams?:ReturnType<typeof createOutboxSubscriptions>,
+  discovery?: Readonly<{ broker: DiscoveryOpenBroker; source: NappletDescriptor }>) {
   let generation: string | null = null;
   let broker: ReturnType<typeof createCapabilityBroker> | null = null;
   let streams:ReturnType<typeof createRelaySubscriptionBroker>|null=null;
@@ -74,7 +84,9 @@ function capabilityReceiver(database: ShellDatabase, native: RuntimeNativePort,
           broker = createCapabilityBroker(database, native, owner, queries, request=>streams?.close(request), resources, identityData, outbox,request=>outboxSubscriptions?.close(request));
         }
         if (event.generation !== generation) return;
-        if (event.lane === 'configuration') {
+        if (event.lane === 'published-open') {
+          void discovery?.broker.dispatch(event.token, {registration: {...configuration, generation}, assertActive}, discovery.source);
+        } else if (event.lane === 'configuration') {
           void config?.dispatch(event.token, {registration: {...configuration, generation}, assertActive});
         } else if (event.lane === 'presentation') {
           void notify?.dispatch(event.token, {registration: {...configuration, generation}, assertActive});
@@ -96,7 +108,7 @@ function capabilityReceiver(database: ShellDatabase, native: RuntimeNativePort,
 export function createRuntimeOwner(database: ShellDatabase,
   identity: Pick<IdentityTransition, 'getSnapshot' | 'sessionAuthority'>, native: RuntimeNativePort,
   approvals?: Readonly<{ service: ApprovalService; destinations: () => readonly string[] }>,
-  published?: Omit<PublishedSessionDependencies, 'identity' | 'database' | 'newInstanceId'>, queries?: RelayQueryService, subscriptions?: ReturnType<typeof createRelaySubscriptions>, resources?: ResourceHost, uploads?: UploadService, identityData?: IdentityDataPort, routing?: Readonly<{broker: RoutingBroker; catalog: RoutingCatalog}>, notify?: NotifyBroker, config?: ConfigBroker, outbox?: OutboxReadService, outboxStreams?:ReturnType<typeof createOutboxSubscriptions>): RuntimeOwner {
+  published?: Omit<PublishedSessionDependencies, 'identity' | 'database' | 'newInstanceId'>, queries?: RelayQueryService, subscriptions?: ReturnType<typeof createRelaySubscriptions>, resources?: ResourceHost, uploads?: UploadService, identityData?: IdentityDataPort, routing?: Readonly<{broker: RoutingBroker; catalog: RoutingCatalog}>, notify?: NotifyBroker, config?: ConfigBroker, outbox?: OutboxReadService, outboxStreams?:ReturnType<typeof createOutboxSubscriptions>, discovery?: DiscoveryOpenBroker): RuntimeOwner {
   const coordinator = published ? createPublishedSessionCoordinator({
     ...published, identity, database, newInstanceId: () => native.newInstanceId(),
   }) : null;
@@ -111,17 +123,28 @@ export function createRuntimeOwner(database: ShellDatabase,
   };
   const bindingFor = (selected: NappletDescriptor, ready: PreparedPublishedSession): PublishedRuntimeBinding => {
     let revoked = false;
+    let mounted: string | null = null;
     const host = JSON.parse(ready.hostInput) as { configuration: string };
     const configuration = JSON.parse(host.configuration) as Omit<NativeRegistration, 'generation'>;
+    const entry = discovery && isDiscoveryEntry(selected) ? { broker: discovery, source: selected } : undefined;
     const assertActive = () => {
       if (revoked) throw new ShellStorageError('REVOKED');
       ready.assertActive();
       exactSession(selected);
     };
-    const receiver = capabilityReceiver(database, native, approvals, selected.id, configuration, assertActive, queries, subscriptions, resources, uploads, identityData, routing?.broker, notify, config, outbox, outboxStreams);
+    const receiver = capabilityReceiver(database, native, approvals, selected.id, configuration, assertActive, queries, subscriptions, resources, uploads, identityData, routing?.broker, notify, config, outbox, outboxStreams, entry);
     const binding: PublishedRuntimeBinding = Object.freeze({
-      publishedArtifact: ready.hostInput,
-      requestedDomains: ready.artifact.manifest.requiredDomains,
+      publishedArtifact: entry ? JSON.stringify({...host, configuration: JSON.stringify({...configuration, publishedOpen: true})}) : ready.hostInput,
+      requestedDomains: Object.freeze({ requiredDomains: ready.artifact.manifest.requiredDomains,
+        optionalDomains: ready.artifact.manifest.optionalDomains }),
+      ready(generation: string) {
+        assertActive();
+        mounted = identifier(generation);
+      },
+      readyGeneration() {
+        assertActive();
+        return mounted;
+      },
       assertApproval(origin: ApprovalOrigin,domain?:'outbox'): void {
         assertActive();
         receiver.assertGeneration(origin.generation);
@@ -155,9 +178,30 @@ export function createRuntimeOwner(database: ShellDatabase,
       prepared.set(id, ready);
       return ready.descriptor;
     },
+    resolveDiscovered(link: string, expectedEventId: string, signal: AbortSignal, active: () => void) {
+      if (!coordinator) throw new ShellStorageError('REVOKED');
+      return coordinator.resolveExact(link, expectedEventId, signal, active);
+    },
+    async prepareDiscovered(artifact: VerifiedNappletArtifact, signal: AbortSignal, assertActive: () => void,
+      reviewLaunch: (changesAccess: boolean) => Promise<boolean>, existing?: NappletDescriptor) {
+      if (!coordinator) throw new ShellStorageError('REVOKED');
+      const ready = await coordinator.prepareExact(artifact, { assertActive, reviewLaunch, ...(existing ? { existing } : {}) }, signal);
+      const id = ready.descriptor.id;
+      try {
+        assertActive();
+        if (existing) exactSession(existing);
+        if (prepared.has(id) || running.has(id)) throw new ShellStorageError('CONFLICT');
+        prepared.set(id, ready);
+        return ready.descriptor;
+      } catch (error) { ready.revoke(); throw error; }
+    },
+    publishedReadyGeneration(session: NappletDescriptor) {
+      exactSession(session);
+      return running.get(session.id)?.readyGeneration() ?? null;
+    },
     publishedCapabilities(session: NappletDescriptor) {
       exactSession(session);
-      return running.get(session.id)?.requestedDomains ?? prepared.get(session.id)?.artifact.manifest.requiredDomains ?? null;
+      return running.get(session.id)?.requestedDomains ?? prepared.get(session.id)?.artifact.manifest ?? null;
     },
     async preparePublishedUpdate(session: NappletDescriptor, signal: AbortSignal,
       reviewUpdate: (request: PublishedUpdateReview) => Promise<boolean>,
@@ -246,7 +290,7 @@ export function createRuntimeOwner(database: ShellDatabase,
           current.version !== descriptor.version || current.source !== descriptor.source || current.title !== descriptor.title) throw new ShellStorageError('REVOKED');
     };
     assertActive();
-    const receiver = capabilityReceiver(database, native, approvals, descriptor.id, configuration, assertActive, queries, subscriptions, resources, uploads, identityData, routing?.broker, notify, config, outbox, outboxStreams);
+    const receiver = capabilityReceiver(database, native, approvals, descriptor.id, configuration, assertActive, queries, subscriptions, resources, uploads, identityData, routing?.broker, notify, config, outbox, outboxStreams, discovery && isDiscoveryEntry(descriptor) ? { broker: discovery, source: descriptor } : undefined);
     return Object.freeze({ configuration: JSON.stringify(configuration),
       revoke(): void { revoked = true; receiver.revoke(); approvals?.service.close(descriptor.id); uploads?.close(descriptor.id); },
       receive: receiver.receive,

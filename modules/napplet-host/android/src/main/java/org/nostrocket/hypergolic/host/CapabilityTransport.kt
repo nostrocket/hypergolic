@@ -12,15 +12,21 @@ internal object CapabilityTransport {
   private data class Pending(val generation: String, val access: IdentityListAccess.Ticket?, val reply: (String?) -> Unit)
   private val pending = mutableMapOf<String, Pending>()
 
-  fun admit(generation: String, sequence: Long, snapshot: String, reply: (String?) -> Unit): String? {
+  fun admit(generation: String, sequence: Long, snapshot: String, reply: (String?) -> Unit): String? =
+    admit(generation, sequence, snapshot, false, reply)
+
+  fun admitPublishedOpen(generation: String, sequence: Long, snapshot: String, reply: (String?) -> Unit): String? =
+    admit(generation, sequence, snapshot, true, reply)
+
+  private fun admit(generation: String, sequence: Long, snapshot: String, publishedOpen: Boolean, reply: (String?) -> Unit): String? {
     check(Looper.myLooper() == Looper.getMainLooper())
-    val token = leases.admit(generation, sequence, snapshot) ?: return null
+    val token = (if (publishedOpen) leases.admitPublishedOpen(generation, sequence, snapshot) else leases.admit(generation, sequence, snapshot)) ?: return null
     val access = runCatching { IdentityListAccess.capture(snapshot) }.getOrElse { leases.finish(token); return null }
     pending[token] = Pending(generation, access, reply)
     main.postDelayed({
       // The registry's elapsedRealtime deadline is authoritative, including device sleep.
       if (!leases.isActive(token)) pending.remove(token)?.reply?.invoke(null)
-    }, 25_000)
+    }, if (publishedOpen) 120_000 else 25_000)
     return token
   }
   fun finish(token: String, response: String?) {

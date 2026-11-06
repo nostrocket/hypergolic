@@ -26,6 +26,7 @@ function NappletIdentity({appId, publisher, fixture}: {appId: string; publisher:
 }
 function reviewTitle(request: RoutingReviewRequest): string {
   switch (request.kind) {
+    case 'published-open': return 'Open this published napplet?';
     case 'intent': return request.selected ? 'Open with this napplet?' : 'Choose a handler';
     case 'topic': return 'Allow this topic?';
     case 'permissions': return 'Allow handler capabilities?';
@@ -59,17 +60,40 @@ function ChannelReviewDetails({request}: {request: Extract<RoutingReviewRequest,
 }
 function PermissionReviewDetails({request}: {request: Extract<RoutingReviewRequest, {kind: 'permissions'}>}) {
   const { styles } = useShellStyles(createStyles);
-  return <><Text style={styles.label}>Handler</Text><NappletIdentity appId={request.consent.appId} publisher={request.consent.publisher} fixture="published"/><Text style={styles.label}>Required capabilities</Text><Text selectable style={styles.text}>{request.consent.domains.join(', ')}</Text><Text style={styles.detail}>These capabilities are remembered for this identity, publisher and app. Uploads, intent dispatch and new communication permissions still need their own approval.</Text></>;
+  const { consent } = request;
+  return <>
+    <Text style={styles.label}>Handler</Text><NappletIdentity appId={consent.appId} publisher={consent.publisher} fixture="published"/>
+    <Text style={styles.label}>Required capabilities</Text><Text selectable style={styles.text}>{consent.domains.join(', ') || 'None'}</Text>
+    {consent.optionalDomains.length > 0 && <><Text style={styles.label}>Optional capabilities</Text><Text selectable style={styles.text}>{consent.optionalDomains.join(', ')}</Text></>}
+    {consent.unsupportedDomains.length > 0 && <Text style={styles.detail}>Unavailable required capabilities: {consent.unsupportedDomains.join(', ')}.</Text>}
+    {consent.unsupportedOptionalDomains.length > 0 && <Text style={styles.detail}>Unavailable optional capabilities: {consent.unsupportedOptionalDomains.join(', ')}.</Text>}
+    <Text style={styles.detail}>Hypergolic saves available access for this identity, publisher and app. Uploads, intent dispatch and new communication permissions still need their own approval.</Text>
+  </>;
+}
+function PublishedOpenDetails({request}: {request: Extract<RoutingReviewRequest, {kind: 'published-open'}>}) {
+  const { styles } = useShellStyles(createStyles);
+  const { target } = request;
+  return <>
+    <Text style={styles.label}>Target napplet and publisher</Text><NappletIdentity appId={target.appId} publisher={target.publisher} fixture="published"/>
+    <Text style={styles.label}>Signed revision</Text><Text selectable style={styles.mono}>{target.eventId}</Text>
+    <Text style={styles.label}>Verified artifact version</Text><Text selectable style={styles.mono}>{target.version}</Text>
+    <Text style={styles.label}>Required capabilities</Text><Text style={styles.text}>{target.requiredDomains.join(', ') || 'None'}</Text>
+    <Text style={styles.label}>Optional capabilities</Text><Text style={styles.text}>{target.optionalDomains.join(', ') || 'None'}</Text>
+    {target.unsupportedDomains.length > 0 && <Text style={styles.detail}>Unavailable required capabilities: {target.unsupportedDomains.join(', ')}. Features using these capabilities will be unavailable.</Text>}
+    {target.unsupportedOptionalDomains.length > 0 && <Text style={styles.detail}>Unavailable optional capabilities: {target.unsupportedOptionalDomains.join(', ')}.</Text>}
+    {request.changesAccess && <Text style={styles.detail}>Hypergolic will save the available access for this publisher and napplet under your selected identity.</Text>}
+  </>;
 }
 function ReviewDetails({request, selected, onSelect, remember, onRemember}: {request: RoutingReviewRequest; selected: CatalogHandler | null; onSelect(value: CatalogHandler): void; remember: boolean; onRemember(): void}) {
   switch (request.kind) {
+    case 'published-open': return <PublishedOpenDetails request={request}/>;
     case 'intent': return <IntentReviewDetails request={request} selected={selected} onSelect={onSelect} remember={remember} onRemember={onRemember}/>;
     case 'topic': return <TopicReviewDetails request={request}/>;
     case 'channel': return <ChannelReviewDetails request={request}/>;
     case 'permissions': return <PermissionReviewDetails request={request}/>;
   }
 }
-const reviewActions = {intent: 'Approve dispatch', channel: 'Open channel once', permissions: 'Allow capabilities', topic: 'Allow this topic'} as const;
+const reviewActions = {'published-open': 'Open verified version', intent: 'Approve dispatch', channel: 'Open channel once', permissions: 'Allow capabilities', topic: 'Allow this topic'} as const;
 function RoutingReviewSheet({service, item}: {service: RoutingReviewService; item: RoutingReviewItem}) {
   const { styles } = useShellStyles(createStyles);
   const request = item.request, insets = useSafeAreaInsets();
@@ -83,10 +107,13 @@ function RoutingReviewSheet({service, item}: {service: RoutingReviewService; ite
       <TrustedBand />
       <ScrollView contentContainerStyle={styles.content}>
         <Text accessibilityRole="header" style={styles.title}>{reviewTitle(request)}</Text>
-        <Text style={styles.label}>Requesting napplet</Text><NappletIdentity {...request.origin}/>
+        <Text style={styles.label}>Requesting napplet</Text>
+        {request.kind === 'published-open' && request.source.source === 'bundled'
+          ? <Text style={styles.text}>{request.source.title} · built into Hypergolic</Text>
+          : <NappletIdentity {...request.origin}/>}
         <ReviewDetails request={request} selected={selected} onSelect={setSelected} remember={remember} onRemember={() => setRemember(value => !value)}/>
       </ScrollView>
-      <View style={styles.actions}><Pressable accessibilityRole="button" testID="routing-approve" disabled={disabled} accessibilityState={{disabled}} style={styles.button} onPress={accept}><Text style={styles.action}>{reviewActions[request.kind]}</Text></Pressable>
+      <View style={styles.actions}><Pressable accessibilityRole="button" testID="routing-approve" disabled={disabled} accessibilityState={{disabled}} style={styles.button} onPress={accept}><Text style={styles.action}>{request.kind === 'published-open' && request.changesAccess ? 'Allow and open' : reviewActions[request.kind]}</Text></Pressable>
         <Pressable accessibilityRole="button" testID="routing-cancel" style={styles.button} onPress={cancel}><Text style={styles.action}>Cancel</Text></Pressable></View>
     </View></View>
   </Modal>;

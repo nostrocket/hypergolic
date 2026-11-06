@@ -1,4 +1,6 @@
 package org.nostrocket.hypergolic.host;
+import java.util.concurrent.atomic.AtomicLong;
+
 public final class RoutingCoreTests {
   static int count = 0;
   static void expect(boolean value) { count++; if (!value) throw new AssertionError("Routing assertion " + count); }
@@ -41,6 +43,27 @@ public final class RoutingCoreTests {
     expect(reviews.focus("peer", true)); expect(reviews.reviewRevision("settings") == currentReview); expect(reviews.matchesRevision(deliveryRevision));
     reviews.foreground(false); expect(reviews.reviewRevision("settings") == -1); reviews.foreground(true); expect(!reviews.matchesRevision(deliveryRevision));
     reviews.revoke("settings"); expect(reviews.reviewRevision("settings") == -1);
+    RoutingEndpointRegistry discovery = new RoutingEndpointRegistry(); expect(discovery.synchronizeOwner(a, 0, true));
+    expect(discovery.register("catalog", a, 0, false, false, false, false, true, false));
+    expect(discovery.register("target", a, 0, false, false, false, false, false, true));
+    discovery.focus("catalog", true); expect(!discovery.mayReview("catalog")); discovery.ready("catalog");
+    expect(discovery.mayReview("catalog")); expect(discovery.mayDeliver("catalog", "published-open"));
+    expect(!discovery.mayDeliver("catalog", "intent")); discovery.focus("catalog", false);
+    expect(!discovery.mayReview("catalog")); expect(discovery.mayDeliver("catalog", "published-open"));
+    discovery.ready("target"); discovery.focus("target", true);
+    expect(discovery.mayReview("target")); expect(!discovery.mayDeliver("target", "published-open"));
+    discovery.revoke("catalog"); expect(!discovery.mayDeliver("catalog", "published-open"));
+    AtomicLong clock = new AtomicLong(1_000);
+    CapabilityLeaseRegistry leases = new CapabilityLeaseRegistry(clock::get);
+    expect(leases.register("catalog"));
+    String ordinary = leases.admit("catalog", 1, "{}"), open = leases.admitPublishedOpen("catalog", 2, "{}");
+    expect(leases.take(ordinary) != null); expect(leases.take(open) != null); expect(leases.take(open) == null);
+    clock.addAndGet(25_000);
+    expect(!leases.isActive(ordinary)); expect(leases.isActive(open));
+    expect(leases.setForeground(false).contains(open)); leases.setForeground(true);
+    expect(!leases.isActive(open)); expect(!leases.finish(open));
+    open = leases.admitPublishedOpen("catalog", 3, "{}"); expect(leases.take(open) != null);
+    clock.addAndGet(120_000); expect(!leases.isActive(open));
     System.out.println("Android routing core " + count + " assertions passed");
   }
 }

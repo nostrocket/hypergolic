@@ -7,7 +7,7 @@ const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 
 export type PublishedMetadata = Readonly<{
   publisher: string; appId: string; eventId: string; version: string; htmlHash: string;
-  domains: readonly string[];
+  domains: readonly string[]; publishedOpen?: true;
 }>;
 export type PublishedDocument = Readonly<{ metadata: PublishedMetadata; html: string }>;
 
@@ -24,17 +24,17 @@ function decodeBase64(value: unknown): Uint8Array {
 }
 const ARTIFACT_DOMAINS = new Set(['identity', 'storage', 'theme', 'relay', 'resource', 'upload', 'link', 'intent', 'inc', 'notify', 'config', 'outbox']);
 function metadata(value: Record<string, unknown>): PublishedMetadata {
-  const { publisher, appId, eventId, version, htmlHash, domains } = value;
+  const { publisher, appId, eventId, version, htmlHash, domains, publishedOpen } = value;
   if (typeof publisher !== 'string' || !HEX64.test(publisher) ||
       typeof eventId !== 'string' || !HEX64.test(eventId) ||
       typeof version !== 'string' || !HEX64.test(version) ||
       typeof htmlHash !== 'string' || !HEX64.test(htmlHash) ||
       typeof appId !== 'string' || !appId || appId !== appId.trim() ||
       new TextEncoder().encode(appId).length > 255 || /[\u0000-\u001f\u007f]/.test(appId) ||
-      !Array.isArray(domains) || domains.length > ARTIFACT_DOMAINS.size ||
+      (publishedOpen !== undefined && publishedOpen !== true) || !Array.isArray(domains) || domains.length > ARTIFACT_DOMAINS.size ||
       domains.some(domain => typeof domain !== 'string' || !ARTIFACT_DOMAINS.has(domain)) ||
       domains.some((domain, index) => index > 0 && domains[index - 1] >= domain)) throw new Error('Invalid artifact metadata');
-  return Object.freeze({ publisher, appId, eventId, version, htmlHash, domains: Object.freeze([...domains]) });
+  return Object.freeze({ publisher, appId, eventId, version, htmlHash, domains: Object.freeze([...domains]), ...(publishedOpen === true ? { publishedOpen } : {}) });
 }
 async function sha256(bytes: Uint8Array): Promise<string> {
   const copy = new Uint8Array(bytes);
@@ -85,7 +85,7 @@ export async function readPublishedArtifact(native: NativeHost, generation: stri
       const remainingTime = 15_000 - (performance.now() - started);
       if (remainingTime <= 0) throw new Error('Artifact read timed out');
       const value = await receiveChunk(native, generation, sequence, Math.min(2500, remainingTime));
-      if (Object.keys(value).length !== 13 || typeof value.totalBytes !== 'number' || !Number.isSafeInteger(value.totalBytes) ||
+      if (Object.keys(value).length !== (value.publishedOpen === true ? 14 : 13) || typeof value.totalBytes !== 'number' || !Number.isSafeInteger(value.totalBytes) ||
           value.totalBytes < 1 || value.totalBytes > MAX_HTML_BYTES ||
           typeof value.byteLength !== 'number' || typeof value.done !== 'boolean') throw new Error('Invalid artifact reply');
       const nextClaims = metadata(value);

@@ -18,7 +18,7 @@ export function loadRoutingNativePort(): RoutingNativePort {
       if (typeof value.user !== 'string' || !/^[0-9a-f]{64}$/.test(value.user) || !Number.isSafeInteger(value.epoch) || (value.epoch as number) < 0 || !Number.isSafeInteger(value.revision) || (value.revision as number) < 0 || typeof value.available !== 'boolean' || typeof value.ownerAvailable !== 'boolean' || typeof value.foreground !== 'boolean') throw new Error('Routing owner unavailable');
       return Object.freeze(value) as RoutingNativeState;
     },
-    mayDeliver: (generation: string, revision: number, domain: 'intent' | 'inc' | 'notify' | 'config') => module.mayDeliverRouting(generation, revision, domain),
+    mayDeliver: (generation: string, revision: number, domain: 'intent' | 'inc' | 'notify' | 'config' | 'published-open') => module.mayDeliverRouting(generation, revision, domain),
     mayReview: (generation: string, revision: number) => module.mayReviewRouting(generation, revision),
     reviewRevision: (generation: string, revision: number) => {
       const value = module.routingReviewRevision(generation, revision);

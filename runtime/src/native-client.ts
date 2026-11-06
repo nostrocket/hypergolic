@@ -66,7 +66,7 @@ function receiveOrdinary(envelope:{sequence:number;response:unknown},pending:Map
   const request = pending.get(envelope.sequence);
   if (!request) return;
   try {
-    if ((request.type === 'link.open' || request.type === 'routing.call') && envelope.response === null) throw new NativeRequestRevoked('Native link owner revoked');
+    if ((request.type === 'link.open' || request.type === 'routing.call') && envelope.response === null) throw new NativeRequestRevoked('Native request revoked');
     if (typeof envelope.response !== 'string') throw new Error('Native request denied');
     const response = JSON.parse(envelope.response);
     if (!response || (response.type !== request.type + '.result' && !(request.type.startsWith('resource.') && response.type === request.type + '.error')) || response.id !== request.id) throw new Error('Native response mismatch');
@@ -189,7 +189,7 @@ export function createNativeClient(native: NativeHost, generation: string, optio
     if(sequence>=Number.MAX_SAFE_INTEGER)throw new Error('Native sequence exhausted');
     native.postMessage(JSON.stringify({type:'relay-stream-ack',sessionId:generation,sequence:++sequence,streamSequence:envelope.sequence,delivery:envelope.delivery}));
   };
-  function request(message: NappletMessage, upload?: Readonly<{uploadId: string; onStatus(message: NappletMessage): void}>): Promise<NappletMessage> {
+  function request(message: NappletMessage, upload?: Readonly<{uploadId: string; onStatus(message: NappletMessage): void}>, timeoutMs?: number): Promise<NappletMessage> {
       if (disposed || pending.size >= 4 || sequence >= Number.MAX_SAFE_INTEGER || !('id' in message) || typeof message.id !== 'string') {
         return Promise.reject(new Error('Native capability unavailable'));
       }
@@ -200,7 +200,7 @@ export function createNativeClient(native: NativeHost, generation: string, optio
       const encoded = JSON.stringify({ type: 'capability', sessionId: generation, sequence: counter, message: JSON.stringify(message) });
       if (new TextEncoder().encode(encoded).length > maxBytes) return Promise.reject(new Error('Native request too large'));
       sequence = counter;
-      return enqueueRequest(native, pending, uploads, {counter, encoded, id, type: message.type, timeoutMs: options.requestTimeoutsMs?.[message.type] ?? ordinaryTimeoutMs, ...(upload ? {upload} : {})});
+      return enqueueRequest(native, pending, uploads, {counter, encoded, id, type: message.type, timeoutMs: timeoutMs ?? options.requestTimeoutsMs?.[message.type] ?? ordinaryTimeoutMs, ...(upload ? {upload} : {})});
    }
   const routing = createRoutingReceiver(generation, options.onRouting, delivery => {
     if (sequence >= Number.MAX_SAFE_INTEGER) throw new Error('Native sequence exhausted');

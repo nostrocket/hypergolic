@@ -2,7 +2,7 @@ import { emptyWorkspace, focusNapplet, openNapplet, type NappletDescriptor, type
 import { BUNDLED_FIXTURES, type BundledFixture } from '../runtime/bundled-catalog.ts';
 
 export type BundledVariant = Exclude<BundledFixture, 'approval-lab-v1' | 'approval-lab-v2' | 'approval-lab-v3' | 'feed-lab-v1'> | 'state-lab-other-publisher';
-const variants: readonly BundledVariant[] = ['close-lab', 'nap-support', 'routing-lab-peer', 'routing-lab', 'upload-lab', 'state-lab-other-publisher', 'resource-lab', 'feed-lab', 'approval-lab', 'state-lab-peer', 'state-lab', 'ux-lab'];
+const variants: readonly BundledVariant[] = ['napplet-discovery', 'close-lab', 'nap-support', 'routing-lab-peer', 'routing-lab', 'upload-lab', 'state-lab-other-publisher', 'resource-lab', 'feed-lab', 'approval-lab', 'state-lab-peer', 'state-lab', 'ux-lab'];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 // Exact previous stateless Support fixture, with the same link/theme authority.
 // Retained descriptors load current hash-verified packaged bytes; no remote pin is relaxed.
@@ -11,7 +11,7 @@ export function bundledDescriptor(variant: BundledVariant, number: number, insta
   const fixture = variant === 'state-lab-other-publisher' ? 'state-lab' : variant;
   const entry = BUNDLED_FIXTURES[fixture];
   const alternate = variant === 'state-lab-other-publisher';
-  return { id: `${variant}-${instance}`, title: `${alternate ? 'State Lab Other Publisher' : entry.title} ${number}`,
+  return { id: `${variant}-${instance}`, title: fixture === 'napplet-discovery' ? entry.title : `${alternate ? 'State Lab Other Publisher' : entry.title} ${number}`,
     publisher: alternate ? 'bundled-unsigned-peer' : 'bundled-unsigned-fixture', appId: entry.appId,
     // Preserve already-saved UX Lab descriptors; privileged namespaces use the aggregate below.
     version: fixture === 'ux-lab' ? entry.sha256 : entry.aggregateHash, source: 'bundled' };
@@ -24,7 +24,7 @@ export function initialTestWorkspace(): Workspace {
 export function resolveBundledSession(session: NappletDescriptor) {
   if (session.eventId !== undefined) throw new Error('Unavailable saved napplet');
   const variant = variants.find(value => session.id.startsWith(value + '-'));
-  const number = Number(session.title.match(/ ([1-9][0-9]*)$/)?.[1]);
+  const number = variant === 'napplet-discovery' ? 1 : Number(session.title.match(/ ([1-9][0-9]*)$/)?.[1]);
   if (!variant || !Number.isSafeInteger(number)) throw new Error('Unavailable saved napplet');
   const instance = session.id.slice(variant.length + 1);
   if (instance !== String(number) && !uuid.test(instance)) throw new Error('Unavailable saved napplet');

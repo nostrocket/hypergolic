@@ -2,6 +2,7 @@ import Foundation
 
 /// Native routing ownership and captured WebKit recipients; no guest can select a generation.
 final class RoutingTransportRegistry: @unchecked Sendable {
+  static let publishedOpen = "hypergolic.publishedOpen"
   typealias Push = @MainActor @Sendable (String) -> Void
   private struct Row {
     let config: CapabilityConfiguration
@@ -33,14 +34,18 @@ final class RoutingTransportRegistry: @unchecked Sendable {
   } }
   private func clearPending() { for generation in Array(rows.keys) { rows[generation]?.pending.removeAll() } }
   func register(_ generation: String, config: CapabilityConfiguration) -> Bool { lock.withLock {
-    guard config.domains.contains("intent") || config.domains.contains("inc") || config.domains.contains("notify") || config.domains.contains("config") else { return true }
-    guard endpoints.register(generation, user: config.user, epoch: config.epoch, intent: config.domains.contains("intent"), inc: config.domains.contains("inc"), notify: config.domains.contains("notify"), config: config.domains.contains("config")) else { return false }
+    let trackPublished = config.fixture == "published"
+    guard trackPublished || config.publishedOpen || config.domains.contains("intent") || config.domains.contains("inc") ||
+      config.domains.contains("notify") || config.domains.contains("config") else { return true }
+    guard endpoints.register(generation, user: config.user, epoch: config.epoch, intent: config.domains.contains("intent"),
+      inc: config.domains.contains("inc"), notify: config.domains.contains("notify"), config: config.domains.contains("config"),
+      publishedOpen: config.publishedOpen, trackPublished: trackPublished) else { return false }
     rows[generation] = Row(config: config); return true
   } }
   func ready(_ generation: String) { lock.withLock { endpoints.ready(generation) } }
   func focus(_ generation: String, _ value: Bool) { lock.withLock { if endpoints.focus(generation, value) { sink?(state()) } } }
   func revoke(_ generation: String) { lock.withLock { endpoints.revoke(generation); _ = rows.removeValue(forKey: generation) } }
-  func mayReview(_ generation: String, revision: UInt64) -> Bool { lock.withLock { endpoints.matchesRevision(revision) && endpoints.mayReview(generation) } }
+  func mayReview(_ generation: String, revision: UInt64) -> Bool { lock.withLock { endpoints.matchesRevision(revision) && endpoints.mayReview(generation) && CapabilityTransport.leases.sessionActive(generation) } }
   func reviewRevision(_ generation: String, revision: UInt64) -> Int64 { lock.withLock { endpoints.matchesRevision(revision) ? endpoints.reviewRevision(generation) : -1 } }
   func mayDeliver(_ generation: String, revision: UInt64, domain: String) -> Bool { lock.withLock {
     endpoints.matchesRevision(revision) && endpoints.mayDeliver(generation, domain: domain) && CapabilityTransport.leases.sessionActive(generation)
@@ -53,14 +58,17 @@ final class RoutingTransportRegistry: @unchecked Sendable {
       Set(wrapper.keys) == ["type", "id", "message"], wrapper["type"] as? String == "routing.call",
       let id = wrapper["id"] as? String, id.range(of: "^[A-Za-z0-9_-]{1,128}$", options: .regularExpression) != nil,
       let message = wrapper["message"] as? [String: Any], let type = message["type"] as? String,
-      let domain = type == "notify.__register" ? "notify" : type == "routing.__register" ? row.config.domains.sorted().first(where: {$0 == "intent" || $0 == "inc"}) : type.split(separator: ".").first.map(String.init),
+      let domain = type == Self.publishedOpen ? "published-open" : type == "notify.__register" ? "notify" : type == "routing.__register" ? row.config.domains.sorted().first(where: {$0 == "intent" || $0 == "inc"}) : type.split(separator: ".").first.map(String.init),
+      domain != "published-open" || type == Self.publishedOpen,
       mayDeliver(generation, revision: revision, domain: domain),
+      type != Self.publishedOpen || (mayReview(generation, revision: revision) && Set(message.keys) == ["type", "id", "address", "expectedEventId"]),
       (type != "routing.__register" && type != "notify.__register") || Set(message.keys) == ["type"] else {
       _ = CapabilityTransport.leases.consumeSequence(generation, sequence: sequence); reply(nil); return nil
     }
     rows[generation]?.push = push; wrapper["revision"] = revision
+    if type == Self.publishedOpen { wrapper["focusRevision"] = reviewRevision(generation, revision: revision) }
     guard let bytes = try? JSONSerialization.data(withJSONObject: wrapper), let snapshot = try? row.config.request(String(decoding: bytes, as: UTF8.self)),
-      let token = CapabilityTransport.admit(generation, sequence: sequence, snapshot: snapshot, reply: { [weak self] response in
+      let token = CapabilityTransport.admit(generation, sequence: sequence, snapshot: snapshot, publishedOpen: type == Self.publishedOpen, reply: { [weak self] response in
         reply(self?.mayDeliver(generation, revision: revision, domain: domain) == true ? response : nil)
       }) else { reply(nil); return nil }
     return token

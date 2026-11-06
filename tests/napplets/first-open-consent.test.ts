@@ -6,6 +6,7 @@ import { resolveNappletLink } from '../../src/napplets/resolve-link.ts';
 import { verifyArtifact, verifyManifest } from '../../src/napplets/verified-artifact.ts';
 import { assertVerifiedNappletAdmission, FirstOpenConsentError, requestFirstOpenConsent } from '../../src/napplets/first-open-consent.ts';
 import { stageAdmittedPublishedArtifact } from '../../src/napplets/admitted-transfer.ts';
+import { descriptorForPublishedArtifact, publishedHostInput } from '../../src/napplets/published-host-input.ts';
 import type { NativePublishedTransferPort } from '../../src/napplets/native-transfer.ts';
 import { registration, setup } from '../storage/harness.ts';
 
@@ -15,12 +16,14 @@ const user = '12'.repeat(32);
 const html = new TextEncoder().encode('<!doctype html><html><head><title>Consent test</title></head><body>ok</body></html>');
 const hex = (bytes: Uint8Array) => Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
 async function sha(bytes: Uint8Array): Promise<string> { return hex(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))); }
-async function artifact(required = ['theme']) {
+async function artifact(required = ['theme'], optional?: string[]) {
   const htmlHash = await sha(html), aggregate = await sha(new TextEncoder().encode(`${htmlHash} /index.html\n`));
-  const event = finalizeEvent({ kind: 35129, created_at: 1_800_000_000, content: '', tags: [
-    ['d', 'hello'], ['path', '/index.html', htmlHash], ['x', aggregate, 'aggregate'],
+  const tags = optional === undefined ? [
+    ['path', '/index.html', htmlHash], ['x', aggregate, 'aggregate'],
     ...required.map(domain => ['requires', domain]),
-  ] }, SECRET);
+  ] : [['x', htmlHash], ...required.map(domain => ['R', domain]), ...optional.map(domain => ['O', domain])];
+  const event = finalizeEvent({ kind: 35129, created_at: 1_800_000_000, content: optional ? 'Modern hello' : '',
+    tags: [['d', 'hello'], ...tags] }, SECRET);
   const coordinate = resolveNappletLink(naddrEncode({ kind: 35129, pubkey: publisher, identifier: 'hello' }));
   return verifyArtifact(await verifyManifest(coordinate, JSON.parse(JSON.stringify(event))), html);
 }
@@ -35,7 +38,7 @@ test('only explicit trusted review persists the exact publisher, signed coordina
   const candidate = await artifact(); let seen: unknown;
   const admission = await requestFirstOpenConsent(candidate, owner, storage, new AbortController().signal, owner.assertActive,
     async request => { seen = request; return true; });
-  assert.deepEqual(seen, { user, publisher, appId: 'hello', eventId: candidate.manifest.eventId, domains: ['theme'], unsupportedDomains: [] });
+  assert.deepEqual(seen, { user, publisher, appId: 'hello', eventId: candidate.manifest.eventId, domains: ['theme'], unsupportedDomains: [], optionalDomains: [], unsupportedOptionalDomains: [] });
   assert.equal(Object.isFrozen(seen), true);
   assert.deepEqual((await storage.readAccessGrant())?.domains, ['theme']);
   assertVerifiedNappletAdmission(admission, candidate);
@@ -159,7 +162,12 @@ test('unsupported names remain warning-only and a changed requested set or host 
   await requestFirstOpenConsent(first, owner, storage, new AbortController().signal, owner.assertActive, accept);
   assert.equal(prompts, 1);
   const current = (await storage.readAccessGrant())!;
-  await storage.replaceAccessGrant(current.domains, current.revision, {}, 'older-host-profile');
+  const olderReview = JSON.stringify({profile: 'hypergolic-native-2026-10-13-v1',
+    requested: ['fs', 'media', 'theme'], domains: ['theme']});
+  await storage.replaceAccessGrant(current.domains, current.revision, {}, olderReview);
+  await assert.rejects(requestFirstOpenConsent(first, owner, storage, new AbortController().signal, owner.assertActive, async () => false),
+    FirstOpenConsentError);
+  assert.equal((await storage.readAccessGrant())?.supportReview, olderReview);
   await requestFirstOpenConsent(first, owner, storage, new AbortController().signal, owner.assertActive, accept);
   assert.equal(prompts, 2);
   const changed = await artifact(['theme', 'media']);
@@ -193,4 +201,33 @@ test('an Outbox-only manifest does not acquire an undeclared relay grant', async
   const admission = await requestFirstOpenConsent(candidate, owner, storage, new AbortController().signal, owner.assertActive,
     async request => {assert.deepEqual(request.domains, ['outbox']); return true;});
   assert.deepEqual(admission.domains, ['outbox']); assert.deepEqual((await storage.readAccessGrant())?.domains, ['outbox']);
+});
+
+test('modern review separates optional access and binds only approved supported domains to the native host', async t => {
+  const {database} = await setup(t); const {owner, storage} = control(database);
+  const signal = new AbortController().signal;
+  const legacy = await artifact(['theme']);
+  await requestFirstOpenConsent(legacy, owner, storage, signal, owner.assertActive, async () => true);
+  const modern = await artifact(['theme', 'unknown-required'], ['storage', 'unknown-optional']);
+  assert.equal(modern.manifest.versionId, legacy.manifest.versionId);
+  await assert.rejects(requestFirstOpenConsent(modern, owner, storage, signal, owner.assertActive, async request => {
+    assert.deepEqual(request.domains, ['theme', 'unknown-required']);
+    assert.deepEqual(request.optionalDomains, ['storage', 'unknown-optional']);
+    assert.deepEqual(request.unsupportedDomains, ['unknown-required']);
+    assert.deepEqual(request.unsupportedOptionalDomains, ['unknown-optional']);
+    return false;
+  }), FirstOpenConsentError);
+  assert.deepEqual((await storage.readAccessGrant())?.domains, ['theme']);
+  const admission = await requestFirstOpenConsent(modern, owner, storage, signal, owner.assertActive, async () => true);
+  const descriptor = descriptorForPublishedArtifact(modern, '58274370-ec8f-4058-a4cc-b63e7e75ca4b');
+  const wire = JSON.parse(publishedHostInput(modern, admission, descriptor, {user, epoch: 0, assertActive: owner.assertActive}, 'stage'));
+  assert.deepEqual(JSON.parse(wire.configuration).domains, ['storage', 'theme']);
+  assert.deepEqual((await storage.readAccessGrant())?.domains, ['storage', 'theme']);
+  await requestFirstOpenConsent(modern, owner, storage, signal, owner.assertActive, async () => assert.fail('same grant must reopen'));
+
+  const reclassified = await artifact(['storage', 'theme', 'unknown-required'], ['unknown-optional']);
+  await assert.rejects(requestFirstOpenConsent(reclassified, owner, storage, signal, owner.assertActive, async request => {
+    assert.deepEqual(request.domains, ['storage', 'theme', 'unknown-required']);
+    return false;
+  }), FirstOpenConsentError);
 });

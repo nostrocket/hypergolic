@@ -87,6 +87,9 @@ function PublishedNappletHost({ session, onHostEvent, ...props }: Props) {
     const message = event.nativeEvent;
     if (message.sessionId !== session.id || !binding) return;
     if (message.type === 'capability') { binding.receive(message); return; }
+    if (message.type === 'ready' && message.generation) {
+      try { binding.ready(message.generation); } catch { /* A stale mount cannot satisfy readiness. */ }
+    }
     if (message.type === 'error') { binding.revoke(); setError(true); }
     onHostEvent(event as NativeSyntheticEvent<HostEvent>);
   }, [binding, onHostEvent, session.id]);
@@ -100,8 +103,10 @@ function PublishedNappletHost({ session, onHostEvent, ...props }: Props) {
       <TrustedBand label="Napplet access" /><ScrollView contentContainerStyle={styles.reviewContent}><Text accessibilityRole="header" style={styles.heading}>Open this napplet?</Text>
       <Text style={styles.detail}>Publisher</Text><Text selectable style={styles.claim}>{review.publisher}</Text>
       <Text style={styles.detail}>Napplet</Text><Text selectable style={styles.claim}>{review.appId}</Text>
-      {review.domains.includes('upload') && <Text style={styles.detail}>Files you select become readable by this napplet. Every upload needs separate approval of the file, identity and server.</Text>}
+      {(review.domains.includes('upload') || review.optionalDomains.includes('upload')) && <Text style={styles.detail}>Files you select become readable by this napplet. Every upload needs separate approval of the file, identity and server.</Text>}
       <Text style={styles.detail}>Access: {review.domains.length ? review.domains.join(', ') : 'none'}</Text>
+      {review.optionalDomains.length > 0 && <Text style={styles.detail}>Optional access: {review.optionalDomains.join(', ')}</Text>}
+      {review.unsupportedOptionalDomains.length > 0 && <Text style={styles.detail}>Unavailable optional access: {review.unsupportedOptionalDomains.join(', ')}</Text>}
       {review.unsupportedDomains.length > 0 && <Text accessibilityLiveRegion="polite" style={styles.detail}>Unavailable: {review.unsupportedDomains.join(', ')}. This napplet can open, but features using these capabilities will not work. They will not be granted.</Text>}
       <Pressable accessibilityRole="button" testID={`published-approve-${session.id}`} onPress={() => decide(true)} style={styles.action}><Text style={styles.actionText}>Allow and open</Text></Pressable>
       <Pressable accessibilityRole="button" testID={`published-reject-${session.id}`} onPress={() => decide(false)} style={styles.secondary}><Text style={styles.secondaryText}>Cancel</Text></Pressable></ScrollView>
