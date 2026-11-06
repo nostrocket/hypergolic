@@ -260,10 +260,11 @@ function queryManifests(poolFactory: BoundedRelayPoolFactory, relayTimeoutMs: nu
 
 async function readBlossom(expectedHash: string, serverHints: readonly string[], maxBytes: number,
   timeoutMs: number, signal: AbortSignal, fetchPublicHttps: PublishedHttpsFetch): Promise<Uint8Array> {
-  if (!HEX64.test(expectedHash) || !Array.isArray(serverHints) || serverHints.length === 0 || serverHints.length > MAX_BLOSSOM_SERVERS ||
+  if (!HEX64.test(expectedHash) || !Array.isArray(serverHints) || serverHints.length === 0 ||
       !Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > MAX_HTML_BYTES || signal.aborted) return fail();
   const failures: unknown[] = [];
-  for (const hint of serverHints) {
+  // Signed publications may advertise more mirrors than one read should contact.
+  for (const hint of serverHints.slice(0, MAX_BLOSSOM_SERVERS)) {
     if (signal.aborted) return fail();
     let base: URL;
     try {

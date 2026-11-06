@@ -160,8 +160,26 @@ test('reads exactly the signed SHA-256 path over manual-redirect HTTPS with stre
 
   await assert.rejects(source.readHtml('AB'.repeat(32), ['https://blossom.example.org/'], 128, new AbortController().signal));
   await assert.rejects(source.readHtml(HASH, [], 128, new AbortController().signal));
-  await assert.rejects(source.readHtml(HASH, Array(MAX_BLOSSOM_SERVERS + 1).fill('https://blossom.example.org/'), 128, new AbortController().signal));
   await assert.rejects(source.readHtml(HASH, ['http://blossom.example.org/'], 128, new AbortController().signal));
+});
+
+test('accepts a longer signed mirror list while preserving the request bound', async () => {
+  const hints = Array.from({ length: MAX_BLOSSOM_SERVERS + 2 }, (_, index) => `https://mirror${index}.example.org/`);
+  const reached: string[] = [];
+  const available = createPublishedArtifactSource({ createRelayPool: unusedPool, fetchPublicHttps: async url => {
+    reached.push(url);
+    return new Response(BODY, { status: 200 });
+  } });
+  assert.deepEqual(await available.readHtml(HASH, hints, 128, new AbortController().signal), BODY);
+  assert.deepEqual(reached, [`${hints[0]}${HASH}`]);
+
+  reached.length = 0;
+  const bounded = createPublishedArtifactSource({ createRelayPool: unusedPool, fetchPublicHttps: async url => {
+    reached.push(url);
+    return new Response(reached.length > MAX_BLOSSOM_SERVERS ? BODY : 'unavailable', { status: 200 });
+  } });
+  await assert.rejects(bounded.readHtml(HASH, hints, 128, new AbortController().signal));
+  assert.deepEqual(reached, hints.slice(0, MAX_BLOSSOM_SERVERS).map(hint => `${hint}${HASH}`));
 });
 
 test('rejects redirects, oversized declared or streamed bodies, and bodies with no enforceable bound', async () => {
