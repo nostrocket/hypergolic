@@ -31,10 +31,13 @@ and [NAP-LINK](https://github.com/napplet/naps/blob/100e5c939ae6b1ea82cc58587c6d
    token. Native admission requires the eligible caller's live, ready, focused
    generation, selected account, owner revision and a fresh request sequence. The
    process admits one launch at a time.
-2. The published loader resolves the publisher and exact `d` using trusted Lookup
-   relays. It selects the newest eligible verified event and checks the caller's
-   expected ID before fetching the HTML. The loader refuses same-time conflicts
-   and verifies original artifact bytes against the selected signed manifest.
+2. The published loader resolves the publisher and exact `d` across the shell's
+   selected Lookup and Network relays. Shared endpoints receive one query. If the
+   first round yields no candidates and a relay failed, the shell retries failed
+   peers once within the same deadline. It selects the newest eligible verified
+   event and checks the caller's expected ID before fetching the HTML. The loader
+   refuses same-time conflicts and checks the original bytes against the signed
+   manifest.
 3. The shell presents the actual caller, target publisher and `d`, signed event ID,
    verified artifact version, and required and optional capabilities, including
    unavailable ones. The same review obtains first-open or changed access consent
@@ -43,7 +46,7 @@ and [NAP-LINK](https://github.com/napplet/naps/blob/100e5c939ae6b1ea82cc58587c6d
 4. Approval permits the exact reviewed artifact. The host reuses a matching mounted
    view or stages the verified artifact through the ordinary one-use native transfer.
    A different saved revision of the same publication coordinate yields a conflict
-   and can be handled through the ordinary update review. Lookup coverage bounds
+   and can be handled through the ordinary update review. Relay coverage bounds
    knowledge of revisions for coordinates with no saved pin.
 5. The source must keep focus through commit. The committed target then takes focus
    and supplies the native ready generation. Discover stays mounted and receives
@@ -64,11 +67,11 @@ revision has changed. The API times out locally so Discover can recover after re
 | `busy` | An open request is already pending. |
 | `cancelled` | The request lost its focus or lifetime before completion. |
 | `rejected` | Review declined the open or its access. |
-| `not-found` | Trusted Lookup completed without returning a publication for the coordinate. |
+| `not-found` | Every selected relay completed without returning a publication for the coordinate. |
 | `unsupported` | The signed publication uses an unsupported manifest format. |
-| `conflict` | Lookup found distinct same-time revisions or the workspace holds a different saved revision. |
+| `conflict` | The relay query found distinct same-time revisions or the workspace holds a different saved revision. |
 | `refresh-required` | The latest eligible event differs from the event displayed in Discover. Refresh the listing before requesting another open. |
-| `failed` | Lookup, artifact verification, staging or target readiness failed. |
+| `failed` | Relay access, artifact verification, staging or target readiness failed. |
 | `unavailable` | The request was invalid, the workspace was full, or the projection could not get a receipt. |
 
 Run the focused broker cases with `pnpm run test:capabilities` and the Java and Swift

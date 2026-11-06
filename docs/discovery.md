@@ -1,6 +1,6 @@
 # Discover
 
-Discover is the packaged napplet catalog. Open it from the workspace overview or **Settings → Discover napplets**. Opening Discover again focuses its existing workspace card. The guest reads signed publications from the selected Network relays. Hypergolic resolves an Open request separately using the selected Lookup relays and presents native review for the exact target. [Published opening contract](published-open.md)
+Discover is the packaged napplet catalog. Open it from the workspace overview or **Settings → Discover napplets**. Opening Discover again focuses its existing workspace card. The guest reads signed publications from the selected Network relays. Hypergolic resolves an Open request separately across the selected Lookup and Network relays and presents native review for the exact target. [Published opening contract](published-open.md)
 
 ## Build and import
 

@@ -38,6 +38,7 @@ export interface PublishedSessionDependencies {
   readonly sqlite: SQLiteModule;
   readonly source: PublishedArtifactSource;
   readonly lookupRelays: () => readonly string[];
+  readonly networkRelays?: () => readonly string[];
   readonly native: NativePublishedTransferPort;
   readonly newInstanceId: () => string;
 }
@@ -209,7 +210,8 @@ export function createPublishedSessionCoordinator(ports: PublishedSessionDepende
     openLink: async (link: string, signal: AbortSignal, review: ConsentReview) =>
       (await preparePublishedSession(ports, { link }, signal, review)) ?? fail(),
     resolveExact: (link: string, expectedEventId: string, signal: AbortSignal, assertActive: () => void) =>
-      loadPublishedArtifact(link, { source: ports.source, lookupRelays: ports.lookupRelays(), signal, assertActive, expectedEventId }),
+      loadPublishedArtifact(link, { source: ports.source, lookupRelays: ports.lookupRelays(),
+        networkRelays: ports.networkRelays?.() ?? [], signal, assertActive, expectedEventId }),
     prepareExact: (candidate: VerifiedNappletArtifact, exactOpen: ExactOpenPreparation, signal: AbortSignal) =>
       preparePublishedSession(ports, { candidate, exactOpen }, signal, async () => false),
     reopenPinned: async (descriptor: NappletDescriptor, signal: AbortSignal, review: ConsentReview) =>

@@ -108,6 +108,42 @@ test('a relay failure does not cancel a sibling that can still return a valid EO
   assert.deepEqual(fixture.cancelled, []);
 });
 
+test('Discover retries only failed peers after an empty partial response', async () => {
+  const hit = event('a'.repeat(64));
+  const fixture = harness((url, _request, sub, index) => {
+    if (url === relayB) return [eose(sub)];
+    if (index === 0) return Promise.reject(new Error('first connection failed'));
+    return [eventFrame(sub, hit), eose(sub)];
+  });
+  const result = await createNativePublishedRelayLookup(fixture.port).query(coordinate, [relayA, relayB],
+    null, new AbortController().signal, true);
+  assert.deepEqual(result, [hit]);
+  assert.deepEqual(fixture.calls.map(call => call.url), [relayA, relayB, relayA]);
+  assert.equal(new Set(fixture.calls.map(call => call.id)).size, 3);
+});
+
+test('Discover reports a persistently incomplete empty response as a failure', async () => {
+  const fixture = harness((url, _request, sub) => url === relayA
+    ? Promise.reject(new Error('unreachable'))
+    : [eose(sub)]);
+  await assert.rejects(createNativePublishedRelayLookup(fixture.port).query(coordinate, [relayA, relayB],
+    null, new AbortController().signal, true), NativePublishedRelayError);
+  assert.deepEqual(fixture.calls.map(call => call.url), [relayA, relayB, relayA]);
+});
+
+test('Discover uses the existing fan-out for the bounded union of both roles', async () => {
+  const fixture = harness((_url, _request, sub) => [eose(sub)]);
+  const lookup = createNativePublishedRelayLookup(fixture.port);
+  const combined = Array.from({ length: 32 }, (_, index) => `wss://r${index}.example.org`);
+  const signal = new AbortController().signal;
+  assert.deepEqual(await lookup.query(coordinate, combined, null, signal, true), []);
+  assert.equal(fixture.calls.length, 32);
+  await assert.rejects(lookup.query(coordinate, [...combined, 'wss://extra.example.org'], null, signal, true),
+    NativePublishedRelayError);
+  await assert.rejects(lookup.query(coordinate, [relayA], 'c'.repeat(64), signal, true), NativePublishedRelayError);
+  assert.equal(fixture.calls.length, 32);
+});
+
 test('requires matching subscription envelopes and EOSE, and rejects CLOSED or malformed frames', async () => {
   for (const reply of [
     (sub: string) => [JSON.stringify(['EOSE', 'wrong-id'])],

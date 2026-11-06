@@ -367,8 +367,11 @@ test('exact discovery review binds staging, then transfers lifetime to the mount
   } as unknown as Pick<IdentityTransition, 'sessionAuthority' | 'getSnapshot'>;
   const owner = createRuntimeOwner(database, identity, leases, undefined, {
     sqlite, native: leases, lookupRelays: () => ['wss://relay.example.org'],
-    source: { query: async (_coordinate, _relays, pinned) => {
+    networkRelays: () => ['wss://directory.example.org', 'wss://relay.example.org'],
+    source: { query: async (_coordinate, relays, pinned, _signal, discovery) => {
       assert.equal(pinned, null);
+      assert.equal(discovery, true);
+      assert.deepEqual(relays, ['wss://relay.example.org', 'wss://directory.example.org']);
       return [EMBEDDED_TEST_EVENT];
     }, readHtml: async () => getEmbeddedTestHtmlBytes() },
   });

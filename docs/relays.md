@@ -37,8 +37,10 @@ new publication requests before signing. The signing approval path snapshots the
 current Network list when a request is admitted; it no longer holds the startup
 defaults for the process lifetime.
 
-Lookup selections feed the connected published-napplet transport adapter.
-[Bounded historical queries](relay-query.md) snapshot the current Network list and
+Lookup selections feed Settings opens, saved-revision reopens and update checks.
+[Reviewed opens from Discover](published-open.md) query the union of the selected
+Lookup and Network relays so a publication visible on a Network relay can be
+resolved there. [Bounded historical queries](relay-query.md) snapshot the current Network list and
 use native WSS. [Public identity data](public-identity-data.md) uses that query
 service for profile reads. Setting an endpoint is not proof that a query, subscription or publication reached it. Availability, AUTH and write acceptance cannot be inferred from adopting
 endpoint defaults. Every event update still requires explicit shell confirmation

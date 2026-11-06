@@ -17,8 +17,8 @@ export class NativePublishedRelayError extends Error {
 }
 
 export type NativePublishedRelayLookup = Readonly<{
-  query(coordinate: NappletLookupCoordinate, lookupRelays: readonly string[], pinnedEventId: string | null,
-    signal: AbortSignal): Promise<readonly unknown[]>;
+  query(coordinate: NappletLookupCoordinate, relays: readonly string[], pinnedEventId: string | null,
+    signal: AbortSignal, discovery?: true): Promise<readonly unknown[]>;
 }>;
 
 const HEX64 = /^[0-9a-f]{64}$/;
@@ -28,8 +28,9 @@ const MAX_NATIVE_TEXT_MESSAGES = 64;
 const MAX_NATIVE_TEXT_BYTES = 2 * 1024 * 1024;
 const fail = (): never => { throw new NativePublishedRelayError(); };
 
-function selectedRelays(input: readonly string[]): string[] {
-  if (!Array.isArray(input) || input.length < 1 || input.length > MAX_RELAYS_PER_ROLE) return fail();
+function selectedRelays(input: readonly string[], discovery?: true): string[] {
+  const maximum = discovery ? MAX_RELAYS_PER_ROLE * 2 : MAX_RELAYS_PER_ROLE;
+  if (!Array.isArray(input) || input.length < 1 || input.length > maximum) return fail();
   const relays = input.map(value => {
     try { return normalizeRelayUrl(value); } catch { return fail(); }
   });
@@ -73,8 +74,9 @@ function encodedSize(event: unknown): number {
 }
 
 /**
- * Query only the selected, normalized lookup relays through the app-only native
- * WSS port. One deadline covers the complete fan-out; aborts, deadline expiry,
+ * Query selected, normalized destinations through the app-only native WSS port.
+ * One deadline covers fan-out and a Discover retry of an incomplete empty read.
+ * Aborts, deadline expiry,
  * and shared budget violations cancel outstanding work. Individual relay
  * failures are isolated while another selected relay can still provide results.
  * Returned events are parsed envelopes only and remain unverified until the
@@ -89,13 +91,13 @@ export function createNativePublishedRelayLookup(
       !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > DEFAULT_RELAY_TIMEOUT_MS) return fail();
 
   return Object.freeze({
-    query(coordinate: NappletLookupCoordinate, lookupRelays: readonly string[], pinnedEventId: string | null,
-      signal: AbortSignal): Promise<readonly unknown[]> {
+    query(coordinate: NappletLookupCoordinate, destinations: readonly string[], pinnedEventId: string | null,
+      signal: AbortSignal, discovery?: true): Promise<readonly unknown[]> {
       let relays: string[];
       let request: ReturnType<typeof buildPublishedRelayRequest>;
       try {
-        relays = selectedRelays(lookupRelays);
-        if (pinnedEventId !== null && !HEX64.test(pinnedEventId)) return Promise.reject(new NativePublishedRelayError());
+        relays = selectedRelays(destinations, discovery);
+        if (pinnedEventId !== null && (discovery || !HEX64.test(pinnedEventId))) return Promise.reject(new NativePublishedRelayError());
         request = buildPublishedRelayRequest(coordinate, pinnedEventId ?? undefined);
       } catch { return Promise.reject(new NativePublishedRelayError()); }
       if (signal.aborted) return Promise.reject(new NativePublishedRelayError());
@@ -129,46 +131,54 @@ export function createNativePublishedRelayLookup(
         signal.addEventListener('abort', abort, { once: true });
         if (signal.aborted) { abort(); return; }
 
-        let nextRelay = 0;
-        let successfulRelays = 0;
-        const queryRelay = async (relay: string): Promise<void> => {
+        const queryRelay = async (relay: string): Promise<boolean> => {
           let id: string;
-          try { id = port.newInstanceId(); } catch { return; }
-          if (typeof id !== 'string' || !UUID.test(id) || usedIds.has(id)) return;
+          try { id = port.newInstanceId(); } catch { return false; }
+          if (typeof id !== 'string' || !UUID.test(id) || usedIds.has(id)) return false;
           usedIds.add(id);
           outstanding.add(id);
           let frames: string[];
           try { frames = await port.queryPublishedRelay(id, relay, request.wire, request.subscriptionId); }
-          catch { outstanding.delete(id); return; }
+          catch { outstanding.delete(id); return false; }
           outstanding.delete(id);
-          if (closed) return;
+          if (closed) return false;
           let relayEvents: unknown[];
           try { relayEvents = candidateEvents(frames, request.subscriptionId); }
-          catch { return; }
+          catch { return false; }
           for (const event of relayEvents) {
             const eventByteLength = encodedSize(event);
             if (events.length >= MAX_MANIFESTS_PER_QUERY || totalBytes > MAX_PUBLISHED_QUERY_BYTES - eventByteLength) {
-              finishError(); return;
+              finishError(); return false;
             }
             totalBytes += eventByteLength;
             events.push(event);
           }
-          successfulRelays++;
+          return true;
         };
-        const worker = (): Promise<void> => {
-          if (closed || nextRelay >= relays.length) return Promise.resolve();
-          const relay = relays[nextRelay++]!;
-          return queryRelay(relay).then(worker);
+        const queryRound = async (queue: readonly string[]): Promise<string[]> => {
+          let next = 0;
+          const failed: string[] = [];
+          const worker = async (): Promise<void> => {
+            while (!closed && next < queue.length) {
+              const relay = queue[next++]!;
+              if (!await queryRelay(relay)) failed.push(relay);
+            }
+          };
+          await Promise.all(Array.from({ length: Math.min(MAX_NATIVE_RELAY_OPERATIONS, queue.length) }, worker));
+          return failed;
         };
-        const workers = Array.from({ length: Math.min(MAX_NATIVE_RELAY_OPERATIONS, relays.length) }, () => worker());
-
-        void Promise.all(workers).then(() => {
+        const complete = async () => {
+          let failed = await queryRound(relays);
+          if (discovery && !closed && events.length === 0 && failed.length > 0) failed = await queryRound(failed);
           if (closed || signal.aborted) return;
-          if (successfulRelays === 0) { finishError(); return; }
+          if (failed.length === relays.length || (discovery && events.length === 0 && failed.length > 0)) {
+            finishError(); return;
+          }
           closed = true;
           cleanup();
           resolve(Object.freeze(events));
-        }, finishError);
+        };
+        void complete().catch(finishError);
       });
     },
   });

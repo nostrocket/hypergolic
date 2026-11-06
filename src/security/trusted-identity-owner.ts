@@ -137,7 +137,8 @@ async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android
     runtime = createRuntimeOwner(database, transition, capability,
       { service: approvals, destinations: () => relaySettings?.getSettings().networkRelays ?? [] },
       { sqlite: SQLite, source: loadNativePublishedArtifactSource(), native: loadNativePublishedTransferPort(),
-        lookupRelays: () => relaySettings?.getSettings().lookupRelays ?? [] },
+        lookupRelays: () => relaySettings?.getSettings().lookupRelays ?? [],
+        networkRelays: () => relaySettings?.getSettings().networkRelays ?? [] },
       queries,
       loadNativeRelaySubscriptions(() => relaySettings?.getSettings().networkRelays ?? []),
       loadNativeResourceHost(() => resourceSettings?.servers() ?? [], queries), uploads, identityData, routing, notifyBroker, configBroker, outbox, loadNativeOutboxSubscriptions(outbox), discovery);

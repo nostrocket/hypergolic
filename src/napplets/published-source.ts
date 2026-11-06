@@ -72,8 +72,9 @@ function boundedTimeout(value: unknown, fallback: number, max: number): number {
   return value;
 }
 
-function checkedLookupRelays(input: readonly string[]): string[] {
-  if (!Array.isArray(input) || input.length < 1 || input.length > MAX_RELAYS_PER_ROLE) return fail();
+function checkedLookupRelays(input: readonly string[], discovery?: true): string[] {
+  const maximum = discovery ? MAX_RELAYS_PER_ROLE * 2 : MAX_RELAYS_PER_ROLE;
+  if (!Array.isArray(input) || input.length < 1 || input.length > maximum) return fail();
   const relays = input.map(value => {
     try { return normalizeRelayUrl(value); } catch { return fail(); }
   });
@@ -203,8 +204,8 @@ async function readBoundedBody(response: Response, maxBytes: number, signal: Abo
 }
 
 function queryManifests(poolFactory: BoundedRelayPoolFactory, relayTimeoutMs: number, coordinate: NappletLookupCoordinate,
-  relaysInput: readonly string[], pinnedEventId: string | null, signal: AbortSignal): Promise<readonly unknown[]> {
-  const relays = checkedLookupRelays(relaysInput);
+  relaysInput: readonly string[], pinnedEventId: string | null, signal: AbortSignal, discovery?: true): Promise<readonly unknown[]> {
+  const relays = checkedLookupRelays(relaysInput, discovery);
   if (coordinate.kind !== 35129 || !/^[0-9a-f]{64}$/.test(coordinate.pubkey) || typeof coordinate.identifier !== 'string' || signal.aborted ||
       (pinnedEventId !== null && !HEX64.test(pinnedEventId))) return Promise.reject(new PublishedSourceError());
   const filter = { kinds: [35129], authors: [coordinate.pubkey], '#d': [coordinate.identifier], limit: MAX_MANIFESTS_PER_QUERY,
@@ -312,8 +313,8 @@ export function createPublishedArtifactSource(options: PublishedSourceOptions): 
   if (typeof options.fetchPublicHttps !== 'function' || typeof options.createRelayPool !== 'function') return fail();
   const poolFactory = options.createRelayPool;
   return Object.freeze({
-    query: (coordinate: NappletLookupCoordinate, lookupRelays: readonly string[], pinnedEventId: string | null, signal: AbortSignal) =>
-      queryManifests(poolFactory, relayTimeoutMs, coordinate, lookupRelays, pinnedEventId, signal),
+    query: (coordinate: NappletLookupCoordinate, relays: readonly string[], pinnedEventId: string | null, signal: AbortSignal, discovery?: true) =>
+      queryManifests(poolFactory, relayTimeoutMs, coordinate, relays, pinnedEventId, signal, discovery),
     readHtml: (expectedHash: string, serverHints: readonly string[], maxBytes: number, signal: AbortSignal) =>
       readBlossom(expectedHash, serverHints, maxBytes, blossomTimeoutMs, signal, options.fetchPublicHttps),
   });
@@ -324,8 +325,8 @@ export function createNativePublishedArtifactSource(options: NativePublishedSour
   const blossomTimeoutMs = boundedTimeout(options.blossomTimeoutMs, DEFAULT_BLOSSOM_TIMEOUT_MS, MAX_BLOSSOM_TIMEOUT_MS);
   if (typeof options.fetchPublicHttps !== 'function' || typeof options.relayLookup?.query !== 'function') return fail();
   return Object.freeze({
-    query: (coordinate: NappletLookupCoordinate, lookupRelays: readonly string[], pinnedEventId: string | null, signal: AbortSignal) =>
-      options.relayLookup.query(coordinate, lookupRelays, pinnedEventId, signal),
+    query: (coordinate: NappletLookupCoordinate, relays: readonly string[], pinnedEventId: string | null, signal: AbortSignal, discovery?: true) =>
+      options.relayLookup.query(coordinate, relays, pinnedEventId, signal, discovery),
     readHtml: (expectedHash: string, serverHints: readonly string[], maxBytes: number, signal: AbortSignal) =>
       readBlossom(expectedHash, serverHints, maxBytes, blossomTimeoutMs, signal, options.fetchPublicHttps),
   });

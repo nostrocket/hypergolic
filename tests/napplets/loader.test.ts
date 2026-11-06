@@ -114,6 +114,40 @@ test('discovery binds the latest eligible event across formats before fetching a
   assert.equal((await loadPublishedArtifact(link, options([old, current], html, undefined, [], old.id))).manifest.id, old.id);
 });
 
+test('only exact Discover requests use the normalized union of selected relay roles', async () => {
+  const displayed = modern(1_700_000_001);
+  const latest = modern(1_700_000_002);
+  const shared = 'wss://relay.example.org';
+  const networkOnly = 'wss://directory.example.org';
+  let blobReads = 0;
+  const queries: Array<{ relays: readonly string[]; discovery?: true }> = [];
+  const source: PublishedArtifactSource = {
+    async query(coordinate, relays, pinned, _signal, discovery) {
+      assert.deepEqual(coordinate, { kind: 35129, pubkey, identifier: 'loader-test' });
+      assert.equal(pinned, null);
+      queries.push({ relays, discovery });
+      return relays.includes(networkOnly) ? [displayed, latest] : [];
+    },
+    async readHtml() { blobReads++; return html; },
+  };
+  const options = { source, lookupRelays: [shared], signal: new AbortController().signal,
+    assertActive: () => undefined };
+  const discover = { ...options, networkRelays: ['wss://relay.example.org:443/', networkOnly] };
+  await assert.rejects(loadPublishedArtifact(link, options), { code: 'PUBLISHED_NOT_FOUND' });
+  await assert.rejects(loadPublishedArtifact(link, discover), { code: 'PUBLISHED_LOAD_FAILED' });
+  await assert.rejects(loadPublishedArtifact(link, { ...discover, expectedEventId: displayed.id }),
+    { code: 'PUBLISHED_REVISION_CHANGED' });
+  assert.equal(blobReads, 0);
+  const artifact = await loadPublishedArtifact(link, { ...discover, expectedEventId: latest.id });
+  assert.equal(artifact.manifest.id, latest.id);
+  assert.equal(blobReads, 1);
+  assert.deepEqual(queries, [
+    { relays: [shared], discovery: undefined },
+    { relays: [shared, networkOnly], discovery: true },
+    { relays: [shared, networkOnly], discovery: true },
+  ]);
+});
+
 test('discovery separates empty results, authentic unsupported manifests and same-time conflicts', async () => {
   const current = modern(1_700_000_001);
   const conflicting = manifest(1_700_000_001);

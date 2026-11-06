@@ -6,8 +6,8 @@ import { UnsupportedNappletManifestError, verifyArtifact, verifyManifest, type V
 export type NappletLookupCoordinate = Pick<NappletCoordinate, 'kind' | 'pubkey' | 'identifier'>;
 /** Trusted transport hooks. Neither relay replies nor blob servers grant execution authority. */
 export interface PublishedArtifactSource {
-  query(coordinate: NappletLookupCoordinate, lookupRelays: readonly string[], pinnedEventId: string | null,
-    signal: AbortSignal): Promise<readonly unknown[]>;
+  query(coordinate: NappletLookupCoordinate, relays: readonly string[], pinnedEventId: string | null,
+    signal: AbortSignal, discovery?: true): Promise<readonly unknown[]>;
   readHtml(expectedHash: string, serverHints: readonly string[], maxBytes: number,
     signal: AbortSignal): Promise<Uint8Array>;
 }
@@ -17,8 +17,10 @@ export interface PublishedLoadOptions {
   readonly signal: AbortSignal;
   /** Reopening an installed version must never substitute a newer or older event. */
   readonly pinnedEventId?: string;
-  /** A discovery result must still match the latest eligible event from trusted Lookup. */
+  /** A Discover result must still match the latest eligible event on the trusted query. */
   readonly expectedEventId?: string;
+  /** Owner-selected Network destinations are admitted only for an exact Discover request. */
+  readonly networkRelays?: readonly string[];
   /** Session/identity/epoch ownership is checked on each side of every await. */
   readonly assertActive: () => void;
 }
@@ -37,6 +39,13 @@ const HEX64 = /^[0-9a-f]{64}$/;
 function lookupRelay(value: unknown): string {
   try { return normalizeRelayUrl(value); } catch { throw new PublishedLoadError(); }
 }
+function checkedRole(input: readonly string[]): string[] {
+  if (!Array.isArray(input) || input.length > MAX_RELAYS_PER_ROLE) throw new PublishedLoadError();
+  const relays = input.map(lookupRelay);
+  if (new Set(relays).size !== relays.length) throw new PublishedLoadError();
+  return relays;
+}
+
 function active(options: PublishedLoadOptions): void {
   if (options.signal.aborted) throw new PublishedLoadError();
   try { options.assertActive(); } catch { throw new PublishedLoadError(); }
@@ -46,18 +55,19 @@ function active(options: PublishedLoadOptions): void {
 /** Prepare a verified candidate. This function never opens a WebView or grants publisher trust. */
 export async function loadPublishedArtifact(link: unknown, options: PublishedLoadOptions): Promise<VerifiedNappletArtifact> {
   const coordinate = resolveNappletLink(link);
-  if (!Array.isArray(options.lookupRelays) || options.lookupRelays.length < 1 || options.lookupRelays.length > MAX_RELAYS_PER_ROLE ||
-      (options.pinnedEventId !== undefined && !HEX64.test(options.pinnedEventId)) ||
-      (options.expectedEventId !== undefined && (options.pinnedEventId !== undefined || !HEX64.test(options.expectedEventId)))) {
-    throw new PublishedLoadError();
-  }
-  const relays = Object.freeze(options.lookupRelays.map(lookupRelay));
-  if (new Set(relays).size !== relays.length) throw new PublishedLoadError();
+  const discovery = options.expectedEventId !== undefined;
+  if ((options.pinnedEventId !== undefined && !HEX64.test(options.pinnedEventId)) ||
+      (discovery && (options.pinnedEventId !== undefined || !HEX64.test(options.expectedEventId!))) ||
+      (!discovery && options.networkRelays !== undefined)) throw new PublishedLoadError();
+  const relays = Object.freeze([...new Set([
+    ...checkedRole(options.lookupRelays), ...checkedRole(options.networkRelays ?? []),
+  ])]);
+  if (relays.length === 0) throw new PublishedLoadError();
   active(options);
   let candidates: readonly unknown[];
   try {
     const lookup = Object.freeze({ kind: coordinate.kind, pubkey: coordinate.pubkey, identifier: coordinate.identifier });
-    candidates = await options.source.query(lookup, relays, options.pinnedEventId ?? null, options.signal);
+    candidates = await options.source.query(lookup, relays, options.pinnedEventId ?? null, options.signal, discovery ? true : undefined);
   }
   catch { throw new PublishedLoadError(); }
   active(options);
