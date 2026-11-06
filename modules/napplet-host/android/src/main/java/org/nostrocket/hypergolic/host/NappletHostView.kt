@@ -3,10 +3,13 @@ package org.nostrocket.hypergolic.host
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Insets
 import android.net.Uri
 import android.net.http.SslError
+import android.os.Build
 import android.os.Message
 import android.view.View
+import android.view.WindowInsets
 import android.view.inputmethod.InputMethodManager
 import android.webkit.*
 import androidx.webkit.WebViewAssetLoader
@@ -46,6 +49,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
   private var closeUnsafeUntil = 0L
   private var pickerFaultProof: String? = null
   private val webView = WebView(context)
+  private val imeLocation = IntArray(2)
   private val assetLoader = WebViewAssetLoader.Builder()
     .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context)).build()
 
@@ -199,6 +203,63 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
       }
     }
     addView(webView)
+    webView.setOnFocusChangeListener { _, _ -> refreshImeViewport() }
+  }
+
+  override fun onApplyWindowInsets(insets: WindowInsets): WindowInsets {
+    val margin = dockedImeMargin(insets)
+    setImeViewportMargin(margin)
+    // Forward hide updates and preserve every inset other than the docked IME we handle here.
+    val forwarded = if (margin > 0 && Build.VERSION.SDK_INT >= 30) {
+      val type = WindowInsets.Type.ime()
+      val ime = insets.getInsets(type)
+      WindowInsets.Builder(insets).setInsets(type, Insets.of(ime.left, ime.top, ime.right, 0)).build()
+    } else insets
+    return super.onApplyWindowInsets(forwarded)
+  }
+
+  override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+    super.onLayout(changed, left, top, right, bottom)
+    if (changed) refreshImeViewport()
+  }
+
+  override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+    super.onWindowFocusChanged(hasWindowFocus)
+    refreshImeViewport()
+  }
+
+  override fun onAttachedToWindow() {
+    super.onAttachedToWindow()
+    refreshImeViewport()
+  }
+
+  override fun onDetachedFromWindow() {
+    super.onDetachedFromWindow()
+    if (!disposed) setImeViewportMargin(0)
+  }
+
+  private fun refreshImeViewport() {
+    if (Build.VERSION.SDK_INT >= 30 && isAttachedToWindow && !disposed &&
+      setImeViewportMargin(dockedImeMargin(rootWindowInsets))) requestApplyInsets()
+  }
+
+  private fun dockedImeMargin(insets: WindowInsets?): Int {
+    if (Build.VERSION.SDK_INT < 30 || !isAttachedToWindow || disposed || !active ||
+      !hasWindowFocus() || !webView.hasFocus() || insets == null || !insets.isVisible(WindowInsets.Type.ime())) return 0
+    val activity = appContext.currentActivity ?: return 0
+    if (activity.window.decorView !== rootView) return 0
+    getLocationInWindow(imeLocation)
+    return DockedImeViewport.overlap(activity.windowManager.currentWindowMetrics.bounds.height(),
+      insets.getInsets(WindowInsets.Type.ime()).bottom, imeLocation[1] + height - paddingBottom,
+      height - paddingTop - paddingBottom)
+  }
+
+  private fun setImeViewportMargin(margin: Int): Boolean {
+    val params = webView.layoutParams as? LayoutParams ?: return false
+    if (params.bottomMargin == margin) return false
+    params.bottomMargin = margin
+    webView.layoutParams = params
+    return true
   }
 
   fun setCloseCheck(raw: String) {
@@ -229,6 +290,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
   fun setActive(active: Boolean) {
     if (disposed || this.active == active) return
     this.active = active
+    refreshImeViewport()
     if (!active) SelectedFilePicker.revoke(generation)
     updateMediaPlayback()
     ApprovalTransport.focus(generation, active)
@@ -526,6 +588,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
       WebViewCompat.removeWebMessageListener(webView, "HypergolicHost")
     }
     webView.stopLoading()
+    webView.onFocusChangeListener = null
     removeView(webView)
     webView.destroy()
   }
