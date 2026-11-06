@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { isDiscoveryEntry } from '../../src/napplets/discovery-entry.ts';
 import { assertBundledWorkspace, assertWorkspaceAvailability, bundledDescriptor, resolveBundledSession, initialTestWorkspace } from '../../src/shell/fixtures.ts';
 import { emptyWorkspace, openNapplet, snapshotWorkspace, type NappletDescriptor } from '../../src/shell/workspace.ts';
 import { openWorkspaceController } from '../../src/storage/workspace-controller.ts';
@@ -57,4 +58,29 @@ test('the exact prior Support descriptor survives upgrade without reseeding or c
   }
   const other = {...bundledDescriptor('state-lab', 4), version: previous.version};
   assert.throws(() => resolveBundledSession(other), /Unavailable saved napplet/);
+});
+
+test('the exact prior bundled Discover card restores under the current packaged authority', async t => {
+  const {database} = await setup(t);
+  const instance = '58274370-ec8f-4058-a4cc-b63e7e75ca4b';
+  const previous: NappletDescriptor = {id: 'napplet-discovery-' + instance, title: 'Discover',
+    appId: 'napplet-discovery', publisher: 'bundled-unsigned-fixture', source: 'bundled',
+    version: '6eb956ead5bc710d70c3511715bf1dab281314d4979ff4bd99d9d1785176655c'};
+  const current = bundledDescriptor('napplet-discovery', 1, instance);
+  assert.notEqual(current.version, previous.version);
+  const original = openNapplet(initialTestWorkspace(), previous);
+  const binding = database.bindWorkspace(registration());
+  await binding.port.save(snapshotWorkspace(original), null);
+  const controller = await openWorkspaceController(binding, () => {throw Error('do not replace retained workspace');}, assertWorkspaceAvailability);
+  assert.deepEqual(controller.getSnapshot().workspace, original);
+  assert.deepEqual((await binding.port.load())?.snapshot, snapshotWorkspace(original));
+  assert.equal(isDiscoveryEntry(previous), true);
+  assert.deepEqual(resolveBundledSession(previous), resolveBundledSession(current));
+  assert.deepEqual(resolveBundledSession(previous).domains, ['relay', 'resource', 'theme']);
+
+  for (const patch of [{version:'a'.repeat(64)}, {publisher:'bundled-unsigned-peer'}, {appId:'state-lab'},
+    {source:'published' as const}, {eventId:'b'.repeat(64)}, {title:'Other'}]) {
+    assert.throws(() => resolveBundledSession({...previous,...patch}), /Unavailable saved napplet/);
+  }
+  assert.throws(() => resolveBundledSession({...bundledDescriptor('state-lab', 4),version:previous.version}), /Unavailable saved napplet/);
 });
