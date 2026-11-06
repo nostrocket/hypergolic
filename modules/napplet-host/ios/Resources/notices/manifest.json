@@ -877,21 +877,21 @@
     },
     {
       "name": "expo-font",
-      "version": "58.0.10",
+      "version": "58.0.11",
       "license": "MIT",
       "repository": {
         "type": "git",
         "url": "https://github.com/expo/expo.git",
         "directory": "packages/expo-font"
       },
-      "packageJsonSha256": "c5e1bb077f5a2193b58e5942ce0713398d08afa1cd0cf2372e196bce47d5e9c4",
+      "packageJsonSha256": "a39a111996fb3549857ce64b59fee0900af9d953f9b8581e5f116ae647041220",
       "scope": "main iOS JavaScript source-map contributor",
       "notices": [
         {
-          "file": "js-expo-font-58.0.10-LICENSE.txt",
+          "file": "js-expo-font-58.0.11-LICENSE.txt",
           "sourcePath": "LICENSE",
-          "sourceCoordinate": "expo-font@58.0.10",
-          "sourceUrl": "https://www.npmjs.com/package/expo-font/v/58.0.10",
+          "sourceCoordinate": "expo-font@58.0.11",
+          "sourceUrl": "https://www.npmjs.com/package/expo-font/v/58.0.11",
           "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
           "bytes": 1106
         }
@@ -899,21 +899,21 @@
     },
     {
       "name": "expo-image",
-      "version": "58.0.17",
+      "version": "58.0.18",
       "license": "MIT",
       "repository": {
         "type": "git",
         "url": "https://github.com/expo/expo.git",
         "directory": "packages/expo-image"
       },
-      "packageJsonSha256": "dc74a5f3ca1ef1a5fbda68e3c7602fee5e319f04a5aba7756528de249d1a7bd9",
+      "packageJsonSha256": "b21f4530a67399aaa7492c51e7b2c1aa50bc5b9c1089e86e9e9ffa7fba095f2f",
       "scope": "main iOS JavaScript source-map contributor",
       "notices": [
         {
-          "file": "js-expo-image-58.0.17-LICENSE.txt",
+          "file": "js-expo-image-58.0.18-LICENSE.txt",
           "sourcePath": "LICENSE",
-          "sourceCoordinate": "expo-image@58.0.17",
-          "sourceUrl": "https://www.npmjs.com/package/expo-image/v/58.0.17",
+          "sourceCoordinate": "expo-image@58.0.18",
+          "sourceUrl": "https://www.npmjs.com/package/expo-image/v/58.0.18",
           "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
           "bytes": 1106
         }
@@ -1480,14 +1480,14 @@
   "mainJavaScriptProfile": {
     "platform": "ios",
     "reviewedMetroBundleSha256": "535b4fb36f55c60ef32b1fd57f0e6f4b4ef558cb3d9f7a4b0977399f4ff1fc1b",
-    "sourceMapSha256": "08f27af4a79b867ad3fe4d6786ee6c467d2c789ce8b9a1d3108ca49097c9f387",
+    "sourceMapSha256": "fc8b3bc4f025dd0fb763d6b0d853d6cb011dabee3c057b7710f740065707c4f1",
     "packageIdentityCount": 63,
     "suppliedOriginalFileCount": 60,
     "sharedOriginalPackageCount": 4,
     "dependencyInputs": {
-      "package.json": "8e8f64320c6e441b4083452136b1a084a49851a18120155c3b0d5d744e925a77",
-      "pnpm-lock.yaml": "8f067f4fd1fcad60492915e955f121e95ca24fc23ebe262b24fc4b8fead0a63f",
-      "node_modules/.pnpm/@expo+cli@58.1.15_@expo+dom-webview@58.0.2_expo-constants@58.0.13_expo@58.0.19_react-na_ed20c1d7617841611880741e76862028/node_modules/@expo/cli/package.json": "25db67cff07f26c8c94b72253e158dcb473238befca9c32e98b377c032134f6e",
+      "package.json": "314d0ef3cc3998c918de210aaf17bf45578a7e57fab406808ad54c19cd6eaecc",
+      "pnpm-lock.yaml": "b3e4ef88d5371d2cf6795114290d226d66576e017352e87517827dae29859fdd",
+      "node_modules/.pnpm/@expo+cli@58.1.15_@expo+dom-webview@58.0.2_expo-constants@58.0.13_expo@58.0.19_react-na_3c726d6bab7f41c266925a1cc48f343f/node_modules/@expo/cli/package.json": "25db67cff07f26c8c94b72253e158dcb473238befca9c32e98b377c032134f6e",
       "node_modules/.pnpm/@react-native+js-polyfills@0.88.0/node_modules/@react-native/js-polyfills/package.json": "b6d6fcb90f91450121c21139428dc77bc423a20326417b02d58a04e89331fd9f",
       "node_modules/.pnpm/expo@58.0.19_@babel+core@7.29.7_@expo+dom-webview@58.0.2_react-native-worklets@0.13.0_@_fd2bdc51abd4a2d9da04476883cda17d/node_modules/expo/package.json": "17cb6e9b357e9ac6bae7b9c5a6259294a5c7ae330883d74b55a21e85abeccd24",
       "node_modules/.pnpm/react-native@0.88.1_@babel+core@7.29.7_@react-native+metro-config@0.88.1_@babel+core@7._05eadce5f1d68d8a8a609a3b62d66ff9/node_modules/react-native/package.json": "3f2bf69ed883e97a295b1de43f5a2d75d112ab45495153360c2fb521023c7f3f",
@@ -1522,8 +1522,8 @@
       "node_modules/.pnpm/semver@7.8.5/node_modules/semver/package.json": "7c94cb7f2a53c27b20d76386ec144c062894dbcc909cfabd0f728c37874b1776",
       "node_modules/.pnpm/react-native-is-edge-to-edge@1.3.1_react-native@0.88.1_@babel+core@7.29.7_@react-native_caa0fd8d5fa2fc426fb93dca17b7810b/node_modules/react-native-is-edge-to-edge/package.json": "4808c1cfb5e0c5d8d082c0d9e5efaf36eeb64da249fc65502d1a0333f3762a23",
       "node_modules/.pnpm/react-native-safe-area-context@5.10.1_react-native@0.88.1_@babel+core@7.29.7_@react-nat_2480ad6a4bdd0dd859d2d15167ddddeb/node_modules/react-native-safe-area-context/package.json": "2ac8132723f5f6fe0ea24ab902724583908ca1f63837def85fa3c3ad19143ac6",
-      "node_modules/.pnpm/expo-font@58.0.10_expo@58.0.19_react-native@0.88.1_@babel+core@7.29.7_@react-native+met_493940710fabc6506f94406ad5fd557b/node_modules/expo-font/package.json": "c5e1bb077f5a2193b58e5942ce0713398d08afa1cd0cf2372e196bce47d5e9c4",
-      "node_modules/.pnpm/expo-image@58.0.17_expo@58.0.19_react-native@0.88.1_@babel+core@7.29.7_@react-native+me_75571678daf566af70bc8dd797092b50/node_modules/expo-image/package.json": "dc74a5f3ca1ef1a5fbda68e3c7602fee5e319f04a5aba7756528de249d1a7bd9",
+      "node_modules/.pnpm/expo-font@58.0.11_expo@58.0.19_react-native@0.88.1_@babel+core@7.29.7_@react-native+met_e47afb7e393592809555dcf309d7c1d4/node_modules/expo-font/package.json": "a39a111996fb3549857ce64b59fee0900af9d953f9b8581e5f116ae647041220",
+      "node_modules/.pnpm/expo-image@58.0.18_expo@58.0.19_react-native@0.88.1_@babel+core@7.29.7_@react-native+me_7569878d466b59ddba8194e4ca1961fc/node_modules/expo-image/package.json": "b21f4530a67399aaa7492c51e7b2c1aa50bc5b9c1089e86e9e9ffa7fba095f2f",
       "node_modules/.pnpm/expo-crypto@58.0.7_expo@58.0.19/node_modules/expo-crypto/package.json": "95d382241a7f7d9662dafaef7b590988ad4def1144e38b05f9eafc5aac7d8b3b",
       "node_modules/.pnpm/applesauce-relay@6.2.1_typescript@6.0.3/node_modules/applesauce-relay/package.json": "00de51a6cefc0fba1e8a48b8dc896f519a7f437787e18b7a9513da79034f98c7",
       "node_modules/.pnpm/applesauce-core@6.2.0_typescript@6.0.3/node_modules/applesauce-core/package.json": "889b287ef9f674d835b560738cd74352e38ea3d97d7bdfba4394deeb5e445d04",

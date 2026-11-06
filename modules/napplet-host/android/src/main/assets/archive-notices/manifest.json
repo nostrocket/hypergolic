@@ -908,9 +908,9 @@
       "sha256": "6638572bc255e7dd1653db31deff0bc5150b52a04b0fc4e9d9db5ac63e7cbbf8"
     },
     {
-      "component": "expo.modules.image:expo.modules.image:58.0.17",
-      "filename": "expo.modules.image-58.0.17.aar",
-      "sha256": "4ec362aa62a2877eff4bdef3e329396e7b063ee0e48a54060357491dcd5607bc"
+      "component": "expo.modules.image:expo.modules.image:58.0.18",
+      "filename": "expo.modules.image-58.0.18.aar",
+      "sha256": "0804b30fbabf4b4484ed877f6b90f17839a430ee67e6dcd91cdc9a270f3705c7"
     },
     {
       "component": "host.exp.exponent:expo.modules.crypto:58.0.7",
@@ -923,8 +923,8 @@
       "sha256": "05b04d656f4a5b19617aeb299500fce68d6777c9c3272c1886efea7fdf2f0ab9"
     },
     {
-      "component": "host.exp.exponent:expo.modules.font:58.0.10",
-      "filename": "expo.modules.font-58.0.10.aar",
+      "component": "host.exp.exponent:expo.modules.font:58.0.11",
+      "filename": "expo.modules.font-58.0.11.aar",
       "sha256": "8722bab1c001def6d5f57762b550c8520065b9def4951f15fa9118a310d4cd41"
     },
     {
@@ -938,8 +938,8 @@
       "sha256": "6d6c7548d9149e50807984282121ae750a82f61cb8a2d8613d330eb86fe0f1b1"
     },
     {
-      "component": "host.exp.exponent:expo.modules.systemui:58.0.6",
-      "filename": "expo.modules.systemui-58.0.6.aar",
+      "component": "host.exp.exponent:expo.modules.systemui:58.0.7",
+      "filename": "expo.modules.systemui-58.0.7.aar",
       "sha256": "89d2db5ac92abb5d6596bc9999cd995fc44cbda2ffeba55c1ffc12a8a9bb92f5"
     },
     {
