@@ -241,7 +241,13 @@ public final class BoundaryInstrumentation extends Instrumentation {
       JSONObject response = guest("barrier", null);
       check("theme.get.result".equals(response.getString("type")), "Parent-source correlated theme barrier");
       JSONObject colors = response.getJSONObject("theme").getJSONObject("colors");
-      check("#140f0b".equals(colors.getString("background")) && "#f3efeb".equals(colors.getString("text")) && "#e8805d".equals(colors.getString("primary")), "Exact existing theme palette");
+      boolean light = main("return {light:window.matchMedia('(prefers-color-scheme: light)').matches};").getBoolean("light");
+      // The runtime projects the shell palette's accent into the guest's primary color.
+      String background = light ? "#FFFFFF" : "#080F17";
+      String text = light ? "#17202A" : "#EEF3F7";
+      String primary = light ? "#AA4708" : "#F5A04B";
+      check(background.equals(colors.getString("background")) && text.equals(colors.getString("text"))
+          && primary.equals(colors.getString("primary")), "Exact theme palette for the host appearance");
     }
     void send(int... sequences) throws Exception {
       JSONArray values = new JSONArray(); for (int sequence : sequences) values.put(sequence);
