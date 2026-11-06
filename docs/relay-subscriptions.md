@@ -23,8 +23,10 @@ foreground/generation checks remain authoritative at the final renderer push;
 JavaScript ownership checks add the runtime identity and workspace binding.
 A close or revocation invalidates intent and delivery revisions before cancelling.
 
-The process allows eight subscriptions, two per session, two trusted relays per
-subscription and 64 session coordinators. Filters retain the bounded core query
+The process allows eight subscriptions and 64 session coordinators. A session can
+hold three raw Relay streams, or two total streams when any stream uses Outbox.
+Raw Relay uses up to two trusted relays per stream. The native socket budget stays
+at 16 for the process. Filters retain the bounded core query
 profile. A valid request for more stored events uses the existing limit of 32
 per filter. Connections use fresh native UUIDs and host-created relay subscription
 IDs; caller IDs cannot reopen closed intent. Trusted Network destinations are

@@ -17,7 +17,11 @@ public final class RelaySubscriptionProof {
     check(!streams.accept(first)); check("immutable-one".equals(streams.take(first))); check(streams.take(first) == null);
     check(streams.accept(first)); check(streams.connectionLimit(first) == 2); check(!streams.accept(first)); check(streams.isActive(first)); check(streams.mayDeliver(first));
     String outbox = streams.admit("one", "native-outbox", true); check(outbox != null); check(streams.connectionLimit(outbox) == 0); check(streams.take(outbox) != null); check(streams.accept(outbox)); check(streams.connectionLimit(outbox) == 16); streams.close(outbox); check(streams.connectionLimit(outbox) == 0);
-    String pending = streams.admit("one", "pending"); check(pending != null); check(streams.admit("one", "overload") == null);
+    String pending = streams.admit("one", "pending"); check(pending != null);
+    check(streams.admit("one", "outbox-after-two-raw", true) == null);
+    String third = streams.admit("one", "third-raw"); check(third != null);
+    check(streams.admit("one", "fourth-raw") == null);
+    streams.close(third); check(streams.admit("one", "raw-after-close") != null);
     clock.addAndGet(25_000); check(streams.take(pending) == null); check(streams.isActive(first));
     streams.setForeground(false); check(streams.isActive(first)); check(!streams.mayDeliver(first)); check(streams.admit("one", "background") == null);
     clock.addAndGet(100_000); check(streams.isActive(first)); streams.setForeground(true); check(streams.mayDeliver(first));
@@ -28,10 +32,18 @@ public final class RelaySubscriptionProof {
     String revoked = streams.admit("one", "revoke"); check(revoked != null); streams.revoke("one"); check(streams.take(revoked) == null);
     check(streams.admit("missing", "forged") == null); check(streams.admit("one", "x".repeat(32_769)) == null);
     check(streams.admit("one", "界".repeat(10_923)) == null);
+    check(generations.register("mixed"));
+    String plannedFirst = streams.admit("mixed", "outbox", true); check(plannedFirst != null);
+    check(streams.admit("mixed", "raw") != null);
+    check(streams.admit("mixed", "second-raw") == null);
+    check(streams.admit("mixed", "second-outbox", true) == null);
+    streams.close(plannedFirst); check(streams.admit("mixed", "second-raw") != null);
+    check(streams.admit("mixed", "third-raw") != null);
+    streams.revoke("mixed");
     Set<String> tokens = new HashSet<>();
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 3; i++) {
       String generation = "capacity-" + i; check(generations.register(generation));
-      for (int j = 0; j < 2; j++) {String token = streams.admit(generation,"known"); check(token != null); check(tokens.add(token)); check(streams.take(token) != null); check(streams.accept(token));}
+      for (int j = 0; j < (i < 2 ? 3 : 2); j++) {String token = streams.admit(generation,"known"); check(token != null); check(tokens.add(token)); check(streams.take(token) != null); check(streams.accept(token));}
     }
     check(generations.register("extra")); check(streams.admit("extra", "overload") == null);
     streams.revokeAll(); for (String token : tokens) check(!streams.isActive(token));

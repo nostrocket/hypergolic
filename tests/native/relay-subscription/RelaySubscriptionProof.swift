@@ -20,7 +20,10 @@ final class TestClock: @unchecked Sendable {
     check(streams.accept(first)); check(streams.connectionLimit(first) == 2); check(!streams.accept(first)); check(streams.isActive(first)); check(streams.mayDeliver(first))
     let outbox = streams.admit("one", snapshot: "native-outbox", outbox: true)!; check(streams.connectionLimit(outbox) == 0); check(streams.take(outbox) != nil); check(streams.accept(outbox)); check(streams.connectionLimit(outbox) == 16); streams.close(outbox); check(streams.connectionLimit(outbox) == 0)
     let pending = streams.admit("one", snapshot: "pending")!; check(!pending.isEmpty)
-    check(streams.admit("one", snapshot: "overload") == nil)
+    check(streams.admit("one", snapshot: "outbox-after-two-raw", outbox: true) == nil)
+    let third = streams.admit("one", snapshot: "third-raw")!; check(!third.isEmpty)
+    check(streams.admit("one", snapshot: "fourth-raw") == nil)
+    streams.close(third); check(streams.admit("one", snapshot: "raw-after-close") != nil)
     clock.advance(.seconds(25)); check(streams.take(pending) == nil); check(streams.isActive(first))
     streams.setForeground(false); check(streams.isActive(first)); check(!streams.mayDeliver(first)); check(streams.admit("one", snapshot: "background") == nil)
     clock.advance(.seconds(100)); check(streams.isActive(first)); streams.setForeground(true); check(streams.mayDeliver(first))
@@ -31,10 +34,18 @@ final class TestClock: @unchecked Sendable {
     let revoked = streams.admit("one", snapshot: "revoke")!; check(!revoked.isEmpty); streams.revoke("one"); check(streams.take(revoked) == nil)
     check(streams.admit("missing", snapshot: "forged") == nil); check(streams.admit("one", snapshot: String(repeating:"x",count:32769)) == nil)
     check(streams.admit("one", snapshot:String(repeating:"界",count:10923)) == nil)
+    check(generations.register("mixed"))
+    let plannedFirst = streams.admit("mixed", snapshot: "outbox", outbox: true)!; check(!plannedFirst.isEmpty)
+    check(streams.admit("mixed", snapshot: "raw") != nil)
+    check(streams.admit("mixed", snapshot: "second-raw") == nil)
+    check(streams.admit("mixed", snapshot: "second-outbox", outbox: true) == nil)
+    streams.close(plannedFirst); check(streams.admit("mixed", snapshot: "second-raw") != nil)
+    check(streams.admit("mixed", snapshot: "third-raw") != nil)
+    streams.revoke("mixed")
     var tokens = Set<String>()
-    for i in 0..<4 {
+    for i in 0..<3 {
       let generation = "capacity-\(i)"; check(generations.register(generation))
-      for _ in 0..<2 { let token = streams.admit(generation,snapshot:"known")!; check(!token.isEmpty); check(tokens.insert(token).inserted); check(streams.take(token) != nil); check(streams.accept(token)) }
+      for _ in 0..<(i < 2 ? 3 : 2) { let token = streams.admit(generation,snapshot:"known")!; check(!token.isEmpty); check(tokens.insert(token).inserted); check(streams.take(token) != nil); check(streams.accept(token)) }
     }
     check(generations.register("extra")); check(streams.admit("extra",snapshot:"overload") == nil)
     streams.revokeAll(); for token in tokens { check(!streams.isActive(token)) }

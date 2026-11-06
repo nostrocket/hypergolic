@@ -5,7 +5,7 @@ import { captureNotifyPush, captureNotifyReply, type NotifyMessage } from '../..
 import { captureRoutingPush, captureRoutingReply } from './routing-adapter';
 import type { RoutingMessage } from '../../src/routing/routing-contract';
 import { captureUploadResult } from '../../src/uploads/upload-contract';
-import { parseRelaySubscribe, parseRelayClose } from '../../src/network/relay-subscription-contract';
+import { parseRelaySubscribe, parseRelayClose, SUBSCRIPTION_LIMITS } from '../../src/network/relay-subscription-contract';
 import { verifyQueryEvent } from '../../src/network/relay-query-contract';
 import type { QueryFilter } from '../../src/network/relay-query-contract';
 import type { NappletMessage } from '@kehto/runtime';
@@ -218,7 +218,9 @@ export function createNativeClient(native: NativeHost, generation: string, optio
   return Object.freeze({
     subscribe(message:NappletMessage,deliver:(message:NappletMessage)=>void):void {
       const outbox=message.type==='outbox.subscribe',request=outbox?parseOutboxSubscribe(message):parseRelaySubscribe(message);
-      if(disposed||streams.size>=2||callerIds.has(request.subId)||callerIds.size>=4096||sequence>=Number.MAX_SAFE_INTEGER)throw new Error('Native subscription unavailable');
+      const mixed = outbox || Array.from(streams.values()).some(stream => stream.domain === 'outbox');
+      const sessionLimit = mixed ? SUBSCRIPTION_LIMITS.session : SUBSCRIPTION_LIMITS.rawSession;
+      if(disposed||streams.size>=sessionLimit||callerIds.has(request.subId)||callerIds.size>=4096||sequence>=Number.MAX_SAFE_INTEGER)throw new Error('Native subscription unavailable');
       const counter=++sequence;
       callerIds.add(request.subId);
       const timer=window.setTimeout(()=>stopStream(counter,true),ordinaryTimeoutMs);

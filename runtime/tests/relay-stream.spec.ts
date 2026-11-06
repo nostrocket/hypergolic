@@ -56,6 +56,54 @@ test('SDK subscriptions requesting more initial history reach the native owner w
   await page.evaluate(({envelope, subId}) => (window as any).streamTest.push(envelope, {type: 'relay.eose', subId}), {envelope, subId});
   await expect.poll(() => frame.evaluate(() => (window as any).eose)).toBe(1);
 });
+async function observeQuotaDenials(frame: Awaited<ReturnType<typeof open>>['frame']) {
+  await frame.evaluate(() => {
+    const root = window as any;
+    root.quotaDenials = 0;
+    window.addEventListener('message', event => {
+      if (event.source === parent && event.data?.type === 'relay.closed') root.quotaDenials++;
+    });
+  });
+}
+function admittedTypes(page: Page) {
+  return page.evaluate(() => (window as any).streamTest.requests
+    .filter((entry: any) => entry.type === 'relay-stream')
+    .map((entry: any) => JSON.parse(entry.message).type));
+}
+
+test('three raw SDK streams reach native, the fourth closes, and an explicit close restores capacity', async ({page}) => {
+  const {frame} = await open(page);
+  await observeQuotaDenials(frame);
+  await frame.evaluate(() => {
+    const root = window as any;
+    for (let index = 0; index < 3; index++) root.napplet.relay.subscribe({kinds: [1], limit: 2}, () => {}, () => {});
+  });
+  await expect.poll(() => admittedTypes(page)).toEqual(['relay.subscribe', 'relay.subscribe', 'relay.subscribe']);
+  await expect.poll(() => frame.evaluate(() => (window as any).quotaDenials)).toBe(1);
+  await frame.evaluate(() => {
+    const root = window as any;
+    root.handle.close();
+    root.napplet.relay.subscribe({kinds: [1], limit: 2}, () => {}, () => {});
+  });
+  await expect.poll(async () => (await admittedTypes(page)).length).toBe(4);
+});
+
+for (const outboxFirst of [false, true]) {
+  test(`mixed SDK streams stay at two when ${outboxFirst ? 'Outbox' : 'raw Relay'} arrives first`, async ({page}) => {
+    const {frame} = await open(page);
+    await observeQuotaDenials(frame);
+    await frame.evaluate(outboxFirst => {
+      const root = window as any;
+      if (outboxFirst) root.handle.close();
+      root.napplet.outbox.subscribe({kinds: [1], limit: 2}, {limit: 2});
+      if (outboxFirst) root.napplet.relay.subscribe({kinds: [1], limit: 2}, () => {}, () => {});
+      root.napplet.relay.subscribe({kinds: [1], limit: 2}, () => {}, () => {});
+    }, outboxFirst);
+    await expect.poll(() => frame.evaluate(() => (window as any).quotaDenials)).toBe(1);
+    const expected = outboxFirst ? ['outbox.subscribe', 'relay.subscribe'] : ['relay.subscribe', 'outbox.subscribe'];
+    expect((await admittedTypes(page)).slice(outboxFirst ? 1 : 0)).toEqual(expected);
+  });
+}
 test('guest native-channel forgery and wrong generation cannot redirect signed stream replies',async({page})=> {
   const h=await open(page);
   const response={type:'relay.event',subId:h.subId,result:{event}};

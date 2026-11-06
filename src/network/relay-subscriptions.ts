@@ -140,7 +140,9 @@ function sessionCommands(scope:CommandScope) {
       }
       function subscribe(input:unknown,send:Emit,authorityToken?:string,plan?:Readonly<{relays:readonly string[];limit:number;timeoutMs:number}>) {
         active();let request=parseRelaySubscribe(input);
-        if(callerIds.has(request.subId)||callerIds.size>=SUBSCRIPTION_LIMITS.callerIds||subscriptions.size>=SUBSCRIPTION_LIMITS.session||process.total>=SUBSCRIPTION_LIMITS.process)throw new RelaySubscriptionError('relay subscription limit or reused ID');
+        const mixed = plan !== undefined || Array.from(subscriptions.values()).some(subscription => subscription.planned);
+        const sessionLimit = mixed ? SUBSCRIPTION_LIMITS.session : SUBSCRIPTION_LIMITS.rawSession;
+        if(callerIds.has(request.subId)||callerIds.size>=SUBSCRIPTION_LIMITS.callerIds||subscriptions.size>=sessionLimit||process.total>=SUBSCRIPTION_LIMITS.process)throw new RelaySubscriptionError('relay subscription limit or reused ID');
         let selected:readonly string[];
         if(plan) {
           if(!registration.domains.includes('outbox')||request.relay!==undefined||!Number.isSafeInteger(plan.limit)||plan.limit<0||plan.limit>32||!Number.isSafeInteger(plan.timeoutMs)||plan.timeoutMs<1||plan.timeoutMs>15000)throw new RelaySubscriptionError('relay plan denied');

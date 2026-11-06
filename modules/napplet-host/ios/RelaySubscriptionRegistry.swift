@@ -3,6 +3,9 @@ import Foundation
 /// Thread-safe native read authority: short admission, generation-lived accepted intent.
 final class RelaySubscriptionRegistry: @unchecked Sendable {
   static let maxSnapshotBytes = 32 * 1024
+  private static let maxStreams = 8
+  private static let maxPerGeneration = 2
+  private static let maxRawPerGeneration = 3
   private struct Stream {
     let generation: String
     let snapshot: String
@@ -26,7 +29,10 @@ final class RelaySubscriptionRegistry: @unchecked Sendable {
     lock.withLock {
       prune()
       guard foreground, activeGeneration(generation), snapshot.utf8.count <= Self.maxSnapshotBytes,
-        streams.count < 8, streams.values.filter({ $0.generation == generation }).count < 2 else { return nil }
+        streams.count < Self.maxStreams else { return nil }
+      let own = streams.values.filter { $0.generation == generation }
+      let mixed = outbox || own.contains { $0.outbox }
+      guard own.count < (mixed ? Self.maxPerGeneration : Self.maxRawPerGeneration) else { return nil }
       let token = UUID().uuidString.lowercased()
       streams[token] = Stream(generation: generation, snapshot: snapshot, expires: now().advanced(by: .seconds(25)), outbox: outbox)
       return token

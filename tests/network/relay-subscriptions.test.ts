@@ -10,7 +10,7 @@ const signed=(content='known',kind=1)=>JSON.parse(JSON.stringify(finalizeEvent({
 const request=(subId='caller')=>({type:'relay.subscribe',id:'request-'+subId,subId,filters:[{kinds:[1],limit:2}]});
 const close=(subId='caller')=>({type:'relay.close',id:'close-'+subId,subId});
 const registration=(generation='generation-1'):NativeRegistration=>({sessionId:generation,generation,epoch:0,user:'1'.repeat(64),publisher:'2'.repeat(64),appId:'feed-lab',version:'3'.repeat(64),instanceId:generation,fixture:'feed-lab',domains:['relay']});
-function harness(relays=['wss://one.example.org']) {
+function harness(relays=['wss://one.example.org'], owner = registration()) {
   let sequence=0,clock=0;
   const calls:{id:string;url:string;wire:string;sub:string;frame:(text:string)=>void;failed:()=>void;stopped:number}[]=[];
   const port:NativeRelayStreamPort={newInstanceId:()=>`00000000-0000-4000-8000-${String(++sequence).padStart(12,'0')}`,
@@ -18,7 +18,7 @@ function harness(relays=['wss://one.example.org']) {
   const manager=createRelaySubscriptions(port,()=>relays,{now:()=>clock,retryMs:[1,1,1,1,1]});
   let active=true;
   const messages:RelaySubscriptionMessage[]=[];
-  const session=manager.session({registration:registration(),assertActive(){if(!active)throw new Error('identity changed');}});
+  const session=manager.session({registration:owner,assertActive(){if(!active)throw new Error('identity changed');}});
   const send=(message:RelaySubscriptionMessage)=>{messages.push(message);return true;};
   const event=(index=0,value=signed())=>calls[index]!.frame(JSON.stringify(['EVENT',calls[index]!.sub,value]));
   const eose=(index=0)=>calls[index]!.frame(JSON.stringify(['EOSE',calls[index]!.sub]));
@@ -98,17 +98,38 @@ test('close and identity change while suspended remove intent before foreground 
 });
 test('equal caller IDs across native sessions remain isolated and process/session bounds recover after revoke',()=> {
   const h=harness();h.session.subscribe(request(),h.send);h.session.subscribe(request('second'),h.send);
-  assert.throws(()=>h.session.subscribe(request('third'),h.send));
-  for(let index=2;index<=4;index++) {
+  h.session.subscribe(request('third'),h.send);
+  assert.throws(()=>h.session.subscribe(request('fourth'),h.send));
+  for (const [index, count] of [[2, 3], [3, 2]] as const) {
     const session=h.manager.session({registration:registration('generation-'+index),assertActive(){}});
-    session.subscribe(request(),()=>true);session.subscribe(request('second'),()=>true);
+    for (let slot=0; slot<count; slot++) session.subscribe(request('caller-'+slot),()=>true);
   }
-  const fifth=h.manager.session({registration:registration('generation-5'),assertActive(){}});
-  assert.throws(()=>fifth.subscribe(request(),()=>true));
-  h.session.revoke();fifth.subscribe(request(),()=>true);
+  const fourth=h.manager.session({registration:registration('generation-4'),assertActive(){}});
+  assert.throws(()=>fourth.subscribe(request(),()=>true));
+  h.session.revoke();fourth.subscribe(request(),()=>true);
   assert.equal(h.calls.length,SUBSCRIPTION_LIMITS.process+1);
-  assert.throws(()=>h.manager.session({registration:registration('generation-5'),assertActive(){}}));
+  assert.throws(()=>h.manager.session({registration:registration('generation-4'),assertActive(){}}));
   h.manager.revokeAll();assert.ok(h.calls.every(call=>call.stopped===1));
+});
+test('mixed stream admission keeps two slots and releases them on close in either order', () => {
+  for (const outboxFirst of [true, false]) {
+    const relays = ['wss://one.example.org'];
+    const h = harness(relays, {...registration(), domains: ['outbox', 'relay']});
+    const outbox = () => h.session.subscribePlanned(request('outbox'), h.send, 'token', relays, 1);
+    if (outboxFirst) outbox();
+    h.session.subscribe(request(), h.send);
+    if (!outboxFirst) outbox();
+    assert.throws(() => h.session.subscribe(request('second'), h.send));
+    assert.throws(() => h.session.subscribePlanned(request('other-outbox'), h.send, 'token', relays, 1));
+    assert.equal(h.calls.length, 2);
+    h.session.close(close('outbox'));
+    h.session.subscribe(request('second'), h.send);
+    h.session.subscribe(request('third'), h.send);
+    assert.throws(() => h.session.subscribePlanned(request('after-three'), h.send, 'token', relays, 1));
+    assert.throws(() => h.session.subscribe(request('fourth'), h.send));
+    assert.equal(h.calls.length, 4);
+    h.session.revoke();
+  }
 });
 test('scoped destinations must be in trusted snapshot and pool selection stays bounded',()=> {
   const h=harness(['wss://one.example.org','wss://two.example.org','wss://three.example.org']);
