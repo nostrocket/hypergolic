@@ -282,15 +282,30 @@ test('runtime digest mismatch fails before fixture code runs', async ({ page }) 
 });
 
 
+test('pagehide releases the mounted guest document even when its frame is still referenced', async ({ page }) => {
+  const guest = await open(page, 'closed');
+  const frame = await guest.frameElement();
+  expect(await frame.getAttribute('srcdoc')).toContain('<!doctype html>');
+  await page.evaluate(() => {
+    window.dispatchEvent(new PageTransitionEvent('pagehide'));
+    window.dispatchEvent(new PageTransitionEvent('pagehide'));
+  });
+  await expect(page.locator('#napplet')).toHaveCount(0);
+  expect(await frame.evaluate(element => element.hasAttribute('srcdoc'))).toBe(false);
+  expect(await diagnostics(page)).toEqual([{type: 'ready', sessionId: 'closed'}]);
+});
+
 test('document navigation ends the generation and removes the bound napplet', async ({ page }) => {
-  const frame = await open(page, 'navigated');
-  await frame.evaluate(() => { location.href = 'about:blank'; });
+  const guest = await open(page, 'navigated');
+  const frame = await guest.frameElement();
+  await guest.evaluate(() => { location.href = 'about:blank'; });
   await expect.poll(() => diagnostics(page)).toEqual([
     { type: 'ready', sessionId: 'navigated' },
     { type: 'error', sessionId: 'navigated', code: 'frame-navigation' },
   ]);
   await expect(page.locator('#napplet')).toHaveCount(0);
   await expect(page.getByRole('alert')).toBeVisible();
+  expect(await frame.evaluate(element => element.hasAttribute('srcdoc'))).toBe(false);
 });
 
 

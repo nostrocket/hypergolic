@@ -40,13 +40,21 @@ const sessionId = parameters.get('sessionId') ?? '';
 const source = parameters.get('source');
 const fixtureName = parameters.get('fixture') ?? 'ux-lab';
 const fixture = source === null && Object.prototype.hasOwnProperty.call(__BUNDLED_FIXTURES__, fixtureName) ? __BUNDLED_FIXTURES__[fixtureName] : undefined;
-type RuntimeArtifact = Readonly<{
-  html: string; sha256: string; aggregateHash: string; appId: string; title: string;
+type RuntimeMetadata = Readonly<{
+  aggregateHash: string; appId: string; title: string;
   domains: readonly string[]; publishTimeoutMs?: number; published: boolean; discoveryOpen: boolean;
 }>;
 let stopped = false;
 let cleanup: (() => void) | undefined;
-window.addEventListener('pagehide', () => { stopped = true; cleanup?.(); }, { once: true });
+function stop(): boolean {
+  if (stopped) return false;
+  stopped = true;
+  const dispose = cleanup;
+  cleanup = undefined;
+  dispose?.();
+  return true;
+}
+window.addEventListener('pagehide', stop, { once: true });
 
 function diagnostic(value: HostDiagnostic): void {
   const encoded = JSON.stringify(value);
@@ -54,9 +62,7 @@ function diagnostic(value: HostDiagnostic): void {
   try { hostWindow.HypergolicHost?.postMessage(encoded); } catch { /* native teardown */ }
 }
 function fail(code: FailureCode): void {
-  if (stopped) return;
-  stopped = true;
-  cleanup?.();
+  if (!stop()) return;
   const message = document.createElement('p');
   message.setAttribute('role', 'alert');
   message.textContent = 'The napplet could not be loaded.';
@@ -85,7 +91,7 @@ async function digest(value: string): Promise<string> {
 }
 
 function makeHooks(native: ReturnType<typeof createNativeClient>, captureRecipient: () => () => boolean,
-  artifact: RuntimeArtifact, theme: ThemeService, registerRouting: (context: ServiceRuntimeContext | null) => void): ShellAdapter {
+  artifact: RuntimeMetadata, theme: ThemeService, registerRouting: (context: ServiceRuntimeContext | null) => void): ShellAdapter {
   const unavailable = (): never => { throw new Error('Capability unavailable'); };
   const supported = new Set(artifact.domains);
   if (!supported.has('relay')) supported.delete('outbox');
@@ -215,7 +221,7 @@ function createGuestFrame(title: string): HTMLIFrameElement {
   return frame;
 }
 
-function approvalTimeouts(artifact: RuntimeArtifact): Readonly<Record<string, number>> {
+function approvalTimeouts(artifact: RuntimeMetadata): Readonly<Record<string, number>> {
   return Object.freeze({
     ...(artifact.domains.includes('relay')
       ? { 'relay.publish': artifact.publishTimeoutMs ?? 660_000 } : {}),
@@ -239,7 +245,7 @@ function rejectEnvelope(event: MessageEvent, source: Window, domains: readonly s
       }
 }
 
-function createGuestEndpoint(artifact: RuntimeArtifact, hooks: ShellAdapter) {
+function createGuestEndpoint(artifact: RuntimeMetadata, hooks: ShellAdapter) {
   const bridge = createShellBridge(hooks);
   const identity = Object.freeze({ dTag: artifact.appId, aggregateHash: artifact.aggregateHash });
   const resolved = resolveShellEnvironment(hooks, identity);
@@ -254,7 +260,7 @@ function createGuestEndpoint(artifact: RuntimeArtifact, hooks: ShellAdapter) {
   return { bridge, frame, source, media, environment, policy };
 }
 
-function mount(artifact: RuntimeArtifact): void {
+function mount(artifact: RuntimeMetadata) {
   const live = () => !stopped && ready && frame.contentWindow === source && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) !== undefined;
   const routing = createGuestRouting(artifact.domains, sessionId, live,
     () => { void native.routing({type: 'routing.__register'}).catch(() => {}); }, () => fail('runtime-bootstrap'));
@@ -323,11 +329,18 @@ function mount(artifact: RuntimeArtifact): void {
     native.destroy();
     bridge.destroy();
     frame.remove();
+    frame.removeAttribute('srcdoc');
   };
   window.addEventListener('message', receive);
   frame.addEventListener('load', loaded);
+  return {frame, environment, policy, discoveryToken};
+}
+
+// Mount listeners receive metadata only, so they cannot retain the original HTML.
+function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
+  const {frame, environment, policy, discoveryToken} = mount(artifact);
   const [prefix, withCsp] = artifact.published
-    ? publishedCspParts(artifact.html, policy) : ['', injectCsp(artifact.html, policy)] as const;
+    ? publishedCspParts(rawHtml, policy) : ['', injectCsp(rawHtml, policy)] as const;
   const html = discoveryToken ? injectDiscoveryOpen(withCsp, discoveryToken) : withCsp;
   frame.srcdoc = prefix + injectNappletNamespacePrelude(injectSupportReport(injectResourceMediaGate(html)), {
     ...environment.capabilities,
@@ -342,23 +355,22 @@ async function start(): Promise<void> {
   }
   try {
     ensureSecureRandomUuid();
-    let artifact: RuntimeArtifact;
     if (source === 'published') {
       if (Array.from(parameters).length !== 2 || parameters.get('fixture') !== null) { fail('artifact-integrity'); return; }
-      const document = await readPublishedArtifact(hostWindow.HypergolicHost!, sessionId);
-      artifact = Object.freeze({ html: document.html, sha256: document.metadata.htmlHash,
-        aggregateHash: document.metadata.version, appId: document.metadata.appId,
-        title: document.metadata.appId, domains: document.metadata.domains, published: true, discoveryOpen: document.metadata.publishedOpen === true });
-    } else {
-      if (source !== null || !fixture) { fail('fixture-integrity'); return; }
-      const actual = await digest(fixture.html);
-      if (actual !== fixture.sha256 || await digest(`${actual} /index.html\n`) !== fixture.aggregateHash) {
-        fail('fixture-integrity'); return;
-      }
-      artifact = Object.freeze({ ...fixture, published: false, discoveryOpen: fixtureName === 'napplet-discovery' && fixture.appId === 'napplet-discovery' });
+      const {html, metadata} = await readPublishedArtifact(hostWindow.HypergolicHost!, sessionId);
+      const {appId, version: aggregateHash, domains, publishedOpen} = metadata;
+      if (!stopped) renderGuest({aggregateHash, appId, title: appId, domains,
+        published: true, discoveryOpen: publishedOpen === true}, html);
+      return;
     }
-    if (stopped) return;
-    mount(artifact);
+    if (source !== null || !fixture) { fail('fixture-integrity'); return; }
+    const {html, sha256, ...metadata} = fixture;
+    const actual = await digest(html);
+    if (actual !== sha256 || await digest(`${actual} /index.html\n`) !== metadata.aggregateHash) {
+      fail('fixture-integrity'); return;
+    }
+    if (!stopped) renderGuest({...metadata, published: false,
+      discoveryOpen: fixtureName === 'napplet-discovery' && metadata.appId === 'napplet-discovery'}, html);
   } catch { fail(source === 'published' ? 'artifact-integrity' : 'runtime-bootstrap'); }
 }
 void start();
