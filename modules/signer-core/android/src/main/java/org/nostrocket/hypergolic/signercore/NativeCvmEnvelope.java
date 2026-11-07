@@ -12,7 +12,6 @@ import org.json.JSONObject;
 /** Native-only CEP-4 envelope owner. MCP stays opaque; no user-vault key or generic bridge export. */
 final class NativeCvmEnvelope implements AutoCloseable {
   static final int MAX_MESSAGE = 32 * 1024, MAX_EVENT = 64 * 1024;
-  private static final java.security.SecureRandom RANDOM = new java.security.SecureRandom();
   interface Authority {
     void current();
     /** The real source facade must bind exact approved/control bytes before any network-effectful send. */
@@ -60,8 +59,7 @@ final class NativeCvmEnvelope implements AutoCloseable {
     try (NativeSigningKey wrapping = new NativeSigningKey()) {
       check(); encrypted = wrapping.transport(peer, clear, true); check();
       String content = utf8(encrypted);
-      long wrappedTime = now - RANDOM.nextInt((int)Math.min(now, 172800) + 1);
-      NativeEvent outer = event(wrapping.publicKey(), wrappedTime, ephemeralWrap ? 21059 : 1059, eventTags(peer, null, false), content);
+      NativeEvent outer = event(wrapping.publicKey(), now, ephemeralWrap ? 21059 : 1059, eventTags(peer, null, false), content);
       String signed = outer.signed(wrapping.sign(outer.digest));
       if (signed.getBytes(StandardCharsets.UTF_8).length > MAX_EVENT) throw denied();
       check(); announced = true; return new Prepared(signed, NativeEvent.hex(inner.digest));

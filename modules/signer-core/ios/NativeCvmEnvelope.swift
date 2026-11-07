@@ -36,8 +36,7 @@ final class NativeCvmEnvelope: @unchecked Sendable {
       let wrapping = try NativeVaultKey(); defer { wrapping.destroy() }
       var encrypted = try wrapping.encrypt(peer: peer, plaintext: clear); defer { encrypted.resetBytes(in: 0..<encrypted.count) }
       try check(); guard let content = String(data: encrypted, encoding: .utf8) else { throw Failure.denied }
-      let wrappedTime = now - UInt64.random(in: 0...min(now, 172800))
-      let outer = try Self.event(pubkey: wrapping.publicKey(), now: wrappedTime, kind: ephemeralWrap ? 21059 : 1059, recipient: peer, content: content)
+      let outer = try Self.event(pubkey: wrapping.publicKey(), now: now, kind: ephemeralWrap ? 21059 : 1059, recipient: peer, content: content)
       let result = try wrapping.sign(outer)
       guard result.utf8.count <= Self.maximumEvent else { throw Failure.denied }; try check(); announced = true
       return Prepared(wire: result, innerEventId: inner.digest.hex)
