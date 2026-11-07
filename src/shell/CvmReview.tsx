@@ -28,7 +28,7 @@ export function CvmReview({service,slot,workspace}:{service:CvmService;slot?:Rev
         <TrustedBand/><ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <Text accessibilityRole="header" style={styles.title}>Send a provider request</Text>
           <Text style={styles.text}>{title} can keep this request running while you use another napplet. It stops when Hypergolic goes into the background, your account changes, or you close this napplet.</Text>
-          <Text style={styles.text}>Up to 2 minutes, including this review. Payments through Hypergolic are unavailable. Provider tools may have external effects.</Text>
+          <Text style={styles.text}>Time limit: {Math.ceil(review.options.timeoutMs / 1000)} seconds, including time spent on this review. Payments through Hypergolic are unavailable. Provider tools may have external effects.</Text>
           <Text style={styles.label}>Requesting napplet</Text><Text selectable style={styles.text}>{title}</Text>
           <Text style={styles.label}>Publisher and exact version</Text><Text selectable style={styles.mono}>{review.scope.publisher}{'\n'}{review.scope.version}</Text>
           <Text style={styles.label}>Provider</Text><Text testID="cvm-review-provider" selectable style={styles.mono}>{review.server.pubkey}</Text>
