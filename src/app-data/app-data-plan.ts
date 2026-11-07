@@ -76,8 +76,8 @@ export function createAppDataPlanner(port:AppDataPlanningPort,now:()=>number=Dat
             requiredInboxes:Object.freeze([]),ownSource:'network-fallback',ancillary:null});
         }
         active();
-        const destinations=publication.event.destinations;
-        if(destinations.length<1||destinations.length>8||destinations.some(peer=>!context.policy.relays.includes(normalizeRelayUrl(peer))))denied('app-data-relay-not-configured');
+        const destinations=publication.event.destinations,allowedRelays=new Set(context.policy.relays);
+        if(destinations.length<1||destinations.length>8||destinations.some(peer=>!allowedRelays.has(normalizeRelayUrl(peer))))denied('app-data-relay-not-configured');
         const expected=captureEventSnapshot(template,registration.user,destinations);
         if(expected.hash!==publication.event.hash||publication.requestId!==request.id)denied('app-data-invalid-request');
         const cacheKey=JSON.stringify([registration,template,destinations]);

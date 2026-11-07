@@ -24,6 +24,26 @@ export interface ApprovalModule {
   finishApproval(token: string, response: string | null): void;
   resumeApprovals(): void;
 }
+type PublicationSender=NonNullable<NativeApprovalLeasePort['publishOutbox']>;
+function createPublicationSender(module:ApprovalModule,tokenFor:(lease:NativeApprovalLease)=>string):PublicationSender{
+  return async(lease,group,event,destinations,execution,settleAll)=>{
+    const token=tokenFor(lease);if(!module.publishOutboxApproval)throw new Error('APPROVAL_DENIED');
+    const rows:unknown[]=[],publish=module.publishOutboxApproval.bind(module),wire=JSON.stringify(event);
+    async function worker(index:number):Promise<void>{
+      if(index>=destinations.length)return;execution.assertActive();
+      try{const raw=await publish(token,group,wire,destinations[index]!);execution.assertActive();rows[index]=JSON.parse(raw);}
+      catch(error){if(!settleAll)throw error;execution.assertActive();rows[index]={relay:destinations[index]!,eventId:event.id,status:'unknown',reason:'app-data-publication-result-unavailable'};}
+      execution.assertActive();return worker(index+4);
+    }
+    const work=[worker(0),worker(1),worker(2),worker(3)];
+    if(settleAll){
+      const results=await Promise.allSettled(work);
+      const failed=results.find(result=>result.status==='rejected');
+      if(failed?.status==='rejected')throw failed.reason;
+    }else await Promise.all(work);
+    execution.assertActive();return Object.freeze(rows) as Awaited<ReturnType<NonNullable<NativeApprovalLeasePort['publishOutbox']>>>;
+  };
+}
 /** Native tokens stay private to the adapter; a guest cannot manufacture a lease object. */
 export function createNativeApprovalPort(module: ApprovalModule): NativeApprovalLeasePort {
   const tokens = new WeakMap<NativeApprovalLease, string>();
@@ -81,23 +101,7 @@ export function createNativeApprovalPort(module: ApprovalModule): NativeApproval
         else cancelCaptured(token);
       }finally{tokens.delete(lease);}
     },
-    async publishOutbox(lease,group,event,destinations,execution,settleAll){
-      const token=tokenFor(lease);if(!module.publishOutboxApproval)throw new Error('APPROVAL_DENIED');
-      const rows:unknown[]=[],publish=module.publishOutboxApproval.bind(module),wire=JSON.stringify(event);
-      async function worker(index:number):Promise<void>{
-        if(index>=destinations.length)return;execution.assertActive();
-        try{const raw=await publish(token,group,wire,destinations[index]!);execution.assertActive();rows[index]=JSON.parse(raw);}
-        catch(error){if(!settleAll)throw error;execution.assertActive();rows[index]={relay:destinations[index]!,eventId:event.id,status:'unknown',reason:'app-data-publication-result-unavailable'};}
-        execution.assertActive();return worker(index+4);
-      }
-      const work=[worker(0),worker(1),worker(2),worker(3)];
-      if(settleAll){
-        const results=await Promise.allSettled(work);
-        const failed=results.find(result=>result.status==='rejected');
-        if(failed?.status==='rejected')throw failed.reason;
-      }else await Promise.all(work);
-      execution.assertActive();return Object.freeze(rows) as Awaited<ReturnType<NonNullable<NativeApprovalLeasePort['publishOutbox']>>>;
-    },
+    publishOutbox:createPublicationSender(module,tokenFor),
     prepareSigning: (lease, snapshot) => module.prepareApprovalSigning(tokenFor(lease), JSON.stringify(snapshot)),
     signingSource: lease => Object.freeze({ kind: 'approval', token: tokenFor(lease) }),
     isLive: lease => module.isApprovalLive(tokenFor(lease)),

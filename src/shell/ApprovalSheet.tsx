@@ -40,6 +40,29 @@ function commonTargets(common:NonNullable<ApprovalItem['common']>):string{
   return rows.join('\n');
 }
 
+function requestedAction(item: ApprovalItem): string {
+  if (item.appData) {
+    const body = item.appData.record.body;
+    if (body.deleted) return 'Unpublish public record';
+    return body.previous ? 'Update public record' : 'Publish public record';
+  }
+  return item.common ? commonAction(item.common) : requestedKind(item.event.event.kind);
+}
+
+function AppDataRecordReview({record, content}: {record: NonNullable<ApprovalItem['appData']>['record']; content: string}) {
+  const { styles } = useShellStyles(createStyles);
+  return <View testID="app-data-approval-record" style={styles.record}>
+    <Text style={styles.label}>Record title</Text><Text selectable style={styles.value}>{record.body.title}</Text>
+    <Text style={styles.value}>{record.body.deleted
+      ? 'This publishes a public deletion marker. Older copies and linked files may remain available.'
+      : 'Anyone may read and copy this record, including its links.'}</Text>
+    <Text style={styles.label}>Record format</Text><Text selectable style={styles.mono}>{record.body.schema} · version {record.body.version}</Text>
+    <Text style={styles.label}>Collection / record ID</Text><Text selectable style={styles.mono}>{record.collection} / {record.id}</Text>
+    <Text style={styles.value}>{new TextEncoder().encode(content).byteLength} bytes · All listed relays must accept this change.</Text>
+    <Text style={styles.label}>Exact record content</Text>
+  </View>;
+}
+
 function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismiss }: Omit<ApprovalSheetProps, 'item'> & { item: ApprovalItem }) {
   const { styles } = useShellStyles(createStyles);
   const approve = useRef<ViewInstance>(null);
@@ -50,7 +73,6 @@ function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismis
   const publisherNpub = formatNpub(item.origin.publisher);
   const identityNpub = formatNpub(item.event.selectedPubkey);
   const record = item.appData?.record;
-  const recordAction = record?.body.deleted ? 'Unpublish public record' : record?.body.previous ? 'Update public record' : 'Publish public record';
   const dismiss = () => { if (!busy) onDismiss(item.id); };
   return <Modal visible transparent animationType="none" onRequestClose={dismiss} onShow={() => {
     approve.current?.focus();
@@ -61,17 +83,8 @@ function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismis
         <TrustedBand />
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text accessibilityRole="header" style={styles.eyebrow}>Approve signing request</Text>
-          <Text style={styles.title}>{record ? recordAction : item.common ? commonAction(item.common) : requestedKind(item.event.event.kind)}</Text>
-          {record && <View testID="app-data-approval-record" style={styles.record}>
-            <Text style={styles.label}>Record title</Text><Text selectable style={styles.value}>{record.body.title}</Text>
-            <Text style={styles.value}>{record.body.deleted
-              ? 'This publishes a public deletion marker. Older copies and linked files may remain available.'
-              : 'Anyone may read and copy this record, including its links.'}</Text>
-            <Text style={styles.label}>Record format</Text><Text selectable style={styles.mono}>{record.body.schema} · version {record.body.version}</Text>
-            <Text style={styles.label}>Collection / record ID</Text><Text selectable style={styles.mono}>{record.collection} / {record.id}</Text>
-            <Text style={styles.value}>{new TextEncoder().encode(item.event.event.content).byteLength} bytes · All listed relays must accept this change.</Text>
-            <Text style={styles.label}>Exact record content</Text>
-          </View>}
+          <Text style={styles.title}>{requestedAction(item)}</Text>
+          {record && <AppDataRecordReview record={record} content={item.event.event.content}/>}
           {item.common && <><Text style={styles.label}>Targets</Text><Text selectable style={styles.mono}>{commonTargets(item.common)}</Text></>}
           {item.common?.request.type==='common.report'&&<><Text style={styles.label}>Report reason</Text><Text style={styles.value}>{item.common.request.reason}</Text></>}
           <Text testID="approval-sheet-content" selectable style={styles.content}>{item.event.event.content}</Text>

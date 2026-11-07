@@ -258,8 +258,10 @@ export class ApprovalService {
         execution.assertActive();const outcomes=captureRelayOutcomes(raw,entry.event.destinations,verified.id);
         const ok=outcomes.every(row=>row.status==='accepted'),unknown=outcomes.some(row=>row.status==='unknown');
         if(unknown)this.closeRisks.set(entry.origin.sessionId,entry.origin.epoch);
+        const relays:Record<string,boolean>={};
+        for(const row of outcomes)if(row.status!=='unknown')relays[row.relay]=row.status==='accepted';
         response=JSON.stringify({type:entry.outbox?'outbox.publish.result':'relay.publish.result',id:entry.requestId,ok,
-          relays:Object.fromEntries(outcomes.filter(row=>row.status!=='unknown').map(row=>[row.relay,row.status==='accepted'])),
+          relays,
           event:verified,eventId:verified.id,...(ok?{}:{error:unknown?'app-data-publication-unknown':'app-data-publish-incomplete'})});
         return outcomes;
       }

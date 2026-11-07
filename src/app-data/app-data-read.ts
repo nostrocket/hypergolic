@@ -19,6 +19,7 @@ export function isAppDataRead(request:OutboxQueryRequest):boolean{
 export function appDataReadPlan(request:OutboxQueryRequest,context:AppDataContext|undefined,network:readonly string[]):OutboxReadPlan|null{
   if(!context||!request.options.relays.length||!isAppDataRead(request))return null;
   try{assertCurrentAppDataSettings(context,network);}catch{throw new OutboxQueryError('policy denied');}
-  if(request.options.relays.length>8||request.options.relays.some(peer=>!context.policy.relays.includes(peer)))throw new OutboxQueryError('policy denied');
+  const allowedRelays=new Set(context.policy.relays);
+  if(request.options.relays.length>8||request.options.relays.some(peer=>!allowedRelays.has(peer)))throw new OutboxQueryError('policy denied');
   return Object.freeze({relays:Object.freeze([...request.options.relays]),source:'fallback',missingAuthors:Object.freeze([]),incomplete:false});
 }
