@@ -162,3 +162,24 @@ test('packaged Discover scopes late and completed row feedback to its search', a
   await expect(feedback).toBeEmpty();
   await expect(search).toBeFocused();
 });
+
+for (const declaration of ['R', 'O']) {
+  test(`packaged Discover trusts independent Outbox availability for ${declaration}`, async ({page}) => {
+    const event = finalizeEvent({kind: 35129, created_at: Math.floor(Date.now() / 1000) - 10,
+      content: 'Independent Outbox catalog control.', tags: [['d', 'outbox-control'],
+        ['title', 'Independent Outbox'], ['x', 'c'.repeat(64)], [declaration, 'outbox']]},
+      new Uint8Array(32).fill(1));
+    const guest = await openRuntime(page, 'napplet-discovery', [{event}]);
+    await guest.getByRole('button', {name: 'Details for Independent Outbox', exact: true}).click();
+    await expect(guest.locator('.compat-state')).toHaveText('Requirements available');
+    await expect(guest.locator('.compat-detail')).not.toContainText('Outbox also needs relay access');
+    await expect(guest.locator('.capabilities .cap-row')).toHaveCount(1);
+    await guest.getByRole('button', {name: 'Open Napplet', exact: true}).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length)).toBe(1);
+    const calls = await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls);
+    expect(calls[0]).toEqual({type, id: expect.any(String), expectedEventId: event.id,
+      address: naddrEncode({kind: 35129, pubkey: event.pubkey, identifier: 'outbox-control'})});
+    await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.finish?.('opened'));
+    await expect(guest.locator('.detail-actions .feedback')).toHaveText('Opened in Hypergolic.');
+  });
+}
