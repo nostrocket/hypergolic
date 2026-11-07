@@ -16,7 +16,7 @@
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/LinkTransport.kt": "3c75a1d0ff46cebe0760f3ecf8cca1832a9e3bdbbbc0516dea09614a4ff33b7d",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/LinkUrl.java": "2290fc96a2eeeba6507f3a1fdea4762c89968a2c7cf6541b510aa033bb068e5c",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/MediaHttpsFile.java": "1c488ec147e0478d07225f44a26fb6d8bc23de4e641b32257d6eb5eb881aea70",
-    "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/NappletHostModule.kt": "60b7d80f7d28bf1a9c26e63c71b5245d7941d595b6021687133259621f3d6c2d",
+    "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/NappletHostModule.kt": "71d48652688af1b650a026e6cb2894308351f642e22f36e9dee2e13968a5cc5b",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/NappletHostView.kt": "248f1c1142ba33a59425f8c149524811752a7d6958b86c3c8c3589c7a935f15e",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/NativeApprovalAuthority.java": "76c1b7e3abc36227b0fa46049c539f55fcca4ae6e32e0f7daceb57101d7e75b0",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/NativeBlossomPermit.java": "1a33b7446323898c2fc37fd3e46f521fa41354b9b94c05cfe72cf43cd4b4514e",
@@ -25,6 +25,7 @@
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/NativeUploadAuthority.java": "7504eacc57d882eae3a8ce6e71c6e3919bce51132a90f261cf472ea6fbbd2af1",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/OutboxAcknowledgement.kt": "9e9cdeabb8c44664c643f98e36b772489eacf4ae957270a903731d70ddf1e842",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/OutboxPublicationOwner.kt": "a20dfd239e725a08c25b308f92add73317d51231af2762d808aa83c6cb2d9330",
+    "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/OutboxQueryCapability.kt": "9d77991289103760ee9449e2e92797e82f170cc132c74a67b7c0b3c5731bcb0f",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/PublicAddressPolicy.java": "6a3f39b9987bf234fef0240aec5508c8cfb112f38b8967dd259c6ab267a19301",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/PublishedArtifactReadOwner.java": "b2f0b42cf9199c522fdb71e08fea8ce411ee5de5a8145b8376a1fd3e0ba68940",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/PublishedArtifactRegistry.java": "4a9bd034a93370740ec96090c6c169463322b4dbb61ef0a8c230170147d39be2",
@@ -33,13 +34,13 @@
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/PublishedHttpsRequestOwner.java": "5ca2a33e5786abe79051efafb20be5b47a09edb4396c6c8d352dc877ff02cbd4",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/PublishedHttpsResponseReader.java": "ce06575e9730f2b19cdcabfa37668e01fe5284eafb28fde83dfcd908093177a1",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/PublishedHttpsTransport.java": "cdcda466130741c5f6173b313f92a74beeb6760c86328bbda71e98124e3f45f2",
-    "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/PublishedRelayResponseClassifier.java": "b525c66f077d3f8a8c68df9b7d9b8d853af6fc51764c56400560762f0bc94d71",
+    "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/PublishedRelayResponseClassifier.java": "fade820ecd2ecf2e209da3ea34995ea484063eb92cfdf03aa5d8e1432e8eb909",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/PublishedRelayWebSocketClientFrames.java": "5d5b8ed345b1c511aab5cca15aa0e68b6dc27c859351c43e7ef95017bbd084fa",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/PublishedRelayWebSocketFrames.java": "e9e285036ec0103c8284937d33cef28dbb47912f7ea0db9a457245f995a70e4e",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/PublishedRelayWebSocketHandshake.java": "724c52ac754f5ecfc7e54e487d622f1070a767a11b23f8e6226719a4b0a9e3a7",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/PublishedRelayWssIo.java": "504fbea2927165a64621d7ca4a401008bdf4ef4e48f2b6a59f8eee6983c12aee",
-    "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/PublishedRelayWssQuery.java": "4c36f285ee850570433ef278ce08d764d01fd2f16706ef88220e1d51d0e3d224",
-    "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/PublishedRelayWssRequestOwner.java": "50afc91a9b85376c62c27a0bcef5d96b3d8d3595bf559446d330ca436941da4a",
+    "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/PublishedRelayWssQuery.java": "e0cba6045ecae2e43e3930b257b3864ec88f6417c601d17bd3a53f9707300457",
+    "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/PublishedRelayWssRequestOwner.java": "345d6faf0a4985d02eac8d50645d6dd459c27908940846490651165c1405e041",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/RelayStreamWssOwner.kt": "40edcc6ec7baab8e58b53d7a90178c051006a1030091106a7cb2918ced4c748f",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/RelaySubscriptionRegistry.java": "d6ab78ea5e65f4c9671077ef1dca34c5fc769684a6d0c3e1eb7de6bc4a936897",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/RelaySubscriptionTransport.kt": "6b18cc0328fac03e86222e94ebd5df16b13cd815052c8a3d0f4ce96c95e00957",
@@ -66,6 +67,6 @@
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/UploadWire.kt": "2027422b69d5ace19bb0ab36e80ee4682260e5c95a6be04621400a40bcaf2e14",
     "modules/napplet-host/android/build.gradle": "d43426cfd2fc062d658d262afd31722a7f23a6e032e6fc90d4f2e35493fc3aa5",
     "modules/napplet-host/android/src/main/assets/runtime/index.html": "9f0b1b6b033f2a9e4ba7f349e791a3721949a8d7959fe18ea8f7c6d9b3cd6a2f",
-    "modules/napplet-host/android/src/main/assets/runtime/host.js": "2895fde00379bb8b87bc22c199404b30c2a6c5b7b4800e101394c14eb8915bdb"
+    "modules/napplet-host/android/src/main/assets/runtime/host.js": "02190ebccd9a0e03d82613209783fa0c0431358b8419a6d3244d371239f645eb"
   }
 }
