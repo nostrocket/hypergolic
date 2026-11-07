@@ -140,8 +140,8 @@ test('one verified mixed grant keeps Media, Outbox, Keys and Intent live without
     const outbox = await api.outbox.query({kinds:[1],limit:0});
     const intent = await api.intent.invoke('napplet:note/open');
     const key = await api.keys.registerAction({id:'clip.skip',label:'Skip',defaultKey:'s'});
-    const surface = document.createElement('div');
-    surface.textContent = 'Key target';
+    const surface = document.createElement('canvas');
+    surface.dataset.testid = 'key-target';
     surface.tabIndex = 0;
     document.body.append(surface);
     (window as any).actions = 0;
@@ -160,7 +160,7 @@ test('one verified mixed grant keeps Media, Outbox, Keys and Intent live without
   expect(wire).toContain('outbox.query');
   expect(wire).toContain('routing.call');
   expect(wire.some(type => type.startsWith('relay.'))).toBe(false);
-  await guest.getByText('Key target').focus();
+  await guest.getByTestId('key-target').focus();
   await page.evaluate(() => (window as any).__hypergolicMediaActive(true));
   await expect.poll(() => guest.evaluate(() => (window as any).keysActive)).toBe(true);
   await page.keyboard.press('s');

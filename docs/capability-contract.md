@@ -31,8 +31,12 @@ resource, upload, link, intent, inc, notify, config, outbox, keys and media. The
 covers selected Outbox operations. Raw Relay operations require a separate grant.
 [Tolerant admission](nap-support.md) never grants an unavailable domain. Keys
 allows up to 32 registered actions per verified frame. The trusted binding only
-reacts to eligible keyboard events in the focused foreground frame and excludes
-text editing, composition, repeated events, modifier chords and reserved controls.
+reacts to eligible keyboard events in the focused foreground frame. Its selected
+surfaces are a directly focused native canvas or button, and the document body
+when it is the ordinary focus fallback. A focused button retains native Space
+activation. It leaves focused custom elements and other DOM surfaces to the
+guest, including editors inside closed shadow roots. Text editing, composition,
+repeated events, modifier chords and reserved controls remain excluded.
 Bindings are local to that frame and expire with it.
 
 The selected SDK/core exports accept an unsigned `EventTemplate`. The NAP 0.31.1

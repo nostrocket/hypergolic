@@ -23,9 +23,10 @@ index 0ec36f0..a6bdd59 100644
  /**
   * Render the host-owned NIP-5D bootstrap that exposes available NAP domains
 diff --git a/dist/index.js b/dist/index.js
+index 523bcf1..1605ef2 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -312,6 +312,7 @@
+@@ -312,6 +312,7 @@ function adaptHooks(shellHooks, deps) {
      onAclCheck: shellHooks.onAclCheck,
      onHashMismatch: shellHooks.onHashMismatch,
      services: shellHooks.services,
@@ -33,7 +34,7 @@ diff --git a/dist/index.js b/dist/index.js
      getConfigOverrides: shellHooks.getConfigOverrides
    };
  }
-@@ -1032,6 +1033,7 @@
+@@ -1032,6 +1033,7 @@ function isServiceDomainLive(hooks, domain) {
      case "outbox":
        return Boolean(hooks.relayPool);
      case "upload":
@@ -41,7 +42,7 @@ diff --git a/dist/index.js b/dist/index.js
        return hooks.upload?.getUploader() !== null && hooks.upload?.getUploader() !== void 0;
      case "intent":
        return hooks.intent?.isAvailable() === true;
-@@ -1265,7 +1267,15 @@
+@@ -1265,7 +1267,15 @@ function scriptJson(value) {
  }
  function renderNappletNamespacePrelude(options) {
    const domains = uniqueBareDomains(["shell", ...options.domains]);
@@ -58,7 +59,7 @@ diff --git a/dist/index.js b/dist/index.js
  }
  function injectNappletNamespacePrelude(html, options) {
    const prelude = renderNappletNamespacePrelude(options);
-@@ -1281,13 +1291,18 @@
+@@ -1281,13 +1291,18 @@ function injectNappletNamespacePrelude(html, options) {
    }
    return `${prelude}${html}`;
  }
@@ -80,7 +81,7 @@ diff --git a/dist/index.js b/dist/index.js
    }
    function post(message) {
      target.parent.postMessage(message, "*");
-@@ -1304,7 +1319,7 @@
+@@ -1304,7 +1319,7 @@ function nappletNamespacePrelude(domains) {
      const outbound = { ...message, id: requestId };
      return new Promise((resolve, reject) => {
        const off = listen((event) => {
@@ -89,7 +90,7 @@ diff --git a/dist/index.js b/dist/index.js
          const incoming = event.data;
          if (typeof incoming !== "object" || incoming === null) return;
          const msg = incoming;
-@@ -1326,7 +1341,7 @@
+@@ -1326,7 +1341,7 @@ function nappletNamespacePrelude(domains) {
        const timer = setTimeout(() => {
          off();
          reject(new Error(`${message.type} timed out`));
@@ -98,16 +99,25 @@ diff --git a/dist/index.js b/dist/index.js
        post(outbound);
      });
    }
-@@ -1813,6 +1828,8 @@
+@@ -1813,6 +1828,17 @@ function nappletNamespacePrelude(domains) {
      "submit"
    ]);
    let keysSmartForwardingInstalled = false;
 +  let keysInputActive = false;
 +  let protectedKeys;
++  const keysDom = allowed.has("keys") ? {
++    apply: Reflect.apply,
++    getPath: target.Event.prototype.composedPath,
++    getFocus: Object.getOwnPropertyDescriptor(target.Document.prototype, "activeElement").get,
++    getBody: Object.getOwnPropertyDescriptor(target.Document.prototype, "body").get,
++    matches: target.Element.prototype.matches,
++    canvasWidth: Object.getOwnPropertyDescriptor(target.HTMLCanvasElement.prototype, "width").get,
++    buttonType: Object.getOwnPropertyDescriptor(target.HTMLButtonElement.prototype, "type").get
++  } : null;
    function normalizeKeyName(key) {
      if (typeof key !== "string") return "";
      return key.length === 1 ? key.toUpperCase() : key;
-@@ -1821,6 +1838,7 @@
+@@ -1821,6 +1847,7 @@ function nappletNamespacePrelude(domains) {
      return `${value.ctrl}|${value.alt}|${value.shift}|${value.meta}|${normalizeKeyName(value.key)}`;
    }
    function bindingComboKey(binding) {
@@ -115,7 +125,7 @@ diff --git a/dist/index.js b/dist/index.js
      if (typeof binding !== "string" || binding.trim() === "") return null;
      const parts = binding.split("+");
      const key = parts.pop()?.trim();
-@@ -1904,8 +1922,9 @@
+@@ -1904,24 +1931,48 @@ function nappletNamespacePrelude(domains) {
      if (keysSmartForwardingInstalled) return;
      keysSmartForwardingInstalled = true;
      listen((event) => {
@@ -126,7 +136,26 @@ diff --git a/dist/index.js b/dist/index.js
        if (typeof msg === "object" && msg !== null && msg.type === "keys.bindings") {
          replaceKeyBindings(msg.bindings);
        }
-@@ -1915,13 +1934,17 @@
+     });
+     const documentLike = target.document;
++    if (!keysDom) return;
++    const { apply, getPath, getFocus, getBody, matches, canvasWidth, buttonType } = keysDom;
++    function hasNativeBrand(origin, getter) {
++      try {
++        apply(getter, origin, []);
++        return true;
++      } catch {
++        return false;
++      }
++    }
++    function isKeySurface(origin) {
++      if (origin !== apply(getFocus, documentLike, [])) return false;
++      const body = apply(getBody, documentLike, []);
++      if (origin === body) return body !== null && !apply(matches, body, [":focus"]);
++      // Canvas and button cannot host author shadow roots. Use their native brands.
++      return hasNativeBrand(origin, canvasWidth) || hasNativeBrand(origin, buttonType);
++    }
+     const listenerTarget = typeof documentLike?.addEventListener === "function" ? documentLike : target;
      if (typeof listenerTarget.addEventListener !== "function") return;
      listenerTarget.addEventListener("keydown", (event) => {
        const keyEvent = event;
@@ -137,9 +166,11 @@ diff --git a/dist/index.js b/dist/index.js
 +          keyEvent.isComposing || keyEvent.keyCode === 229 || keyEvent.repeat || keyEvent.defaultPrevented ||
 +          keyEvent.ctrlKey || keyEvent.altKey || keyEvent.shiftKey || keyEvent.metaKey) return;
 +      if (typeof keyEvent.key === "string" && (modifierKeys.has(keyEvent.key) || reservedKeyNames.has(keyEvent.key))) return;
-+      if (keyEvent.composedPath().some((node) => isTextEntryTarget(node) ||
++      const path = apply(getPath, keyEvent, []);
++      if (!isKeySurface(path[0])) return;
++      if (path.some((node) => isTextEntryTarget(node) ||
 +          node instanceof Element && node.matches('input,textarea,select,[role="textbox"],[role="combobox"]'))) return;
-+      if (keyEvent.key === " " && keyEvent.composedPath().some((node) =>
++      if (keyEvent.key === " " && path.some((node) =>
 +          node instanceof Element && node.matches('button,summary,[role="button"],[role="checkbox"],[role="switch"]'))) return;
        const combo = eventComboKey(keyEvent);
        const actionId = combo ? keyBindingActions.get(combo) : void 0;
@@ -149,7 +180,7 @@ diff --git a/dist/index.js b/dist/index.js
          keyEvent.preventDefault?.();
          notifyKeyAction(actionId);
          return;
-@@ -1958,7 +1981,7 @@
+@@ -1958,7 +2009,7 @@ function nappletNamespacePrelude(domains) {
          }
          callbacks.add(callback);
          const off = listen((event) => {
@@ -158,7 +189,7 @@ diff --git a/dist/index.js b/dist/index.js
            const msg = event.data;
            if (typeof msg === "object" && msg !== null && msg.type === "keys.action" && msg.actionId === actionId) callback();
          });
-@@ -2047,7 +2070,7 @@
+@@ -2047,7 +2098,7 @@ function nappletNamespacePrelude(domains) {
          const off = listen((event) => {
            if (!isParentMessage(event)) return;
            const msg = event.data;
@@ -167,7 +198,7 @@ diff --git a/dist/index.js b/dist/index.js
          });
          fire({ type: "config.subscribe" });
          return subscriptionHandle(() => {
-@@ -2071,18 +2094,42 @@
+@@ -2071,18 +2122,42 @@ function nappletNamespacePrelude(domains) {
    }
    function makeResource() {
      const objectUrls = /* @__PURE__ */ new Set();
@@ -212,7 +243,7 @@ diff --git a/dist/index.js b/dist/index.js
              if (objectUrl) {
                URL.revokeObjectURL(objectUrl);
                objectUrls.delete(objectUrl);
-@@ -2090,14 +2137,17 @@
+@@ -2090,14 +2165,17 @@ function nappletNamespacePrelude(domains) {
              }
            }
          };
@@ -231,7 +262,7 @@ diff --git a/dist/index.js b/dist/index.js
          for (const url of objectUrls) URL.revokeObjectURL(url);
          objectUrls.clear();
        }
-@@ -2265,25 +2315,85 @@
+@@ -2265,25 +2343,85 @@ function nappletNamespacePrelude(domains) {
          ...Object.keys(sanitizedBehavior).length === 0 ? {} : { behavior: sanitizedBehavior }
        };
      };
@@ -245,7 +276,6 @@ diff --git a/dist/index.js b/dist/index.js
 -        "intent.invoke.result",
 -        (msg) => fieldOrThrow(msg, "result", "intent.invoke.result missing result")
 -      );
--    };
 +    const fromUri = (uri, options = {}) => {
 +      if (!options || typeof options !== "object" || Array.isArray(options) ||
 +          Object.keys(options).some((key) => !["payload", "handler", "behavior"].includes(key))) {
@@ -276,7 +306,7 @@ diff --git a/dist/index.js b/dist/index.js
 +    const dropDelivery = pendingDeliveries.delete.bind(pendingDeliveries);
 +    const notify = (handler, delivery) => {
 +      try { handler(delivery); } catch { /* Other subscriptions still receive their delivery. */ }
-+    };
+     };
 +    const channel = new MessageChannel();
 +    const consume = channel.port1.postMessage.bind(channel.port1);
 +    const readData = Function.call.bind(Object.getOwnPropertyDescriptor(MessageEvent.prototype, "data").get);
@@ -334,7 +364,7 @@ diff --git a/dist/index.js b/dist/index.js
        available: (archetype) => request(
          { type: "intent.available", archetype },
          "intent.available.result",
-@@ -2367,7 +2477,10 @@
+@@ -2367,7 +2505,10 @@ function nappletNamespacePrelude(domains) {
        open: (url, options) => request(
          { type: "link.open", url, ...options ? { options } : {} },
          "link.open.result",
@@ -346,7 +376,7 @@ diff --git a/dist/index.js b/dist/index.js
          { rejectOnError: false }
        )
      };
-@@ -2479,7 +2592,7 @@
+@@ -2479,7 +2620,7 @@ function nappletNamespacePrelude(domains) {
      return intent;
    }
    function isProtectedDomain(domain) {
@@ -355,7 +385,7 @@ diff --git a/dist/index.js b/dist/index.js
    }
    function makeDomain(domain, existing) {
      if (domain === "shell") return shell;
-@@ -2487,14 +2600,13 @@
+@@ -2487,14 +2628,13 @@ function nappletNamespacePrelude(domains) {
      if (domain === "identity") return makeProtectedIdentity();
      if (domain === "theme") return makeProtectedTheme();
      if (domain === "intent") return makeProtectedIntent();

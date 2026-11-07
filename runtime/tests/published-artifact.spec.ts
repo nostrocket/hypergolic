@@ -18,6 +18,10 @@ function artifactFor(mode: Mode): Buffer {
   if (mode === 'published-approval') return approvalHtml;
   if (mode === 'intent-only') return Buffer.from('<!doctype html><html><head><title>Intent</title></head><body><output id="deliveries"></output></body></html>');
   const source = html.toString();
+  if (mode === 'keys-domain') return Buffer.from(source.replace('</body>', `
+    <keys-declarative-editor id="keys-declarative" style="display:block">
+      <template shadowrootmode="closed"><input aria-label="Declarative editor"></template>
+    </keys-declarative-editor></body>`));
   if (mode === 'attributed-head') return Buffer.from(source.replace('<head>', '<HEAD data-fixture="attribute">'));
   if (mode === 'commented-head') {
     const commented = source.replace('<!doctype html>', '<!doctype html>\n<!-- <head><meta http-equiv="Content-Security-Policy" content="default-src *"> -->');
@@ -499,10 +503,9 @@ test('Keys dispatches real focused hardware shortcuts and scopes its action list
     const collision = await keys.registerAction({id: 'game.other', label: 'Other', defaultKey: 'p'});
     let duplicate = false;
     try { await keys.registerAction({id: 'game.pause', label: 'Duplicate'}); } catch { duplicate = true; }
-    const surface = document.createElement('div');
+    const surface = document.createElement('canvas');
     surface.tabIndex = 0;
     surface.dataset.testid = 'keys-surface';
-    surface.textContent = 'Game surface';
     const editor = document.createElement('input');
     editor.dataset.testid = 'keys-editor';
     document.body.prepend(surface, editor);
@@ -566,6 +569,136 @@ test('Keys dispatches real focused hardware shortcuts and scopes its action list
 
   await guest.evaluate(() => location.replace('about:blank'));
   await expect(page.locator('#napplet')).toHaveCount(0);
+});
+
+test('Keys preserves typing in closed shadow editors and captures ordinary body fallback', async ({page}) => {
+  await openPublished(page, 'keys-domain');
+  const guest = await publishedGuest(page);
+  await guest.evaluate(async () => {
+    const state = window as any;
+    state.actions = 0;
+    window.addEventListener('message', event => {
+      if (event.isTrusted && event.source === parent && event.data?.type === 'hypergolic.private.media-active') {
+        state.keysActive = event.data.inputActive;
+      }
+    });
+    // Capture the genuine selector for the assertion, then replace it before
+    // the guest first accesses the lazily created Keys API.
+    const nativeMatches = Element.prototype.matches;
+    state.nativeMatches = nativeMatches;
+    Element.prototype.matches = function (selector) {
+      return this === document.body && selector === ':focus' ? false : nativeMatches.call(this,selector);
+    };
+    const {keys} = state.napplet;
+    await keys.registerAction({id: 'game.action', label: 'Action', defaultKey: 's'});
+    keys.onAction('game.action', () => state.actions++);
+
+    const plain = document.createElement('div');
+    plain.tabIndex = 0;
+    document.body.prepend(plain);
+    const programmatic = document.createElement('div');
+    programmatic.id = 'keys-programmatic';
+    document.body.prepend(programmatic);
+    const programmaticInput = document.createElement('input');
+    programmatic.attachShadow({mode:'closed'}).append(programmaticInput);
+    const inputs: Record<string, HTMLInputElement | null> = {
+      programmatic: programmaticInput, declarative: null, body: null,
+    };
+    state.closedInputs = inputs;
+    customElements.define('keys-declarative-editor', class extends HTMLElement {
+      constructor() {
+        super();
+        const root = this.attachInternals().shadowRoot;
+        if (root?.mode !== 'closed') throw Error('Expected parser-created closed shadow root');
+        inputs.declarative = root.querySelector('input');
+      }
+    });
+    plain.focus();
+  });
+  await page.evaluate(() => (window as any).__hypergolicMediaActive(true));
+  await expect.poll(() => guest.evaluate(() => (window as any).keysActive)).toBe(true);
+  const actions = () => guest.evaluate(() => (window as any).actions);
+  await page.keyboard.press('s');
+  expect(await actions()).toBe(0);
+
+  await guest.evaluate(() => (document.activeElement as HTMLElement).blur());
+  expect(await guest.evaluate(() => [document.hasFocus(), document.activeElement === document.body,
+    document.body.matches(':focus')])).toEqual([true, true, false]);
+  await page.keyboard.press('s');
+  expect(await actions()).toBe(1);
+
+  for (const editor of ['programmatic','declarative']) {
+    const active = await guest.evaluate(name => {
+      (window as any).closedInputs[name].focus();
+      return document.activeElement?.id;
+    }, editor);
+    expect(active).toBe(`keys-${editor}`);
+    await page.keyboard.press('s');
+    expect(await guest.evaluate(name => (window as any).closedInputs[name].value,editor)).toBe('s');
+    expect(await actions()).toBe(1);
+  }
+
+  expect(await guest.evaluate(() => {
+    const input = document.createElement('input');
+    document.body.attachShadow({mode:'closed'}).append(input);
+    (window as any).closedInputs.body = input;
+    input.focus();
+    return [document.activeElement === document.body,
+      (window as any).nativeMatches.call(document.body, ':focus')];
+  })).toEqual([true, true]);
+  await page.keyboard.press('s');
+  expect(await guest.evaluate(() => (window as any).closedInputs.body.value)).toBe('s');
+  expect(await actions()).toBe(1);
+});
+
+test('Keys allows a focused native button shortcut and preserves its Space activation and editor input', async ({page}) => {
+  await openPublished(page, 'keys-domain');
+  const guest = await publishedGuest(page);
+  await guest.evaluate(async () => {
+    const state = window as any;
+    state.buttonActions = [];
+    state.buttonClicks = 0;
+    window.addEventListener('message', event => {
+      if (event.isTrusted && event.source === parent && event.data?.type === 'hypergolic.private.media-active') {
+        state.keysActive = event.data.inputActive;
+      }
+    });
+    const {keys} = state.napplet;
+    await keys.registerAction({id:'game.pause', label:'Pause', defaultKey:'p'});
+    await keys.registerAction({id:'game.shoot', label:'Shoot', defaultKey:' '});
+    keys.onAction('game.pause', () => state.buttonActions.push('pause'));
+    keys.onAction('game.shoot', () => state.buttonActions.push('shoot'));
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = 'Resume game';
+    button.dataset.testid = 'keys-resume';
+    button.addEventListener('click', () => state.buttonClicks++);
+    document.body.prepend(button);
+    button.focus();
+  });
+  await page.evaluate(() => (window as any).__hypergolicMediaActive(true));
+  await expect.poll(() => guest.evaluate(() => (window as any).keysActive)).toBe(true);
+  const observation = () => guest.evaluate(() => {
+    const {buttonActions,buttonClicks} = window as any;
+    return {buttonActions,buttonClicks};
+  });
+  await page.keyboard.press('p');
+  expect(await observation()).toEqual({buttonActions:['pause'],buttonClicks:0});
+  await page.keyboard.press('Space');
+  expect(await observation()).toEqual({buttonActions:['pause'],buttonClicks:1});
+
+  await guest.evaluate(() => {
+    const editor = document.createElement('input');
+    editor.dataset.testid = 'keys-nested-editor';
+    document.querySelector('[data-testid="keys-resume"]')!.append(editor);
+    editor.focus();
+  });
+  const editor = guest.getByTestId('keys-nested-editor');
+  await expect(editor).toBeFocused();
+  await page.keyboard.press('p');
+  await expect(editor).toHaveValue('p');
+  expect(await observation()).toEqual({buttonActions:['pause'],buttonClicks:1});
 });
 
 test('ungranted Keys remains absent and raw requests get no reply', async ({page}) => {
