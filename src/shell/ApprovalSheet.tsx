@@ -49,6 +49,8 @@ function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismis
   const landscape = width > height;
   const publisherNpub = formatNpub(item.origin.publisher);
   const identityNpub = formatNpub(item.event.selectedPubkey);
+  const record = item.appData?.record;
+  const recordAction = record?.body.deleted ? 'Unpublish public record' : record?.body.previous ? 'Update public record' : 'Publish public record';
   const dismiss = () => { if (!busy) onDismiss(item.id); };
   return <Modal visible transparent animationType="none" onRequestClose={dismiss} onShow={() => {
     approve.current?.focus();
@@ -59,7 +61,17 @@ function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismis
         <TrustedBand />
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text accessibilityRole="header" style={styles.eyebrow}>Approve signing request</Text>
-          <Text style={styles.title}>{item.common ? commonAction(item.common) : requestedKind(item.event.event.kind)}</Text>
+          <Text style={styles.title}>{record ? recordAction : item.common ? commonAction(item.common) : requestedKind(item.event.event.kind)}</Text>
+          {record && <View testID="app-data-approval-record" style={styles.record}>
+            <Text style={styles.label}>Record title</Text><Text selectable style={styles.value}>{record.body.title}</Text>
+            <Text style={styles.value}>{record.body.deleted
+              ? 'This publishes a public deletion marker. Older copies and linked files may remain available.'
+              : 'Anyone may read and copy this record, including its links.'}</Text>
+            <Text style={styles.label}>Record format</Text><Text selectable style={styles.mono}>{record.body.schema} · version {record.body.version}</Text>
+            <Text style={styles.label}>Collection / record ID</Text><Text selectable style={styles.mono}>{record.collection} / {record.id}</Text>
+            <Text style={styles.value}>{new TextEncoder().encode(item.event.event.content).byteLength} bytes · All listed relays must accept this change.</Text>
+            <Text style={styles.label}>Exact record content</Text>
+          </View>}
           {item.common && <><Text style={styles.label}>Targets</Text><Text selectable style={styles.mono}>{commonTargets(item.common)}</Text></>}
           {item.common?.request.type==='common.report'&&<><Text style={styles.label}>Report reason</Text><Text style={styles.value}>{item.common.request.reason}</Text></>}
           <Text testID="approval-sheet-content" selectable style={styles.content}>{item.event.event.content}</Text>
@@ -99,6 +111,7 @@ const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.cre
   eyebrow: { textTransform: 'uppercase', letterSpacing: 1.2, fontFamily: fonts.mono, color: colors.accent, fontSize: 12, },
   title: { fontFamily: fonts.display, color: colors.text, fontSize: 28, letterSpacing: 0.2 },
   content: { fontFamily: fonts.body, color: colors.text, fontSize: 17, lineHeight: 25 },
+  record: { gap: 10 },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: 8 },
   label: { textTransform: 'uppercase', letterSpacing: 1.2, fontFamily: fonts.mono, color: colors.muted, fontSize: 12, marginTop: 8 },
   value: { fontFamily: fonts.body, color: colors.text, fontSize: 17, lineHeight: 25 },

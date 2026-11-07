@@ -62,10 +62,15 @@ private struct Harness {
     registry.setFocused(generation, active: true)
   }
 
-  func admit(_ sequence: UInt64, id: String? = "wire-id", snapshot: String = "{\"registration\":{},\"request\":\"exact\"}",
+  func admit(_ sequence: UInt64, id: String? = "wire-id", snapshot: String? = nil,
              replies: Replies = Replies()) -> (String, Replies) {
+    let request: [String: Any] = ["type": "relay.publish", "id": id ?? "wire-id",
+      "event": ["kind": 1, "content": "Owned ordinary approval fixture", "tags": [], "created_at": 1]]
+    let raw = String(decoding: try! JSONSerialization.data(withJSONObject: request), as: UTF8.self)
+    let ordinary = String(decoding: try! JSONSerialization.data(withJSONObject:
+      ["registration": [String: String](), "request": raw]), as: UTF8.self)
     #expect(leases.consumeSequence(generation, sequence: sequence))
-    let token = registry.admit(generation, snapshot: snapshot, wireId: id) { replies.add($0) }
+    let token = registry.admit(generation, snapshot: snapshot ?? ordinary, wireId: id) { replies.add($0) }
     return (try! #require(token), replies)
   }
 }
@@ -322,5 +327,66 @@ private func waitForReplies(_ replies: Replies, count: Int) async {
   }
   #expect(throws: (any Error).self) {
     _ = try CapabilityConfiguration(raw(fixture: "state-lab", domains: ["identity", "storage", "relay", "theme"]), generation: "generation")
+  }
+}
+
+
+@Test func malformedEnvelopeOrRequestCannotReachReviewOrApproval() {
+  for snapshot in ["not-json", "{\"registration\":{},\"request\":\"exact\"}",
+      "{\"registration\":{},\"request\":\"[]\"}"] {
+    let harness = Harness()
+    harness.focusAndForeground()
+    let (token, _) = harness.admit(1, snapshot: snapshot)
+    #expect(harness.registry.take(token) != nil)
+    #expect(!harness.registry.mayReview(token))
+    #expect(!harness.registry.approve(token))
+    #expect(!harness.registry.isApproved(token))
+    harness.registry.finish(token, response: nil)
+  }
+}
+
+@Test func claimedRawAppDataReportsOnlyCorrelatedPreApprovalFailure() async throws {
+  let harness = Harness()
+  harness.focusAndForeground()
+  let snapshot = #"{"registration":{},"request":"{\"type\":\"relay.publish\",\"id\":\"soy-error\",\"event\":{\"kind\":30078,\"content\":\"{}\",\"tags\":[[\"d\",\"soy.app-data/1:claimed\"]]}}"}"#
+  let (token, replies) = harness.admit(1, id: "soy-error", snapshot: snapshot)
+  #expect(harness.registry.take(token) != nil)
+  #expect(!harness.registry.mayReview(token))
+  #expect(!harness.registry.approve(token))
+  harness.registry.failOutbox(token, error: "app-data-conflict")
+  await waitForReplies(replies, count: 1)
+  let response = try #require(replies.all.first!)
+  let row = try #require(JSONSerialization.jsonObject(with: Data(response.utf8)) as? [String: Any])
+  #expect(row["type"] as? String == "relay.publish.result")
+  #expect(row["id"] as? String == "soy-error")
+  #expect(row["ok"] as? Bool == false)
+  #expect(row["error"] as? String == "app-data-conflict")
+  #expect(!harness.registry.isLive(token))
+  harness.registry.failOutbox(token, error: "stale-second-error")
+  await waitForReplies(replies, count: 2)
+  #expect(replies.all.count == 1)
+}
+
+@Test func rawAppDataReporterCannotAffectOrdinaryMalformedOrForeignRows() async {
+  let tokens = TokenSource()
+  let owner = Harness(generation: "owner", tokenSource: tokens)
+  let foreign = Harness(generation: "foreign", tokenSource: tokens)
+  let ordinary = Harness(generation: "ordinary", tokenSource: tokens)
+  let malformed = Harness(generation: "malformed", tokenSource: tokens)
+  for harness in [owner, foreign, ordinary, malformed] { harness.focusAndForeground() }
+  let snapshot = #"{"registration":{},"request":"{\"type\":\"relay.publish\",\"id\":\"soy-error\",\"event\":{\"kind\":30078,\"content\":\"{}\",\"tags\":[[\"d\",\"soy.app-data/1:claimed\"]]}}"}"#
+  let (owned, ownedReplies) = owner.admit(1, snapshot: snapshot)
+  let (other, otherReplies) = foreign.admit(1, snapshot: snapshot)
+  let (plain, plainReplies) = ordinary.admit(1)
+  let (bad, badReplies) = malformed.admit(1, snapshot: "not-json")
+  for (harness, token) in [(owner, owned), (foreign, other), (ordinary, plain), (malformed, bad)] { #expect(harness.registry.take(token) != nil) }
+  foreign.registry.failOutbox(owned, error: "foreign-error")
+  ordinary.registry.failOutbox(plain, error: "ordinary-error")
+  malformed.registry.failOutbox(bad, error: "malformed-error")
+  await waitForReplies(plainReplies, count: 1)
+  for replies in [ownedReplies, otherReplies, plainReplies, badReplies] { #expect(replies.all.isEmpty) }
+  for (harness, token) in [(owner, owned), (foreign, other), (ordinary, plain), (malformed, bad)] {
+    #expect(harness.registry.isLive(token))
+    harness.registry.finish(token, response: nil)
   }
 }

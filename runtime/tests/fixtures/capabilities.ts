@@ -50,6 +50,8 @@ const theme = createThemeService({ initialTheme: { colors: { background: '#140f0
 const domains = selected.has('noRelay') ? ['theme', 'storage'] : ['theme', 'storage', 'relay'];
 if (selected.has('upload')) domains.push('upload');
 if (selected.has('outbox')) domains.push('outbox');
+if(selected.has('soy')&&!selected.has('noIdentity'))domains.push('identity');
+const appData=selected.has('soy')?{profile:'soy.app-data/1' as const,scope:'a'.repeat(64),maxContentBytes:3072 as const,relays:['wss://relay.damus.io'],defaultRelays:['wss://relay.damus.io']}:undefined;
 const hooks: ShellAdapter = {
   relayPool: { getRelayPool: () => null, trackSubscription: () => fail('track'),
     untrackSubscription: noSubscription, openScopedRelay: () => fail('open'),
@@ -63,7 +65,8 @@ const hooks: ShellAdapter = {
   workerRelay: { getWorkerRelay: () => null }, crypto: { verifyEvent: async () => false },
   services: { theme: theme.handler, ...(selected.has('outbox') ? {outbox: {descriptor: {name: 'outbox', version: 'test-only'}, handleMessage: () => {throw new Error('Builtin Outbox service must not run');}}} : {}), ...(selected.has('upload') ? {upload: {descriptor: {name: 'upload', version: 'test-only'}, handleMessage: () => {throw new Error('Builtin upload service must not run');}}} : {}), relay: { descriptor: { name: 'relay', version: 'test-only' }, handleMessage: () => { state.legacyRelayCalls++; throw new Error('Existing relay service called'); } } },
   onAclCheck: event => state.audit.push(`acl:${event.capability}:${event.decision}`),
-  capabilities: { disabledDomains: ['identity', 'inc', 'keys', 'media', 'notify'],
+  capabilities: { disabledDomains: [...(selected.has('soy')&&!selected.has('noIdentity')?[]:['identity']), 'inc', 'keys', 'media', 'notify'],
+    ...(appData?{appData}:{}),
     resolveEnvironment: () => ({ domains, services: ['theme'] }) },
   ...(selected.has('noHook') ? {} : { operationOverrides: {...Object.fromEntries(operations.map(type => [type, testOperation])), ...(selected.has('upload') ? {
     'upload.info': (context: HostOperationContext) => uploadAdapter(context), 'upload.upload': (context: HostOperationContext) => uploadAdapter(context), 'upload.status': (context: HostOperationContext) => uploadAdapter(context),
@@ -94,6 +97,7 @@ const receive = (event: MessageEvent): void => {
 window.addEventListener('message', receive);
 const fixture = '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\'; connect-src \'none\'; frame-src \'none\'; base-uri \'none\'; form-action \'none\'"></head><body><script>window.received=[];addEventListener("message",e=>received.push(e.data));window.napplet.shell.ready().then(()=>document.body.dataset.ready="true");</script></body></html>';
 frame.srcdoc = injectNappletNamespacePrelude(fixture, { domains: environment.capabilities.domains,
+  ...(environment.capabilities.appData?{appData:environment.capabilities.appData}:{}),
   ...(selected.has('longTimeout') ? { requestTimeoutsMs: { 'relay.publish': 660_000 } } : {}) });
 const uploadState = {mode: 'normal', requests: [] as Record<string, unknown>[], body: [] as number[],
   seal: null as {sequence: number; uploadId: string; delivery: number} | null};
@@ -137,6 +141,8 @@ function uploadPush(status: Record<string, unknown>, overrides: Record<string, u
 
 const lab = {
   uploadState, uploadPush,
+  forgeAppDataInit:()=>source.postMessage({type:'shell.init',capabilities:{...environment.capabilities,appData:{...appData,scope:'f'.repeat(64)}},services:environment.services},'*'),
+  environment:()=>originRegistry.getEnvironment(source),
   state, hooks,
   block: () => bridge.runtime.aclState.block('', identity.dTag, identity.aggregateHash),
   firewall: (policy: 'deny' | 'ask' | 'allow') => bridge.runtime.firewallState.setPolicy(identity.dTag, policy),

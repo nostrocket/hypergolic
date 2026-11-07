@@ -83,6 +83,7 @@ Hosted Expo updates are disabled.
 | Workspace | [Storage](workspace-storage.md), [optional close check](close-check.md) |
 | Published artifacts | [Network boundary](published-network.md), [native registry](published-artifact-registry.md), [Discover](discovery.md), [opening from Discover](published-open.md) |
 | Relay operations | [Relay settings](relays.md), [query](relay-query.md), [subscriptions](relay-subscriptions.md), [Outbox](outbox-routing.md) |
+| Public application records | [Shared application data](shared-app-data.md) |
 | Other capabilities | [Resources](resource-access.md), [uploads](upload-access.md), [identity data](public-identity-data.md), [links](external-links.md), [intent/INC](intent-inc.md), [notifications/configuration](notifications-configuration.md), [encrypted CVM](cvm.md) |
 | Build dependencies | [Patches](dependency-patches.md), [notices and provenance](native-dependency-notices.md) |
 

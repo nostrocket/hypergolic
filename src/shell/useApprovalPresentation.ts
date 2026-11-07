@@ -5,6 +5,7 @@ import { isSignerFailureCode, signerFailureMessage } from '../security/signing-m
 import type {ApprovalItem,ApprovalService} from '../security/approval-service';
 import type {OutboxPublicationReceipt} from '../outbox/publication-receipt';
 import type {RelayOutcome} from '../network/relay-service';
+import {appDataPublicationStatus} from './app-data-publication-status';
 type Presentation=Readonly<{service:ApprovalService;epoch:number;id:string;held:ApprovalItem|null;busy:boolean;receipt:OutboxPublicationReceipt|null;outcome:string|null}>;
 function publicationStatus(results:readonly RelayOutcome[]):string {
  let accepted=0,unknown=0;
@@ -20,7 +21,7 @@ export function useApprovalPresentation(service:ApprovalService,epoch:number,rev
   if(reviewSlot ? !reviewSlot.holdApproval(item) : state?.busy)return;
   const pending:Presentation={service,epoch,id:item.id,held:item,busy:true,receipt:null,outcome:null};setStored(pending);
   void service.approve(item.id).then(results=>{
-   const receipt=service.outboxReceipt(results),outcome=receipt?null:publicationStatus(results);
+   const receipt=service.outboxReceipt(results),outcome=receipt?null:item.appData?appDataPublicationStatus(results):publicationStatus(results);
    if(!receipt)reviewSlot?.releaseApproval(item.id);
    setStored(current=>current===pending?{...pending,held:null,busy:false,receipt,outcome}:current);
   }).catch(error=>{

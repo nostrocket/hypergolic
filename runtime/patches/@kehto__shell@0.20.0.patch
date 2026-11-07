@@ -1,32 +1,7 @@
-diff --git a/dist/index.d.ts b/dist/index.d.ts
-index 0ec36f0..a6bdd59 100644
---- a/dist/index.d.ts
-+++ b/dist/index.d.ts
-@@ -350,6 +350,8 @@ interface ShellEnvironment {
-  * ```
-  */
- interface ShellAdapter {
-+    /** Whole-operation host hooks, forwarded without changing existing service semantics. */
-+    operationOverrides?: RuntimeAdapter['operationOverrides'];
-     relayPool: RelayPoolHooks;
-     relayConfig: RelayConfigHooks;
-     windowManager: WindowManagerHooks;
-@@ -599,6 +601,10 @@ interface NappletNamespacePreludeOptions {
-      * Mandatory `shell` is injected even when omitted here.
-      */
-     domains: readonly string[];
-+    /** Host-only per-operation deadlines in milliseconds; omitted operations remain 30000.
-+     * Values must be safe integers from 1 through 2147483647. Never a napplet wire field.
-+     */
-+    requestTimeoutsMs?: Readonly<Record<string, number>>;
- }
- /**
-  * Render the host-owned NIP-5D bootstrap that exposes available NAP domains
 diff --git a/dist/index.js b/dist/index.js
-index 523bcf1..243479b 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -312,6 +312,7 @@ function adaptHooks(shellHooks, deps) {
+@@ -312,6 +312,7 @@
      onAclCheck: shellHooks.onAclCheck,
      onHashMismatch: shellHooks.onHashMismatch,
      services: shellHooks.services,
@@ -34,7 +9,59 @@ index 523bcf1..243479b 100644
      getConfigOverrides: shellHooks.getConfigOverrides
    };
  }
-@@ -1032,6 +1033,7 @@ function isServiceDomainLive(hooks, domain) {
+@@ -397,7 +398,8 @@
+     const entry = registry.get(win);
+     if (!entry) return;
+     entry.environment = Object.freeze({
+-      capabilities: Object.freeze({ domains: Object.freeze([...environment.capabilities.domains]) }),
++      capabilities: Object.freeze({ domains: Object.freeze([...environment.capabilities.domains]),
++        ...(eligibleAppData(environment.capabilities.appData, environment.capabilities.domains) ? {appData: eligibleAppData(environment.capabilities.appData, environment.capabilities.domains)} : {}) }),
+       services: Object.freeze([...environment.services])
+     });
+   },
+@@ -1002,13 +1004,30 @@
+   "count",
+   "fs"
+ ];
++// Selected host policy extension; this public hint never authorizes an operation.
++function snapshotAppData(value) {
++  if (value === undefined || value === null) return undefined;
++  const fields = ["profile", "scope", "maxContentBytes", "relays", "defaultRelays"];
++  if (typeof value !== "object" || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) throw new TypeError("Invalid app-data host policy");
++  const own = Object.getOwnPropertyDescriptors(value);
++  if (Reflect.ownKeys(value).length !== fields.length || fields.some(key => !own[key] || !("value" in own[key]))) throw new TypeError("Invalid app-data host policy");
++  const row = Object.fromEntries(fields.map(key => [key, own[key].value]));
++  if (row.profile !== "soy.app-data/1" || typeof row.scope !== "string" || !/^[a-f0-9]{64}$/.test(row.scope) || row.maxContentBytes !== 3072 || !Array.isArray(row.relays) || row.relays.length < 1 || row.relays.length > 8 || !Array.isArray(row.defaultRelays) || row.defaultRelays.length !== 1) throw new TypeError("Invalid app-data host policy");
++  const relays = Array.from(row.relays);
++  if (relays.some(url => typeof url !== "string" || url.length > 256 || !url.startsWith("wss://")) || new Set(relays).size !== relays.length || row.defaultRelays[0] !== relays[0]) throw new TypeError("Invalid app-data host policy");
++  return Object.freeze({ profile: row.profile, scope: row.scope, maxContentBytes: row.maxContentBytes, relays: Object.freeze(relays), defaultRelays: Object.freeze([relays[0]]) });
++}
++function eligibleAppData(value, domains) {
++  return (domains.includes("outbox") || domains.includes("relay")) && domains.includes("identity") ? snapshotAppData(value) : undefined;
++}
+ function buildShellCapabilities(hooks) {
+   const disabled = new Set(hooks.capabilities?.disabledDomains ?? []);
+   const domains = RUNTIME_NATIVE_DOMAINS.filter((domain) => !disabled.has(domain));
+   for (const domain of SERVICE_ONLY_DOMAINS) {
+     if (!disabled.has(domain) && isServiceDomainLive(hooks, domain)) domains.push(domain);
+   }
+-  return Object.freeze({ domains: freezeList(domains) });
++  return Object.freeze({ domains: freezeList(domains),
++    ...(eligibleAppData(hooks.capabilities?.appData, domains) ? {appData: eligibleAppData(hooks.capabilities.appData, domains)} : {}) });
+ }
+ function resolveShellEnvironment(hooks, identity) {
+   const capabilities = buildShellCapabilities(hooks);
+@@ -1021,7 +1040,8 @@
+   const granted = hooks.capabilities?.resolveEnvironment?.(identity, available) ?? available;
+   return Object.freeze({
+     capabilities: Object.freeze({
+-      domains: freezeList(intersectInOrder(available.domains, granted.domains))
++      domains: freezeList(intersectInOrder(available.domains, granted.domains)),
++      ...(eligibleAppData(capabilities.appData, intersectInOrder(available.domains, granted.domains)) ? {appData: eligibleAppData(capabilities.appData, intersectInOrder(available.domains, granted.domains))} : {})
+     }),
+     services: freezeList(intersectInOrder(available.services, granted.services))
+   });
+@@ -1032,6 +1052,7 @@
      case "outbox":
        return Boolean(hooks.relayPool);
      case "upload":
@@ -42,7 +69,7 @@ index 523bcf1..243479b 100644
        return hooks.upload?.getUploader() !== null && hooks.upload?.getUploader() !== void 0;
      case "intent":
        return hooks.intent?.isAvailable() === true;
-@@ -1265,7 +1267,15 @@ function scriptJson(value) {
+@@ -1265,7 +1286,15 @@
  }
  function renderNappletNamespacePrelude(options) {
    const domains = uniqueBareDomains(["shell", ...options.domains]);
@@ -55,18 +82,20 @@ index 523bcf1..243479b 100644
 +    }
 +    requestTimeoutsMs[operation] = timeout;
 +  }
-+  return `<script data-kehto-nip5d-injection>(${nappletNamespacePrelude.toString()})(${scriptJson(domains)},${scriptJson(requestTimeoutsMs)});</script>`;
++  return `<script data-kehto-nip5d-injection>(${nappletNamespacePrelude.toString()})(${scriptJson(domains)},${scriptJson(requestTimeoutsMs)},(${snapshotAppData.toString()})(${scriptJson(eligibleAppData(options.appData, domains) ?? null)}));</script>`;
  }
  function injectNappletNamespacePrelude(html, options) {
    const prelude = renderNappletNamespacePrelude(options);
-@@ -1281,13 +1291,18 @@ function injectNappletNamespacePrelude(html, options) {
+@@ -1281,13 +1310,20 @@
    }
    return `${prelude}${html}`;
  }
 -function nappletNamespacePrelude(domains) {
-+function nappletNamespacePrelude(domains, requestTimeoutsMs = {}) {
++function nappletNamespacePrelude(domains, requestTimeoutsMs = {}, appData) {
    const target = window;
    const allowed = new Set(domains);
++  const policyJSON = JSON.stringify(appData);
++  const policyStringify = JSON.stringify.bind(JSON);
    const requestTimeoutMs = 3e4;
    function id() {
 -    if (target.crypto?.randomUUID) return target.crypto.randomUUID();
@@ -81,7 +110,7 @@ index 523bcf1..243479b 100644
    }
    function post(message) {
      target.parent.postMessage(message, "*");
-@@ -1304,7 +1319,7 @@ function nappletNamespacePrelude(domains) {
+@@ -1304,7 +1340,7 @@
      const outbound = { ...message, id: requestId };
      return new Promise((resolve, reject) => {
        const off = listen((event) => {
@@ -90,7 +119,7 @@ index 523bcf1..243479b 100644
          const incoming = event.data;
          if (typeof incoming !== "object" || incoming === null) return;
          const msg = incoming;
-@@ -1326,7 +1341,7 @@ function nappletNamespacePrelude(domains) {
+@@ -1326,7 +1362,7 @@
        const timer = setTimeout(() => {
          off();
          reject(new Error(`${message.type} timed out`));
@@ -99,7 +128,17 @@ index 523bcf1..243479b 100644
        post(outbound);
      });
    }
-@@ -1813,6 +1828,17 @@ function nappletNamespacePrelude(domains) {
+@@ -1418,7 +1454,8 @@
+       const domains2 = freezeStrings(rawDomains);
+       const services = freezeStrings(Array.isArray(message.services) ? message.services : []);
+       environment = Object.freeze({
+-        capabilities: Object.freeze({ domains: domains2 }),
++        capabilities: Object.freeze({ domains: domains2,
++          ...(appData && policyStringify(rawCapabilities.appData) === policyJSON ? {appData} : {}) }),
+         services
+       });
+       off();
+@@ -1813,6 +1850,17 @@
      "submit"
    ]);
    let keysSmartForwardingInstalled = false;
@@ -117,7 +156,7 @@ index 523bcf1..243479b 100644
    function normalizeKeyName(key) {
      if (typeof key !== "string") return "";
      return key.length === 1 ? key.toUpperCase() : key;
-@@ -1821,6 +1847,7 @@ function nappletNamespacePrelude(domains) {
+@@ -1821,6 +1869,7 @@
      return `${value.ctrl}|${value.alt}|${value.shift}|${value.meta}|${normalizeKeyName(value.key)}`;
    }
    function bindingComboKey(binding) {
@@ -125,7 +164,7 @@ index 523bcf1..243479b 100644
      if (typeof binding !== "string" || binding.trim() === "") return null;
      const parts = binding.split("+");
      const key = parts.pop()?.trim();
-@@ -1904,24 +1931,48 @@ function nappletNamespacePrelude(domains) {
+@@ -1904,24 +1953,48 @@
      if (keysSmartForwardingInstalled) return;
      keysSmartForwardingInstalled = true;
      listen((event) => {
@@ -180,7 +219,7 @@ index 523bcf1..243479b 100644
          keyEvent.preventDefault?.();
          notifyKeyAction(actionId);
          return;
-@@ -1958,7 +2009,7 @@ function nappletNamespacePrelude(domains) {
+@@ -1958,7 +2031,7 @@
          }
          callbacks.add(callback);
          const off = listen((event) => {
@@ -189,7 +228,7 @@ index 523bcf1..243479b 100644
            const msg = event.data;
            if (typeof msg === "object" && msg !== null && msg.type === "keys.action" && msg.actionId === actionId) callback();
          });
-@@ -2047,7 +2098,7 @@ function nappletNamespacePrelude(domains) {
+@@ -2047,7 +2120,7 @@
          const off = listen((event) => {
            if (!isParentMessage(event)) return;
            const msg = event.data;
@@ -198,7 +237,7 @@ index 523bcf1..243479b 100644
          });
          fire({ type: "config.subscribe" });
          return subscriptionHandle(() => {
-@@ -2071,18 +2122,42 @@ function nappletNamespacePrelude(domains) {
+@@ -2071,18 +2144,42 @@
    }
    function makeResource() {
      const objectUrls = /* @__PURE__ */ new Set();
@@ -243,7 +282,7 @@ index 523bcf1..243479b 100644
              if (objectUrl) {
                URL.revokeObjectURL(objectUrl);
                objectUrls.delete(objectUrl);
-@@ -2090,14 +2165,17 @@ function nappletNamespacePrelude(domains) {
+@@ -2090,14 +2187,17 @@
              }
            }
          };
@@ -262,7 +301,7 @@ index 523bcf1..243479b 100644
          for (const url of objectUrls) URL.revokeObjectURL(url);
          objectUrls.clear();
        }
-@@ -2265,25 +2343,85 @@ function nappletNamespacePrelude(domains) {
+@@ -2265,25 +2365,85 @@
          ...Object.keys(sanitizedBehavior).length === 0 ? {} : { behavior: sanitizedBehavior }
        };
      };
@@ -276,6 +315,7 @@ index 523bcf1..243479b 100644
 -        "intent.invoke.result",
 -        (msg) => fieldOrThrow(msg, "result", "intent.invoke.result missing result")
 -      );
+-    };
 +    const fromUri = (uri, options = {}) => {
 +      if (!options || typeof options !== "object" || Array.isArray(options) ||
 +          Object.keys(options).some((key) => !["payload", "handler", "behavior"].includes(key))) {
@@ -319,7 +359,7 @@ index 523bcf1..243479b 100644
 +      }
 +      for (const handler of [...deliveryHandlers]) notify(handler, delivery);
 +      consume(receipt);
-     };
++    };
 +    target.parent.postMessage({ type: "hypergolic.intent.delivery-port" }, "*", [channel.port2]);
 +    const invokeRequest = (value, modern) => request(
 +      { type: "intent.invoke", request: normalizeRequest(value) },
@@ -364,7 +404,7 @@ index 523bcf1..243479b 100644
        available: (archetype) => request(
          { type: "intent.available", archetype },
          "intent.available.result",
-@@ -2367,7 +2505,10 @@ function nappletNamespacePrelude(domains) {
+@@ -2367,7 +2527,10 @@
        open: (url, options) => request(
          { type: "link.open", url, ...options ? { options } : {} },
          "link.open.result",
@@ -376,7 +416,7 @@ index 523bcf1..243479b 100644
          { rejectOnError: false }
        )
      };
-@@ -2396,7 +2537,12 @@ function nappletNamespacePrelude(domains) {
+@@ -2396,7 +2559,12 @@
        encodeNip19: (input) => req("common.encodeNip19", { input }),
        decodeNip19: (value) => req("common.decodeNip19", { value }),
        getProfile: (targetValue) => req("common.getProfile", { target: targetValue }),
@@ -390,7 +430,7 @@ index 523bcf1..243479b 100644
        follow: (...pubkeys) => req("common.follow", { pubkeys }),
        unfollow: (...pubkeys) => req("common.unfollow", { pubkeys }),
        react: (targetEventId, reaction, customEmojiHref) => req("common.react", {
-@@ -2479,7 +2625,7 @@ function nappletNamespacePrelude(domains) {
+@@ -2479,7 +2647,7 @@
      return intent;
    }
    function isProtectedDomain(domain) {
@@ -399,7 +439,7 @@ index 523bcf1..243479b 100644
    }
    function makeDomain(domain, existing) {
      if (domain === "shell") return shell;
-@@ -2487,14 +2633,13 @@ function nappletNamespacePrelude(domains) {
+@@ -2487,14 +2655,13 @@
      if (domain === "identity") return makeProtectedIdentity();
      if (domain === "theme") return makeProtectedTheme();
      if (domain === "intent") return makeProtectedIntent();
@@ -415,3 +455,57 @@ index 523bcf1..243479b 100644
        case "media":
          return makeMedia();
        case "notify":
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -241,7 +241,16 @@
+  * temporarily suppress domains to simulate smaller or policy-constrained shell
+  * environments while still using the production shell-ready path.
+  */
++/** Selected soy.app-data/1 host-policy hint; grants and publication review remain independent. */
++interface ShellAppDataPolicy {
++    readonly profile: 'soy.app-data/1';
++    readonly scope: string;
++    readonly maxContentBytes: 3072;
++    readonly relays: readonly string[];
++    readonly defaultRelays: readonly string[];
++}
+ interface CapabilityHooks {
++    readonly appData?: ShellAppDataPolicy;
+     /** Bare capability domains to remove from the delivered environment. */
+     readonly disabledDomains?: readonly string[];
+     /**
+@@ -325,6 +334,7 @@
+  * `shell.supports(domain)` locally from this snapshot after `shell.init`.
+  */
+ interface ShellCapabilities {
++    readonly appData?: ShellAppDataPolicy;
+     /** Immutable bare domain names the shell offers to this napplet. */
+     readonly domains: readonly string[];
+ }
+@@ -350,6 +360,8 @@
+  * ```
+  */
+ interface ShellAdapter {
++    /** Whole-operation host hooks, forwarded without changing existing service semantics. */
++    operationOverrides?: RuntimeAdapter['operationOverrides'];
+     relayPool: RelayPoolHooks;
+     relayConfig: RelayConfigHooks;
+     windowManager: WindowManagerHooks;
+@@ -594,11 +606,16 @@
+  * ```
+  */
+ interface NappletNamespacePreludeOptions {
++    readonly appData?: ShellAppDataPolicy;
+     /**
+      * Optional bare NAP domain names the shell exposes to this napplet.
+      * Mandatory `shell` is injected even when omitted here.
+      */
+     domains: readonly string[];
++    /** Host-only per-operation deadlines in milliseconds; omitted operations remain 30000.
++     * Values must be safe integers from 1 through 2147483647. Never a napplet wire field.
++     */
++    requestTimeoutsMs?: Readonly<Record<string, number>>;
+ }
+ /**
+  * Render the host-owned NIP-5D bootstrap that exposes available NAP domains

@@ -1,3 +1,5 @@
+import {appDataReadPlan} from '../app-data/app-data-read.ts';
+import {assertCurrentAppDataSettings,type AppDataContext} from '../app-data/app-data-context.ts';
 import type { QueryBatchVerifier } from '../network/native-event-verifier.ts';
 import {createOutboxReadAdmission} from './read-admission.ts';
 import {createNativeRelayQuery, type RelayQueryResult} from '../network/native-relay-query.ts';
@@ -16,8 +18,8 @@ export type NativeOutboxQueryPort = Pick<NativePublishedRelayPort, 'newInstanceI
   queryOutboxRelay(token: string, operationId: string, url: string, requestText: string, subscriptionId: string, timeoutMs: number): Promise<string[]>;
 };
 export interface OutboxReadService {
-  query(input: unknown, user: string, signal: AbortSignal, assertActive: () => void, nativeToken: string): Promise<OutboxReadResult>;
-  getEvent?(input: unknown, user: string, signal: AbortSignal, assertActive: () => void, nativeToken: string): Promise<OutboxEventResult>;
+  query(input: unknown, user: string, signal: AbortSignal, assertActive: () => void, nativeToken: string, appData?:AppDataContext): Promise<OutboxReadResult>;
+  getEvent?(input: unknown, user: string, signal: AbortSignal, assertActive: () => void, nativeToken: string, appData?:AppDataContext): Promise<OutboxEventResult>;
   resolveRelays?(input: unknown, user: string, signal: AbortSignal, assertActive: () => void): Promise<OutboxReadPlan>;
   plan?(input: unknown, user: string, signal: AbortSignal, assertActive: () => void, refresh?: boolean): Promise<OutboxReadPlan>;
 }
@@ -83,20 +85,22 @@ export function createOutboxReadService(resolver: OutboxAuthorResolver,
       return Object.freeze({...selected,relays:Object.freeze(relays),incomplete:false});
     });
   }
-  async function query(input: unknown,user: string,signal: AbortSignal,assertActive: () => void, nativeToken: string): Promise<OutboxReadResult> {
+  async function query(input: unknown,user: string,signal: AbortSignal,assertActive: () => void, nativeToken: string, appData?:AppDataContext): Promise<OutboxReadResult> {
     const request = parseOutboxQuery(input);
     if (!nativeToken) throw new OutboxQueryError('policy denied');
     return bounded(request.options.timeoutMs,signal,assertActive,async (leased,active,remaining) => {
       const wide = request.filters.length > QUERY_LIMITS.filters;
       const planning = {wide, timeoutMs:Math.max(1, Math.floor(remaining() / 2))};
-      const plan = await route(request,user,leased,active,false,planning); active();
+      const storage=appDataReadPlan(request,appData,settings().networkRelays);
+      const current=()=>{active();if(storage&&appData)assertCurrentAppDataSettings(appData,settings().networkRelays);};
+      const plan = storage ?? await route(request,user,leased,current,false,planning); current();
       const transport = createNativeRelayQuery({
         newInstanceId: () => native.newInstanceId(),
         queryPublishedRelay: (id, url, wire, sub, timeoutMs) => native.queryOutboxRelay(nativeToken,id,url,wire,sub,timeoutMs!),
         cancelPublishedRelay: id => native.cancelPublishedRelay(id),
       },() => plan.relays,remaining(true),{allowPartialOnLimit:true,outbox:true,...(verifyBatch ? {verifyBatch} : {})});
-      const result = await transport.queryDetailed(capOutboxFilters(request.filters,OUTBOX_QUERY_COUNTS.events),leased,active,
-        {maximumFilters:wide ? OUTBOX_QUERY_FILTERS : QUERY_LIMITS.filters, allowSearch:true}); active();
+      const result = await transport.queryDetailed(capOutboxFilters(request.filters,OUTBOX_QUERY_COUNTS.events),leased,current,
+        {maximumFilters:wide ? OUTBOX_QUERY_FILTERS : QUERY_LIMITS.filters, allowSearch:true}); current();
       const maximum = OUTBOX_QUERY_COUNTS.events;
       const capped = result.events.length === maximum &&
         (request.options.limit > maximum ||
@@ -107,10 +111,10 @@ export function createOutboxReadService(resolver: OutboxAuthorResolver,
   }
   return Object.freeze({
     query,
-    async getEvent(input: unknown,user: string,signal: AbortSignal,active: () => void,nativeToken: string): Promise<OutboxEventResult> {
+    async getEvent(input: unknown,user: string,signal: AbortSignal,active: () => void,nativeToken: string, appData?:AppDataContext): Promise<OutboxEventResult> {
       const request = parseOutboxEvent(input);
       const result = await query({type:'outbox.query',id:request.id,filters:{ids:[request.eventId],limit:1},
-        options:{authors:request.options.author ? [request.options.author] : [],relays:request.options.relays,timeoutMs:request.options.timeoutMs,limit:1}},user,signal,active,nativeToken);
+        options:{authors:request.options.author ? [request.options.author] : [],relays:request.options.relays,timeoutMs:request.options.timeoutMs,limit:1}},user,signal,active,nativeToken,appData);
       const row = result.events[0];
       if (row && row.event.id !== request.eventId) throw new OutboxQueryError('invalid filter');
       return Object.freeze({...(row ? {result:row} : {error:'not found'}),...(result.incomplete ? {incomplete:true as const} : {})});

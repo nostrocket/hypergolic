@@ -1,3 +1,4 @@
+import {claimsAppDataTemplate} from '../app-data/app-data-contract.ts';
 import {parseCommonRequest,CommonError,type CommonSocialRequest} from '../common/common-contract.ts';
 import {hasCommonSocial} from '../common/social-plan.ts';
 import {parseOutboxPublish} from '../outbox/publication-contract.ts';
@@ -56,7 +57,7 @@ export function createNativeApprovalPort(module: ApprovalModule): NativeApproval
         const requestId = text(value.id, 128);
         const lease = Object.freeze({});
         tokens.set(lease, token);
-        return Object.freeze({ lease, origin: registration, requestId, event: value.event,...(outboxRequest?{outboxRequest}:{}),...(commonRequest?{commonRequest,commonRegistration:registration}:{}) });
+        return Object.freeze({ lease, origin: registration, requestId, event: value.event,...(outboxRequest?{outboxRequest}:{}),...(claimsAppDataTemplate(value.event)?{appDataRequest:Object.freeze({...value}),appDataRegistration:registration}:{}),...(commonRequest?{commonRequest,commonRegistration:registration}:{}) });
       } catch(error) {
         if(common&&module.failCommonApproval){try{module.failCommonApproval(token,error instanceof CommonError?error.message:'invalid-target');}catch{try{cancelCaptured(token);}catch{/* Cleanup was attempted; native lifecycle and expiry remain authoritative. */}}return null;}
         try { module.cancelApproval(token); } finally { module.finishApproval(token, null); }
@@ -80,11 +81,22 @@ export function createNativeApprovalPort(module: ApprovalModule): NativeApproval
         else cancelCaptured(token);
       }finally{tokens.delete(lease);}
     },
-    async publishOutbox(lease,group,event,destinations,execution){
+    async publishOutbox(lease,group,event,destinations,execution,settleAll){
       const token=tokenFor(lease);if(!module.publishOutboxApproval)throw new Error('APPROVAL_DENIED');
       const rows:unknown[]=[],publish=module.publishOutboxApproval.bind(module),wire=JSON.stringify(event);
-      async function worker(index:number):Promise<void>{if(index>=destinations.length)return;execution.assertActive();const raw=await publish(token,group,wire,destinations[index]!);execution.assertActive();rows[index]=JSON.parse(raw);return worker(index+4);}
-      await Promise.all([worker(0),worker(1),worker(2),worker(3)]);execution.assertActive();return Object.freeze(rows) as Awaited<ReturnType<NonNullable<NativeApprovalLeasePort['publishOutbox']>>>;
+      async function worker(index:number):Promise<void>{
+        if(index>=destinations.length)return;execution.assertActive();
+        try{const raw=await publish(token,group,wire,destinations[index]!);execution.assertActive();rows[index]=JSON.parse(raw);}
+        catch(error){if(!settleAll)throw error;execution.assertActive();rows[index]={relay:destinations[index]!,eventId:event.id,status:'unknown',reason:'app-data-publication-result-unavailable'};}
+        execution.assertActive();return worker(index+4);
+      }
+      const work=[worker(0),worker(1),worker(2),worker(3)];
+      if(settleAll){
+        const results=await Promise.allSettled(work);
+        const failed=results.find(result=>result.status==='rejected');
+        if(failed?.status==='rejected')throw failed.reason;
+      }else await Promise.all(work);
+      execution.assertActive();return Object.freeze(rows) as Awaited<ReturnType<NonNullable<NativeApprovalLeasePort['publishOutbox']>>>;
     },
     prepareSigning: (lease, snapshot) => module.prepareApprovalSigning(tokenFor(lease), JSON.stringify(snapshot)),
     signingSource: lease => Object.freeze({ kind: 'approval', token: tokenFor(lease) }),

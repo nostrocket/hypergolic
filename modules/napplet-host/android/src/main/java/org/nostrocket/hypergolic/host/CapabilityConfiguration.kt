@@ -16,6 +16,7 @@ internal class CapabilityConfiguration(raw: String, generation: String, allowPub
   val appId: String
   val version: String
   val grantedDomains: List<String>
+  val appData: String?
   val mediaProfile: String?
   val commonProfile: String?
   val cvmProfile: String?
@@ -27,7 +28,8 @@ internal class CapabilityConfiguration(raw: String, generation: String, allowPub
     val common = value.has("commonProfile")
     val cvm = value.has("cvmProfile")
     val media=value.has("mediaProfile")
-    require(value.keys().asSequence().toSet() == names + (if(open)setOf("publishedOpen") else emptySet()) + (if(common)setOf("commonProfile") else emptySet()) + (if(cvm)setOf("cvmProfile") else emptySet()) + (if(media)setOf("mediaProfile") else emptySet()))
+    val data=value.has("appData")
+    require(value.keys().asSequence().toSet() == names + (if(open)setOf("publishedOpen") else emptySet()) + (if(common)setOf("commonProfile") else emptySet()) + (if(cvm)setOf("cvmProfile") else emptySet()) + (if(media)setOf("mediaProfile") else emptySet()) + (if(data)setOf("appData") else emptySet()))
     require(!open || value.remove("publishedOpen") == true)
     fun string(name: String): String = (value.get(name) as? String) ?: error("Invalid configuration")
     for (name in listOf("sessionId", "instanceId", "fixture")) require(string(name).matches(Regex("[A-Za-z0-9_-]{1,80}")))
@@ -73,6 +75,7 @@ internal class CapabilityConfiguration(raw: String, generation: String, allowPub
     require(!open || (allowPublished && fixture == "published"))
     publishedOpen = (fixture == "napplet-discovery" && appId == "napplet-discovery") || open
     version = string("version")
+    appData = if(data) NativeAppDataPolicy.capture(value.get("appData"),publisher,appId,fixture,grantedDomains) else null
     value.put("generation", generation)
     snapshot = value.toString()
   }

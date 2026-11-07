@@ -43,16 +43,18 @@ final class PublishedArtifactReadOwner {
   private let totalBytes: Int
   private let domains: [String]
   private let publishedOpen: Bool
+  private let appData: String?
   private var bytes: Data?
   private var offset = 0
   private var nextSequence = 0
 
-  init(claimed: PublishedArtifactRegistry.ClaimedArtifact, domains: Set<String>, publishedOpen: Bool = false) {
+  init(claimed: PublishedArtifactRegistry.ClaimedArtifact, domains: Set<String>, publishedOpen: Bool = false, appData: String? = nil) {
     claims = claimed.claims
     generation = claimed.viewGeneration
     totalBytes = claimed.htmlBytes.count
     self.domains = domains.sorted()
     self.publishedOpen = publishedOpen
+    self.appData = appData
     bytes = claimed.htmlBytes
   }
 
@@ -70,6 +72,7 @@ final class PublishedArtifactReadOwner {
       "version": claims.aggregateHash, "htmlHash": claims.htmlHash, "done": done,
       "domains": domains
     ]
+    if let appData, let data = appData.data(using: .utf8), let value = try? JSONSerialization.jsonObject(with:data) { response["appData"] = value }
     if publishedOpen { response["publishedOpen"] = true }
     guard let encoded = try? JSONSerialization.data(withJSONObject: response) else { clear(); return nil }
     offset = end

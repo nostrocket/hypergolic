@@ -1,3 +1,4 @@
+import {createNativeAppDataPlanner} from '../app-data/native-app-data-plan';
 import {createNativeCommonSocialPlanner} from '../common/native-social-plan';
 import {createOutboxPublicationPlanner} from './publication-plan';
 import {requireNativeModule} from 'expo';
@@ -16,5 +17,5 @@ export function loadNativeOutboxReadService(cache: OutboxRelayListCache, setting
   const discovery = createNativeRelayQuery(native, () => settings().lookupRelays);
   const resolver=createOutboxAuthorResolver(cache,discovery);
   const publication=createOutboxPublicationPlanner(resolver,settings,{ancillaryWhenOutboxSkipped:'omit'});
-  return Object.freeze({...createOutboxReadService(resolver,native,settings,Date.now,verifier),publication,common:createNativeCommonSocialPlanner(native,resolver,settings,publication,signer)});
+  return Object.freeze({...createOutboxReadService(resolver,native,settings,Date.now,verifier),publication,appData:createNativeAppDataPlanner(native,settings,publication,verifier),common:createNativeCommonSocialPlanner(native,resolver,settings,publication,signer)});
 }

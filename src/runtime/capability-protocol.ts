@@ -1,3 +1,4 @@
+import {captureAppDataContext,type AppDataContext} from '../app-data/app-data-context.ts';
 import { parseOutboxRead, type OutboxReadRequest } from '../outbox/query-contract.ts';
 import {COMMON_OPERATIONS,parseCommonRequest,type CommonOperation,type CommonRequest} from '../common/common-contract.ts';
 import { identifier, publicKey, revision, text, utf8Bytes } from '../storage/codec.ts';
@@ -28,7 +29,7 @@ export interface NativeRegistration {
   readonly sessionId: string; readonly generation: string; readonly epoch: number;
   readonly user: string; readonly publisher: string; readonly appId: string;
   readonly version: string; readonly instanceId: string;
-  readonly fixture: string; readonly domains: readonly string[]; readonly commonProfile?: 'social-v1'; readonly cvmProfile?: 'free-foreground-v1'; readonly mediaProfile?: 'finite-live-mp3-v1';
+  readonly fixture: string; readonly domains: readonly string[]; readonly appData?: AppDataContext; readonly commonProfile?: 'social-v1'; readonly cvmProfile?: 'free-foreground-v1'; readonly mediaProfile?: 'finite-live-mp3-v1';
 }
 export type CapabilityRequest = CommonRequest | OutboxReadRequest | RelayQueryRequest | Readonly<{ type: IdentityOperation; id: string; listType?: string }>
   | Readonly<{ type: StorageOperation; id: string; key?: string; value?: string; scope: Scope }>;
@@ -50,14 +51,15 @@ function fields(value: Record<string, unknown>, required: readonly string[], opt
 }
 export function decodeNativeRegistration(value: unknown): NativeRegistration {
   const data = record(value);
-  fields(data, ['sessionId', 'generation', 'epoch', 'user', 'publisher', 'appId', 'version', 'instanceId', 'fixture', 'domains'],['commonProfile','cvmProfile','mediaProfile']);
+  fields(data, ['sessionId', 'generation', 'epoch', 'user', 'publisher', 'appId', 'version', 'instanceId', 'fixture', 'domains'],['commonProfile','cvmProfile','mediaProfile','appData']);
   if (!Array.isArray(data.domains) || data.domains.length > NATIVE_CAPABILITY_DOMAINS.length ||
       data.domains.some(domain => !NATIVE_CAPABILITY_DOMAINS.includes(domain)) || new Set(data.domains).size !== data.domains.length) return invalid();
   if(Object.prototype.hasOwnProperty.call(data,'commonProfile')&&(data.commonProfile!=='social-v1'||data.fixture!=='published'||!data.domains.includes('common')||!data.domains.includes('identity')||!data.domains.some(d=>d==='relay'||d==='outbox')))return invalid();
   if(Object.prototype.hasOwnProperty.call(data,'cvmProfile')&&(data.cvmProfile!=='free-foreground-v1'||data.fixture!=='published'||!data.domains.includes('cvm')))return invalid();
+  const appData=Object.prototype.hasOwnProperty.call(data,'appData')?captureAppDataContext(data.appData,{publisher:publicKey(data.publisher),appId:text(data.appId,1024),fixture:identifier(data.fixture),domains:data.domains as string[]}):null;
   const liveMedia=Object.prototype.hasOwnProperty.call(data,'mediaProfile');
   if(liveMedia&&(data.mediaProfile!=='finite-live-mp3-v1'||data.fixture!=='published'||!data.domains.includes('media')))return invalid();
-  return Object.freeze({ ...(liveMedia?{mediaProfile:'finite-live-mp3-v1' as const}:{}),sessionId: identifier(data.sessionId), generation: identifier(data.generation),
+  return Object.freeze({ ...(appData?{appData}:{}),...(liveMedia?{mediaProfile:'finite-live-mp3-v1' as const}:{}),sessionId: identifier(data.sessionId), generation: identifier(data.generation),
     epoch: revision(data.epoch), user: publicKey(data.user), publisher: publicKey(data.publisher),
     appId: text(data.appId, 1024), version: publicKey(data.version), instanceId: identifier(data.instanceId),
     fixture: identifier(data.fixture), ...(data.cvmProfile==='free-foreground-v1'?{cvmProfile:'free-foreground-v1' as const}:{}), ...(data.commonProfile==='social-v1'?{commonProfile:'social-v1' as const}:{}), domains: Object.freeze([...data.domains].sort()) });

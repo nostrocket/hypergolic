@@ -1,3 +1,4 @@
+import type {AppDataPolicy} from '../../src/app-data/app-data-context';
 import {createCvmGuestReceiver} from './cvm-native';
 import {injectCvmFacade} from './cvm-guest';
 import './legacy-webview';
@@ -50,7 +51,7 @@ const fixtureName = parameters.get('fixture') ?? 'ux-lab';
 const fixture = source === null && Object.prototype.hasOwnProperty.call(__BUNDLED_FIXTURES__, fixtureName) ? __BUNDLED_FIXTURES__[fixtureName] : undefined;
 type RuntimeMetadata = Readonly<{
   aggregateHash: string; appId: string; title: string;
-  domains: readonly string[]; publishTimeoutMs?: number; published: boolean; discoveryOpen: boolean;
+  domains: readonly string[]; appData?:AppDataPolicy; publishTimeoutMs?: number; published: boolean; discoveryOpen: boolean;
 }>;
 let stopped = false;
 let cleanup: (() => void) | undefined;
@@ -177,6 +178,7 @@ function makeHooks(native: ReturnType<typeof createNativeClient>, captureRecipie
       ...(supported.has('relay') ? { 'relay.publish': relayPublish, 'relay.query': relayPublish, 'relay.subscribe': relaySubscribe, 'relay.close': relayClose } : {}),
     } } : {}),
     capabilities: {
+      ...(artifact.appData?{appData:artifact.appData}:{}),
       disabledDomains: ['link', 'upload', 'resource', 'relay', 'identity', 'storage', 'intent', 'inc', 'keys', 'media', 'notify', 'config', 'outbox', 'common', 'cvm'].filter(domain => !supported.has(domain)),
       resolveEnvironment: () => ({ domains: [...supported], services: ['theme', ...(supported.has('identity') ? ['identity'] : [])] }),
     },
@@ -405,8 +407,8 @@ async function start(): Promise<void> {
     if (source === 'published') {
       if (Array.from(parameters).length !== 2 || parameters.get('fixture') !== null) { fail('artifact-integrity'); return; }
       const {html, metadata} = await readPublishedArtifact(hostWindow.HypergolicHost!, sessionId);
-      const {appId, version: aggregateHash, domains, publishedOpen} = metadata;
-      if (!stopped) renderGuest({aggregateHash, appId, title: appId, domains,
+      const {appId, version: aggregateHash, domains, publishedOpen, appData} = metadata;
+      if (!stopped) renderGuest({aggregateHash, appId, title: appId, domains,...(appData?{appData:appData.policy}:{}),
         published: true, discoveryOpen: publishedOpen === true}, html);
       return;
     }

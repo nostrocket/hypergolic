@@ -27,4 +27,4 @@ with tempfile.TemporaryDirectory(prefix='hypergolic-live-mp3-') as name:
  configuration=out/'CapabilityConfiguration.swift'
  configuration.write_text('import Foundation\nimport CoreFoundation\n'+start+production.split(start,1)[1].split(end,1)[0])
  executable=out/'LiveMP3ConfigurationProof'
- run(['swiftc','-swift-version','6','-module-cache-path',out/'swiftcache',configuration,HERE/'LiveMP3ConfigurationProof.swift','-o',executable]);run([executable])
+ run(['swiftc','-swift-version','6','-module-cache-path',out/'swiftcache',IOS/'NativeCanonicalJSON.swift',IOS/'NativeAppDataPolicy.swift',configuration,HERE/'LiveMP3ConfigurationProof.swift','-o',executable]);run([executable])

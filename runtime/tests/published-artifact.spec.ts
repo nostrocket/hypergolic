@@ -12,12 +12,13 @@ const identity = {
   publisher: '1'.repeat(64), appId: 'published-test', eventId: '2'.repeat(64), version, htmlHash,
 };
 
-type Mode = 'normal' | 'keys-domain' | 'bad-hash' | 'malformed-base64' | 'replayed-sequence' | 'unknown-domain' | 'relay-domain' | 'attributed-head' | 'commented-head' | 'unsafe-head-comment' | 'upload-domain' | 'all-domains' | 'outbox-domain' | 'outbox-only' | 'published-approval' | 'intent-only';
+type Mode = 'normal' | 'keys-domain' | 'bad-hash' | 'malformed-base64' | 'replayed-sequence' | 'unknown-domain' | 'relay-domain' | 'attributed-head' | 'commented-head' | 'unsafe-head-comment' | 'upload-domain' | 'all-domains' | 'outbox-domain' | 'outbox-only' | 'published-approval' | 'intent-only' | 'soy-policy' | 'soy-policy-change';
 
 function artifactFor(mode: Mode): Buffer {
   if (mode === 'published-approval') return approvalHtml;
   if (mode === 'intent-only') return Buffer.from('<!doctype html><html><head><title>Intent</title></head><body><output id="deliveries"></output></body></html>');
   const source = html.toString();
+  if(mode==='soy-policy'||mode==='soy-policy-change')return Buffer.from(source.replace('</body>','<!--'+'x'.repeat(64*1024)+'--></body>'));
   if (mode === 'keys-domain') return Buffer.from(source.replace('</body>', `
     <keys-declarative-editor id="keys-declarative" style="display:block">
       <template shadowrootmode="closed"><input aria-label="Declarative editor"></template>
@@ -78,7 +79,8 @@ async function openPublished(page: Page, mode: Mode = 'normal', extraQuery = '')
         type: 'artifact.chunk', sessionId: generation,
         sequence: mode === 'replayed-sequence' ? sequence + 1 : sequence,
         base64, byteLength: payload.length, totalBytes: htmlLength,
-        ...claims, domains: mode === 'intent-only' ? ['intent'] : mode === 'published-approval' ? ['identity', 'relay', 'theme'] : mode === 'unknown-domain' ? ['future-domain'] : mode === 'outbox-domain' ? ['outbox', 'relay', 'theme'] : mode === 'outbox-only' ? ['outbox', 'theme'] : mode === 'relay-domain' ? ['relay', 'theme'] : mode === 'upload-domain' ? ['upload'] : mode === 'keys-domain' ? ['keys', 'theme'] : mode === 'all-domains' ? ['config', 'identity', 'inc', 'intent', 'link', 'notify', 'outbox', 'relay', 'resource', 'storage', 'theme', 'upload'] : ['theme'],
+        ...claims, ...((mode==='soy-policy'||mode==='soy-policy-change')?{appData:{sourceKind:35129,policy:{profile:'soy.app-data/1',scope:mode==='soy-policy-change'&&sequence>0?'f'.repeat(64):'b7890c0793a7fa9c2570c56500f403724b1a4c0e453a9194ec7200132c634f8b',maxContentBytes:3072,relays:['wss://relay.damus.io'],defaultRelays:['wss://relay.damus.io']}}}:{}),
+        domains: mode==='soy-policy'||mode==='soy-policy-change'?['identity','outbox','theme']:mode === 'intent-only' ? ['intent'] : mode === 'published-approval' ? ['identity', 'relay', 'theme'] : mode === 'unknown-domain' ? ['future-domain'] : mode === 'outbox-domain' ? ['outbox', 'relay', 'theme'] : mode === 'outbox-only' ? ['outbox', 'theme'] : mode === 'relay-domain' ? ['relay', 'theme'] : mode === 'upload-domain' ? ['upload'] : mode === 'keys-domain' ? ['keys', 'theme'] : mode === 'all-domains' ? ['config', 'identity', 'inc', 'intent', 'link', 'notify', 'outbox', 'relay', 'resource', 'storage', 'theme', 'upload'] : ['theme'],
         done: (sequence + 1) * 48 * 1024 >= htmlLength,
       };
       for (const listener of listenerSet) listener({ data: JSON.stringify(envelope) });
@@ -714,4 +716,13 @@ test('ungranted Keys remains absent and raw requests get no reply', async ({page
   expect(supported).toBe(false);
   await guest.evaluate(() => (window as any).napplet.shell.ready());
   expect(await guest.evaluate(() => (window as any).gotUnapprovedKeys)).toBeUndefined();
+});
+
+test('application-data native chunk context reaches actual runtime and cached guest onReady without Relay inference',async({page})=>{
+  await openPublished(page,'soy-policy');const frame=await publishedGuest(page);
+  const result=await frame.evaluate(async()=>{const api=(window as any).napplet.shell;const ready=await api.ready();let cached:any;api.onReady((value:any)=>{cached=value;});return {ready,cached};});
+  expect(result.ready.capabilities.domains).toEqual(['identity','theme','outbox']);expect(result.ready.capabilities.appData).toMatchObject({profile:'soy.app-data/1',maxContentBytes:3072,relays:['wss://relay.damus.io'],defaultRelays:['wss://relay.damus.io']});expect(result.cached).toEqual(result.ready);
+});
+test('application-data policy changes across native artifact chunks reject mount before guest startup',async({page})=>{
+  await openPublished(page,'soy-policy-change');await expect(page.getByRole('alert')).toHaveText('The napplet could not be loaded.');await expect(page.locator('#napplet')).toHaveCount(0);
 });

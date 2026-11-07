@@ -45,7 +45,7 @@ internal class NativeOutboxPlan private constructor(
       val identity = registration.getString("user")
       require(identity.matches(Regex("[0-9a-f]{64}")))
       val domains = strings(registration.getJSONArray("domains"))
-      require(if (derived == null) "outbox" in domains && request.getString("type") == "outbox.publish"
+      require(if (derived == null) ("outbox" in domains && request.getString("type") == "outbox.publish" || NativeAppDataPolicy.rawRelay(registration, request))
         else NativeCommonPlan.granted(registration) && request.getString("type") in NativeCommonPlan.operations)
       val plan = JSONObject(raw)
       fields(plan, setOf("requestId", "event", "destinations", "requiredInboxes", "ownSource", "ancillary"))
@@ -68,6 +68,10 @@ internal class NativeOutboxPlan private constructor(
       require(reviewed.length() == destinations.size)
       for (index in destinations.indices) require(reviewed.getJSONObject(index).getString("relay") == destinations[index])
       require(strings(plan.getJSONArray("requiredInboxes")).all { it in destinations })
+      if (NativeAppDataPolicy.claims(request)) {
+        NativeAppDataPolicy.validatePublication(registration, request, destinations)
+        require(plan.isNull("ancillary") && (request.getString("type") != "relay.publish" || plan.getJSONArray("requiredInboxes").length() == 0))
+      }
       val options = request.optJSONObject("options")
       val skipped = options?.opt("toOutbox") == false
       require(!skipped || plan.getString("ownSource") == "skipped")
@@ -103,26 +107,6 @@ internal class NativeOutboxPlan private constructor(
       val event = JSONObject(unsigned(value))
       return "{\"id\":${quote(hash)},\"pubkey\":${quote(identity)},\"created_at\":${event.getLong("created_at")},\"kind\":${event.getInt("kind")},\"tags\":${tags(event.getJSONArray("tags"))},\"content\":${quote(event.getString("content"))},\"sig\":${quote(string(value, "sig"))}}"
     }
-    private fun quote(value: String): String = buildString {
-      append('"')
-      var index = 0
-      while (index < value.length) {
-        val character = value[index++]
-        when (character) {
-          '"' -> append("\\\"")
-          '\\' -> append("\\\\")
-          '\b' -> append("\\b")
-          '\u000c' -> append("\\f")
-          '\n' -> append("\\n")
-          '\r' -> append("\\r")
-          '\t' -> append("\\t")
-          else -> if (character.code < 32) append("\\u%04x".format(character.code)) else {
-            if (Character.isHighSurrogate(character)) { require(index < value.length && Character.isLowSurrogate(value[index])); append(character); append(value[index++]) }
-            else { require(!Character.isLowSurrogate(character)); append(character) }
-          }
-        }
-      }
-      append('"')
-    }
+    private fun quote(value: String): String = NativeCanonicalJSON.quote(value)
   }
 }

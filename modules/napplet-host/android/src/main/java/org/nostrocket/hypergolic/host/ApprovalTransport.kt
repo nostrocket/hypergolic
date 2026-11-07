@@ -9,7 +9,7 @@ import org.json.JSONObject
 internal object ApprovalTransport {
   val leases = ApprovalLeaseRegistry(SystemClock::elapsedRealtime)
   private val main = Handler(Looper.getMainLooper())
-  private data class Pending(val generation: String, val id: String, val resultType: String, val reply: (String?) -> Unit)
+  private data class Pending(val generation: String, val id: String, val resultType: String, val appData: Boolean, val reply: (String?) -> Unit)
   private val pending = mutableMapOf<String, Pending>()
 
   fun register(generation: String): Boolean = leases.register(generation)
@@ -20,11 +20,13 @@ internal object ApprovalTransport {
   fun admit(generation: String, snapshot: String, id: String, reply: (String?) -> Unit): String? {
     check(Looper.myLooper() == Looper.getMainLooper())
     sweep()
-    val type = runCatching { JSONObject(JSONObject(snapshot).getString("request")).getString("type") }.getOrDefault("")
+    val request = runCatching { JSONObject(JSONObject(snapshot).getString("request")) }.getOrNull()
+    val type = request?.optString("type").orEmpty()
     val outbox = type == "outbox.publish"
     val common = type in NativeCommonPlan.operations
-    val token = leases.admit(generation, snapshot, outbox || common) ?: return null
-    pending[token] = Pending(generation, id, if (common) "$type.result" else if (outbox) "outbox.publish.result" else "relay.publish.result", reply)
+    val appData = request?.let { NativeAppDataPolicy.claims(it) } ?: false
+    val token = leases.admit(generation, snapshot, request == null || outbox || common || appData) ?: return null
+    pending[token] = Pending(generation, id, if (common) "$type.result" else if (outbox) "outbox.publish.result" else "relay.publish.result", appData, reply)
     main.postDelayed({ sweep() }, NativeApprovalAuthority.LIFETIME_MS)
     return token
   }
@@ -56,7 +58,7 @@ internal object ApprovalTransport {
     leases.cancel(token)
     main.post {
       val row = pending[token]
-      if (row?.resultType == "outbox.publish.result") deliver(token, JSONObject().put("type", row.resultType)
+      if (row != null && (row.resultType == "outbox.publish.result" || row.appData)) deliver(token, JSONObject().put("type", row.resultType)
         .put("id", row.id).put("ok", false).put("error", captured).toString())
       else deliver(token, null)
     }

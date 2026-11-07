@@ -28,6 +28,7 @@ struct CapabilityConfiguration {
   let sessionId: String
   let fixture: String
   let domains: Set<String>
+  let appData:String?
   let mediaProfile:String?
   let commonProfile:String?
   let cvmProfile:String?
@@ -39,7 +40,7 @@ struct CapabilityConfiguration {
     enum Invalid: Error { case configuration }
     guard raw.utf8.count <= 8192, let bytes = raw.data(using: .utf8),
       var value = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
-      Set(value.keys).subtracting(["publishedOpen","commonProfile","cvmProfile","mediaProfile"]) == Set(["sessionId", "epoch", "user", "publisher", "appId", "version", "instanceId", "fixture", "domains"])
+      Set(value.keys).subtracting(["publishedOpen","commonProfile","cvmProfile","mediaProfile","appData"]) == Set(["sessionId", "epoch", "user", "publisher", "appId", "version", "instanceId", "fixture", "domains"])
       else { throw Invalid.configuration }
     let open = value.removeValue(forKey: "publishedOpen")
     if let open {
@@ -104,6 +105,7 @@ struct CapabilityConfiguration {
     self.publisher = publisher
     self.appId = appId
     self.version = version
+    self.appData = try value["appData"].map { try NativeAppDataPolicy.capture($0,publisher:publisher,appId:appId,fixture:fixture,domains:expected) }
   }
 
   func matchesPublishedClaims(sessionId claimSession: String, publisher claimPublisher: String,

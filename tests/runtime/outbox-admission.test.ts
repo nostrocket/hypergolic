@@ -26,7 +26,7 @@ for(const stopped of ['none','native-expired','owner-revoked','broker-revoked'] 
   const {database}=await setup(t), native=new NativeLeases(), release=deferred();
   const calls:string[]=[], seen:unknown[]=[];
   let ownerActive=true;
-  const enter=async (request:unknown,user:string,signal:AbortSignal,active:()=>void,_nativeToken?:string)=>{
+  const enter=async (request:unknown,user:string,signal:AbortSignal,active:()=>void,_nativeToken?:string,_appDataContext?:unknown)=>{
     active();assert.equal(user,registration.user);assert.equal(signal.aborted,false);
     const row=request as {type:string;id:string};calls.push(row.id);seen.push(request);await release.promise;active();
     return row;

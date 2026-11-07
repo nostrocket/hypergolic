@@ -7,7 +7,7 @@ def digest(p):return hashlib.sha256(p.read_bytes()).hexdigest()
 def inputs():
  files=[p for directory in ['App','Tests','BoundaryProbe.xcodeproj','Resources'] for p in (HERE/directory).rglob('*') if p.is_file()]
  files += [HERE/n for n in ['expected-runtime.json','prepare-assets.py','build.py']]
- files += [REPO/'modules/napplet-host/ios'/n for n in ['RestrictedNappletHost.swift','NativeApprovalAuthority.swift','CapabilityLeaseRegistry.swift','CapabilityTransport.swift','ApprovalTransport.swift','NappletHostView.swift','NappletHostModule.swift','HypergolicNappletHost.podspec']]
+ files += [REPO/'modules/napplet-host/ios'/n for n in ['NativeCanonicalJSON.swift','NativeAppDataPolicy.swift','RestrictedNappletHost.swift','NativeApprovalAuthority.swift','CapabilityLeaseRegistry.swift','CapabilityTransport.swift','ApprovalTransport.swift','NappletHostView.swift','NappletHostModule.swift','HypergolicNappletHost.podspec']]
  return {str(p.relative_to(REPO)):digest(p) for p in sorted(files)}
 def main():
  subprocess.run([sys.executable,str(HERE/'prepare-assets.py')],check=True)

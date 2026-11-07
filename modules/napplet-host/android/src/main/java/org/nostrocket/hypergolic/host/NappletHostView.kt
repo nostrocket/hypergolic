@@ -166,6 +166,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
               .put("eventId", claims.eventId).put("version", claims.version)
               .put("htmlHash", claims.htmlHash).put("domains", JSONArray(configuration?.grantedDomains ?: listOf("theme")))
               .put("done", chunk.done)
+            configuration?.appData?.let { result.put("appData", JSONObject(it)) }
             if (configuration?.publishedOpen == true) result.put("publishedOpen", true)
             reply.postMessage(result.toString())
             return@addWebMessageListener

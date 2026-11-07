@@ -215,7 +215,7 @@ final class ApprovalTransportRegistry: @unchecked Sendable {
   func prepareOutbox(_ token: String, raw: String) -> Bool {
     lock.withLock {
       guard var row = rows[token], row.claimed, row.approval == nil, row.outboxPlan == nil,
-        sessionLiveLocked(row), authority.contains(row.request), isOutbox(row),
+        sessionLiveLocked(row), authority.contains(row.request),
         let plan = try? NativeOutboxPlan.capture(snapshot: row.snapshot, raw: raw) else { return false }
       row.outboxPlan = plan; rows[token] = row; return true
     }
@@ -238,7 +238,7 @@ final class ApprovalTransportRegistry: @unchecked Sendable {
   }
   func failOutbox(_ token: String, error: String) {
     let deliveries: [Delivery] = lock.withLock {
-      guard let row = rows[token], isOutbox(row) else { return [] }
+      guard let row = rows[token], isOutbox(row) || appDataClaim(row) == true else { return [] }
       rows.removeValue(forKey: token)
       if let approval = row.approval { _ = authority.cancel(approval) } else { _ = authority.cancel(row.request) }
       guard sessionLiveLocked(row) else { return [] }
@@ -250,7 +250,12 @@ final class ApprovalTransportRegistry: @unchecked Sendable {
     guard let envelope=try? NativeOutboxPlan.object(row.snapshot),let raw=envelope["request"] as? String,let request=try? NativeOutboxPlan.object(raw) else{return ""};return request["type"] as? String ?? ""
   }
   private func resultType(_ row:Row)->String{let type=requestType(row);return NativeCommonPlan.operations.contains(type) ? type+".result" : isOutbox(row) ? "outbox.publish.result":"relay.publish.result"}
-  private func requiresPlan(_ row:Row)->Bool{isOutbox(row)||NativeCommonPlan.operations.contains(requestType(row))}
+  private func appDataClaim(_ row:Row)->Bool?{
+    guard let envelope=try? NativeOutboxPlan.object(row.snapshot),let raw=envelope["request"] as? String,
+      let request=try? NativeOutboxPlan.object(raw) else{return nil}
+    return NativeAppDataPolicy.claims(request)
+  }
+  private func requiresPlan(_ row:Row)->Bool{isOutbox(row)||NativeCommonPlan.operations.contains(requestType(row))||appDataClaim(row) != false}
   private func isOutbox(_ row: Row) -> Bool {
     guard let envelope = try? JSONSerialization.jsonObject(with: Data(row.snapshot.utf8)) as? [String: Any],
       let raw = envelope["request"] as? String,

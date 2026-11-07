@@ -144,7 +144,7 @@ async function preparePublishedSession(ports: PublishedSessionDependencies, requ
     const handle = await stageAdmittedPublishedArtifact(admission, artifact, id, ports.native,
       controller.signal, active);
     active();
-    const hostInput = publishedHostInput(artifact, admission, descriptor, authority, handle);
+    const hostInput = publishedHostInput(artifact, admission, descriptor, authority, handle, ports.networkRelays?.() ?? []);
     success = true;
     return Object.freeze({ descriptor, hostInput, artifact,
       assertActive: () => { active(); admission.assertActive(); },

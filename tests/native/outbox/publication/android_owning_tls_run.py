@@ -151,7 +151,7 @@ def compile_proof(out, receipt):
     proof_classes = out / 'classes'
     proof_classes.mkdir()
     # These exact production class files are executed; only the WSS publish route wrapper is adapted.
-    names = ['NativeSigningHold', 'OutboxPublicationOwner', 'ApprovalTransport', 'ApprovalLeaseRegistry', 'NativeApprovalAuthority',
+    names = ['NativeAppDataPolicy', 'NativeCanonicalJSON', 'NativeSigningHold', 'OutboxPublicationOwner', 'ApprovalTransport', 'ApprovalLeaseRegistry', 'NativeApprovalAuthority',
              'NativeOutboxPlan', 'OutboxAcknowledgement']
     owned = [p for directory in classes for p in directory.rglob('*.class')
              if any(p.name == name + '.class' or p.name.startswith(name + '$') for name in names)]

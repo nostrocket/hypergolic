@@ -259,7 +259,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     }
     configuration = publishedConfiguration
     configurationSource = input.configuration
-    publishedReader = PublishedArtifactReadOwner(claimed: claimed, domains: publishedConfiguration?.domains ?? ["theme"], publishedOpen: publishedConfiguration?.publishedOpen == true)
+    publishedReader = PublishedArtifactReadOwner(claimed: claimed, domains: publishedConfiguration?.domains ?? ["theme"], publishedOpen: publishedConfiguration?.publishedOpen == true, appData: publishedConfiguration?.appData)
     publishedSource = raw
     // Loaded verified read views survive suspension. Native stream/approval/transfer
     // owners independently stop network work and sensitive authority on inactivity.

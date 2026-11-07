@@ -121,7 +121,7 @@ async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android
       handoffState: source => vault.signingHandoffState(source),
       sign: (snapshot, execution) => vault.signApproved(snapshot, execution),
       publishEvent,
-    },outbox.publication,outbox.common);
+    },outbox.publication,outbox.common,outbox.appData);
     const uploads=createWorkspaceUploads(vault,transition,()=>runtime);
     const capability = loadNativeCapabilityPort(), routingNative = loadRoutingNativePort();
     const slot = reviewSlot = new ReviewSlot(approvals, uploads, () => {

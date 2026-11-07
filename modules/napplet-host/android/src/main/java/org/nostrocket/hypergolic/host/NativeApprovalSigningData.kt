@@ -35,7 +35,7 @@ internal class NativeApprovalSigningData private constructor(val source: String,
       require(destinations.distinct().size==destinations.size)
       destinations.forEach { PublishedRelayWssQuery.parseUrl(NativeOutboxPlan.transportUrl(it)) }
       if(common)require(plan is NativeCommonPlan && plan.matches(event,user,destinations,eventId))
-      if(type=="outbox.publish")require(plan is NativeOutboxPlan && plan.matchesSigning(event,user,destinations,eventId))
+      if(type=="outbox.publish" || NativeAppDataPolicy.claims(request))require(plan is NativeOutboxPlan && plan.matchesSigning(event,user,destinations,eventId))
       val requester="Napplet: ${registration.getString("appId")}\nPublisher: ${registration.getString("publisher")}\nVersion: ${registration.getString("version")}\nSession: ${registration.getString("sessionId")}\nEpoch: ${registration.getLong("epoch")}"
       return NativeApprovalSigningData(source,user,template,requester,destinations.toList(),eventId)
     }

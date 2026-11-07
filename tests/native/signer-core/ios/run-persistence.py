@@ -13,6 +13,8 @@ HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location('native_signer_runner', HERE / 'run.py')
 native = importlib.util.module_from_spec(spec); spec.loader.exec_module(native)
 EXTRA = [
+    'modules/napplet-host/ios/NativeCanonicalJSON.swift',
+    'modules/napplet-host/ios/NativeAppDataPolicy.swift',
     'tests/native/signer-core/ios/App/NativeHandoffProbeController.swift',
     'modules/identity-owner/ios/IdentityOwnerContextRegistry.swift',
     'modules/napplet-host/ios/FixtureReleaseAuthority.swift',

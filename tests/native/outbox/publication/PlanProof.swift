@@ -81,6 +81,43 @@ enum CapabilityTransport { static let leases = CapabilityLeaseRegistry() }
   static func main() throws {
     let data = try Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[1]))
     let fixture = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+    for row in fixture["appData"] as! [[String: Any]] {
+      let snapshot = row["snapshot"] as! String, raw = try wire(row["plan"]!)
+      let envelope = try NativeOutboxPlan.object(snapshot), request = try NativeOutboxPlan.object(envelope["request"] as! String)
+      check(NativeAppDataPolicy.claims(request))
+      let leases = CapabilityLeaseRegistry(), registry = ApprovalTransportRegistry(leases: leases, schedule: { _, _ in })
+      check(leases.register("soy-owner")); check(registry.register("soy-owner")); registry.setForeground(true); registry.setFocused("soy-owner", active: true)
+      let token = registry.admit("soy-owner", snapshot: snapshot, wireId: "native-soy", reply: { _ in })!
+      check(registry.take(token) != nil); check(!registry.mayReview(token)); check(!registry.approve(token))
+      if row["accepted"] as! Bool {
+        let captured = try NativeOutboxPlan.capture(snapshot: snapshot, raw: raw)
+        check(captured.destinations.count == 2); check(registry.prepareOutbox(token, raw: raw)); check(registry.mayReview(token)); check(registry.approve(token))
+        let send = try registry.reserveOutbox(token, group: "primary", wire: wire(row["primary"]!), relay: captured.destinations[0])
+        var sends = 0; try registry.sendOutbox(token, operation: send) { sends += 1 }; check(sends == 1)
+        denied { try registry.sendOutbox(token, operation: send) { sends += 1 } }; check(sends == 1)
+      } else {
+        denied { _ = try NativeOutboxPlan.capture(snapshot: snapshot, raw: raw) }
+        check(!registry.prepareOutbox(token, raw: raw)); check(!registry.mayReview(token)); check(!registry.approve(token))
+      }
+    }
+    for row in fixture["appDataMarkers"] as! [[String: Any]] {
+      let snapshot = row["snapshot"] as! String, envelope = try NativeOutboxPlan.object(snapshot)
+      check(NativeAppDataPolicy.claims(try NativeOutboxPlan.object(envelope["request"] as! String)))
+      let leases = CapabilityLeaseRegistry(), registry = ApprovalTransportRegistry(leases: leases, schedule: { _, _ in })
+      check(leases.register("marker-sign")); check(registry.register("marker-sign")); registry.setForeground(true); registry.setFocused("marker-sign", active: true)
+      let token = registry.admit("marker-sign", snapshot: snapshot, wireId: "native-soy", reply: { _ in })!
+      check(registry.take(token) != nil); check(!registry.mayReview(token)); check(!registry.prepareSigning(token, raw: try wire(row["signing"]!))); check(!registry.approve(token))
+    }
+    let markerRow = (fixture["appData"] as! [[String: Any]])[0]
+    var markerEnvelope = try NativeOutboxPlan.object(markerRow["snapshot"] as! String)
+    var markerRequest = try NativeOutboxPlan.object(markerEnvelope["request"] as! String)
+    var markerEvent = markerRequest["event"] as! [String: Any]; markerEvent["tags"] = [(markerEvent["tags"] as! [[String]])[0]]
+    markerRequest["event"] = markerEvent; markerEnvelope["request"] = try wire(markerRequest)
+    check(NativeAppDataPolicy.claims(markerRequest))
+    let markerLeases = CapabilityLeaseRegistry(), markerRegistry = ApprovalTransportRegistry(leases: markerLeases, schedule: { _, _ in })
+    check(markerLeases.register("marker-owner")); check(markerRegistry.register("marker-owner")); markerRegistry.setForeground(true); markerRegistry.setFocused("marker-owner", active: true)
+    let markerToken = markerRegistry.admit("marker-owner", snapshot: try wire(markerEnvelope), wireId: "native-soy", reply: { _ in })!
+    check(markerRegistry.take(markerToken) != nil); check(!markerRegistry.mayReview(markerToken)); check(!markerRegistry.approve(markerToken))
     try exactUnicodeSource(fixture)
     let snapshot = fixture["snapshot"] as! String, raw = try wire(fixture["plan"]!)
     let primary = try wire(fixture["primary"]!), list = try wire(fixture["list"]!)

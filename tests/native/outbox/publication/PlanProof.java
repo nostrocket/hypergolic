@@ -80,6 +80,30 @@ public final class PlanProof {
   }
   public static void main(String[] args) throws Exception {
     JSONObject fixture = new JSONObject(Files.readString(Path.of(args[0])));
+    org.json.JSONArray appData = fixture.getJSONArray("appData");
+    for (int i = 0; i < appData.length(); i++) {
+      JSONObject row = appData.getJSONObject(i), envelope = new JSONObject(row.getString("snapshot"));
+      JSONObject request = new JSONObject(envelope.getString("request"));
+      check(NativeAppDataPolicy.INSTANCE.claims(request));
+      if (row.getBoolean("accepted")) {
+        NativeOutboxPlan captured = NativeOutboxPlan.Companion.capture(row.getString("snapshot"), row.getJSONObject("plan").toString());
+        check(captured.getDestinations().size() == 2);
+        NativeOutboxPlan.Send sent = captured.reserve("primary", row.getJSONObject("primary").toString(), captured.getDestinations().get(0), 10);
+        check(sent.getDeadline() == 15010);
+        denied(() -> captured.reserve("primary", row.getJSONObject("primary").toString(), captured.getDestinations().get(0), 11));
+      } else denied(() -> NativeOutboxPlan.Companion.capture(row.getString("snapshot"), row.getJSONObject("plan").toString()));
+    }
+    org.json.JSONArray markers = fixture.getJSONArray("appDataMarkers");
+    for (int i = 0; i < markers.length(); i++) {
+      JSONObject row = markers.getJSONObject(i), source = new JSONObject(row.getString("snapshot"));
+      check(NativeAppDataPolicy.INSTANCE.claims(new JSONObject(source.getString("request"))));
+      denied(() -> NativeApprovalSigningData.Companion.capture(row.getString("snapshot"), row.getJSONObject("signing").toString(), null));
+    }
+    JSONObject marker = new JSONObject(appData.getJSONObject(0).getString("snapshot"));
+    JSONObject markerRequest = new JSONObject(marker.getString("request"));
+    org.json.JSONArray onlyD = new org.json.JSONArray().put(markerRequest.getJSONObject("event").getJSONArray("tags").getJSONArray(0));
+    markerRequest.getJSONObject("event").put("tags", onlyD);
+    check(NativeAppDataPolicy.INSTANCE.claims(markerRequest));
     String snapshot = fixture.getString("snapshot"), raw = fixture.getJSONObject("plan").toString();
     String primary = fixture.getJSONObject("primary").toString(), list = fixture.getJSONObject("list").toString();
     NativeOutboxPlan plan = NativeOutboxPlan.Companion.capture(snapshot, raw);

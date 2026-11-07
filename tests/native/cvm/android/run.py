@@ -16,7 +16,7 @@ ROOT=Path(__file__).resolve().parents[4]
 JAVA_NAMES=['NativeCvmEnvelope','NativeCvmLifetime','NativeCvmProtocol','NativeCvmSessions']
 HOST_NAMES=['NativeCvmServiceAuthority','NativeCvmSourceFacade','NativeSignerRelay','NativeSignerRelayOpening',
             'NativeResolverOwnership','PublishedRelayWssIo','PublishedCapabilityBinding']
-KOTLIN_NAMES=['CvmTransport','CapabilityConfiguration','NappletHostView','NappletHostModule']
+KOTLIN_NAMES=['NativeCanonicalJSON','NativeAppDataPolicy','CvmTransport','CapabilityConfiguration','NappletHostView','NappletHostModule']
 
 def digest(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 

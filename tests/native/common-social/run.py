@@ -11,8 +11,8 @@ def sha(p):return hashlib.sha256(p.read_bytes()).hexdigest()
 def main():
  parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--output',type=Path,required=True);args=parser.parse_args()
  out=args.output.resolve();out.mkdir(parents=True,exist_ok=False)
- names=['NativeCommonPlan','NativeCommonNpub','NativeOutboxPlan','NativeApprovalSigningData','CapabilityConfiguration','ApprovalTransport','NappletHostView','NappletHostModule']
- files=[*(A/'src/main/java/org/nostrocket/hypergolic/host'/(n+'.kt') for n in names),*(I/(n+'.swift') for n in ['NativeCommonPlan','NativeCommonNpub','NativeOutboxPlan','ApprovalTransport','CapabilityTransport','NappletHostModule']),HERE/'NativeCommonProof.kt',HERE/'NativeCommonProof.swift',HERE/'make-fixtures.mjs',Path(__file__)]
+ names=['NativeCanonicalJSON','NativeAppDataPolicy','NativeCommonPlan','NativeCommonNpub','NativeOutboxPlan','NativeApprovalSigningData','CapabilityConfiguration','ApprovalTransport','NappletHostView','NappletHostModule']
+ files=[*(A/'src/main/java/org/nostrocket/hypergolic/host'/(n+'.kt') for n in names),*(I/(n+'.swift') for n in ['NativeCanonicalJSON','NativeAppDataPolicy','NativeCommonPlan','NativeCommonNpub','NativeOutboxPlan','ApprovalTransport','CapabilityTransport','NappletHostModule']),HERE/'NativeCommonProof.kt',HERE/'NativeCommonProof.swift',HERE/'make-fixtures.mjs',Path(__file__)]
  before={str(p.relative_to(ROOT)):sha(p) for p in files};receipt={'status':'failed','sourceBefore':before,'scope':__doc__}
  def run(name,cmd,cwd=ROOT):
   with (out/(name+'.log')).open('w') as log:subprocess.run(list(map(str,cmd)),cwd=cwd,stdout=log,stderr=subprocess.STDOUT,check=True,timeout=300)
@@ -28,7 +28,7 @@ def main():
   run('android-proof-compile',['java','-cp',os.pathsep.join(map(str,compiler)),'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler','-Werror','-no-stdlib','-no-reflect','-jvm-target','17','-Xfriend-paths='+str(classes[0]),'-classpath',classpath,'-d',proof,HERE/'NativeCommonProof.kt'])
   run('android-proof',['java','-cp',classpath,'org.nostrocket.hypergolic.host.NativeCommonProofKt',out/'fixtures.json'])
   executable=out/'swift-proof'
-  run('swift-proof-compile',['swiftc','-swift-version','6','-parse-as-library',*(I/(n+'.swift') for n in ['NativeCommonPlan','NativeCommonNpub','NativeOutboxPlan','PublishedRelayWebSocketClientFrames']),HERE/'NativeCommonProof.swift','-o',executable])
+  run('swift-proof-compile',['swiftc','-swift-version','6','-parse-as-library',*(I/(n+'.swift') for n in ['NativeAppDataPolicy','NativeCanonicalJSON','NativeCommonPlan','NativeCommonNpub','NativeOutboxPlan','PublishedRelayWebSocketClientFrames']),HERE/'NativeCommonProof.swift','-o',executable])
   run('swift-proof',[executable,out/'fixtures.json']);receipt['sourceAfter']={str(p.relative_to(ROOT)):sha(p) for p in files};assert before==receipt['sourceAfter'];receipt['status']='passed'
  finally:
   receipt['logs']={p.name:sha(p) for p in out.glob('*.log')};(out/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')

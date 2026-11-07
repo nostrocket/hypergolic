@@ -9,7 +9,7 @@ def prepare():
  native=REPO/'modules/napplet-host/ios'
  assert digest((native/'RestrictedNappletHost.swift').read_bytes())==expected['coreSha256'],'Owning core changed: review and rebaseline boundary tests'
  assert digest((native/'NappletHostView.swift').read_bytes())==expected['wrapperSha256'],'Expo wrapper changed: review integration scope'
- for name,key in [('CapabilityLeaseRegistry.swift','leaseSha256'),('CapabilityTransport.swift','transportSha256')]:
+ for name,key in [('NativeCanonicalJSON.swift','canonicalJSONSha256'),('NativeAppDataPolicy.swift','appDataPolicySha256'),('CapabilityLeaseRegistry.swift','leaseSha256'),('CapabilityTransport.swift','transportSha256')]:
   assert digest((native/name).read_bytes())==expected[key],'Native capability authority changed: review boundary tests'
  for name,key in [('NativeApprovalAuthority.swift','approvalAuthoritySha256'),('ApprovalTransport.swift','approvalTransportSha256')]:
   assert digest((native/name).read_bytes())==expected[key],'Native approval authority changed: review boundary tests'
