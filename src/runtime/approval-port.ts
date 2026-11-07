@@ -73,7 +73,13 @@ export function createNativeApprovalPort(module: ApprovalModule): NativeApproval
       }finally{tokens.delete(lease);}
     },
     prepareOutbox:(lease,plan)=>module.prepareOutboxApproval?.(tokenFor(lease),JSON.stringify(plan))??false,
-    failOutbox(lease,error){const token=tokenFor(lease);tokens.delete(lease);if(module.failOutboxApproval)module.failOutboxApproval(token,error);else{module.cancelApproval(token);module.finishApproval(token,null);}},
+    failOutbox(lease,error){
+      const token=tokenFor(lease);
+      try{
+        if(module.failOutboxApproval){try{module.failOutboxApproval(token,error);}catch(failure){try{cancelCaptured(token);}catch{/* Preserve the original failure after both cleanup calls. */}throw failure;}}
+        else cancelCaptured(token);
+      }finally{tokens.delete(lease);}
+    },
     async publishOutbox(lease,group,event,destinations,execution){
       const token=tokenFor(lease);if(!module.publishOutboxApproval)throw new Error('APPROVAL_DENIED');
       const rows:unknown[]=[],publish=module.publishOutboxApproval.bind(module),wire=JSON.stringify(event);
