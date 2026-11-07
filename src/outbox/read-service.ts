@@ -42,9 +42,17 @@ export function createOutboxReadService(resolver: OutboxAuthorResolver,
     finally {clearTimeout(timer);signal.removeEventListener('abort',stop);controller.signal.removeEventListener('abort',rejectCancelled);controller.abort();pending--;}
   }
   function route(request: OutboxQueryRequest, user: string, signal: AbortSignal, active: () => void, refresh = false, batchTimeoutMs?: number) {
-    const authors = new Set(request.options.authors);
-    for (const filter of request.filters) for (const author of (filter.authors ?? []) as readonly string[]) authors.add(author);
-    return resolveOutboxPlan(resolver,settings(),user,[...authors],request.options.relays,'read',signal,active,refresh,batchTimeoutMs);
+    const search = request.filters[0]?.search !== undefined;
+    const authors = new Set(search ? [] : request.options.authors);
+    if (!search) for (const filter of request.filters) for (const author of (filter.authors ?? []) as readonly string[]) authors.add(author);
+    const plan = resolveOutboxPlan(resolver,settings(),user,[...authors],request.options.relays,'read',signal,active,refresh,batchTimeoutMs);
+    // Search terms go only to the nominated peer, whose relevance ranking is local to that relay.
+    if (!search) return plan;
+    return plan.then(selected => {
+      const relays = selected.relays.filter(relay => relay === request.options.relays[0]);
+      if (relays.length !== 1) throw new OutboxQueryError('policy denied');
+      return Object.freeze({...selected,relays:Object.freeze(relays),incomplete:false});
+    });
   }
   async function query(input: unknown,user: string,signal: AbortSignal,assertActive: () => void): Promise<OutboxReadResult> {
     const request = parseOutboxQuery(input);
@@ -54,7 +62,7 @@ export function createOutboxReadService(resolver: OutboxAuthorResolver,
       const plan = await route(request,user,leased,active,false,discoveryBudget); active();
       const transport = createNativeRelayQuery(native,() => plan.relays,remaining(true),{allowPartialOnLimit:true});
       const result = await transport.queryDetailed(capOutboxFilters(request.filters),leased,active,
-        wide ? {maximumFilters:OUTBOX_QUERY_FILTERS} : undefined); active();
+        {maximumFilters:wide ? OUTBOX_QUERY_FILTERS : QUERY_LIMITS.filters, allowSearch:true}); active();
       const capped = result.events.length === QUERY_LIMITS.events &&
         (request.options.limit > QUERY_LIMITS.events ||
           request.options.limit === QUERY_LIMITS.events && request.filters.some(filter => (filter.limit as number) > QUERY_LIMITS.events));
@@ -82,7 +90,7 @@ export function createOutboxReadService(resolver: OutboxAuthorResolver,
         resolveOutboxPlan(resolver,settings(),user,request.target.authors,[],request.target.direction,leased,active));
     },
     async plan(input: unknown,user: string,signal: AbortSignal,assertActive: () => void, refresh = false): Promise<OutboxReadPlan> {
-      const request = parseOutboxQuery(input);
+      const request = parseOutboxQuery(input,OUTBOX_QUERY_FILTERS,false);
       return bounded(request.options.timeoutMs,signal,assertActive,(leased,active) => route(request,user,leased,active,refresh));
     },
   });

@@ -5,7 +5,7 @@ export const QUERY_LIMITS = Object.freeze({ filters: 4, list: 64, requestBytes: 
   events: 32, eventBytes: 64 * 1024, resultBytes: 512 * 1024, frames: 64,
   timeoutMs: 15_000, concurrent: 2 });
 export const NATIVE_RELAY_REQUEST_BYTES = 8_192;
-export type QueryFilter = Readonly<Record<string, readonly string[] | readonly number[] | number>>;
+export type QueryFilter = Readonly<Record<string, readonly string[] | readonly number[] | number | string>>;
 export type RelayQueryRequest = Readonly<{ type: 'relay.query'; id: string; filters: readonly QueryFilter[] }>;
 export class RelayQueryError extends Error {
   constructor(message = 'relay query failed') { super(message); this.name = 'RelayQueryError'; }
@@ -36,14 +36,18 @@ function dense(value: unknown, max: number): unknown[] {
   return output;
 }
 export function parseQueryFilters(input: unknown, maximumLimit: number = QUERY_LIMITS.events,
-  maximumFilters: number = QUERY_LIMITS.filters): readonly QueryFilter[] {
+  maximumFilters: number = QUERY_LIMITS.filters, allowSearch = false): readonly QueryFilter[] {
   const filters = dense(input, maximumFilters);
   if (filters.length === 0) return fail();
   const result = filters.map(value => {
-    const source = record(value), filter: Record<string, readonly string[] | readonly number[] | number> = {};
+    const source = record(value), filter: Record<string, QueryFilter[string]> = {};
     if (Object.keys(source).length > 32) return fail();
     for (const [key, item] of Object.entries(source)) {
-      if (['since', 'until', 'limit'].includes(key)) {
+      if (key === 'search') {
+        if (!allowSearch || filters.length !== 1 || typeof item !== 'string' || item.length > 1024 ||
+          !item.trim() || utf8Bytes(item) > 1024) return fail();
+        filter.search = item;
+      } else if (['since', 'until', 'limit'].includes(key)) {
         if (!integer(item)) return fail();
         // NIP-01 allows fewer initial results than the caller requests.
         filter[key] = key === 'limit' ? Math.min(item, maximumLimit) : item;
@@ -83,6 +87,7 @@ type QueryPhase = 'stored' | 'live';
 export function queryMatches(event: NostrEvent, filter: QueryFilter, phase: QueryPhase = 'stored'): boolean {
   if (phase === 'stored' && filter.limit === 0) return false;
   return Object.entries(filter).every(([key, value]) => {
+    if (key === 'search') return false; // Ranked reads verify a separate structured filter.
     if (key === 'limit') return true;
     if (key === 'since') return event.created_at >= (value as number);
     if (key === 'until') return event.created_at <= (value as number);

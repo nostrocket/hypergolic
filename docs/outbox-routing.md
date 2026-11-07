@@ -21,6 +21,18 @@ leave room for whole author relay sets that fit. Omitted author routes make the
 result incomplete. Packs with more than 32 per-member filters still exceed
 this profile.
 
+One-shot Outbox also accepts a [NIP-50 search filter](https://github.com/nostr-protocol/nips/blob/0046368a747c5c25ae2bec28bae0e537744c8f10/50.md)
+with one nonblank search string of up to 1 KiB and one explicit policy-allowed
+WSS relay hint. The shell sends the term only to that relay. It preserves that
+relay's relevance order and keeps the leading results within the existing REQ,
+event, byte and deadline limits. It verifies signatures, event hashes and all
+structured filter conditions independently. Text relevance is supplied by the
+relay, and callers should choose a relay with advertised NIP-50 support.
+The existing 16-destination route union is checked before narrowing to the
+nominated relay. With 16 configured Network relays, use one of them as the
+search hint. A distinct seventeenth relay fails before dispatch.
+Raw Relay and subscriptions use structured filters only.
+
 ## Review, publication and receipts
 
 Before trusted review, freeze the exact unsigned primary template and the full unique union of own write, explicitly requested inbox read and explicit relay destinations. Bounds are 64 authors and 16 unique relay destinations; required fanout is never silently truncated. No automatic p-tag recipient inference is selected. toOutbox:false skips own discovery and own-list redistribution while explicit and required inbox destinations still apply.

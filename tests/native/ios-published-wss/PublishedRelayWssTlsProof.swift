@@ -33,8 +33,11 @@ private final class ResultBox: @unchecked Sendable {
     } else { addresses = [loopback] }
     let result = ResultBox()
     let done = DispatchSemaphore(value: 0)
+    let request = mode == "auth-announcement"
+      ? #"["REQ","proof",{"kinds":[31237],"limit":32,"search":"café jazz"}]"#
+      : #"["REQ","proof",{"kinds":[35129]}]"#
     let operation = try PublishedRelayWebSocketQuery.queryForProof(
-      "wss://relay.example.org:\(port)/fixture", subscription: "[\"REQ\",\"proof\",{\"kinds\":[35129]}]",
+      "wss://relay.example.org:\(port)/fixture", subscription: request,
       addresses: addresses, anchorDER: mode == "untrusted" ? nil : anchor,
       classifyText: { value in
         if mode == "auth-announcement" { return PublishedRelayEnvelope.classify(value, subscriptionId: "proof") }

@@ -30,18 +30,22 @@ export function outboxUint(value: unknown, min: number, max: number): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < min || value > max) return fail();
   return value;
 }
-/** Supported bounded NIP-01 query profile; options never select a native owner. */
-export function parseOutboxQuery(input: unknown, maximumFilters: number = OUTBOX_QUERY_FILTERS): OutboxQueryRequest {
+/** Bounded NIP-01 and one-shot search filters. Options never select a native owner. */
+export function parseOutboxQuery(input: unknown, maximumFilters: number = OUTBOX_QUERY_FILTERS, allowSearch = true): OutboxQueryRequest {
   try {
     const source = outboxRecord(input);
     if (source.type !== 'outbox.query' || !Object.hasOwn(source, 'filters') || Object.keys(source).some(key => !['type','id','filters','options'].includes(key))) return fail();
     const options = Object.hasOwn(source, 'options') ? outboxRecord(source.options) : {};
     if (Object.keys(options).some(key => !['authors','relays','limit','timeoutMs'].includes(key))) return fail();
-    const filters = parseQueryFilters(Array.isArray(source.filters) ? source.filters : [source.filters], Number.MAX_SAFE_INTEGER, maximumFilters);
-    if (filters.length > QUERY_LIMITS.filters) relayQueryWire('query_' + '0'.repeat(32), capOutboxFilters(filters));
+    const filters = parseQueryFilters(Array.isArray(source.filters) ? source.filters : [source.filters],
+      Number.MAX_SAFE_INTEGER, maximumFilters, allowSearch);
+    const relays = Object.hasOwn(options,'relays') ? outboxList(options.relays, OUTBOX_LIST_LIMITS.relays, normalizeRelayUrl) : Object.freeze([]);
+    const search = filters[0]?.search !== undefined;
+    if (search && (relays.length !== 1 || !Array.isArray(options.relays) || options.relays.length !== 1)) return fail();
+    if (search || filters.length > QUERY_LIMITS.filters) relayQueryWire('query_' + '0'.repeat(32), capOutboxFilters(filters));
     return Object.freeze({type: 'outbox.query', id: text(source.id, 128), filters,
       options: Object.freeze({authors: Object.hasOwn(options,'authors') ? outboxList(options.authors, OUTBOX_LIST_LIMITS.authors, publicKey) : Object.freeze([]),
-        relays: Object.hasOwn(options,'relays') ? outboxList(options.relays, OUTBOX_LIST_LIMITS.relays, normalizeRelayUrl) : Object.freeze([]),
+        relays,
         limit: Object.hasOwn(options,'limit') ? outboxUint(options.limit, 0, Number.MAX_SAFE_INTEGER) : QUERY_LIMITS.events,
         timeoutMs: Object.hasOwn(options,'timeoutMs') ? outboxUint(options.timeoutMs, 1, QUERY_LIMITS.timeoutMs) : QUERY_LIMITS.timeoutMs})});
   } catch { return fail(); }

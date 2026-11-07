@@ -102,7 +102,9 @@ def serve(mode: str, key: Path, cert: Path, listener: socket.socket,
                 return
             req = read_request_frame(peer)
             observed.append("req")
-            if req != '["REQ","proof",{"kinds":[35129]}]':
+            expected = ('["REQ","proof",{"kinds":[31237],"limit":32,"search":"café jazz"}]'
+                        if mode == "auth-announcement" else '["REQ","proof",{"kinds":[35129]}]')
+            if req != expected:
                 errors.append("wrong masked REQ payload")
             if mode == "cancel":
                 time.sleep(0.8)
