@@ -136,7 +136,7 @@ final class SelectedFilePicker: NSObject, UIDocumentPickerDelegate, PHPickerView
     } catch {clearSelection(); finish(nil)}
   }
   private nonisolated static func fileExtension(_ mime: String) -> String {
-    switch mime {case "image/png": "png"; case "audio/wav": "wav"; case "audio/mpeg": "mp3"; case "video/mp4": "mp4"; case "application/pdf": "pdf"; case "application/zip": "zip"; case "text/plain": "txt"; default: "bin"}
+    switch mime {case "image/png": "png"; case "audio/wav": "wav"; case "audio/mpeg": "mp3"; case "video/mp4": "mp4"; case "application/pdf": "pdf"; case "application/zip": "zip"; case "text/plain": "txt"; case "text/html": "html"; default: "bin"}
   }
   private func finish(_ urls: [URL]?) {
     let callback = completion; completion = nil; processing = false

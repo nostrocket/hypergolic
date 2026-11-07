@@ -62,7 +62,7 @@ class SelectedFileProvider : ContentProvider() {
       revoke(generation)
       if (bytes.size > NativeUploadAuthority.MAX_BYTES || entries.size >= 2 || !live()) return null
       val token = UUID.randomUUID().toString()
-      val extension = when (mime) {"image/png" -> ".png"; "audio/wav" -> ".wav"; "audio/mpeg" -> ".mp3"; "video/mp4" -> ".mp4"; "application/pdf" -> ".pdf"; "application/zip" -> ".zip"; "text/plain" -> ".txt"; else -> ".bin"}
+      val extension = when (mime) {"image/png" -> ".png"; "audio/wav" -> ".wav"; "audio/mpeg" -> ".mp3"; "video/mp4" -> ".mp4"; "application/pdf" -> ".pdf"; "application/zip" -> ".zip"; "text/plain" -> ".txt"; "text/html" -> ".html"; else -> ".bin"}
       val file = runCatching { File(stagingRoot(context), token) }.getOrNull() ?: return null
       try {file.outputStream().use {it.write(bytes)}} catch (_: Exception) {file.delete(); return null}
       entries[token] = Selection(generation, file, bytes.size, "Selected file$extension", mime, live, android.os.SystemClock.elapsedRealtime() + 600_000)

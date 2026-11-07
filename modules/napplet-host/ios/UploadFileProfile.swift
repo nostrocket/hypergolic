@@ -2,6 +2,7 @@ import Foundation
 
 /// Supported attachment signatures are native-owned; a failed photo never falls through.
 enum UploadFileProfile {
+  private static let html = try? NSRegularExpression(pattern: "^\u{FEFF}?[\\t\\n\\r ]*<!doctype[\\t\\n\\r ]+html[\\t\\n\\r ]*>", options: .caseInsensitive)
   struct Prepared: Sendable {let bytes: Data; let mimeType: String; let metadataPolicy: String}
   static func prepare(_ input: Data) -> Prepared? {
     guard (1...NativeUploadAuthority.maxBytes).contains(input.count) else {return nil}
@@ -59,10 +60,15 @@ enum UploadFileProfile {
       text(bytes, max(0, bytes.count - 1024), min(1024, bytes.count)).contains("%%EOF") {return "application/pdf"}
     if bytes.count >= 22, bytes[0] == 80, bytes[1] == 75,
       ((bytes[2] == 3 && bytes[3] == 4) || (bytes[2] == 5 && bytes[3] == 6)) {return "application/zip"}
-    guard bytes.count <= 1024 * 1024, let value = String(bytes: bytes, encoding: .utf8) else {return nil}
+    guard bytes.count <= 1024 * 1024, String(bytes: bytes, encoding: .utf8) != nil else {return nil}
+    // Preserve the original BOM count after fatal UTF-8 validation.
+    let value = String(decoding: bytes, as: UTF8.self)
     let start = value.replacingOccurrences(of: "\u{FEFF}", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !start.isEmpty, !start.hasPrefix("<"), !start.hasPrefix("GIF8"), !start.hasPrefix("II*"), !start.hasPrefix("MM") else {return nil}
+    guard !start.isEmpty, !start.hasPrefix("GIF8"), !start.hasPrefix("II*"), !start.hasPrefix("MM") else {return nil}
     guard !bytes.contains(where: {$0 < 32 && ![9,10,13].contains($0) || $0 == 127}) else {return nil}
+    if start.hasPrefix("<") {
+      return html?.firstMatch(in: value, range: NSRange(location: 0, length: (value as NSString).length)) != nil ? "text/html" : nil
+    }
     return "text/plain"
   }
   private static func mp3(_ bytes: [UInt8], _ offset: Int) -> Bool {
