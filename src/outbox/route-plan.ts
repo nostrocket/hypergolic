@@ -63,7 +63,8 @@ export async function resolveOutboxPlan(resolver: OutboxAuthorResolver, settings
   }
   if (selected.size > OUTBOX_LIST_LIMITS.relays) throw new OutboxQueryError('policy denied');
   if (selected.size === 0) throw new OutboxQueryError('relay list unavailable');
-  if (fallback || missing.size > 0) { source = 'fallback'; incomplete = true; }
+  if (fallback || missing.size > 0) source = 'fallback';
+  incomplete ||= missing.size > 0;
   active(); return Object.freeze({relays:Object.freeze([...selected]),source,
     missingAuthors:Object.freeze(authors.filter(author => missing.has(author))),incomplete});
 }

@@ -236,9 +236,9 @@ test('observed relay hints merge after deduplication and never include a failed 
   assert.equal(result.events.length,1);assert.deepEqual(result.events[0]?.sidecar?.relayHints,['wss://hint.nostr.net','wss://network.nostr.net']);assert.ok(Object.isFrozen(result.events[0]?.sidecar?.relayHints));
   assert.equal(result.incomplete,true);
 });
-test('authorless and successfully missing relay lists report fallback discovery as incomplete', async () => {
+test('authorless Network completion differs from a missing requested-author route', async () => {
   const h=harness({async resolve(){return {list:null,source:'cache',incomplete:false};}});
-  assert.equal((await h.service.query({...request,filters:{kinds:[1]}},author,signal(),()=>{},token)).incomplete,true);
+  assert.equal((await h.service.query({...request,filters:{kinds:[1]}},author,signal(),()=>{},token)).incomplete,false);
   const missing=await h.service.query(request,author,signal(),()=>{},token);
   assert.equal(missing.incomplete,true);assert.deepEqual(missing.plan.missingAuthors,[author]);
 });
@@ -249,7 +249,17 @@ test('getEvent returns one exact signed id with observed hints, and distinguishe
   assert.equal(result.result?.event.id,event.id);assert.equal(result.incomplete,undefined);assert.deepEqual(result.result?.sidecar?.relayHints,['wss://write.nostr.net']);
   h.native.queryOutboxRelay=async (_token,_id,relay,_wire,sub)=>{h.calls.push(relay);return [JSON.stringify(['EOSE',sub])];};
   assert.deepEqual(await h.service.getEvent(input,author,signal(),()=>{},token),{error:'not found'});
-  assert.deepEqual(await h.service.getEvent({...input,options:{}},author,signal(),()=>{},token),{error:'not found',incomplete:true});
+  assert.deepEqual(await h.service.getEvent({...input,options:{}},author,signal(),()=>{},token),{error:'not found'});
+  h.native.queryOutboxRelay = async () => {throw Error('unavailable');};
+  await assert.rejects(h.service.getEvent({...input,options:{}},author,signal(),()=>{},token));
+  const partial = harness({async resolve(){assert.fail('no author metadata requested');}},
+    ['wss://empty.nostr.net','wss://failed.nostr.net']);
+  partial.native.queryOutboxRelay = async (_token,_id,relay,_wire,sub) => {
+    if (relay === 'wss://failed.nostr.net') throw Error('controlled outage');
+    return [JSON.stringify(['EOSE',sub])];
+  };
+  assert.deepEqual(await partial.service.getEvent({...input,options:{}},author,signal(),()=>{},token),
+    {error:'not found',incomplete:true});
 });
 test('getEvent rejects a signed event for another id rather than delivering it', async () => {
   const h=harness({async resolve(){return {list,source:'cache',incomplete:false};}});
@@ -376,7 +386,7 @@ test('wide authorless reads use configured Network fallback without discovery', 
   const filters = profileFilters.slice(0,22).map(() => ({kinds:[1],limit:1}));
   const result = await h.service.query({...request,filters},author,signal(),()=>{},token);
   assert.equal(result.events[0]?.event.id,event.id);
-  assert.deepEqual(result.plan,{relays:['wss://network.nostr.net'],source:'fallback',missingAuthors:[],incomplete:true});
+  assert.deepEqual(result.plan,{relays:['wss://network.nostr.net'],source:'fallback',missingAuthors:[],incomplete:false});
   assert.deepEqual(h.calls,['wss://network.nostr.net']);
 });
 
@@ -421,7 +431,7 @@ test('the default Outbox read retains a signed root after 68 newer matching chil
   assert.equal(result.events.length,69);
   assert.equal(result.events[68]?.event.id,root.id);
   assert.equal(result.plan.source,'fallback');
-  assert.equal(result.incomplete,true);
+  assert.equal(result.incomplete,false);
   const stream = parseOutboxSubscribe({...input,type:'outbox.subscribe',subId:'test'});
   assert.equal(stream.filters[0]?.limit,32);
   assert.equal(stream.options.limit,32);
@@ -466,3 +476,28 @@ test('the one-shot deadline can expire between signed frames without opening ano
   assert.equal(result.incomplete,true);
   assert.equal(h.cancelled.length,1);
 });
+
+
+for (const mode of ['complete','empty','failed-peer','missing-eose'] as const) {
+  test(`authorless manifest query reports selected Network completion for ${mode}`, async () => {
+    const peers = ['wss://first.nostr.net','wss://second.nostr.net'];
+    const manifest = finalizeEvent({kind:35129,created_at:10,content:'Test game',tags:[
+      ['d','test-game'],['title','Test game'],['z','game'],['x','a'.repeat(64)],
+    ]},key);
+    const h = harness({async resolve(){assert.fail('no author was requested');}},peers);
+    h.native.queryOutboxRelay = async (captured,_id,relay,wire,sub) => {
+      assert.equal(captured,token); h.calls.push(relay);
+      assert.deepEqual(JSON.parse(wire),['REQ',sub,{kinds:[5129,15129,35129],limit:80}]);
+      if (mode === 'failed-peer' && relay === peers[1]) throw Error('controlled outage');
+      const frames = mode === 'empty' ? [] : [JSON.stringify(['EVENT',sub,manifest])];
+      return mode === 'missing-eose' && relay === peers[1] ? frames : [...frames,JSON.stringify(['EOSE',sub])];
+    };
+    const result = await h.service.query({type:'outbox.query',id:'manifest-directory',
+      filters:[{kinds:[5129,15129,35129],limit:80}],options:{limit:80,timeoutMs:8000}},
+      author,signal(),()=>{},token);
+    assert.deepEqual(h.calls,peers);
+    assert.equal(result.incomplete,mode === 'failed-peer' || mode === 'missing-eose');
+    assert.deepEqual(result.plan,{relays:peers,source:'fallback',missingAuthors:[],incomplete:false});
+    assert.deepEqual(result.events.map(row=>row.event.id),mode === 'empty' ? [] : [manifest.id]);
+  });
+}
