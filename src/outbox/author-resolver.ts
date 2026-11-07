@@ -8,11 +8,14 @@ import { OUTBOX_LIST_LIMITS, OutboxRelayListError, outboxListAge, parseOutboxRel
 
 export type OutboxAuthorResolution = Readonly<{ list: OutboxRelayList | null; source: 'cache' | 'nip65'; incomplete: boolean }>;
 export interface OutboxAuthorResolver {
-  resolve(user: string, author: string, purpose: 'read' | 'publication', signal: AbortSignal, assertActive: () => void, refresh?: boolean): Promise<OutboxAuthorResolution>;
+  resolve(user: string, author: string, purpose: 'read' | 'publication', signal: AbortSignal, assertActive: () => void, refresh?: boolean, timeoutMs?: number): Promise<OutboxAuthorResolution>;
   resolveReadBatch?(user: string, authors: readonly string[], signal: AbortSignal, assertActive: () => void,
     timeoutMs: number): Promise<ReadonlyMap<string, OutboxAuthorResolution>>;
 }
 type ReadScope = Readonly<{ user: string; signal: AbortSignal; active: () => void }>;
+function metadataTransportBudget(remaining: number): number {
+  return remaining - Math.min(100, Math.max(1, Math.floor(remaining / 10)));
+}
 /** Discovery service is constructed by the shell using trusted Lookup settings. */
 export function createOutboxAuthorResolver(cache: OutboxRelayListCache, discovery: DetailedRelayQueryService,
   now: () => number = Date.now): OutboxAuthorResolver {
@@ -101,7 +104,7 @@ export function createOutboxAuthorResolver(cache: OutboxRelayListCache, discover
         const remaining = timeoutMs - (now() - startedAt);
         const share = Math.floor(remaining / Math.ceil((waiting.length - start) / OUTBOX_QUERY_FILTERS));
         // Leave part of the planning lease for a verified partial reply and cache checks.
-        const budget = share - Math.min(100, Math.max(1, Math.floor(share / 10)));
+        const budget = metadataTransportBudget(share);
         let fetched: RelayQueryResult;
         try {
           if (budget < 1) throw new RelayQueryError('relay discovery timed out');
@@ -128,15 +131,23 @@ export function createOutboxAuthorResolver(cache: OutboxRelayListCache, discover
     }, timeoutMs);
   }
   return Object.freeze({
-    async resolve(userInput: string, authorInput: string, purpose: 'read' | 'publication', signal: AbortSignal, assertActive: () => void, refresh = false) {
+    async resolve(userInput: string, authorInput: string, purpose: 'read' | 'publication', signal: AbortSignal, assertActive: () => void, refresh = false, timeoutMs?: number) {
       const user = publicKey(userInput), author = publicKey(authorInput);
       if (purpose !== 'read' && purpose !== 'publication') throw new OutboxRelayListError();
+      if (timeoutMs !== undefined && (purpose !== 'read' || !Number.isSafeInteger(timeoutMs) ||
+        timeoutMs < 1 || timeoutMs > QUERY_LIMITS.timeoutMs)) throw new OutboxRelayListError();
+      const deadline = timeoutMs === undefined ? undefined : now() + timeoutMs;
       return leased(user, signal, assertActive, async scope => {
         const cached = await cachedList(scope, author);
         if (cached.age === 'fresh' && !refresh) return fromCache(cached.list, false);
         const filters = parseQueryFilters([{authors:[author], kinds:[10002], limit:32}]);
         let fetched: RelayQueryResult;
-        try { fetched = await discovery.queryDetailed(filters, scope.signal, scope.active); }
+        try {
+          const budget = deadline === undefined ? undefined : metadataTransportBudget(deadline - now());
+          if (budget !== undefined && budget < 1) throw new RelayQueryError('relay discovery timed out');
+          fetched = await discovery.queryDetailed(filters, scope.signal, scope.active,
+            budget === undefined ? undefined : {timeoutMs:budget});
+        }
         catch (error) {
           scope.active();
           if (purpose === 'read' && cached.age !== 'expired' && error instanceof RelayQueryError && !(error instanceof RelayQueryDataError)) {
@@ -147,7 +158,7 @@ export function createOutboxAuthorResolver(cache: OutboxRelayListCache, discover
         scope.active();
         const observed = selectOutboxRelayList(fetched.events.map(row => row.event), author);
         return observedList(scope, author, cached, observed, fetched.incomplete, purpose, true);
-      });
+      }, timeoutMs);
     },
     resolveReadBatch,
   });

@@ -62,6 +62,16 @@ public final class PublishedRelayWssTlsProof {
       rejectsBadUpgrade(serverContext, trusted, dns);
       rejectsOversizedFrame(serverContext, trusted, dns);
       cancelsAfterUpgrade(serverContext, trusted, dns);
+      try (LocalRelay relay = new LocalRelay(serverContext, Mode.HOLD_RESPONSE)) {
+        PublishedRelayWssQuery.TimedRead deadline = new PublishedRelayWssQuery.TimedRead() {
+          @Override public boolean isCancelled() { return false; }
+          @Override public int timeoutMs() { return 1_000; }
+        };
+        long started = System.nanoTime();
+        throwsIo(() -> query(relay,"relay.example.org",deadline,ignored -> new InetAddress[] {LOOPBACK},dns,trusted));
+        check(relay.requestArrived.getCount() == 0);
+        check(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started) < 2_500);
+      }
     } finally {
       dns.shutdownNow();
       check(dns.awaitTermination(2, TimeUnit.SECONDS));

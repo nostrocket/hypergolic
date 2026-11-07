@@ -15,6 +15,9 @@ type DetailedQueryOptions = Readonly<{maximumFilters?: number; timeoutMs?: numbe
 export interface DetailedRelayQueryService extends RelayQueryService {
   queryDetailed(filters: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void, options?: DetailedQueryOptions): Promise<RelayQueryResult>;
 }
+type NativeQueryPort = Pick<NativePublishedRelayPort, 'newInstanceId' | 'cancelPublishedRelay'> & {
+  queryPublishedRelay(operationId: string, url: string, request: string, subId: string, timeoutMs?: number): Promise<string[]>;
+};
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 type QueryCounts = Readonly<{events: number; frames: number}>;
 function parseFrames(input: unknown, subscription: string, filters: readonly QueryFilter[], counts: QueryCounts, checkDeadline?: () => void): NostrEvent[] {
@@ -91,6 +94,12 @@ function queryLifetime(signal: AbortSignal, active: () => void, budget: number, 
   return {
     cancelled,
     aborted: () => controller.signal.aborted,
+    peerBudget(peers: number): number {
+      const remaining = Math.floor(expiresAt - performance.now());
+      if (remaining < 1) {expire();throw new RelayQueryError('relay query timed out');}
+      // Reserve half for the next peer, with no overlap or renewed total deadline.
+      return Math.max(1,Math.min(10_000,Math.floor(remaining / Math.min(2,peers))));
+    },
     track(operation: string) { pending = operation; },
     complete(operation: string) { if (pending === operation) pending = null; },
     checkDeadline: enforceClock ? () => {
@@ -105,7 +114,7 @@ function queryLifetime(signal: AbortSignal, active: () => void, budget: number, 
   };
 }
 /** App-side only. Destinations come from trusted Network settings, never guest JSON. */
-export function createNativeRelayQuery(port: Pick<NativePublishedRelayPort, 'newInstanceId' | 'queryPublishedRelay' | 'cancelPublishedRelay'>,
+export function createNativeRelayQuery(port: NativeQueryPort,
   destinations: () => readonly string[], timeoutMs: number = QUERY_LIMITS.timeoutMs, options:Readonly<{allowPartialOnLimit?:boolean;outbox?:true}> = {}): DetailedRelayQueryService {
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > QUERY_LIMITS.timeoutMs) throw new RelayQueryError();
   const counts = options.outbox ? OUTBOX_QUERY_COUNTS : QUERY_LIMITS;
@@ -145,7 +154,7 @@ export function createNativeRelayQuery(port: Pick<NativePublishedRelayPort, 'new
       const {checkDeadline} = lifetime;
       try {
         const work = async () => {
-          for (const relay of relays) {
+          for (const [index,relay] of relays.entries()) {
             active();
             checkDeadline?.();
             if (lifetime.aborted()) throw new RelayQueryError();
@@ -159,7 +168,9 @@ export function createNativeRelayQuery(port: Pick<NativePublishedRelayPort, 'new
             try {
               active();
               checkDeadline?.();
-              const frames = await port.queryPublishedRelay(operation, relay, wire, subscription);
+              const frames = options.outbox
+                ? await port.queryPublishedRelay(operation,relay,wire,subscription,lifetime.peerBudget(relays.length - index))
+                : await port.queryPublishedRelay(operation,relay,wire,subscription);
               active();
               if (lifetime.aborted()) throw new RelayQueryError();
               try {

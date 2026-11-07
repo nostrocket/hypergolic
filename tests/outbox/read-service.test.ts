@@ -3,6 +3,7 @@ import {test} from 'node:test';
 import {finalizeEvent, getPublicKey} from 'nostr-tools/pure';
 import {parseRelayQuery, OUTBOX_QUERY_COUNTS} from '../../src/network/relay-query-contract.ts';
 import {createOutboxReadService} from '../../src/outbox/read-service.ts';
+import {createNativeRelayQuery} from '../../src/network/native-relay-query.ts';
 import {parseOutboxQuery,parseOutboxEvent,parseOutboxResolve} from '../../src/outbox/query-contract.ts';
 import {parseOutboxSubscribe} from '../../src/outbox/subscription-contract.ts';
 import {parseOutboxRelayList} from '../../src/outbox/relay-list.ts';
@@ -16,7 +17,7 @@ function harness(resolver: OutboxAuthorResolver, network = ['wss://network.nostr
   let sequence = 0;
   const calls: string[] = [], cancelled: string[] = [];
   const native = {newInstanceId: () => '00000000-0000-4000-8000-'+String(++sequence).padStart(12,'0'),
-    async queryOutboxRelay(nativeToken: string, _id: string, relay: string, _wire: string, sub: string) {assert.equal(nativeToken,token);calls.push(relay); return [JSON.stringify(['EVENT',sub,event]),JSON.stringify(['EOSE',sub])];},
+    async queryOutboxRelay(nativeToken: string, _id: string, relay: string, _wire: string, sub: string, _timeoutMs: number) {assert.equal(nativeToken,token);calls.push(relay); return [JSON.stringify(['EVENT',sub,event]),JSON.stringify(['EOSE',sub])];},
     cancelPublishedRelay(id: string) {cancelled.push(id);}};
   return {calls, cancelled, native, service:createOutboxReadService(resolver,native,()=>({networkRelays:network,lookupRelays:['wss://lookup.nostr.net']}))};
 }
@@ -80,6 +81,145 @@ test('total deadline cancels hanging discovery before data query', async () => {
   await assert.rejects(h.service.query({...request,options:{timeoutMs:5}},author,signal(),()=>{},token)); assert.equal(h.calls.length,0);
 });
 
+
+for (const previousList of [false,true]) {
+  test(`single-author query reserves time for data with ${previousList ? 'a verified partial route' : 'a cold missing route'}`, async () => {
+    const metadata: string[] = [], cancelled: string[] = [];
+    let sequence = 0, cacheWrites = 0;
+    const discovery = createNativeRelayQuery({
+      newInstanceId: () => '10000000-0000-4000-8000-'+String(++sequence).padStart(12,'0'),
+      async queryPublishedRelay(_id, relay, wire, sub) {
+        metadata.push(relay);
+        assert.deepEqual(JSON.parse(wire),['REQ',sub,{authors:[author],kinds:[10002],limit:32}]);
+        if (relay === 'wss://slow.nostr.net') return new Promise(() => {});
+        const eose = JSON.stringify(['EOSE',sub]);
+        return previousList ? [JSON.stringify(['EVENT',sub,list.event]),eose] : [eose];
+      },
+      cancelPublishedRelay(id) {cancelled.push(id);},
+    }, () => ['wss://lookup.nostr.net','wss://slow.nostr.net']);
+    const resolver = createOutboxAuthorResolver({
+      async read() {return null;}, async write() {cacheWrites++;}, async close() {},
+    },discovery);
+    const h = harness(resolver);
+    const result = await h.service.query({...request,options:{timeoutMs:240}},author,signal(),()=>{},token);
+    assert.deepEqual(metadata,['wss://lookup.nostr.net','wss://slow.nostr.net']);
+    assert.equal(cancelled.length,1);
+    assert.equal(cacheWrites,0);
+    assert.deepEqual(h.calls,[previousList ? 'wss://write.nostr.net' : 'wss://network.nostr.net']);
+    assert.equal(result.events[0]?.event.id,event.id);
+    assert.equal(result.incomplete,true);
+    assert.deepEqual(result.plan.missingAuthors,previousList ? [] : [author]);
+  });
+}
+
+test('the single-author reservation is exclusive to one-shot reads', async () => {
+  const budgets: Array<[string, number | undefined]> = [];
+  const h = harness({async resolve(_user,_author,purpose,_signal,_active,_refresh,timeoutMs) {
+    budgets.push([purpose,timeoutMs]);
+    return {list,source:'nip65',incomplete:false};
+  }});
+  await h.service.plan(request,author,signal(),()=>{});
+  await h.service.resolveRelays({type:'outbox.resolveRelays',id:'write-plan',
+    target:{pubkey:author,direction:'write'}},author,signal(),()=>{});
+  await h.service.query({...request,options:{timeoutMs:200}},author,signal(),()=>{},token);
+  assert.deepEqual(budgets.slice(0,2),[['read',undefined],['publication',undefined]]);
+  assert.equal(budgets[2]?.[0],'read');
+  assert.ok(budgets[2]?.[1] && budgets[2][1] <= 100);
+});
+
+test('one-shot data visits the next existing peer after a native deadline without overlapping promises', async () => {
+  const h = harness({async resolve(){throw Error('unused');}},['wss://slow.nostr.net','wss://carrier.nostr.net']);
+  const trace: string[] = [], attempts: number[] = [];
+  let active = 0, peak = 0;
+  h.native.queryOutboxRelay = async (_token,_id,relay,_wire,sub,timeoutMs) => {
+    active++; peak = Math.max(peak,active);
+    trace.push(`start:${relay}`); attempts.push(timeoutMs);
+    assert.ok(Number.isInteger(timeoutMs) && timeoutMs >= 1 && timeoutMs <= 10_000);
+    try {
+      if (relay.includes('slow')) return await new Promise((_,reject) => setTimeout(()=>reject(Error('native deadline')),timeoutMs));
+      return [JSON.stringify(['EVENT',sub,event]),JSON.stringify(['EOSE',sub])];
+    } finally {active--;trace.push(`settled:${relay}`);}
+  };
+  const result = await h.service.query({...request,filters:{kinds:[1]},options:{timeoutMs:240}},author,signal(),()=>{},token);
+  assert.deepEqual(result.events.map(row=>row.event.id),[event.id]);
+  assert.equal(result.incomplete,true);
+  assert.equal(peak,1);
+  assert.equal(active,0);
+  assert.deepEqual(trace,['start:wss://slow.nostr.net','settled:wss://slow.nostr.net',
+    'start:wss://carrier.nostr.net','settled:wss://carrier.nostr.net']);
+  assert.ok(attempts[0]! <= 120);
+  assert.ok(attempts[1]! <= 240 - attempts[0]!);
+});
+
+test('a six-peer one-shot retains a useful first response instead of dividing time into sixths', async () => {
+  const network = Array.from({length:6},(_,i) => `wss://peer${i}.nostr.net`);
+  const h = harness({async resolve(){throw Error('unused');}},network);
+  const deadlines:number[] = [];
+  h.native.queryOutboxRelay = async (_token,_id,relay,_wire,sub,timeoutMs) => {
+    h.calls.push(relay);deadlines.push(timeoutMs);
+    if (relay === network[0]) return new Promise((resolve,reject) => {
+      const nativeDeadline = setTimeout(()=>reject(Error('native deadline')),timeoutMs);
+      setTimeout(()=>{
+        clearTimeout(nativeDeadline);
+        resolve([JSON.stringify(['EVENT',sub,event]),JSON.stringify(['EOSE',sub])]);
+      },90);
+    });
+    return [JSON.stringify(['EOSE',sub])];
+  };
+  const result = await h.service.query({...request,filters:{kinds:[1]},options:{timeoutMs:240}},author,signal(),()=>{},token);
+  assert.equal(result.events[0]?.event.id,event.id);
+  assert.deepEqual(h.calls,network);
+  assert.ok(deadlines[0]! >= 90 && deadlines[0]! <= 120);
+});
+
+test('a fast first Outbox peer remains useful and cancellation never starts a later peer', async () => {
+  const h = harness({async resolve(){throw Error('unused');}},['wss://first.nostr.net','wss://later.nostr.net']);
+  const deadlines:number[] = [];
+  h.native.queryOutboxRelay = async (_token,_id,relay,_wire,sub,timeoutMs) => {
+    h.calls.push(relay); deadlines.push(timeoutMs);
+    return [JSON.stringify(['EVENT',sub,event]),JSON.stringify(['EOSE',sub])];
+  };
+  const result = await h.service.query({...request,filters:{kinds:[1]},options:{timeoutMs:240}},author,signal(),()=>{},token);
+  assert.equal(result.events[0]?.event.id,event.id);
+  assert.deepEqual(h.calls,['wss://first.nostr.net','wss://later.nostr.net']);
+  assert.ok(deadlines[0]! <= 120 && deadlines[1]! <= 240);
+
+  const controller = new AbortController();
+  let started!: () => void, release!: (frames:string[]) => void;
+  const entered = new Promise<void>(resolve=>{started=resolve;});
+  h.calls.length = 0;
+  h.native.queryOutboxRelay = async (_token,_id,relay,_wire,sub) => {
+    h.calls.push(relay);started();
+    return new Promise(resolve=>{release=()=>resolve([JSON.stringify(['EVENT',sub,event]),JSON.stringify(['EOSE',sub])]);});
+  };
+  const pending = h.service.query({...request,filters:{kinds:[1]}},author,controller.signal,()=>{},token);
+  await entered;
+  controller.abort();
+  await assert.rejects(pending);
+  release([]);
+  await new Promise(resolve=>setTimeout(resolve,5));
+  assert.deepEqual(h.calls,['wss://first.nostr.net']);
+  assert.equal(h.cancelled.length,1);
+});
+
+test('single-author metadata cache waits are bounded without turning revocation into a fallback', async () => {
+  let writes = 0;
+  const resolver = createOutboxAuthorResolver({
+    async read(){return new Promise(()=>{});},async write(){writes++;},async close() {},
+  },{async query(){assert.fail('cache stall must not reach discovery');},
+    async queryDetailed(){assert.fail('cache stall must not reach discovery');}});
+  const h = harness(resolver);
+  const result = await h.service.query({...request,options:{timeoutMs:240}},author,signal(),()=>{},token);
+  assert.equal(result.events[0]?.event.id,event.id);
+  assert.equal(result.incomplete,true);
+  assert.equal(writes,0);
+  h.calls.length=0;
+  const controller = new AbortController();
+  const pending = h.service.query({...request,options:{timeoutMs:240}},author,controller.signal,()=>{},token);
+  controller.abort();
+  await assert.rejects(pending);
+  assert.deepEqual(h.calls,[]);
+});
 
 test('end-to-end Outbox deadline returns verified partial data instead of losing an earlier complete relay', async () => {
   const routes=parseOutboxRelayList(JSON.parse(JSON.stringify(finalizeEvent({kind:10002,created_at:1,content:'',tags:[['r','wss://write.nostr.net','write'],['r','wss://slow.nostr.net','write']]},key))),author);

@@ -98,15 +98,15 @@ enum PublishedRelayWebSocketQuery {
     let send: @Sendable (@Sendable () -> Void) throws -> Void
   }
   static func query(_ url: String, subscription: String,
-                    publication: PublicationControl? = nil, profile: ResponseProfile = .standard,
+                    publication: PublicationControl? = nil, profile: ResponseProfile = .standard, timeoutMs: Int = 10_000,
                     readAuthorized: @escaping @Sendable () -> Bool = { true },
                     classifyText: @escaping @Sendable (String) throws -> TextKind,
                     completion: @escaping @Sendable (Result<[String], Error>) -> Void) throws -> Operation {
     let request = try Request(url)
-    guard Data(subscription.utf8).count <= PublishedRelayWebSocketClientFrames.maxTextBytes,
+    guard (1...10_000).contains(timeoutMs), Data(subscription.utf8).count <= PublishedRelayWebSocketClientFrames.maxTextBytes,
           String(data: Data(subscription.utf8), encoding: .utf8) == subscription else { throw Failure.invalidURL }
     let operation = Operation(request: request, subscription: subscription, classifyText: classifyText, completion: completion,
-      profile: profile, readAuthorized: readAuthorized)
+      profile: profile, timeoutMs: timeoutMs, readAuthorized: readAuthorized)
     operation.publication = publication
     operation.start()
     return operation
@@ -129,15 +129,15 @@ enum PublishedRelayWebSocketQuery {
   /// Host-only proof seam. The production query cannot choose addresses or trust anchors.
   static func queryForProof(_ url: String, subscription: String,
                             addresses: [PublishedPinnedHTTPS.Address], anchorDER: Data?,
-                            publication: PublicationControl? = nil,
+                            publication: PublicationControl? = nil, timeoutMs: Int = 10_000,
                             classifyText: @escaping @Sendable (String) throws -> TextKind,
                             completion: @escaping @Sendable (Result<[String], Error>) -> Void) throws -> Operation {
     let request = try Request(url)
-    guard Data(subscription.utf8).count <= PublishedRelayWebSocketClientFrames.maxTextBytes,
+    guard (1...10_000).contains(timeoutMs), Data(subscription.utf8).count <= PublishedRelayWebSocketClientFrames.maxTextBytes,
           String(data: Data(subscription.utf8), encoding: .utf8) == subscription,
           !addresses.isEmpty else { throw Failure.invalidURL }
     let operation = Operation(request: request, subscription: subscription,
-                              classifyText: classifyText, completion: completion)
+                              classifyText: classifyText, completion: completion, timeoutMs: timeoutMs)
     operation.proofAddresses = addresses
     operation.proofAnchorDER = anchorDER
     operation.publication = publication
@@ -170,6 +170,7 @@ enum PublishedRelayWebSocketQuery {
     private var total = 0
     private var collector: TextCollector
     private let readAuthorized: @Sendable () -> Bool
+    private let timeoutMs: Int
     private var ended = false
     fileprivate var publication: PublicationControl?
     fileprivate var streamDelivery: StreamDelivery?
@@ -188,15 +189,16 @@ enum PublishedRelayWebSocketQuery {
     fileprivate init(request: Request, subscription: String,
                      classifyText: @escaping @Sendable (String) throws -> TextKind,
                      completion: @escaping @Sendable (Result<[String], Error>) -> Void,
-                     profile: ResponseProfile = .standard, readAuthorized: @escaping @Sendable () -> Bool = { true }) {
+                     profile: ResponseProfile = .standard, timeoutMs: Int = 10_000, readAuthorized: @escaping @Sendable () -> Bool = { true }) {
       self.request = request; self.subscription = subscription; self.classifyText = classifyText; self.completion = completion
       self.collector = TextCollector(profile: profile)
+      self.timeoutMs = timeoutMs
       self.readAuthorized = readAuthorized
     }
 
     fileprivate func start() {
       guard readAuthorized(), publication?.mayContinue() != false else { finish(.failure(Failure.cancelled)); return }
-      queue.asyncAfter(deadline: .now() + 10) { if self.streamDelivery == nil || !self.streamEOSE { self.finish(.failure(Failure.timeout)) } }
+      queue.asyncAfter(deadline: .now() + .milliseconds(timeoutMs)) { if self.streamDelivery == nil || !self.streamEOSE { self.finish(.failure(Failure.timeout)) } }
 #if HYPERGOLIC_NETWORK_PROOF
       if let proofAddresses {
         queue.async {

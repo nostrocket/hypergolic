@@ -39,6 +39,7 @@ private final class ResultBox: @unchecked Sendable {
     let operation = try PublishedRelayWebSocketQuery.queryForProof(
       "wss://relay.example.org:\(port)/fixture", subscription: request,
       addresses: addresses, anchorDER: mode == "untrusted" ? nil : anchor,
+      timeoutMs: mode == "short-deadline" ? 1_000 : 10_000,
       classifyText: { value in
         if mode == "auth-announcement" { return PublishedRelayEnvelope.classify(value, subscriptionId: "proof") }
         switch value {
@@ -67,6 +68,10 @@ private final class ResultBox: @unchecked Sendable {
     case ("untrusted", .failure), ("wrong-host", .failure), ("redirect", .failure),
          ("bad-accept", .failure), ("oversize", .failure):
       break
+    case ("short-deadline", .failure(let error)):
+      guard case PublishedRelayWebSocketQuery.Failure.timeout = error else {
+        throw NSError(domain: "wrong native peer deadline result", code: 1)
+      }
     case ("cancel", .failure(let error)):
       guard case PublishedRelayWebSocketQuery.Failure.cancelled = error else {
         throw NSError(domain: "wrong cancellation result", code: 1)

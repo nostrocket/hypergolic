@@ -50,9 +50,9 @@ function Fixture({caseName,selected}:{caseName:CaseName;selected:boolean}) {
       const calls:{role:string;relay:string}[]=[];
       const observed=(role:string)=>({...native,newInstanceId:()=>native.newInstanceId(),cancelPublishedRelay:(id:string)=>native.cancelPublishedRelay(id),
         queryPublishedRelay:(id:string,relay:string,wire:string,sub:string)=>{calls.push({role,relay});setTrace(JSON.stringify({calls}));return native.queryPublishedRelay(id,relay,wire,sub);},
-        queryOutboxRelay:(token:string,id:string,relay:string,wire:string,sub:string)=>{
+        queryOutboxRelay:(token:string,id:string,relay:string,wire:string,sub:string,timeoutMs:number)=>{
           calls.push({role,relay});setTrace(JSON.stringify({calls}));
-          return native.queryOutboxRelay(token,id,relay,wire,sub);
+          return native.queryOutboxRelay(token,id,relay,wire,sub,timeoutMs);
         }});
       const discovery=createNativeRelayQuery(observed('discovery'),()=>['wss://nos.lol']);
       const resolver=createOutboxAuthorResolver(cache,discovery);

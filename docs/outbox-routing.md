@@ -19,7 +19,15 @@ results are not cached as absent. When the complete signed read relay union
 would exceed 16 destinations, configured Network relays and validated hints
 leave room for whole author relay sets that fit. Omitted author routes make the
 result incomplete. Packs with more than 32 per-member filters still exceed
-this profile.
+this profile. A single-author one-shot read budgets up to half of its remaining
+deadline for route discovery and leaves the original remainder for data. A slow
+Lookup peer can leave the verified author metadata incomplete. The shell uses any verified route already
+found or the existing Network fallback. A timeout does not cache an absent list.
+Data peers run serially. Each nonlast peer gets at most half the remaining
+total deadline, and the last peer gets the remaining time, capped by the
+existing native ten-second maximum. The next peer starts after the prior
+native promise settles. Later tail peers remain best-effort under the original
+deadline. No new destinations or connection slots are added.
 
 Only an active native claim for an exact Outbox query or getEvent can use
 the one-shot transport budget of 200 events and 256 text frames per relay.

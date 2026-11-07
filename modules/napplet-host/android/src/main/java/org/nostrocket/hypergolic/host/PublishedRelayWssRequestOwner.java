@@ -44,17 +44,18 @@ public final class PublishedRelayWssRequestOwner {
 
   public List<String> query(String operationId, String url, String request, String subscriptionId, JobState job)
       throws IOException {
-    return query(operationId, url, request, subscriptionId, ResponseProfile.STANDARD, job);
+    return query(operationId, url, request, subscriptionId, ResponseProfile.STANDARD, PublishedRelayWssQuery.TOTAL_TIMEOUT_MS, job);
   }
 
-  List<String> queryOutbox(String operationId, String url, String request, String subscriptionId, JobState job)
+  List<String> queryOutbox(String operationId, String url, String request, String subscriptionId, int timeoutMs, JobState job)
       throws IOException {
     if (!isJobActive(job)) throw new IOException("Inactive Outbox query");
-    return query(operationId, url, request, subscriptionId, ResponseProfile.OUTBOX, job);
+    return query(operationId, url, request, subscriptionId, ResponseProfile.OUTBOX, timeoutMs, job);
   }
 
   private List<String> query(String operationId, String url, String request, String subscriptionId,
-      ResponseProfile profile, JobState job) throws IOException {
+      ResponseProfile profile, int timeoutMs, JobState job) throws IOException {
+    if (timeoutMs < 1 || timeoutMs > PublishedRelayWssQuery.TOTAL_TIMEOUT_MS) throw new IOException("Invalid relay deadline");
     if (!isCanonicalUuid(operationId)) throw new IOException("Invalid relay operation id");
     if (subscriptionId == null || !subscriptionId.matches("[A-Za-z0-9_-]{1,64}")) {
       throw new IOException("Invalid relay subscription id");
@@ -70,8 +71,10 @@ public final class PublishedRelayWssRequestOwner {
       active.put(operationId, operation);
     }
     try {
-      List<String> result = query.run(url, request, subscriptionId, profile, () ->
-          operation.cancelled || !foreground || !isJobActive(job));
+      List<String> result = query.run(url, request, subscriptionId, profile, new PublishedRelayWssQuery.TimedRead() {
+        @Override public int timeoutMs() { return timeoutMs; }
+        @Override public boolean isCancelled() { return operation.cancelled || !foreground || !isJobActive(job); }
+      });
       ensureLive(operationId, operation, job);
       if (result == null || result.isEmpty() || result.size() > profile.frames) {
         throw new IOException("Invalid published relay result");

@@ -184,12 +184,14 @@ class NappletHostModule : Module() {
       }
     }
     AsyncFunction("queryOutboxRelay") Coroutine { token: String, operationId: String, url: String,
-      requestText: String, subscriptionId: String ->
+      requestText: String, subscriptionId: String, timeoutMs: Double ->
+      if (!timeoutMs.isFinite() || timeoutMs < 1 || timeoutMs > PublishedRelayWssQuery.TOTAL_TIMEOUT_MS ||
+        timeoutMs % 1.0 != 0.0) throw java.io.IOException("Invalid relay deadline")
       val leases = CapabilityTransport.leases
       if (!OutboxQueryCapability.admits(leases, token)) throw java.io.IOException("Inactive Outbox query")
       val job = currentCoroutineContext()[Job]
       withContext(Dispatchers.IO) {
-        PublishedRelayWssRequestOwner.INSTANCE.queryOutbox(operationId, url, requestText, subscriptionId) {
+        PublishedRelayWssRequestOwner.INSTANCE.queryOutbox(operationId, url, requestText, subscriptionId, timeoutMs.toInt()) {
           job?.isActive == true && leases.isActive(token)
         }
       }

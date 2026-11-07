@@ -80,19 +80,25 @@ public final class PublishedRelayWssRequestOwnerProof {
 
   private static void outboxClaimAndProfile() throws Exception {
     AtomicReference<PublishedRelayResponseClassifier.ResponseProfile> observed = new AtomicReference<>();
+    AtomicReference<Integer> deadline = new AtomicReference<>();
     var owner = new PublishedRelayWssRequestOwner((url, req, sub, profile, cancel) -> {
       observed.set(profile);
+      deadline.set(((PublishedRelayWssQuery.TimedRead) cancel).timeoutMs());
       return Collections.singletonList("[\"EOSE\",\"sub-1\"]");
     });
     owner.setForeground(true);
     String id = uuid();
-    rejects(() -> owner.queryOutbox(id, URL, REQ, "sub-1", () -> false));
+    rejects(() -> owner.queryOutbox(id, URL, REQ, "sub-1", 10_000, () -> false));
     check(observed.get() == null);
-    owner.queryOutbox(id, URL, REQ, "sub-1", () -> true);
+    rejects(() -> owner.queryOutbox(id, URL, REQ, "sub-1", 0, () -> true));
+    rejects(() -> owner.queryOutbox(id, URL, REQ, "sub-1", 10_001, () -> true));
+    owner.queryOutbox(id, URL, REQ, "sub-1", 37, () -> true);
+    equal(37, deadline.get());
     equal(PublishedRelayResponseClassifier.ResponseProfile.OUTBOX, observed.get());
     rejects(() -> owner.query(id, URL, REQ, "sub-1", () -> true));
     owner.query(uuid(), URL, REQ, "sub-1", () -> true);
     equal(PublishedRelayResponseClassifier.ResponseProfile.STANDARD, observed.get());
+    equal(10_000, deadline.get());
   }
 
   private static void concurrencyCap() throws Exception {
@@ -118,7 +124,7 @@ public final class PublishedRelayWssRequestOwnerProof {
       thread.start();
     }
     check(entered.await(1, TimeUnit.SECONDS));
-    rejects(() -> owner.queryOutbox(uuid(), URL, REQ, "sub-1", () -> true));
+    rejects(() -> owner.queryOutbox(uuid(), URL, REQ, "sub-1", 10_000, () -> true));
     release.countDown();
     for (Thread thread : threads) thread.join(2_000L);
     for (Thread thread : threads) check(!thread.isAlive());

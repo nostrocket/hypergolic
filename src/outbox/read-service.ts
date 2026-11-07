@@ -5,13 +5,13 @@ import {utf8Bytes} from '../storage/codec.ts';
 import {OUTBOX_QUERY_COUNTS, QUERY_LIMITS} from '../network/relay-query-contract.ts';
 import type {OutboxAuthorResolver} from './author-resolver.ts';
 import {OUTBOX_QUERY_FILTERS, capOutboxFilters, parseOutboxQuery, parseOutboxEvent, parseOutboxResolve, OutboxQueryError, type OutboxQueryRequest} from './query-contract.ts';
-import {resolveOutboxPlan, type OutboxReadPlan} from './route-plan.ts';
+import {resolveOutboxPlan, type OutboxReadPlan, type OutboxReadPlanning} from './route-plan.ts';
 export type {OutboxReadPlan} from './route-plan.ts';
 export type OutboxEventRow = Readonly<RelayQueryResult['events'][number] & {sidecar?: Readonly<{relayHints: readonly string[]}>}>;
 export type OutboxReadResult = Readonly<{events: readonly OutboxEventRow[]; incomplete: boolean; plan: OutboxReadPlan}>;
 export type OutboxEventResult = Readonly<{result?: OutboxEventRow; incomplete?: true; error?: string}>;
 export type NativeOutboxQueryPort = Pick<NativePublishedRelayPort, 'newInstanceId' | 'cancelPublishedRelay'> & {
-  queryOutboxRelay(token: string, operationId: string, url: string, requestText: string, subscriptionId: string): Promise<string[]>;
+  queryOutboxRelay(token: string, operationId: string, url: string, requestText: string, subscriptionId: string, timeoutMs: number): Promise<string[]>;
 };
 export interface OutboxReadService {
   query(input: unknown, user: string, signal: AbortSignal, assertActive: () => void, nativeToken: string): Promise<OutboxReadResult>;
@@ -58,11 +58,11 @@ export function createOutboxReadService(resolver: OutboxAuthorResolver,
     try {const result = await Promise.race([work(controller.signal,active,remaining),cancelled]); active(); return result;}
     finally {clearTimeout(timer);signal.removeEventListener('abort',stop);controller.signal.removeEventListener('abort',rejectCancelled);controller.abort();pending--;}
   }
-  function route(request: OutboxQueryRequest, user: string, signal: AbortSignal, active: () => void, refresh = false, batchTimeoutMs?: number) {
+  function route(request: OutboxQueryRequest, user: string, signal: AbortSignal, active: () => void, refresh = false, planning?: OutboxReadPlanning) {
     const search = request.filters[0]?.search !== undefined;
     const authors = new Set(search ? [] : request.options.authors);
     if (!search) for (const filter of request.filters) for (const author of (filter.authors ?? []) as readonly string[]) authors.add(author);
-    const plan = resolveOutboxPlan(resolver,settings(),user,[...authors],request.options.relays,'read',signal,active,refresh,batchTimeoutMs);
+    const plan = resolveOutboxPlan(resolver,settings(),user,[...authors],request.options.relays,'read',signal,active,refresh,planning);
     // Search terms go only to the nominated peer, whose relevance ranking is local to that relay.
     if (!search) return plan;
     return plan.then(selected => {
@@ -76,11 +76,11 @@ export function createOutboxReadService(resolver: OutboxAuthorResolver,
     if (!nativeToken) throw new OutboxQueryError('policy denied');
     return bounded(request.options.timeoutMs,signal,assertActive,async (leased,active,remaining) => {
       const wide = request.filters.length > QUERY_LIMITS.filters;
-      const discoveryBudget = wide ? Math.max(1, Math.floor(remaining() / 2)) : undefined;
-      const plan = await route(request,user,leased,active,false,discoveryBudget); active();
+      const planning = {wide, timeoutMs:Math.max(1, Math.floor(remaining() / 2))};
+      const plan = await route(request,user,leased,active,false,planning); active();
       const transport = createNativeRelayQuery({
         newInstanceId: () => native.newInstanceId(),
-        queryPublishedRelay: (id, url, wire, sub) => native.queryOutboxRelay(nativeToken,id,url,wire,sub),
+        queryPublishedRelay: (id, url, wire, sub, timeoutMs) => native.queryOutboxRelay(nativeToken,id,url,wire,sub,timeoutMs!),
         cancelPublishedRelay: id => native.cancelPublishedRelay(id),
       },() => plan.relays,remaining(true),{allowPartialOnLimit:true,outbox:true});
       const result = await transport.queryDetailed(capOutboxFilters(request.filters,OUTBOX_QUERY_COUNTS.events),leased,active,
