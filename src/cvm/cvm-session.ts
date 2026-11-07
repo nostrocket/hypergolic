@@ -116,7 +116,12 @@ export class CvmEndpoint{
   private nativeClosed(session:Session,reason?:CvmError,completed?:ReadonlySet<string>):void{
     if(this.sessions.get(session.server.pubkey)!==session)return;
     this.sessions.delete(session.server.pubkey);this.unsubscribe(session);
-    for(const work of this.work)if(work.session===session&&work.dispatched&&(!work.permit||!completed?.has(work.permit))){work.reason=reason??new CvmError('session closed');work.controller.abort();}
+    for(const work of this.work)if(work.session===session&&work.dispatched&&(!work.permit||!completed?.has(work.permit))){
+      // A generic transport close cannot erase this operation's known outcome or elapsed deadline.
+      work.reason??=reason&&reason.message!=='session closed'?reason:
+        new CvmError(this.ports.now()>=work.deadline?'relay timeout':'session closed');
+      work.controller.abort();
+    }
   }
   private async run(request:CvmRequest,review:CvmReview,work:Work):Promise<McpMessage|null>{
     const prior=this.sessions.get(request.server.pubkey),key=isRequest(request.message)?mcpKey(request.message.id!):null;
