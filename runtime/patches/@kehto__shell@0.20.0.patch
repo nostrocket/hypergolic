@@ -23,7 +23,7 @@ index 0ec36f0..a6bdd59 100644
  /**
   * Render the host-owned NIP-5D bootstrap that exposes available NAP domains
 diff --git a/dist/index.js b/dist/index.js
-index 523bcf1..1605ef2 100644
+index 523bcf1..243479b 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -312,6 +312,7 @@ function adaptHooks(shellHooks, deps) {
@@ -306,7 +306,7 @@ index 523bcf1..1605ef2 100644
 +    const dropDelivery = pendingDeliveries.delete.bind(pendingDeliveries);
 +    const notify = (handler, delivery) => {
 +      try { handler(delivery); } catch { /* Other subscriptions still receive their delivery. */ }
-     };
++    };
 +    const channel = new MessageChannel();
 +    const consume = channel.port1.postMessage.bind(channel.port1);
 +    const readData = Function.call.bind(Object.getOwnPropertyDescriptor(MessageEvent.prototype, "data").get);
@@ -319,7 +319,7 @@ index 523bcf1..1605ef2 100644
 +      }
 +      for (const handler of [...deliveryHandlers]) notify(handler, delivery);
 +      consume(receipt);
-+    };
+     };
 +    target.parent.postMessage({ type: "hypergolic.intent.delivery-port" }, "*", [channel.port2]);
 +    const invokeRequest = (value, modern) => request(
 +      { type: "intent.invoke", request: normalizeRequest(value) },
@@ -376,7 +376,21 @@ index 523bcf1..1605ef2 100644
          { rejectOnError: false }
        )
      };
-@@ -2479,7 +2620,7 @@ function nappletNamespacePrelude(domains) {
+@@ -2396,7 +2537,12 @@ function nappletNamespacePrelude(domains) {
+       encodeNip19: (input) => req("common.encodeNip19", { input }),
+       decodeNip19: (value) => req("common.decodeNip19", { value }),
+       getProfile: (targetValue) => req("common.getProfile", { target: targetValue }),
+-      follows: () => req("common.follows", {}),
++      follows: () => req("common.follows", {}).then((result) => {
++        if (result.ok !== true || !Array.isArray(result.pubkeys)) {
++          throw new Error(typeof result.error === "string" ? result.error : "Common follows unavailable");
++        }
++        return result.pubkeys;
++      }),
+       follow: (...pubkeys) => req("common.follow", { pubkeys }),
+       unfollow: (...pubkeys) => req("common.unfollow", { pubkeys }),
+       react: (targetEventId, reaction, customEmojiHref) => req("common.react", {
+@@ -2479,7 +2625,7 @@ function nappletNamespacePrelude(domains) {
      return intent;
    }
    function isProtectedDomain(domain) {
@@ -385,7 +399,7 @@ index 523bcf1..1605ef2 100644
    }
    function makeDomain(domain, existing) {
      if (domain === "shell") return shell;
-@@ -2487,14 +2628,13 @@ function nappletNamespacePrelude(domains) {
+@@ -2487,14 +2633,13 @@ function nappletNamespacePrelude(domains) {
      if (domain === "identity") return makeProtectedIdentity();
      if (domain === "theme") return makeProtectedTheme();
      if (domain === "intent") return makeProtectedIntent();

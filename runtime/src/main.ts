@@ -1,4 +1,5 @@
 import './legacy-webview';
+import {COMMON_OPERATIONS,parseCommonRequest,commonFailure} from '../../src/common/common-contract';
 import { injectMediaFacade } from './media-guest';
 import { guestMessageReceiver } from './guest-message-receiver';
 import { injectAndroidGuestHelpers } from './android-guest-helpers';
@@ -104,7 +105,7 @@ function makeHooks(native: ReturnType<typeof createNativeClient>, captureRecipie
   const config = createConfigAdapter(native, captureRecipient);
   const resource = createResourceAdapter(native, captureRecipient);
   const upload = createUploadAdapter(native, captureRecipient);
-  const storage = async ({ message, send }: HostOperationContext): Promise<void> => { send({ ...await native.request(message) }); };
+  const capability = async ({ message, send }: HostOperationContext): Promise<void> => { send({ ...await native.request(message) }); };
   const relayPublish = async ({ message, send }: HostOperationContext): Promise<void> => { send({ ...await native.request(message) }); };
   const relaySubscribe = ({message,send}:HostOperationContext):void => {
     const live=captureRecipient();
@@ -112,6 +113,15 @@ function makeHooks(native: ReturnType<typeof createNativeClient>, captureRecipie
     catch { if(live()){const outbox=message.type==='outbox.subscribe';const request=outbox?parseOutboxClose({type:'outbox.close',id:message.id,subId:message.subId}):parseRelayClose({type:'relay.close',id:message.id,subId:message.subId});send({type:outbox?'outbox.closed':'relay.closed',subId:request.subId,reason:'relay subscription unavailable'});} }
   };
   const relayClose = ({message}:HostOperationContext):void => { native.close(message); };
+  const common = {descriptor: {name: 'common', version: '1.0.0'},
+    handleMessage(_windowId: string, message: NappletMessage, send: (message: NappletMessage) => void): void {
+      const live = captureRecipient();
+      void native.request(message).then(response => {if (live()) send(response);}).catch(() => {
+        const failure = commonFailure(message, 'relay-timeout');
+        if (live() && failure) send(failure as NappletMessage);
+      });
+    },
+  };
   const identity = { descriptor: { name: 'identity', version: '1.0.0' },
     handleMessage(_windowId: string, message: NappletMessage, send: (message: NappletMessage) => void): void {
       const live = captureRecipient();
@@ -140,6 +150,7 @@ function makeHooks(native: ReturnType<typeof createNativeClient>, captureRecipie
     crypto: { verifyEvent: async () => false },
     intent: {isAvailable: () => supported.has('intent')},
     link: {isAvailable: () => supported.has('link')},
+    common: {isAvailable: () => supported.has('common')},
     services: { theme: theme.handler,
       ...(supported.has('config') ? {config: {descriptor: {name: 'config', version: '1.0.0'}, handleMessage: unavailable, onRegistered: registerRouting, onUnregistered: () => registerRouting(null)}} : {}),
       ...(supported.has('notify') ? {notify: {descriptor: {name: 'notify', version: '1.0.0'}, handleMessage: unavailable, onRegistered: registerRouting, onUnregistered: () => registerRouting(null)}} : {}),
@@ -148,33 +159,35 @@ function makeHooks(native: ReturnType<typeof createNativeClient>, captureRecipie
       ...(supported.has('link') ? {link: createLinkAdapter(native, captureRecipient)} : {}),
       ...(supported.has('upload') ? { upload: { descriptor: { name: 'upload', version: '1.0.0' }, handleMessage: unavailable } } : {}), ...(supported.has('identity') ? { identity } : {}),
       ...(supported.has('resource') ? { resource: { descriptor: { name: 'resource', version: '1.0.0' }, handleMessage: unavailable } } : {}),
+      ...(supported.has('common') ? {common} : {}),
       ...(supported.has('outbox') ? {outbox: {descriptor: {name: 'outbox', version: '1.0.0'}, handleMessage: unavailable}} : {}),
       ...(supported.has('relay') ? { relay: { descriptor: { name: 'relay', version: '1.0.0' }, handleMessage: unavailable } } : {}) },
-    ...((supported.has('storage') || supported.has('relay') || supported.has('resource') || supported.has('upload') || supported.has('intent') || supported.has('inc') || supported.has('notify') || supported.has('config') || supported.has('outbox')) ? { operationOverrides: {
+    ...((supported.has('storage') || supported.has('relay') || supported.has('resource') || supported.has('upload') || supported.has('intent') || supported.has('inc') || supported.has('notify') || supported.has('config') || supported.has('outbox') || supported.has('common')) ? { operationOverrides: {
       ...(supported.has('config') ? {'config.registerSchema': config, 'config.get': config, 'config.subscribe': config, 'config.unsubscribe': config, 'config.openSettings': config} : {}),
       ...(supported.has('notify') ? {'notify.send': notify, 'notify.dismiss': notify, 'notify.badge': notify, 'notify.channel.register': notify, 'notify.permission.request': notify} : {}),
       ...(supported.has('intent') ? { 'intent.invoke': routing, 'intent.available': routing, 'intent.handlers': routing } : {}),
       ...(supported.has('inc') ? { 'inc.subscribe': routing, 'inc.unsubscribe': routing, 'inc.emit': routing, 'inc.channel.open': routing, 'inc.channel.list': routing, 'inc.channel.emit': routing, 'inc.channel.broadcast': routing, 'inc.channel.close': routing } : {}),
       ...(supported.has('upload') ? { 'upload.info': upload, 'upload.upload': upload, 'upload.status': upload } : {}),
       ...(supported.has('resource') ? { 'resource.info': resource, 'resource.bytes': resource, 'resource.bytesMany': resource, 'resource.cancel': resource } : {}),
-      ...(supported.has('storage') ? { 'storage.get': storage, 'storage.set': storage, 'storage.remove': storage, 'storage.keys': storage } : {}),
+      ...(supported.has('storage') ? { 'storage.get': capability, 'storage.set': capability, 'storage.remove': capability, 'storage.keys': capability } : {}),
       ...(supported.has('outbox') ? {'outbox.query': relayPublish, 'outbox.getEvent': relayPublish, 'outbox.resolveRelays': relayPublish, 'outbox.publish': relayPublish, 'outbox.subscribe': relaySubscribe, 'outbox.close': relayClose} : {}),
       ...(supported.has('relay') ? { 'relay.publish': relayPublish, 'relay.query': relayPublish, 'relay.subscribe': relaySubscribe, 'relay.close': relayClose } : {}),
     } } : {}),
     capabilities: {
-      disabledDomains: ['link', 'upload', 'resource', 'relay', 'identity', 'storage', 'intent', 'inc', 'keys', 'media', 'notify', 'config', 'outbox'].filter(domain => !supported.has(domain)),
+      disabledDomains: ['link', 'upload', 'resource', 'relay', 'identity', 'storage', 'intent', 'inc', 'keys', 'media', 'notify', 'config', 'outbox', 'common'].filter(domain => !supported.has(domain)),
       resolveEnvironment: () => ({ domains: [...supported], services: ['theme', ...(supported.has('identity') ? ['identity'] : [])] }),
     },
   };
 }
 
-const privilegedRequests = new Set(['identity.getPublicKey', 'identity.getRelays', 'identity.getProfile',
+const privilegedRequests = new Set([...COMMON_OPERATIONS,'identity.getPublicKey', 'identity.getRelays', 'identity.getProfile',
   'identity.getFollows', 'identity.getMutes', 'identity.getBlocked', 'identity.getList',
   'identity.getZaps', 'identity.getBadges', 'storage.get', 'storage.set', 'storage.remove', 'storage.keys', 'relay.query', 'outbox.query', 'outbox.getEvent', 'outbox.resolveRelays', 'outbox.publish', 'resource.info', 'resource.bytes', 'resource.bytesMany', 'resource.cancel']);
 function validEnvelope(value: unknown): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const message = value as Record<string, unknown>;
   const keys = Object.keys(message);
+  if (typeof message.type === 'string' && message.type.startsWith('common.')) {try {parseCommonRequest(value); return true;} catch {return false;}}
   if (typeof message.type === 'string' && message.type.startsWith('config.')) {try {parseConfigMessage(value); return true;} catch {return false;}}
   if (typeof message.type === 'string' && message.type.startsWith('notify.')) {try {parseNotifyMessage(value); return true;} catch {return false;}}
   if (typeof message.type === 'string' && (message.type.startsWith('intent.') || message.type.startsWith('inc.'))) { try { parseRoutingMessage(value); return true; } catch { return false; } }
@@ -234,6 +247,10 @@ function approvalTimeouts(artifact: RuntimeMetadata): Readonly<Record<string, nu
 }
 
 function rejectEnvelope(event: MessageEvent, source: Window, domains: readonly string[]): void {
+      if (domains.includes('common')) {
+        const reply = commonFailure(event.data);
+        if (reply) {source.postMessage(reply,'*');return;}
+      }
       if (domains.includes('relay') && event.data?.type === 'relay.publish') {
         const id = event.data.id;
         if (typeof id === 'string' && id.length > 0 && id.length <= 128 &&

@@ -497,6 +497,10 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     return when (type) {
       "identity.getPublicKey", "identity.getProfile", "identity.getRelays", "identity.getFollows", "identity.getBadges" ->
         "identity" in config.grantedDomains && request.length() == 2
+      "common.getProfile" -> "common" in config.grantedDomains &&
+        request.length() == 3 &&
+        (request.opt("target") as? String)?.let { it.toByteArray(Charsets.UTF_8).size in 1..5000 } == true
+      "common.follows" -> "common" in config.grantedDomains && request.length() == 2
       "relay.query" -> config.allowsRelay
       "storage.get", "storage.keys", "storage.set", "storage.remove" -> "storage" in config.grantedDomains
       else -> false

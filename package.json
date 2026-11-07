@@ -55,6 +55,7 @@
   },
   "dependencies": {
     "@expo/dom-webview": "58.0.2",
+    "@scure/base": "2.0.0",
     "applesauce-core": "6.2.0",
     "applesauce-relay": "6.2.1",
     "expo": "58.0.23",

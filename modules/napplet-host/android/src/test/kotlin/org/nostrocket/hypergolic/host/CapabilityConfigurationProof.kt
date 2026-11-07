@@ -37,7 +37,9 @@ object CapabilityConfigurationProof {
     }
     fun admitted(token: String) = OutboxQueryCapability.admits(leases, token)
     for ((type, domains) in listOf("relay.query" to listOf("outbox", "relay"),
-        "outbox.resolveRelays" to listOf("outbox"), "outbox.query" to listOf("relay"))) {
+        "outbox.resolveRelays" to listOf("outbox"), "outbox.query" to listOf("relay"),
+        "common.getProfile" to listOf("common"), "common.getProfile" to listOf("outbox"),
+        "common.follows" to listOf("common", "outbox"))) {
       val token = issue(type, domains)
       checkProof(leases.take(token) != null && !admitted(token))
       checkProof(leases.finish(token))
@@ -46,6 +48,9 @@ object CapabilityConfigurationProof {
     checkProof(!admitted(query) && leases.take(query) != null && admitted(query))
     checkProof(leases.take(query) == null)
     checkProof(leases.finish(query) && !admitted(query))
+    val common = issue("common.getProfile", listOf("common", "outbox"))
+    checkProof(!admitted(common) && leases.take(common) != null && admitted(common))
+    checkProof(leases.finish(common) && !admitted(common))
     val event = issue("outbox.getEvent", listOf("outbox"))
     checkProof(leases.take(event) != null && admitted(event))
     elapsed += 25_000

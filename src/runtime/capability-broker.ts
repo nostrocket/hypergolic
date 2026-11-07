@@ -1,4 +1,6 @@
 import {CapabilityReadAdmission, CapabilityReadBusy} from './capability-read-admission.ts';
+import {readCommon} from '../common/common-service.ts';
+import {commonFailure,type CommonRequest} from '../common/common-contract.ts';
 import { CATALOG_PAGE, parseCatalogPageRequest } from '../napplets/catalog-page-contract.ts';
 import { createCatalogPaging } from '../napplets/catalog-paging.ts';
 import type { OutboxReadService } from '../outbox/read-service.ts';
@@ -92,10 +94,11 @@ async function readCatalogPage(value: unknown, catalog: ReturnType<typeof create
   catch {return failure;}
 }
 function invalidRequestReply(payload: unknown, domains: readonly string[]): CapabilityReply | null {
+  const common = domains.includes('common') ? commonFailure(payload) : null;
   const relay = domains.includes('relay') ? queryFailure(payload, 'invalid relay query') : null;
   const storage = domains.includes('storage') ? storageFailure(payload, 'invalid storage request') : null;
   const outbox = domains.includes('outbox') ? outboxReadFailure(payload, 'invalid filter') : null;
-  return relay ?? storage ?? outbox;
+  return common ?? relay ?? storage ?? outbox;
 }
 
 function finishCapability(native: NativeCapabilityPort, token: string, response: string | null, active: () => void): void {
@@ -160,13 +163,20 @@ export function createCapabilityBroker(database: ShellDatabase, native: NativeCa
         if (!registration.domains.includes(domain)) return;
         const correlation = JSON.stringify([request.type, request.id]);
         if (seen.has(correlation) || seen.size >= CAPABILITY_LIMITS.sessionRequests) {
-          const failure = outboxReadFailure(request, 'policy denied') ?? queryFailure(request, 'request already used or session limit reached') ?? storageFailure(request, 'request already used or session limit reached');
+          const failure = commonFailure(request) ?? outboxReadFailure(request, 'policy denied') ?? queryFailure(request, 'request already used or session limit reached') ?? storageFailure(request, 'request already used or session limit reached');
           if (failure) response = JSON.stringify(failure);
           return;
         }
         seen.add(correlation);
         let result: CapabilityReply;
-        if (request.type === 'outbox.query' || request.type === 'outbox.getEvent' || request.type === 'outbox.resolveRelays') result = await readOutboxQuery(request, outbox, registration, pending, () => assertActive(token), token);
+        if (domain === 'common') {
+          const work = (signal:AbortSignal) => readCommon(request as CommonRequest,registration,
+            signal,() => assertActive(token),{queries,identity:identityData,outbox,token});
+          try {result = request.type === 'common.getProfile' || request.type === 'common.follows'
+            ? await pending.schedule(() => assertActive(token),work)
+            : await work(new AbortController().signal);}
+          catch {assertActive(token);result = commonFailure(request,'relay-timeout')!;}
+        } else if (request.type === 'outbox.query' || request.type === 'outbox.getEvent' || request.type === 'outbox.resolveRelays') result = await readOutboxQuery(request, outbox, registration, pending, () => assertActive(token), token);
         else if (request.type === 'relay.query') result = await readQuery(request, queries, pending, () => assertActive(token));
         else if (domain === 'identity') result = await readIdentity(request as IdentityRequest, identityData, registration, pending, () => assertActive(token));
         else {

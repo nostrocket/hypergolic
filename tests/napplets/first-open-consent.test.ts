@@ -4,7 +4,7 @@ import { finalizeEvent, getPublicKey } from 'nostr-tools/pure';
 import { naddrEncode } from 'nostr-tools/nip19';
 import { resolveNappletLink } from '../../src/napplets/resolve-link.ts';
 import { verifyArtifact, verifyManifest } from '../../src/napplets/verified-artifact.ts';
-import { assertVerifiedNappletAdmission, FirstOpenConsentError, requestFirstOpenConsent } from '../../src/napplets/first-open-consent.ts';
+import { assertVerifiedNappletAdmission, FirstOpenConsentError, requestFirstOpenConsent, publishedCapabilityCompatibility } from '../../src/napplets/first-open-consent.ts';
 import { stageAdmittedPublishedArtifact } from '../../src/napplets/admitted-transfer.ts';
 import { descriptorForPublishedArtifact, publishedHostInput } from '../../src/napplets/published-host-input.ts';
 import type { NativePublishedTransferPort } from '../../src/napplets/native-transfer.ts';
@@ -139,6 +139,8 @@ test('native staging refuses a forged admission and revokes an upload after iden
     revokePublishedSession: () => { calls.push('revoke'); },
     revokeAllPublishedArtifacts: () => {},
   };
+
+
   await assert.rejects(stageAdmittedPublishedArtifact({}, candidate, 'session_1', native,
     new AbortController().signal, owner.assertActive));
   assert.deepEqual(calls, []);
@@ -147,6 +149,30 @@ test('native staging refuses a forged admission and revokes an upload after iden
   await assert.rejects(stageAdmittedPublishedArtifact(admission, candidate, 'session_1', native,
     new AbortController().signal, owner.assertActive));
   assert.deepEqual(calls, ['begin', 'append', 'cancel']);
+});
+
+test('saved current-profile grants retain exact prior authority until Common is explicitly reviewed', async t => {
+  const {database} = await setup(t);
+  const {owner,storage} = control(database);
+  const required = ['common','identity','keys','media','outbox','theme'];
+  const candidate = await artifact(required,[]);
+  const prior = publishedCapabilityCompatibility(required,[],'before-common');
+  await storage.replaceAccessGrant(prior.grantedDomains,null,{},prior.review);
+  const before = await storage.readAccessGrant();
+  const signal = new AbortController().signal;
+  const pinned = await requestFirstOpenConsent(candidate,owner,storage,signal,owner.assertActive,
+    async () => assert.fail('saved exact pin must preserve old access'),'saved-pin');
+  assert.equal(pinned.supportProfile,'before-common');
+  assert.deepEqual(pinned.domains,['identity','keys','media','outbox','theme']);
+  assertVerifiedNappletAdmission(pinned,candidate);
+  await assert.rejects(requestFirstOpenConsent(candidate,owner,storage,signal,owner.assertActive,async review => {
+    assert.deepEqual(review.unsupportedDomains,[]);return false;
+  }),FirstOpenConsentError);
+  assert.deepEqual(await storage.readAccessGrant(),before);
+  const admitted = await requestFirstOpenConsent(candidate,owner,storage,signal,owner.assertActive,async()=>true);
+  assert.deepEqual(admitted.domains,required);
+  assert.equal(admitted.supportProfile,'current');
+  assertVerifiedNappletAdmission(admitted,candidate);
 });
 
 test('unsupported names remain warning-only and a changed requested set or host profile requires review', async t => {

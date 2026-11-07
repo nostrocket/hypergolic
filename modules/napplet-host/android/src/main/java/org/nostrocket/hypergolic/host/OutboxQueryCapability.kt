@@ -9,8 +9,11 @@ internal object OutboxQueryCapability {
       val value = JSONObject(snapshot)
       val domains = value.getJSONObject("registration").getJSONArray("domains")
       val request = JSONObject(value.getString("request"))
-      request.optString("type") in setOf("outbox.query", "outbox.getEvent") &&
-        (0 until domains.length()).any { domains.get(it) == "outbox" } && leases.isActive(token)
+      val grants = (0 until domains.length()).map { domains.get(it) }
+      val type = request.optString("type")
+      val operation = type in setOf("outbox.query", "outbox.getEvent") ||
+        type == "common.getProfile" && "common" in grants
+      operation && "outbox" in grants && leases.isActive(token)
     } catch (_: Exception) { false }
   }
 }

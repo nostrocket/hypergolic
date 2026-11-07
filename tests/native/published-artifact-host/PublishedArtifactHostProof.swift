@@ -38,7 +38,8 @@ import Foundation
       return leases.admit(generation, sequence: capabilitySequence, snapshot: snapshot)!
     }
     func allowsOutbox(_ token: String) -> Bool { CapabilityTransport.outboxAdmitted(token, leases: leases) }
-    for (type, domains) in [("relay.query", ["outbox", "relay"]), ("outbox.resolveRelays", ["outbox"]), ("outbox.query", ["relay"])] {
+    for (type, domains) in [("relay.query", ["outbox", "relay"]), ("outbox.resolveRelays", ["outbox"]), ("outbox.query", ["relay"]),
+      ("common.getProfile", ["common"]), ("common.getProfile", ["outbox"]), ("common.follows", ["common", "outbox"])] {
       let token = try issue(type, domains)
       try check(leases.take(token) != nil && !allowsOutbox(token), "reject crossed query authority")
       try check(leases.finish(token), "finish denied query")
@@ -47,6 +48,9 @@ import Foundation
     try check(!allowsOutbox(query) && leases.take(query) != nil && allowsOutbox(query), "only a claimed exact Outbox query can borrow")
     try check(leases.take(query) == nil, "one-use claim")
     try check(leases.finish(query) && !allowsOutbox(query), "finished query cannot borrow")
+    let common = try issue("common.getProfile", ["common", "outbox"])
+    try check(!allowsOutbox(common) && leases.take(common) != nil && allowsOutbox(common), "Common profile needs both actual grants and the exact claimed lease")
+    try check(leases.finish(common) && !allowsOutbox(common), "finished Common profile cannot borrow")
     let event = try issue("outbox.getEvent", ["outbox"])
     try check(leases.take(event) != nil && allowsOutbox(event), "allow claimed exact getEvent")
     _ = leases.setForeground(false)

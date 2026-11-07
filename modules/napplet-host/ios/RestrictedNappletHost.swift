@@ -555,6 +555,11 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     switch type {
     case "identity.getPublicKey", "identity.getProfile", "identity.getRelays", "identity.getFollows", "identity.getBadges":
       return configuration.domains.contains("identity") && request.count == 2
+    case "common.getProfile":
+      return configuration.domains.contains("common") &&
+        request.count == 3 &&
+        (request["target"] as? String).map { (1...5000).contains($0.utf8.count) } == true
+    case "common.follows": return configuration.domains.contains("common") && request.count == 2
     case "relay.query": return configuration.domains.contains("relay")
     case "storage.get", "storage.keys", "storage.set", "storage.remove": return configuration.domains.contains("storage")
     default: return false

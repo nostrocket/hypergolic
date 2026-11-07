@@ -7,8 +7,9 @@ const BASE_SUPPORT_PROFILE = `${PROFILE_PREFIX}-v1`;
 const INTENT_SUPPORT_PROFILE = 'hypergolic-native-2026-11-06-intent-v1';
 export const MEDIA_ACCESS_DETAIL = 'Media access lets this napplet offer a public HTTPS video. Play in the shell authorizes playback and a download of up to 256 MiB for the selected video. The source may redirect to another public HTTPS site.';
 const MEDIA_SUPPORT_PROFILE = `${PROFILE_PREFIX}-media-file-v1`;
-export const REPORTED_SUPPORT_PROFILE = `${PROFILE_PREFIX}-outbox-keys-v1/${MEDIA_SUPPORT_PROFILE}`;
-export type ReviewedSupportProfile = 'current' | 'legacy';
+export const REPORTED_SUPPORT_PROFILE = `${PROFILE_PREFIX}-outbox-keys-v1/${MEDIA_SUPPORT_PROFILE}/${PROFILE_PREFIX}-common-read-v1`;
+export type ReviewedSupportProfile = 'current' | 'before-common' | 'legacy';
+const beforeCommonDomains = Object.freeze(SUPPORTED_CAPABILITY_DOMAINS.filter(domain => domain !== 'common'));
 const legacyDomains = Object.freeze(['identity', 'storage', 'theme', 'relay', 'resource', 'upload',
   'link', 'intent', 'inc', 'notify', 'config', 'outbox']);
 
@@ -28,6 +29,7 @@ const notes: Readonly<Record<string, string>> = Object.freeze({
   outbox: 'Outbox queries return up to 200 events. Bounded subscriptions and approved publication are available. Raw Relay operations require a separate grant.',
   keys: 'Hardware keyboard actions for the focused napplet. Ordinary suggested shortcuts can work outside text entry.',
   media: 'Shell-owned foreground HTTPS MP4 playback after trusted Play. Live streams, playlists and napplet-owned sessions are unavailable.',
+  common: 'Public NIP-19 helpers. Profile lookup needs a Relay or Outbox grant; follows needs Identity. Social writes are unavailable.',
 });
 
 export function supportForDomain(domain: string): Readonly<{status: SupportAvailability; detail: string}> {
@@ -43,7 +45,8 @@ function supportProfile(requested: readonly string[], policy: ReviewedSupportPro
   const added = ['outbox', 'keys'].filter(domain => requested.includes(domain));
   if (intent && added.length) added.push('intent');
   const profile = added.length ? `${PROFILE_PREFIX}-${added.join('-')}-v1` : previous;
-  return requested.includes('media') ? `${profile}/${MEDIA_SUPPORT_PROFILE}` : profile;
+  const media = requested.includes('media') ? `${profile}/${MEDIA_SUPPORT_PROFILE}` : profile;
+  return policy === 'current' && requested.includes('common') ? `${media}/${PROFILE_PREFIX}-common-read-v1` : media;
 }
 
 export function capabilityCompatibility(requested: readonly string[], available: readonly string[] = SUPPORTED_CAPABILITY_DOMAINS,
@@ -57,5 +60,6 @@ export function capabilityCompatibility(requested: readonly string[], available:
 }
 
 export function reviewedCapabilityCompatibility(requested: readonly string[], policy: ReviewedSupportProfile) {
-  return capabilityCompatibility(requested, policy === 'legacy' ? legacyDomains : SUPPORTED_CAPABILITY_DOMAINS, policy);
+  const available = policy === 'legacy' ? legacyDomains : policy === 'before-common' ? beforeCommonDomains : SUPPORTED_CAPABILITY_DOMAINS;
+  return capabilityCompatibility(requested, available, policy);
 }

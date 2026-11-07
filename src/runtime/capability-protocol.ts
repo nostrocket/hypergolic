@@ -1,10 +1,11 @@
 import { parseOutboxRead, type OutboxReadRequest } from '../outbox/query-contract.ts';
+import {COMMON_OPERATIONS,parseCommonRequest,type CommonOperation,type CommonRequest} from '../common/common-contract.ts';
 import { identifier, publicKey, revision, text, utf8Bytes } from '../storage/codec.ts';
 import { parseRelayQuery, type RelayQueryRequest } from '../network/relay-query-contract.ts';
 import { LIMITS, type Scope } from '../storage/ports.ts';
 
 export const CAPABILITY_LIMITS = Object.freeze({ messageBytes: 2 * 1024 * 1024, sessionRequests: 1024 });
-export const SUPPORTED_CAPABILITY_DOMAINS = Object.freeze(['identity', 'storage', 'theme', 'relay', 'resource', 'upload', 'link', 'intent', 'inc', 'notify', 'config', 'outbox', 'keys', 'media']);
+export const SUPPORTED_CAPABILITY_DOMAINS = Object.freeze(['identity', 'storage', 'theme', 'relay', 'resource', 'upload', 'link', 'intent', 'inc', 'notify', 'config', 'outbox', 'keys', 'media', 'common']);
 // Published and bundled admission use the same reviewed domain set; operations still enforce grants.
 const NATIVE_CAPABILITY_DOMAINS = SUPPORTED_CAPABILITY_DOMAINS;
 export const IDENTITY_OPERATIONS = ['identity.getPublicKey', 'identity.getRelays', 'identity.getProfile',
@@ -16,18 +17,19 @@ export const DEFERRED_IDENTITY_OPERATIONS: readonly string[] = Object.freeze([
 ]);
 export function canDeferCapability(type: string): boolean {
   return DEFERRED_IDENTITY_OPERATIONS.includes(type) || type === 'relay.query' ||
+    type === 'common.getProfile' || type === 'common.follows' ||
     STORAGE_OPERATIONS.some(operation => operation === type);
 }
 export type IdentityOperation = typeof IDENTITY_OPERATIONS[number];
 export type StorageOperation = typeof STORAGE_OPERATIONS[number];
-export type CapabilityOperation = IdentityOperation | StorageOperation | 'relay.query' | 'outbox.query' | 'outbox.getEvent' | 'outbox.resolveRelays';
+export type CapabilityOperation = IdentityOperation | StorageOperation | CommonOperation | 'relay.query' | 'outbox.query' | 'outbox.getEvent' | 'outbox.resolveRelays';
 export interface NativeRegistration {
   readonly sessionId: string; readonly generation: string; readonly epoch: number;
   readonly user: string; readonly publisher: string; readonly appId: string;
   readonly version: string; readonly instanceId: string;
   readonly fixture: string; readonly domains: readonly string[];
 }
-export type CapabilityRequest = OutboxReadRequest | RelayQueryRequest | Readonly<{ type: IdentityOperation; id: string; listType?: string }>
+export type CapabilityRequest = CommonRequest | OutboxReadRequest | RelayQueryRequest | Readonly<{ type: IdentityOperation; id: string; listType?: string }>
   | Readonly<{ type: StorageOperation; id: string; key?: string; value?: string; scope: Scope }>;
 export type CapabilityReply = Readonly<Record<string, unknown> & { type: string; id: string }>;
 export class CapabilityRequestError extends Error {
@@ -57,6 +59,7 @@ export function decodeNativeRegistration(value: unknown): NativeRegistration {
 }
 export function parseCapabilityRequest(value: unknown): CapabilityRequest {
   const data = record(value);
+  if (COMMON_OPERATIONS.includes(data.type as CommonOperation)) return parseCommonRequest(data);
   if (data.type === 'relay.query') return parseRelayQuery(data);
   if (['outbox.query','outbox.getEvent','outbox.resolveRelays'].includes(data.type as string)) return parseOutboxRead(data);
   const id = text(data.id, 128);

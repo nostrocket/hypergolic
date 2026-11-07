@@ -110,10 +110,13 @@ export async function requestFirstOpenConsent(
   if (current?.supportReview === supportReview && sameSet(existing, domains)) {
     accepted = { domains, supportProfile: 'current' };
   } else {
-    const previous = publishedCapabilityCompatibility(requestedDomains, optionalDomains, 'legacy');
-    if (current?.supportReview === previous.review && sameSet(existing, previous.grantedDomains) &&
-        (mode === 'saved-pin' || sameSet(previous.domains, domains))) {
-      accepted = { domains: previous.domains, supportProfile: 'legacy' };
+    for (const profile of ['before-common','legacy'] as const) {
+      const previous = publishedCapabilityCompatibility(requestedDomains, optionalDomains, profile);
+      if (current?.supportReview === previous.review && sameSet(existing, previous.grantedDomains) &&
+          (mode === 'saved-pin' || sameSet(previous.domains, domains))) {
+        accepted = { domains: previous.domains, supportProfile: profile };
+        break;
+      }
     }
   }
 
