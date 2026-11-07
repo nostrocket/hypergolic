@@ -8,6 +8,7 @@ import { createResourceService, type ResourceResolvers } from '../../src/resourc
 import { parseResourceRequest, parseResourceURL, publicResourceHttps, ResourceError,
   RESOURCE_LIMITS, resourceFailure } from '../../src/resources/resource-contract.ts';
 import { classifyResourceBytes } from '../../src/resources/resource-mime.ts';
+import { DEFAULT_RESOURCE_SERVERS } from '../../src/resources/resource-settings.ts';
 import type { NativeRegistration } from '../../src/runtime/capability-protocol.ts';
 
 const encoder = new TextEncoder();
@@ -174,6 +175,51 @@ test('Blossom verifies bytes on fallback and does not let hints choose servers',
   const bad=setup({https:async()=>text('wrong')}), b=bad.bind();
   await assert.rejects(b.execute(bytes('bad','blossom:sha256:'+digest)),error('decode-failed'));
   h.service.revokeAll();bad.service.revokeAll();
+});
+
+test('unhinted default mirrors reach the third verified response within one URL budget', async t => {
+  t.mock.timers.enable({apis: ['setTimeout', 'setInterval']});
+  let clock = 0;
+  const body = text('verified default mirror'), digest = hash(body);
+  const calls: {url: string; reject(error: ResourceError): void; resolve(bytes: Uint8Array<ArrayBuffer>): void}[] = [];
+  const h = setup({servers: () => DEFAULT_RESOURCE_SERVERS, now: () => clock,
+    https: (url, _signal, active) => { active(); return new Promise((resolve, reject) => calls.push({url, resolve, reject})); }});
+  const work = h.bind().execute(bytes('default-fallback', 'blossom:' + digest));
+  void work.catch(() => {});
+  const turn = () => new Promise<void>(resolve => setImmediate(resolve));
+  try {
+    await turn(); assert.equal(calls.length, 1);
+    clock = 1000; t.mock.timers.tick(1000); calls[0]!.reject(new ResourceError('not-found'));
+    await turn(); assert.equal(calls.length, 2);
+    clock = 2000; t.mock.timers.tick(1000); calls[1]!.reject(new ResourceError('not-found'));
+    await turn(); assert.equal(calls.length, 3);
+    clock = 2500; t.mock.timers.tick(500); calls[2]!.resolve(body);
+    const result = await work as {value: {bytes: Uint8Array; mime: string}};
+    assert.deepEqual(result.value, {bytes: body, mime: 'text/plain'});
+    assert.deepEqual(calls.map(call => call.url), ['https://blossom.primal.net', 'https://cdn.satellite.earth', 'https://blssm.us'].map(origin => origin + '/' + digest));
+  } finally { h.service.revokeAll(); for (const call of calls) call.resolve(body); await work.catch(() => {}); t.mock.timers.reset(); }
+});
+
+test('slow default mirrors cannot renew the URL deadline or start a late third attempt', async t => {
+  t.mock.timers.enable({apis: ['setTimeout', 'setInterval']});
+  let clock = 0;
+  const body = text('late default mirror'), digest = hash(body);
+  const calls: {url: string; reject(error: ResourceError): void; resolve(bytes: Uint8Array<ArrayBuffer>): void}[] = [];
+  const h = setup({servers: () => DEFAULT_RESOURCE_SERVERS, now: () => clock,
+    https: (url, _signal, active) => { active(); return new Promise((resolve, reject) => calls.push({url, resolve, reject})); }});
+  const work = h.bind().execute(bytes('default-timeout', 'blossom:' + digest));
+  void work.catch(() => {});
+  const turn = () => new Promise<void>(resolve => setImmediate(resolve));
+  try {
+    await turn(); clock = 5000; t.mock.timers.tick(5000); calls[0]!.reject(new ResourceError('not-found'));
+    await turn(); assert.equal(calls.length, 2);
+    clock = RESOURCE_LIMITS.urlMs; t.mock.timers.tick(RESOURCE_LIMITS.urlMs - 5000);
+    await assert.rejects(work, error('timeout'));
+    calls[1]!.reject(new ResourceError('not-found')); await turn();
+    assert.equal(calls.length, 2);
+    assert.equal(RESOURCE_LIMITS.requestMs, 20_000);
+    assert.equal(RESOURCE_LIMITS.urlMs, 15_000);
+  } finally { h.service.revokeAll(); for (const call of calls) call.resolve(body); await work.catch(() => {}); t.mock.timers.reset(); }
 });
 test('advisory Blossom hints prefer an exact configured origin and preserve configured fallback', async () => {
   const body = text('verified');

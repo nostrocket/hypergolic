@@ -1,7 +1,7 @@
 import { RESOURCE_LIMITS, resourceServerOrigin, ResourceError } from './resource-contract.ts';
 import type { RelaySettingsStoragePort } from '../network/relay-settings.ts';
 export const RESOURCE_SETTINGS_KEY = 'trusted-resource-servers-v1';
-export const DEFAULT_RESOURCE_SERVERS = Object.freeze(['https://blossom.primal.net', 'https://cdn.satellite.earth']);
+export const DEFAULT_RESOURCE_SERVERS = Object.freeze(['https://blossom.primal.net', 'https://cdn.satellite.earth', 'https://blssm.us']);
 export function normalizeResourceServers(input: unknown): readonly string[] {
   if (!Array.isArray(input) || input.length > RESOURCE_LIMITS.blossomServers) throw new ResourceError('blocked-by-policy');
   const servers = input.map(value => {
