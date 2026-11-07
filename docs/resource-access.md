@@ -12,7 +12,7 @@ Caller scope, fetch options, cookies, authorization headers, response headers/st
 
 Native Resource GETs identify the client with the fixed Hypergolic Resource User-Agent and its public project URL. The header contains no device, account, or napplet identifiers. [Wikimedia Foundation User-Agent policy](https://foundation.wikimedia.org/wiki/Policy:Wikimedia_Foundation_User-Agent_Policy)
 
-A resource grant permits any validated public HTTPS hostname. Each connection resolves and checks all addresses, rejects private/mixed results, pins a permitted address, and verifies TLS against the hostname. HTTPS URLs reject credentials, IP literals, local/private aliases, fragments and malformed controls. The WebView itself has no network authority. Its inner CSP admits Blob image/media previews only when resource is granted; the trusted CSP remains the leading head policy before all preludes.
+A resource grant permits any validated public HTTPS hostname. Each connection resolves and checks all addresses, rejects private/mixed results, pins a permitted address, and verifies TLS against the hostname. HTTPS URLs reject credentials, IP literals, local/private aliases, fragments and malformed controls. A Resource grant authorizes these native routes. The [browser boundary](native-contract.md#artifact-and-browser-boundary) has separately documented networking limits. Its inner CSP admits Blob image/media previews only when resource is granted; the trusted CSP remains the leading head policy before all preludes.
 
 ## Selected schemes
 

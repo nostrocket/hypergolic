@@ -66,10 +66,17 @@ reference. The production policy belongs to `RestrictedNappletHost.swift`; the
 Build/runtime verification checks original UTF-8 bytes, HTML SHA-256 and NIP-5A
 aggregate. CSP/namespace injection must not change the bytes used for verification.
 The outer CSP admits only its packaged script and controlled bootstrap. The child
-CSP precedes guest scripts and denies network, external scripts, workers, nested
-frames, forms, base overrides, media and objects except selected native-mediated
-resource projection. The sandbox has no same-origin, popup, download, form or
-top-navigation grant.
+CSP precedes guest scripts and blocks direct fetch and WebSocket requests,
+external scripts, remote/data workers, nested frames, form submission, base
+overrides and object loads. Media URLs remain restricted to selected Blob
+projection. [Local blob workers](local-workers.md) and their generation-isolated
+browser cache have a separate selected policy. The sandbox has no same-origin,
+popup, download, form or top-navigation grant.
+
+WebRTC transport isolation is outside these guarantees. An Android constructor-only
+probe observed available WebRTC globals and constructed and closed an
+RTCPeerConnection. ICE/STUN and data-channel egress remain untested. That diagnostic
+establishes constructor behavior only.
 
 On the trusted Android runtime origin, activation of an explicit local submit
 button can deliver a synthetic `submit` event when Chromium suppresses the
