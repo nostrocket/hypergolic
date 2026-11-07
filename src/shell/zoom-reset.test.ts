@@ -183,3 +183,20 @@ test('target subscriptions update menu availability while stale unregistration l
   removeTarget(); assert.deepEqual(snapshots, [2, 3]); assert.equal(h.targets.get(first.id), null);
   removeListener(); h.targets.register(h.target); assert.deepEqual(snapshots, [2, 3]);
 });
+
+
+test('the actual Fabric target and timeStamp decorations preserve a correlated native acknowledgement', async t => {
+  t.mock.timers.enable({apis: ['setTimeout']});
+  const h = requests(), result = h.owner.request('first', 'ready-first');
+  h.reply({target: 42, timeStamp: 1_234.25}); t.mock.timers.tick(1_100);
+  assert.equal(await result, true);
+});
+
+test('only valid framework decorations are tolerated and arbitrary extra fields stay denied', async () => {
+  const h = requests(); let settled = false;
+  const result = h.owner.request('first', 'ready-first').then(value => {settled = true; return value;});
+  for (const patch of [{target: '42'}, {target: true}, {target: 0}, {target: 1.5},
+    {timeStamp: '1'}, {timeStamp: -1}, {timeStamp: Number.NaN}, {timeStamp: Infinity},
+    {target: 42, timeStamp: 1, extra: true}]) h.reply(patch);
+  await tick(); assert.equal(settled, false); h.reply({ok: false}); assert.equal(await result, false);
+});

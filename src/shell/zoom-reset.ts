@@ -6,6 +6,8 @@ export type ZoomResetRegistration = (target: ZoomResetTarget) => () => void;
 type NativeZoomState = Readonly<{view: NativeZoomView | null; generation: string | null; available: boolean}>;
 export type NativeZoomReply = Readonly<{type: 'zoom-reset'; sessionId: string; generation: string; sequence: number; ok: boolean}>;
 type PendingZoom = {sessionId: string; generation: string; sequence: number; deadline: number; timer: ReturnType<typeof setTimeout>; resolve(value: boolean): void};
+const zoomReplyFields = ['type', 'sessionId', 'generation', 'sequence', 'ok'];
+const zoomViewEventFields = new Set([...zoomReplyFields, 'target', 'timeStamp']);
 
 /** A prop command has one bounded waiter; native also rejects expired or replayed commands. */
 export class NativeZoomRequests {
@@ -30,8 +32,13 @@ export class NativeZoomRequests {
   receive(value: unknown): void {
     const pending = this.pending;
     if (!pending || !value || typeof value !== 'object' || Array.isArray(value)) return;
-    const row = value as NativeZoomReply;
-    if (Object.keys(row).length !== 5 || row.type !== 'zoom-reset' || row.sessionId !== pending.sessionId ||
+    const row = value as NativeZoomReply & {target?: unknown; timeStamp?: unknown};
+    // Fabric decorates native view events; these fields never participate in correlation.
+    if (zoomReplyFields.some(key => !Object.hasOwn(row, key)) ||
+      Object.keys(row).some(key => !zoomViewEventFields.has(key))) return;
+    if (Object.hasOwn(row, 'target') && (typeof row.target !== 'number' || !Number.isSafeInteger(row.target) || row.target <= 0)) return;
+    if (Object.hasOwn(row, 'timeStamp') && (typeof row.timeStamp !== 'number' || !Number.isFinite(row.timeStamp) || row.timeStamp < 0)) return;
+    if (row.type !== 'zoom-reset' || row.sessionId !== pending.sessionId ||
       row.generation !== pending.generation || row.sequence !== pending.sequence || typeof row.ok !== 'boolean') return;
     let timely = false;
     try {timely = this.now() < pending.deadline;} catch { /* Unavailable timing cannot confirm a reset. */ }
