@@ -187,9 +187,9 @@ export function createNativeRelayQuery(port: NativeQueryPort,
               if (lifetime.aborted()) throw new RelayQueryError();
               continue;
             } finally { lifetime.complete(operation); }
-            // Wide queries can receive a different revision per author from each relay.
-            // Enforce per-filter limits before the aggregate cap can crowd out other authors.
-            if (filters.length > QUERY_LIMITS.filters) batch = selectBatch(events, hints, batch, filters, aggregation);
+            // Apply exact per-filter selection before charging aggregate budgets. Rows outside
+            // the requested newest results do not make that selected output partial.
+            if (!ranked) batch = selectBatch(events, hints, batch, filters, aggregation);
             for (const event of batch) {
               if (ranked && (aggregation.limited || events.size >= (structuredFilter.limit as number))) break;
               retainEvent(events,hints,event,relay,aggregation);

@@ -292,12 +292,12 @@ test('event and relay-plan parsers reject guest authority and malformed alternat
   let invoked=false;assert.throws(()=>parseOutboxEvent({...input,options:{get author(){invoked=true;return author;}}}));assert.equal(invoked,false);
 });
 
-test('valid disjoint relay batches exceeding the global result bound retain newest verified partial events without changing legacy limits',async()=> {
+test('disjoint relay batches outside requested filter selection do not make selected output partial',async()=> {
   const routes=parseOutboxRelayList(JSON.parse(JSON.stringify(finalizeEvent({kind:10002,created_at:1,content:'',tags:[['r','wss://first.nostr.net','write'],['r','wss://second.nostr.net','write']]},key))),author);
   const h=harness({async resolve(){return {list:routes,source:'cache',incomplete:false};}});
   h.native.queryOutboxRelay=async(_token,_id,relay,_wire,sub)=>{h.calls.push(relay);const start=relay.includes('first')?1:111;return [...Array.from({length:110},(_,i)=>JSON.stringify(['EVENT',sub,JSON.parse(JSON.stringify(finalizeEvent({kind:1,created_at:start+i,tags:[],content:'bounded-'+(start+i)},key)))])),JSON.stringify(['EOSE',sub])];};
   const result=await h.service.query({...request,options:{limit:2}},author,signal(),()=>{},token);
-  assert.deepEqual(result.events.map(row=>row.event.created_at),[220,219]);assert.equal(result.incomplete,true);assert.deepEqual(result.events[0]?.sidecar?.relayHints,['wss://second.nostr.net']);assert.equal(h.calls.length,2);
+  assert.deepEqual(result.events.map(row=>row.event.created_at),[220,219]);assert.equal(result.incomplete,false);assert.deepEqual(result.events[0]?.sidecar?.relayHints,['wss://second.nostr.net']);assert.equal(h.calls.length,2);
 });
 
 const profileKeys = Array.from({length:33}, (_, index) => new Uint8Array(32).fill(index + 1));
@@ -501,3 +501,21 @@ for (const mode of ['complete','empty','failed-peer','missing-eose'] as const) {
     assert.deepEqual(result.events.map(row=>row.event.id),mode === 'empty' ? [] : [manifest.id]);
   });
 }
+
+test('Intent public80/8s query returns exact top80 complete after three healthy distinct80 batches',async()=>{
+  const peers=['wss://first.nostr.net','wss://second.nostr.net','wss://third.nostr.net'];
+  const manifests=Array.from({length:240},(_,index)=>finalizeEvent({kind:35129,created_at:1000+index,
+    content:JSON.stringify({name:`Game ${index}`}),tags:[['d',`game-${index}`],['x','a'.repeat(64)],['z','game'],['i','napplet:game/open']],
+  },key));
+  const h=harness({async resolve(){assert.fail('public query must not resolve an author');}},peers);
+  h.native.queryOutboxRelay=async(captured,_id,relay,wire,sub)=>{
+    assert.equal(captured,token);h.calls.push(relay);
+    assert.deepEqual(JSON.parse(wire),['REQ',sub,{kinds:[5129,15129,35129],limit:80}]);
+    const start=peers.indexOf(relay)*80;
+    return [...manifests.slice(start,start+80).map(e=>JSON.stringify(['EVENT',sub,e])),JSON.stringify(['EOSE',sub])];
+  };
+  const result=await h.service.query({type:'outbox.query',id:'intent-public',filters:[{kinds:[5129,15129,35129],limit:80}],
+    options:{limit:80,timeoutMs:8000}},author,signal(),()=>{},token);
+  assert.deepEqual(h.calls,peers);assert.equal(result.incomplete,false);assert.equal(result.plan.incomplete,false);
+  assert.deepEqual(result.events.map(r=>r.event.id),manifests.slice(160).reverse().map(e=>e.id));
+});

@@ -47,7 +47,14 @@ This admission stage neither retries nor replays a request.
 Only an active native claim for an exact Outbox query or getEvent can use
 the one-shot transport budget of 200 events and 256 text frames per relay.
 Signed result events remain limited to 512 KiB, with a 2 MiB ceiling on
-native response bytes per relay. Advisory relay hints use a separate 256 KiB
+native response bytes per relay. Structured reads select each filter's newest
+matching events, including deterministic timestamp/ID ties, before applying
+aggregate event and byte budgets. Discarding rows outside the requested filter
+limits does not itself make those selected results incomplete. Required output
+that exceeds a host budget, failed or invalid peer batches, and deadlines still
+remain incomplete or fail as appropriate. Ranked search retains the selected
+peer's order.
+Advisory relay hints use a separate 256 KiB
 budget. Excess hints are omitted so they cannot crowd out signed events. It uses the existing shared native connection
 slots and deadlines. Raw Relay, catalog reads, author-list discovery
 and live subscriptions retain their existing budgets.
