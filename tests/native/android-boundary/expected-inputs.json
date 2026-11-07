@@ -71,6 +71,6 @@
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/UploadWire.kt": "2027422b69d5ace19bb0ab36e80ee4682260e5c95a6be04621400a40bcaf2e14",
     "modules/napplet-host/android/build.gradle": "d43426cfd2fc062d658d262afd31722a7f23a6e032e6fc90d4f2e35493fc3aa5",
     "modules/napplet-host/android/src/main/assets/runtime/index.html": "1040d8cb8e91d50858cbcdde570a2e1312b59a2b6377b0dfe1bd11e0bdae6494",
-    "modules/napplet-host/android/src/main/assets/runtime/host.js": "8530dd08744f388aa7dd231d1e28ba75004f8afc74817b58736949d743614bd9"
+    "modules/napplet-host/android/src/main/assets/runtime/host.js": "c49bfc77fc298ff7e52839df9a21eb26111d0ef87c5a9a451f635162dcafa472"
   }
 }
