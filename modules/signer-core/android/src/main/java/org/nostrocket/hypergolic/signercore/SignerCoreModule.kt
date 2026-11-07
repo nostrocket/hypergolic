@@ -36,6 +36,7 @@ class SignerCoreModule : Module() {
   private val handoffs by lazy { NativeHandoffController(appContext, ::active) }
   private var androidSigners: NativeAndroidSignerActions? = null
   private val completedSignings = NativeCompletedSignings()
+  private val publicVerification = NativePublicVerification()
 
   private class Signing(val kind: String, val token: String, val core: NativeSignerCore, val epoch: Long,
     val remote: NativeRemoteBinding? = null, val android: NativeAndroidSignerBinding? = null) {
@@ -724,16 +725,24 @@ class SignerCoreModule : Module() {
       }
     } }
 
+    AsyncFunction("verifyPublicSignatures") Coroutine { operationId: String, tuples: String, timeoutMs: Double ->
+      val job = publicVerification.begin(operationId, tuples, timeoutMs, ::active)
+      try { withContext(Dispatchers.Default) { publicVerification.run(job) }.also { publicVerification.delivery(job) } }
+      finally { publicVerification.abandon(job) }
+    }
+    Function("cancelPublicSignatures") { operationId: String -> publicVerification.cancel(operationId) }
+
     OnActivityEntersForeground {
+      publicVerification.foreground(true)
       androidSigners?.foreground(true)
       handoffs.foreground()
     }
-    OnActivityEntersBackground { background(); androidSigners?.foreground(false) }
-    OnUserLeavesActivity { background() }
+    OnActivityEntersBackground { publicVerification.foreground(false); background(); androidSigners?.foreground(false) }
+    OnUserLeavesActivity { publicVerification.foreground(false); background() }
     OnActivityResult { activity, result ->
       androidSigners?.result(activity, result.requestCode, result.resultCode, result.data)
     }
-    OnActivityDestroys { retire() }
-    OnDestroy { retire() }
+    OnActivityDestroys { publicVerification.close(); retire() }
+    OnDestroy { publicVerification.close(); retire() }
   }
 }

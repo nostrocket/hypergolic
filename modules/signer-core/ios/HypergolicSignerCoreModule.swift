@@ -9,9 +9,12 @@ import UIKit
 public final class HypergolicSignerCoreModule: Module {
   private let binding = EphemeralSignerBinding()
   private let nativeVault = NativeVaultBinding()
+  private let publicVerification = NativePublicVerification()
   public func definition() -> ModuleDefinition {
     let binding = self.binding
     let nativeVault = self.nativeVault
+    let publicVerification = self.publicVerification
+    let publicAuthority = appContext.map { NativeVaultRuntimeAuthority(context: $0) }
     Name("HypergolicSignerCore")
     Function("activateEphemeralSigner") { () throws -> Bool in
       try signerResult {
@@ -182,7 +185,18 @@ public final class HypergolicSignerCoreModule: Module {
     Function("cancelNativeSigning") { (kind: String, token: String) throws in
       try nativeVaultResult { try nativeVault.lease().cancelSigning(kind: kind, token: token) }
     }
-    OnDestroy { binding.revoke(); nativeVault.close() }
+    AsyncFunction("verifyPublicSignatures") { (operationId: String, tuples: String, timeoutMs: Double) async throws -> String in
+      guard let publicAuthority, publicAuthority.isOwner() else { throw NativePublicVerification.Failure.denied }
+      let foreground = await MainActor.run {
+        let active = UIApplication.shared.applicationState == .active
+        publicVerification.setForeground(active)
+        return active
+      }
+      guard foreground else { throw NativePublicVerification.Failure.denied }
+      return try await publicVerification.verify(id: operationId, raw: tuples, milliseconds: timeoutMs, active: { publicAuthority.isOwner() })
+    }
+    Function("cancelPublicSignatures") { (operationId: String) in publicVerification.cancel(operationId) }
+    OnDestroy { publicAuthority?.close(); publicVerification.close(); binding.revoke(); nativeVault.close() }
   }
 }
 

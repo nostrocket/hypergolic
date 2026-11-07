@@ -1,10 +1,11 @@
+import type { QueryBatchVerifier } from './native-event-verifier.ts';
 import type { CatalogRelayReader } from '../napplets/catalog-paging.ts';
 import type { NostrEvent } from 'nostr-tools/pure';
 import type { NativePublishedRelayPort } from '../napplets/native-published-relay.ts';
 import { parsePublishedRelayMessage } from '../napplets/published-relay-wire.ts';
 import { normalizeRelayUrl, MAX_RELAYS_PER_ROLE } from './relay-settings.ts';
 import { utf8Bytes } from '../storage/codec.ts';
-import { OUTBOX_QUERY_COUNTS, parseQueryFilters, QUERY_LIMITS, RelayQueryDataError, RelayQueryError, relayQueryWire, selectQueryEvents, verifyQueryEvent, type QueryFilter } from './relay-query-contract.ts';
+import { OUTBOX_QUERY_COUNTS, parseQueryFilters, QUERY_LIMITS, RelayQueryDataError, RelayQueryError, relayQueryWire, selectQueryEvents, captureQueryEvent, verifyQueryEvent, type QueryFilter } from './relay-query-contract.ts';
 
 export interface RelayQueryService {
   readonly catalog?: CatalogRelayReader;
@@ -21,7 +22,7 @@ type NativeQueryPort = Pick<NativePublishedRelayPort, 'newInstanceId' | 'cancelP
 };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 type QueryCounts = Readonly<{events: number; frames: number}>;
-function parseFrames(input: unknown, subscription: string, filters: readonly QueryFilter[], counts: QueryCounts, checkDeadline?: () => void): NostrEvent[] {
+async function parseFrames(input: unknown, subscription: string, filters: readonly QueryFilter[], counts: QueryCounts, checkDeadline?: () => void, verify?: (events: readonly NostrEvent[]) => Promise<void>): Promise<NostrEvent[]> {
   if (!Array.isArray(input) || input.length < 1 || input.length > counts.frames) throw new RelayQueryError();
   let eose = false, bytes = 0;
   const events: NostrEvent[] = [];
@@ -32,11 +33,13 @@ function parseFrames(input: unknown, subscription: string, filters: readonly Que
     if (message.type === 'eose') eose = true;
     else if (message.type === 'event') {
       if (events.length >= counts.events) throw new RelayQueryError();
-      events.push(verifyQueryEvent(message.event, filters));
+      events.push((verify ? captureQueryEvent : verifyQueryEvent)(message.event, filters));
     } else if (message.type !== 'notice' && message.type !== 'auth') throw new RelayQueryError();
   }
   checkDeadline?.();
   if (!eose) throw new RelayQueryError();
+  if (verify && events.length) await verify(Object.freeze(events));
+  checkDeadline?.();
   return events;
 }
 type Aggregation={maximumEvents:number;bytes:number;limited:boolean;sizes:Map<string,number>;partial:boolean;ranked:boolean};
@@ -94,6 +97,8 @@ function queryLifetime(signal: AbortSignal, active: () => void, budget: number, 
   if (signal.aborted) cancel();
   return {
     cancelled,
+    signal: controller.signal,
+    remaining: () => Math.max(0, Math.floor(expiresAt - performance.now())),
     aborted: () => controller.signal.aborted,
     peerBudget(peers: number): number {
       const remaining = Math.floor(expiresAt - performance.now());
@@ -116,7 +121,7 @@ function queryLifetime(signal: AbortSignal, active: () => void, budget: number, 
 }
 /** App-side only. Destinations come from trusted Network settings, never guest JSON. */
 export function createNativeRelayQuery(port: NativeQueryPort,
-  destinations: () => readonly string[], timeoutMs: number = QUERY_LIMITS.timeoutMs, options:Readonly<{allowPartialOnLimit?:boolean;outbox?:true}> = {}): DetailedRelayQueryService {
+  destinations: () => readonly string[], timeoutMs: number = QUERY_LIMITS.timeoutMs, options:Readonly<{allowPartialOnLimit?:boolean;outbox?:true;verifyBatch?:QueryBatchVerifier}> = {}): DetailedRelayQueryService {
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > QUERY_LIMITS.timeoutMs) throw new RelayQueryError();
   const counts = options.outbox ? OUTBOX_QUERY_COUNTS : QUERY_LIMITS;
   let concurrent = 0;
@@ -175,7 +180,10 @@ export function createNativeRelayQuery(port: NativeQueryPort,
               active();
               if (lifetime.aborted()) throw new RelayQueryError();
               try {
-                batch = parseFrames(frames, subscription, filters, counts, checkDeadline);
+                batch = await parseFrames(frames, subscription, filters, counts, checkDeadline, options.verifyBatch
+                  ? events => options.verifyBatch!(events,lifetime.signal,active,lifetime.remaining()) : undefined);
+                active();
+                if (lifetime.aborted()) throw new RelayQueryError();
                 if (catalogRelay !== undefined && new Set(batch.map(event => event.id)).size !== batch.length) throw new RelayQueryDataError();
               } catch (error) {
                 if (lifetime.aborted()) throw error;

@@ -115,8 +115,10 @@ function consumeJsonText(value: string, remaining: number, allowUnpaired = false
   return remaining;
 }
 
-/** Fresh exact event fields prevent cached verifyEvent symbols from blessing mutated input. */
-export function verifyQueryEvent(input: unknown, filters: readonly QueryFilter[], phase: QueryPhase = 'stored'): NostrEvent {
+const capturedQueryEvents = new WeakSet<object>();
+export function isCapturedQueryEvent(value: NostrEvent): boolean { return capturedQueryEvents.has(value); }
+/** Fresh exact fields, byte bounds, matching filter and canonical hash before async verification. */
+export function captureQueryEvent(input: unknown, filters: readonly QueryFilter[], phase: QueryPhase = 'stored'): NostrEvent {
   const value = record(input);
   if (typeof value.id !== 'string' || !hex64.test(value.id) || typeof value.pubkey !== 'string' || !hex64.test(value.pubkey) ||
       typeof value.sig !== 'string' || !/^[0-9a-f]{128}$/.test(value.sig) ||
@@ -139,13 +141,22 @@ export function verifyQueryEvent(input: unknown, filters: readonly QueryFilter[]
     event.tags.push(tag as string[]);
   }
   if (!filters.some(filter => queryMatches(event, filter, phase))) return fail();
-  try { if (getEventHash(event) !== event.id || !verifyEvent(event)) return fail(); } catch { return fail(); }
+  try { if (getEventHash(event) !== event.id) return fail(); } catch { return fail(); }
   // Remove verification cache symbols; downstream code receives only NIP-01 fields.
   const clean = { id: event.id, pubkey: event.pubkey, kind: event.kind, created_at: event.created_at,
     content: event.content, tags: event.tags, sig: event.sig };
   for (const tag of event.tags) Object.freeze(tag);
   Object.freeze(event.tags);
-  return Object.freeze(clean);
+  Object.freeze(clean);
+  capturedQueryEvents.add(clean);
+  return clean;
+}
+/** Synchronous paths retain fresh JS Schnorr verification; captured rows have no cache symbols. */
+export function verifyQueryEvent(input: unknown, filters: readonly QueryFilter[], phase: QueryPhase = 'stored'): NostrEvent {
+  const event = captureQueryEvent(input, filters, phase);
+  // verifyEvent writes a cache symbol, so verify a fresh mutable exact-field copy.
+  try { if (!verifyEvent({...event})) return fail(); } catch { return fail(); }
+  return event;
 }
 export function selectQueryEvents(events: readonly NostrEvent[], filters: readonly QueryFilter[]): readonly Readonly<{ event: NostrEvent }>[] {
   const sorted = [...events].sort((a, b) => b.created_at - a.created_at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));

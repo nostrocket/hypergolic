@@ -1,3 +1,4 @@
+import type { QueryBatchVerifier } from '../network/native-event-verifier.ts';
 import {createOutboxReadAdmission} from './read-admission.ts';
 import {createNativeRelayQuery, type RelayQueryResult} from '../network/native-relay-query.ts';
 import type {NativePublishedRelayPort} from '../napplets/native-published-relay.ts';
@@ -36,7 +37,7 @@ function projectEvents(result: RelayQueryResult, limit: number): readonly Outbox
 /** App-owned transport and settings are captured separately from parsed guest options. */
 export function createOutboxReadService(resolver: OutboxAuthorResolver,
   native: NativeOutboxQueryPort,
-  settings: () => RelaySettingsSnapshot, now: () => number = Date.now) {
+  settings: () => RelaySettingsSnapshot, now: () => number = Date.now, verifyBatch?: QueryBatchVerifier) {
   const admission = createOutboxReadAdmission();
   async function bounded<T>(timeoutMs: number, signal: AbortSignal, assertActive: () => void,
     work: (signal: AbortSignal, active: () => void, remaining: (handoff?: boolean) => number) => Promise<T>): Promise<T> {
@@ -93,7 +94,7 @@ export function createOutboxReadService(resolver: OutboxAuthorResolver,
         newInstanceId: () => native.newInstanceId(),
         queryPublishedRelay: (id, url, wire, sub, timeoutMs) => native.queryOutboxRelay(nativeToken,id,url,wire,sub,timeoutMs!),
         cancelPublishedRelay: id => native.cancelPublishedRelay(id),
-      },() => plan.relays,remaining(true),{allowPartialOnLimit:true,outbox:true});
+      },() => plan.relays,remaining(true),{allowPartialOnLimit:true,outbox:true,...(verifyBatch ? {verifyBatch} : {})});
       const result = await transport.queryDetailed(capOutboxFilters(request.filters,OUTBOX_QUERY_COUNTS.events),leased,active,
         {maximumFilters:wide ? OUTBOX_QUERY_FILTERS : QUERY_LIMITS.filters, allowSearch:true}); active();
       const maximum = OUTBOX_QUERY_COUNTS.events;
