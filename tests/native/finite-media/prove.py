@@ -66,7 +66,7 @@ with tempfile.TemporaryDirectory(prefix="finite-media-") as path:
         f.truncate(256 * 1024 * 1024 + 1)
     inputs = [str(target / name) for name in [*cases, large.name, "reject-too-large"]]
     subprocess.run([java_bin / "javac", "-Xlint:all", "-Werror", "-d", target, *[
-        android / name for name in ["FiniteMp4.java", "MediaHttpsFile.java", "PublishedHttpsResponseReader.java",
+        android / name for name in ["FiniteMp4.java", "FiniteVideoSize.java", "MediaHttpsFile.java", "PublishedHttpsResponseReader.java",
             "PublishedHttpsTransport.java", "PublicAddressPolicy.java"]
     ], Path(__file__).with_name("MediaFileProof.java")], check=True)
     subprocess.run([java_bin / "java", "-Xmx24m", "-cp", target,

@@ -10,6 +10,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.system.Os
 import android.system.OsConstants
+import android.view.Gravity
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
@@ -32,6 +33,7 @@ internal class NativeFiniteVideo(private val host: LinearLayout, private val gen
     var volume = 1f
     var file: File? = null
     var view: SurfaceView? = null
+    var videoSize: FiniteVideoSize? = null
     var prepared = false
     var decoderReady = false
     var finished = false
@@ -116,7 +118,16 @@ internal class NativeFiniteVideo(private val host: LinearLayout, private val gen
   fun layout() {
     val controls = panel ?: return
     if (host.width <= 0 || host.height <= 0) return
-    session?.view?.layoutParams?.height = (host.width * 9 / 16).coerceAtMost((host.height * 0.55).toInt())
+    session?.let { row ->
+      val size = row.videoSize?.fit(host.width, (host.height * 55L / 100).toInt()) ?: FiniteVideoSize(1, 1)
+      row.view?.let { video ->
+        val params = video.layoutParams
+        if (params.width != size.width || params.height != size.height) {
+          params.width = size.width; params.height = size.height
+          video.layoutParams = params
+        }
+      }
+    }
     controls.measure(View.MeasureSpec.makeMeasureSpec(host.width, View.MeasureSpec.EXACTLY),
       View.MeasureSpec.makeMeasureSpec(host.height, View.MeasureSpec.AT_MOST))
     controls.layout(0, host.height - controls.measuredHeight, host.width, host.height)
@@ -208,7 +219,7 @@ internal class NativeFiniteVideo(private val host: LinearLayout, private val gen
       }
     })
     row.view = video
-    panel?.addView(video, 1, LinearLayout.LayoutParams(-1, 1))
+    panel?.addView(video, 1, LinearLayout.LayoutParams(1, 1).apply { gravity = Gravity.CENTER_HORIZONTAL })
     layout()
   }
 
@@ -246,6 +257,10 @@ internal class NativeFiniteVideo(private val host: LinearLayout, private val gen
   private fun checkPlayer(row: Session, holder: SurfaceHolder, player: MediaPlayer, width: Int, height: Int) {
     if (session !== row || row.player !== player || width == 0 && height == 0) return
     if (!FiniteMp4.validDimensions(width, height)) { failed(row); return }
+    if (row.videoSize?.width != width || row.videoSize?.height != height) {
+      row.videoSize = FiniteVideoSize(width, height)
+      layout()
+    }
     if (!row.decoderReady || row.prepared) return
     if (player.duration !in 1..3600000 || !holder.surface.isValid) { failed(row); return }
     try {

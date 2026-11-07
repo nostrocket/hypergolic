@@ -27,8 +27,27 @@ final class MediaFileProof {
       "HTTP/1.1 302 Found\r\nLocation: https://other.example.org/video.mp4\r\nLocation: /other\r\n",
   };
 
+  private static void proveVideoFit() {
+    int[][] pictures = {{1080, 1920}, {1920, 1080}, {1080, 1080}, {2160, 3840}, {3840, 2160}};
+    int[][] bounds = {{1080, 1200}, {2340, 500}, {1, 1}, {13, 7}, {Integer.MAX_VALUE, Integer.MAX_VALUE}};
+    for (int[] source : pictures) {
+      for (int[] maximum : bounds) {
+        var fitted = new FiniteVideoSize(source[0], source[1]).fit(maximum[0], maximum[1]);
+        require(fitted.width >= 1 && fitted.height >= 1 &&
+            fitted.width <= maximum[0] && fitted.height <= maximum[1], "picture escaped bounds");
+        long error = Math.abs((long) fitted.width * source[1] - (long) fitted.height * source[0]);
+        require(error < Math.max(source[0], source[1]), "picture aspect ratio changed beyond pixel rounding");
+      }
+    }
+    var portrait = new FiniteVideoSize(1080, 1920).fit(1080, 1100);
+    require(portrait.width == 618 && portrait.height == 1100, "portrait is still stretched to 16:9");
+    var landscape = new FiniteVideoSize(1920, 1080).fit(1080, 1100);
+    require(landscape.width == 1080 && landscape.height == 607, "landscape width fit");
+  }
+
   public static void main(String[] args) throws Exception {
     proveIdleClock();
+    proveVideoFit();
     File destination = Path.of(args[0], "java-video.mp4").toFile();
     for (int i = 1; i < args.length; i++) {
       File file = new File(args[i]);

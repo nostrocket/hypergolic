@@ -29,3 +29,10 @@ The file validator reads small windows and seeks over the media payload. It chec
 The SDK accepts `createSession`, `destroySession`, `sendCommand` and `command` for this shell-owned profile. It exposes the latest state and capabilities to late subscribers and retains `onEnded` for the endpoint lifetime. The canonical identifier belongs to the generation that created it. Retirement removes native output and command dispatch before one terminal notification. Stale or foreign replies do not select a destination.
 
 The isolated contract checks use a fake native browser transport and matching Java and Swift file-admission cases. Native sink tests stream synthetic 161 MiB files, exercise malformed framing, and verify partial-file cleanup after cancellation. Android also runs with a 24 MiB Java heap. Native acceptance still needs rendered frames and advancing position on both platforms, along with trusted Play, pre-play egress, redirect and idle failure, revocation, and killed-process cleanup checks.
+
+
+The Android picture uses decoder-reported dimensions to preserve aspect ratio
+within the host width and 55% of its height. Portrait pictures are centered in
+the native panel. Later valid size callbacks and host resizing recompute that
+fit. iOS uses `AVPlayerLayer.resizeAspect` within its existing bounded picture.
+These layout rules leave native Play, pause and close controls in the panel.

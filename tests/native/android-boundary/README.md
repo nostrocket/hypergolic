@@ -72,7 +72,7 @@ then use a fresh output directory outside the repository:
 python3 -B tests/native/android-boundary/build.py --output /tmp/android-boundary-build-01
 ```
 
-`expected-inputs.json` pins the reviewed 66 native/build/runtime inputs. A changed
+`expected-inputs.json` pins the reviewed 67 native/build/runtime inputs. A changed
 input requires review before an explicit rebaseline. The helper seals the full
 source snapshot, unchanged generated packaging, signed app/test APKs, exact runtime
 bytes, JavaScript bundle and Gradle log. It refuses an existing output directory
