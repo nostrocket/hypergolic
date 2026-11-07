@@ -1,0 +1,22 @@
+{
+  "name": "Mbed TLS",
+  "version": "4.2.0",
+  "tag": "mbedtls-4.2.0",
+  "commit": "ece41aa84d7879d7e55c59e955a5884b541f7f3b",
+  "archive": "https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-4.2.0/mbedtls-4.2.0.tar.bz2",
+  "archiveSha256": "2bed9d713b4668f76553b097e72b8aa30bc8f112a940d7ae228d524bbde6ffea",
+  "tfPsaCrypto": {
+    "version": "1.2.0",
+    "commit": "73c5da561c8e5253db7b1fb440eda86fde8d8024"
+  },
+  "frameworkCommit": "dde0c4a0e448a0552f18817dcea633bb851fd288",
+  "licenseChoice": "Apache-2.0",
+  "retainedFiles": 1434,
+  "retainedBytes": 16831787,
+  "filesManifestSha256": "c10145150cfd666d845a6b314656bdad022280b29d3f47d810f1010c812fc1bf",
+  "upstreamEdits": false,
+  "pruning": "Unused upstream programs/tests and framework data removed. Guarded library/source groups, generated release sources, upstream CMake files and licenses retained unchanged.",
+  "releaseVsGit": "Official source release changes GEN_FILES default to OFF in both root CMake files and updates generated-file .gitignore entries. All matched C/header source blobs equal pinned git trees; official archive SHA is primary retained-byte authority.",
+  "materializedSymlinks": 128,
+  "symlinkPolicy": "Upstream symlinks resolving within this pinned tree are stored as regular files with the same ledger-verified contents for portable source inventory. No source bytes change."
+}
