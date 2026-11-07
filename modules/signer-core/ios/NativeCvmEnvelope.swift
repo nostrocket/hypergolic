@@ -65,7 +65,7 @@ final class NativeCvmEnvelope: @unchecked Sendable {
     replyTo: String? = nil, announce: Bool = false) throws -> ExactSignerEvent {
     var tags = [["p", recipient]]
     if let replyTo { tags.append(["e", replyTo]) }
-    if announce { tags += [["support_encryption"], ["support_open_stream"], ["payment_interaction", "explicit_gating"]] }
+    if announce { tags += [["support_encryption"], ["support_open_stream"]] }
     let rawTags = "[" + tags.map { "[" + $0.map(ExactSignerEvent.quote).joined(separator: ",") + "]" }.joined(separator: ",") + "]"
     let raw = "{\"pubkey\":\(ExactSignerEvent.quote(pubkey)),\"created_at\":\(now),\"kind\":\(kind),\"tags\":\(rawTags),\"content\":\(ExactSignerEvent.quote(content))}"
     return try ExactSignerEvent(json: raw, expectedPubkey: pubkey, maximumBytes: maximumEvent)

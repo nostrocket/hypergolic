@@ -89,7 +89,7 @@ final class NativeCvmEnvelope implements AutoCloseable {
   private static String eventTags(String recipient, String replyTo, boolean announce) {
     String tags = "[[\"p\"," + NativeEvent.quote(recipient) + "]";
     if (replyTo != null) tags += ",[\"e\"," + NativeEvent.quote(replyTo) + "]";
-    if (announce) tags += ",[\"support_encryption\"],[\"support_open_stream\"],[\"payment_interaction\",\"explicit_gating\"]";
+    if (announce) tags += ",[\"support_encryption\"],[\"support_open_stream\"]";
     return tags + "]";
   }
   private static NativeEvent event(String pubkey, long now, int kind, String tags, String content) {

@@ -23,13 +23,22 @@ public final class CvmEnvelopeRuntimeProof {
     AtomicBoolean current=new AtomicBoolean(true);String request="{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":{\"number\":-1.25,\"opaque\":\"\\ud800\"}}";long now=1700000000;
     try(NativeSigningKey provider=new NativeSigningKey();NativeSigningKey foreign=new NativeSigningKey();NativeCvmEnvelope client=new NativeCvmEnvelope(provider.publicKey(),new NativeCvmEnvelope.Authority(){
       public void current(){if(!current.get())throw new IllegalStateException("closed fixture");}public void outgoing(String message,String recipient){check(request.equals(message));check(provider.publicKey().equals(recipient));}})){
-      String clientKey=client.clientPublicKey();NativeCvmEnvelope.Prepared prepared=client.prepare(request,now,false,null);JSONObject outer=new JSONObject(prepared.wire);
+      String clientKey=client.clientPublicKey();
+      // Separate native contexts cannot inherit another client's paid authorization identity.
+      try(NativeCvmEnvelope independent=new NativeCvmEnvelope(provider.publicKey(),new NativeCvmEnvelope.Authority(){
+        public void current(){if(!current.get())throw new IllegalStateException("closed fixture");}
+        public void outgoing(String message,String recipient){throw new AssertionError("No independent send");}})){
+        check(NativeSigningKey.validPublicKey(independent.clientPublicKey()));check(!clientKey.equals(independent.clientPublicKey()));
+      }
+      NativeCvmEnvelope.Prepared prepared=client.prepare(request,now,false,null);JSONObject outer=new JSONObject(prepared.wire);
       check(outer.getInt("kind")==1059);check(outer.getLong("created_at")==now);NativeSignedEvent.verify(outer,outer.getString("pubkey"),65536);checks++;
       byte[] clear=provider.transport(outer.getString("pubkey"),outer.getString("content").getBytes(StandardCharsets.UTF_8),false);
       JSONObject inner;
       try{inner=new JSONObject(new String(clear,StandardCharsets.UTF_8));}finally{java.util.Arrays.fill(clear,(byte)0);}
       check(inner.getInt("kind")==25910);check(inner.getString("pubkey").equals(clientKey));check(inner.getString("id").equals(prepared.innerEventId));
-      NativeSignedEvent.verify(inner,clientKey,65536);checks++;check(inner.getString("content").equals(request));check(inner.getJSONArray("tags").toString().equals("[[\"p\",\""+provider.publicKey()+"\"],[\"support_encryption\"],[\"support_open_stream\"],[\"payment_interaction\",\"explicit_gating\"]]"));
+      NativeSignedEvent.verify(inner,clientKey,65536);checks++;check(inner.getString("content").equals(request));
+      // Exact first-message tags exclude mode, PMI and direct-payment authority.
+      check(inner.getJSONArray("tags").toString().equals("[[\"p\",\""+provider.publicKey()+"\"],[\"support_encryption\"],[\"support_open_stream\"]]"));
       check(outer.getJSONArray("tags").toString().equals("[[\"p\",\""+provider.publicKey()+"\"]]"));
       NativeCvmEnvelope.Prepared referenced=client.prepare(request,now,false,"3".repeat(64));JSONObject secondOuter=new JSONObject(referenced.wire);
       check(secondOuter.getLong("created_at")==now);
