@@ -43,7 +43,7 @@
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/NativeCvmServiceAuthority.java": "56c5b1a9324118db9e31474274e7610e5a99255e18a1a3ca36f2b49265b17305",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/NativeCvmSourceFacade.java": "7606d15a596040173f112ae629acb0469fef6ee92fb78b3dda033193a8b1c3d6",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/NativeFiniteVideo.kt": "5825d464e271da3118713c7a1aae93d4e217eba704f2713e69a4e99db534ea55",
-    "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/NativeLiveRadio.kt": "48506075725ee9d027a218fd1b48dedd945b0b9058decb89c83b719e467cac7a",
+    "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/NativeLiveRadio.kt": "94b340b0ef6792b7ed2e478f82428f49b2b1392c4e8e1932f4f14d81ef033791",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/NativeOutboxPlan.kt": "77421b3ca02e48734797c3e76491d56b52606948be967741802f468f9242abc4",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/NativeResolverOwnership.java": "f4faff4424b67a42bc617edb9b57fe62883c01ba53bdad0405f7586ff66aa5b8",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/NativeSignerRelay.java": "80177e4f51306cb6e5b244bc91bd4e7221762e402667b87eda9767cb9aed53fa",
