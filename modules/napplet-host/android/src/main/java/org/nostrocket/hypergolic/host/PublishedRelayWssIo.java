@@ -21,7 +21,11 @@ final class PublishedRelayWssIo {
       return delegate.read();
     }
     @Override public int read(byte[] target, int offset, int length) throws IOException {
-      socket.setSoTimeout(deadline.timeoutMs(READ_TIMEOUT_MS));
+      return readWithTimeout(target, offset, length, READ_TIMEOUT_MS);
+    }
+    int readWithTimeout(byte[] target, int offset, int length, int maximumIdle) throws IOException {
+      if (maximumIdle < 1 || maximumIdle > READ_TIMEOUT_MS) throw new IOException("Invalid relay read turn");
+      socket.setSoTimeout(deadline.timeoutMs(maximumIdle));
       return delegate.read(target, offset, length);
     }
   }

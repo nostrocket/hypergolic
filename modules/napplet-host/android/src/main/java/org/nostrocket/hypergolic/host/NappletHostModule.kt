@@ -22,6 +22,7 @@ class NappletHostModule : Module() {
       val foreground = appContext.runtime.reactContext?.lifecycleState == LifecycleState.RESUMED
       SelectedFilePicker.foreground(foreground)
       UploadTransport.foreground(foreground)
+      CvmTransport.foreground(foreground)
       FixtureReleaseTransport.foreground(foreground)
       CapabilityTransport.foreground(foreground)
       NappletHostView.setMediaForeground(foreground)
@@ -34,6 +35,7 @@ class NappletHostModule : Module() {
     OnActivityEntersForeground {
       SelectedFilePicker.foreground(true)
       UploadTransport.foreground(true)
+      CvmTransport.foreground(true)
       FixtureReleaseTransport.foreground(true)
       CapabilityTransport.foreground(true)
       NappletHostView.setMediaForeground(true)
@@ -46,6 +48,7 @@ class NappletHostModule : Module() {
     OnActivityEntersBackground {
       SelectedFilePicker.foreground(false)
       UploadTransport.foreground(false)
+      CvmTransport.foreground(false)
       FixtureReleaseTransport.foreground(false)
       CapabilityTransport.foreground(false)
       NappletHostView.setMediaForeground(false)
@@ -62,6 +65,7 @@ class NappletHostModule : Module() {
       SelectedFilePicker.cancel()
       SelectedFilePicker.foreground(false)
       UploadTransport.foreground(false)
+      CvmTransport.foreground(false)
       FixtureReleaseTransport.foreground(false)
       CapabilityTransport.foreground(false)
       NappletHostView.setMediaForeground(false)
@@ -77,6 +81,7 @@ class NappletHostModule : Module() {
       SelectedFilePicker.cancel()
       SelectedFilePicker.foreground(false)
       UploadTransport.foreground(false)
+      CvmTransport.foreground(false)
       FixtureReleaseTransport.foreground(false)
       CapabilityTransport.foreground(false)
       NappletHostView.setMediaForeground(false)
@@ -91,6 +96,7 @@ class NappletHostModule : Module() {
       UploadTransport.observeProgress(null)
       SelectedFilePicker.foreground(false)
       UploadTransport.foreground(false)
+      CvmTransport.foreground(false)
       FixtureReleaseTransport.foreground(false)
       CapabilityTransport.foreground(false)
       RelaySubscriptionTransport.foreground(false)
@@ -262,7 +268,15 @@ class NappletHostModule : Module() {
     Function("closeSubscription") { token: String -> RelaySubscriptionTransport.close(token) }
     Function("synchronizeRoutingOwner") { user: String, epoch: Long, available: Boolean ->
       require(RoutingTransport.synchronizeOwner(user, epoch, available)) { "Routing owner unavailable" }
+      CvmTransport.synchronizeOwner(user, epoch, available)
     }
+    Function("synchronizeCvmRelays") { relays: List<String> -> CvmTransport.synchronizeRelays(relays) }
+    Function("isCvmSourceCurrent") { generation: String, sourceRevision: String -> CvmTransport.current(generation,sourceRevision) }
+    Function("takeCvmRequest") { token: String -> CvmTransport.take(token) }
+    Function("approveCvmRequest") { token: String -> CvmTransport.approve(token) }
+    Function("rejectCvmRequest") { token: String -> CvmTransport.reject(token) }
+    Function("finishCvmRequest") { token: String, response: String? -> CvmTransport.finish(token,response) }
+    Function("sendCvmEvent") { generation: String, sourceRevision: String, requestToken: String, response: String -> CvmTransport.send(generation,sourceRevision,requestToken,response) }
     Function("routingState") { RoutingTransport.state() }
     Function("mayReviewRouting") { generation: String, revision: Long -> RoutingTransport.mayReview(generation, revision) }
     Function("routingReviewRevision") { generation: String, revision: Long -> RoutingTransport.reviewRevision(generation, revision) }

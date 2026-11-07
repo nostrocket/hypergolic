@@ -10,10 +10,10 @@ final class CapabilityLifecycle: @unchecked Sendable {
   init() {
     let center = NotificationCenter.default
     for name in [UIApplication.willResignActiveNotification, UIApplication.didEnterBackgroundNotification] {
-      observers.append(center.addObserver(forName: name, object: nil, queue: nil) { _ in CapabilityTransport.foreground(false) })
+      observers.append(center.addObserver(forName: name, object: nil, queue: nil) { _ in CapabilityTransport.foreground(false); CvmTransport.shared.foreground(false) })
     }
-    observers.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: nil) { _ in CapabilityTransport.foreground(true) })
-    Task { @MainActor in CapabilityTransport.foreground(UIApplication.shared.applicationState == .active) }
+    observers.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: nil) { _ in CapabilityTransport.foreground(true); CvmTransport.shared.foreground(true) })
+    Task { @MainActor in let active = UIApplication.shared.applicationState == .active; CapabilityTransport.foreground(active); CvmTransport.shared.foreground(active) }
   }
   deinit { for observer in observers { NotificationCenter.default.removeObserver(observer) } }
 }
@@ -29,6 +29,7 @@ struct CapabilityConfiguration {
   let fixture: String
   let domains: Set<String>
   let commonProfile:String?
+  let cvmProfile:String?
   let publishedOpen: Bool
   let publisher: String
   let appId: String
@@ -37,7 +38,7 @@ struct CapabilityConfiguration {
     enum Invalid: Error { case configuration }
     guard raw.utf8.count <= 8192, let bytes = raw.data(using: .utf8),
       var value = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
-      Set(value.keys).subtracting(["publishedOpen","commonProfile"]) == Set(["sessionId", "epoch", "user", "publisher", "appId", "version", "instanceId", "fixture", "domains"])
+      Set(value.keys).subtracting(["publishedOpen","commonProfile","cvmProfile"]) == Set(["sessionId", "epoch", "user", "publisher", "appId", "version", "instanceId", "fixture", "domains"])
       else { throw Invalid.configuration }
     let open = value.removeValue(forKey: "publishedOpen")
     if let open {
@@ -72,7 +73,7 @@ struct CapabilityConfiguration {
     case "feed-lab": expected = Set(domains).contains("outbox") ? ["identity", "outbox", "relay", "theme"] : ["identity", "relay", "theme"]
     case "published":
       expected = Set(domains)
-      let supported: Set<String> = ["identity", "storage", "theme", "relay", "resource", "upload", "link", "intent", "inc", "notify", "config", "outbox", "keys", "media", "common"]
+      let supported: Set<String> = ["identity", "storage", "theme", "relay", "resource", "upload", "link", "intent", "inc", "notify", "config", "outbox", "keys", "media", "common", "cvm"]
       guard domains.count <= supported.count, expected.isSubset(of: supported) else {
         throw Invalid.configuration
       }
@@ -89,6 +90,10 @@ struct CapabilityConfiguration {
       guard profile as? String=="social-v1",fixture=="published",expected.contains("common"),expected.contains("identity"),!expected.isDisjoint(with:["relay","outbox"]) else{throw Invalid.configuration}
       self.commonProfile="social-v1"
     }else{self.commonProfile=nil}
+    if let profile=value["cvmProfile"] {
+      guard profile as? String == "free-foreground-v1", fixture == "published", expected.contains("cvm") else { throw Invalid.configuration }
+      self.cvmProfile = "free-foreground-v1"
+    } else { self.cvmProfile = nil }
     self.domains = expected
     self.publishedOpen = (fixture == "napplet-discovery" && appId == "napplet-discovery") || open != nil
     self.publisher = publisher

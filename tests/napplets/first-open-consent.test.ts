@@ -443,3 +443,21 @@ test('Common social authority needs fresh review even with identical old domains
     assert.notEqual((await storage.readAccessGrant())!.supportReview,prior.review);assert.equal(config(saved).commonProfile,undefined);
   });
 });
+
+test('CVM requires fresh effective review; saved finite/social pins retain their exact old authority',async t=>{
+ for(const optionalCvm of [false,true])await t.test(optionalCvm?'optional CVM':'required CVM',async t=>{
+  const {database}=await setup(t),{owner,storage}=control(database);
+  const required=optionalCvm?['common','identity','outbox']:['common','cvm','identity','outbox'];
+  const optional=optionalCvm?['cvm']:[];
+  const candidate=await artifact(required,optional),previous=publishedCapabilityCompatibility(required,optional,'before-cvm');
+  await storage.replaceAccessGrant(previous.domains,null,{},previous.review);const old=await storage.readAccessGrant();
+  const descriptor=descriptorForPublishedArtifact(candidate,'58274370-ec8f-4058-a4cc-b63e7e75ca4b'),signal=new AbortController().signal;
+  const config=(admission:unknown)=>JSON.parse(JSON.parse(publishedHostInput(candidate,admission,descriptor,{user,epoch:0,assertActive:owner.assertActive},'stage')).configuration);
+  const saved=await requestFirstOpenConsent(candidate,owner,storage,signal,owner.assertActive,async()=>assert.fail('old pin must not gain service'),'saved-pin');
+  assert.equal(config(saved).cvmProfile,undefined);assert.equal(config(saved).domains.includes('cvm'),false);assert.equal(config(saved).commonProfile,'social-v1');
+  await assert.rejects(requestFirstOpenConsent(candidate,owner,storage,signal,owner.assertActive,async()=>false),FirstOpenConsentError);assert.deepEqual(await storage.readAccessGrant(),old);
+  const renewed=await requestFirstOpenConsent(candidate,owner,storage,signal,owner.assertActive,async()=>true);
+  assert.equal(config(renewed).cvmProfile,'free-foreground-v1');assert.equal(config(renewed).commonProfile,'social-v1');assert.equal(config(renewed).domains.includes('cvm'),true);
+  assert.equal(config(saved).cvmProfile,undefined);
+ });
+});

@@ -1,3 +1,5 @@
+import {createCvmGuestReceiver} from './cvm-native';
+import {injectCvmFacade} from './cvm-guest';
 import './legacy-webview';
 import {COMMON_OPERATIONS,parseCommonRequest,commonFailure} from '../../src/common/common-contract';
 import { injectMediaFacade } from './media-guest';
@@ -160,6 +162,7 @@ function makeHooks(native: ReturnType<typeof createNativeClient>, captureRecipie
       ...(supported.has('upload') ? { upload: { descriptor: { name: 'upload', version: '1.0.0' }, handleMessage: unavailable } } : {}), ...(supported.has('identity') ? { identity } : {}),
       ...(supported.has('resource') ? { resource: { descriptor: { name: 'resource', version: '1.0.0' }, handleMessage: unavailable } } : {}),
       ...(supported.has('common') ? {common} : {}),
+      ...(supported.has('cvm')?{cvm:{descriptor:{name:'cvm',version:'1.0.0'},handleMessage:unavailable}}:{}),
       ...(supported.has('outbox') ? {outbox: {descriptor: {name: 'outbox', version: '1.0.0'}, handleMessage: unavailable}} : {}),
       ...(supported.has('relay') ? { relay: { descriptor: { name: 'relay', version: '1.0.0' }, handleMessage: unavailable } } : {}) },
     ...((supported.has('storage') || supported.has('relay') || supported.has('resource') || supported.has('upload') || supported.has('intent') || supported.has('inc') || supported.has('notify') || supported.has('config') || supported.has('outbox') || supported.has('common')) ? { operationOverrides: {
@@ -174,7 +177,7 @@ function makeHooks(native: ReturnType<typeof createNativeClient>, captureRecipie
       ...(supported.has('relay') ? { 'relay.publish': relayPublish, 'relay.query': relayPublish, 'relay.subscribe': relaySubscribe, 'relay.close': relayClose } : {}),
     } } : {}),
     capabilities: {
-      disabledDomains: ['link', 'upload', 'resource', 'relay', 'identity', 'storage', 'intent', 'inc', 'keys', 'media', 'notify', 'config', 'outbox', 'common'].filter(domain => !supported.has(domain)),
+      disabledDomains: ['link', 'upload', 'resource', 'relay', 'identity', 'storage', 'intent', 'inc', 'keys', 'media', 'notify', 'config', 'outbox', 'common', 'cvm'].filter(domain => !supported.has(domain)),
       resolveEnvironment: () => ({ domains: [...supported], services: ['theme', ...(supported.has('identity') ? ['identity'] : [])] }),
     },
   };
@@ -307,7 +310,7 @@ function mount(artifact: RuntimeMetadata) {
   const native = createNativeClient(hostWindow.HypergolicHost!, sessionId,
     {requestTimeoutsMs: approvalTimeouts(artifact), onRouting: routing.deliver, onMedia: message => {
       if (hasMedia && live()) source.postMessage(message, '*');
-    }});
+    },onCvm:message=>{if(artifact.domains.includes('cvm')&&live())source.postMessage(message,'*');}});
   const shellTheme = createShellTheme(theme => bridge.publishTheme(theme));
   const hooks = makeHooks(native, () => {
     const entry = bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId);
@@ -329,6 +332,7 @@ function mount(artifact: RuntimeMetadata) {
 
   const receive = guestMessageReceiver(frame, source, {
     routing, discoveryOpen, catalogPage, keys, sendMedia: hasMedia ? native.sendMedia : null,
+    cvm:artifact.domains.includes('cvm')?createCvmGuestReceiver(source,native.cvm,live):null,
     closed: () => stopped, live,
     dispatch(event) {
       if (!validEnvelope(event.data)) {
@@ -387,7 +391,8 @@ function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
     ...environment.capabilities,
     requestTimeoutsMs: approvalTimeouts(artifact),
   });
-  frame.srcdoc = prefix + (artifact.published && artifact.domains.includes('media') ? injectMediaFacade(injected) : injected);
+  const withMedia=artifact.published && artifact.domains.includes('media') ? injectMediaFacade(injected) : injected;
+  frame.srcdoc = prefix + (artifact.published && artifact.domains.includes('cvm') ? injectCvmFacade(withMedia) : withMedia);
 }
 
 async function start(): Promise<void> {

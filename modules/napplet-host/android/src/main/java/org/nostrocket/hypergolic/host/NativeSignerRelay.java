@@ -19,14 +19,24 @@ public final class NativeSignerRelay implements AutoCloseable {
     void attach(Socket raw) throws IOException;
     /** Validate authority and mark possible dispatch, then return before network I/O. */
     void beforeSend() throws IOException;
+    default boolean tracksResolution() { return false; }
+    default void resolutionReserved() {}
+    default void resolutionDrained() {}
   }
   /** One operation shares this budget and its original deadline across at most three opens. */
   public static final class Budget {
     private static final int MAX_WIRE = 32 * 1024 * 1024;
     private static final int MAX_FRAMES = 64, MAX_TEXTS = 32, MAX_RELAYS = 3;
     private final int maxRelays;
+    private final int maxWire, maxFrames, maxTexts, maxTextBytes;
     public Budget() { this(MAX_RELAYS); }
-    private Budget(int maxRelays) { this.maxRelays = maxRelays; }
+    private Budget(int maxRelays) { this(maxRelays, MAX_WIRE, MAX_FRAMES, MAX_TEXTS, MAX_BYTES); }
+    private Budget(int maxRelays, int maxWire, int maxFrames, int maxTexts, int maxTextBytes) {
+      this.maxRelays = maxRelays; this.maxWire = maxWire; this.maxFrames = maxFrames;
+      this.maxTexts = maxTexts; this.maxTextBytes = maxTextBytes;
+    }
+    /** New native-only CVM profile; existing signer/refresh constructors keep their exact limits. */
+    public static Budget forCvm() { return new Budget(4, 4 * 1024 * 1024, 4096, 2048, 66 * 1024); }
     /** Native Settings refresh checks the old and proposed lists under one unchanged aggregate budget. */
     public static Budget forRefresh() { return new Budget(6); }
     private int wireBytes, frames, texts, relays;
@@ -39,8 +49,8 @@ public final class NativeSignerRelay implements AutoCloseable {
     }
     synchronized int reserveRead(int wanted) throws IOException {
       check();
-      if (wanted <= 0 || wireBytes == MAX_WIRE) throw fail();
-      int reserved = Math.min(wanted, MAX_WIRE - wireBytes);
+      if (wanted <= 0 || wireBytes == maxWire) throw fail();
+      int reserved = Math.min(wanted, maxWire - wireBytes);
       wireBytes += reserved;
       return reserved;
     }
@@ -50,17 +60,17 @@ public final class NativeSignerRelay implements AutoCloseable {
     }
     synchronized void wire(int bytes) throws IOException {
       check();
-      if (bytes < 0 || bytes > MAX_WIRE - wireBytes) throw fail();
+      if (bytes < 0 || bytes > maxWire - wireBytes) throw fail();
       wireBytes += bytes;
     }
     synchronized void outbound(int bytes, boolean text) throws IOException {
       check();
-      if (bytes < 0 || bytes > MAX_WIRE - wireBytes || frames == MAX_FRAMES || text && texts == MAX_TEXTS) throw fail();
+      if (bytes < 0 || bytes > maxWire - wireBytes || frames == maxFrames || text && texts == maxTexts) throw fail();
       wireBytes += bytes; frames++; if (text) texts++;
     }
     synchronized void inbound(long frameCount, int textCount) throws IOException {
       check();
-      if (frameCount < 0 || frameCount > MAX_FRAMES - frames || textCount < 0 || textCount > MAX_TEXTS - texts) throw fail();
+      if (frameCount < 0 || frameCount > maxFrames - frames || textCount < 0 || textCount > maxTexts - texts) throw fail();
       frames += (int) frameCount; texts += textCount;
     }
     private synchronized void check() throws IOException { if (failed) throw new IOException("Native relay budget exhausted"); }
@@ -80,13 +90,14 @@ public final class NativeSignerRelay implements AutoCloseable {
   private final NativeSignerRelayOpening.OpenRelay connection;
   private final Control control;
   private final Budget budget;
-  private final PublishedRelayWebSocketFrames frames = new PublishedRelayWebSocketFrames(MAX_BYTES);
+  private final PublishedRelayWebSocketFrames frames;
   private final ArrayDeque<String> pending = new ArrayDeque<>();
   private volatile boolean closed;
   private boolean remoteClosed;
   private long seenFrames;
   private NativeSignerRelay(NativeSignerRelayOpening.OpenRelay connection, Control control, Budget budget) {
     this.connection = connection; this.control = control; this.budget = budget;
+    this.frames = new PublishedRelayWebSocketFrames(budget.maxTextBytes);
   }
   public static String canonical(String rawUrl) throws IOException {
     PublishedRelayWssQuery.parseUrl(rawUrl);
@@ -117,12 +128,15 @@ public final class NativeSignerRelay implements AutoCloseable {
       @Override public int reserveRead(int wanted) throws IOException { return budget.reserveRead(wanted); }
       @Override public void finishRead(int reserved, int received) { budget.finishRead(reserved, received); }
       @Override public void beforeWrite(int bytes) throws IOException { budget.wire(bytes); }
+      @Override public boolean tracksResolution() { return control.tracksResolution(); }
+      @Override public void resolutionReserved() { control.resolutionReserved(); }
+      @Override public void resolutionDrained() { control.resolutionDrained(); }
     };
   }
   public void send(String text) throws IOException {
     check();
     final byte[] frame;
-    try { frame = PublishedRelayWebSocketClientFrames.textReq(text, MAX_BYTES); }
+    try { frame = PublishedRelayWebSocketClientFrames.textReq(text, budget.maxTextBytes); }
     catch (IllegalArgumentException invalid) { throw new IOException("Invalid native relay text", invalid); }
     try {
       if (remoteClosed) throw new IOException("Native relay is closed");
@@ -134,14 +148,21 @@ public final class NativeSignerRelay implements AutoCloseable {
     catch (RuntimeException unavailable) { close(); throw new IOException("Native relay send authority unavailable", unavailable); }
   }
   public String read() throws IOException {
+    for (;;) { String text = poll(); if (text != null) return text; }
+  }
+  /** One serial owner's bounded read turn, so it can check a pending authenticated side publication. */
+  public String poll() throws IOException { return poll(PublishedRelayWssQuery.READ_TIMEOUT_MS); }
+  /** Short CVM actor turn; original signer polling and every absolute deadline remain unchanged. */
+  public String pollCvm() throws IOException { return poll(100); }
+  private String poll(int maximumIdle) throws IOException {
     try {
       while (pending.isEmpty()) {
         check();
         if (remoteClosed) throw new IOException("Native relay is closed");
         byte[] buffer = new byte[PublishedRelayWebSocketFrames.MAX_READ];
         final int count;
-        try { count = connection.input.read(buffer); }
-        catch (SocketTimeoutException idle) { check(); continue; }
+        try { count = connection.input.readWithTimeout(buffer, 0, buffer.length, maximumIdle); }
+        catch (SocketTimeoutException idle) { check(); return null; }
         if (count < 0) throw new IOException("Native relay ended before response");
         if (count == 0) continue;
         preflight(Arrays.copyOf(buffer, count));
@@ -177,5 +198,6 @@ public final class NativeSignerRelay implements AutoCloseable {
     try { connection.abort.check(); }
     catch (RuntimeException unavailable) { close(); throw new IOException("Native relay authority unavailable", unavailable); }
   }
-  @Override public void close() { closed = true; connection.close(); }
+  public boolean closeKnown() { closed = true; return connection.closeKnown(); }
+  @Override public void close() { closeKnown(); }
 }

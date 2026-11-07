@@ -1,6 +1,6 @@
 type Origin = Readonly<{sessionId: string; generation: string; epoch: number}>;
 type Candidate = Readonly<{id: string; origin: Origin}>;
-type ExplicitLane = 'routing' | 'config';
+type ExplicitLane = 'routing' | 'config' | 'cvm';
 type ReviewLane = 'approval' | 'upload' | ExplicitLane;
 type Claim = Readonly<{lane: ReviewLane; item: Candidate}>;
 type ReviewSource = {

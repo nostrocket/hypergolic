@@ -116,7 +116,7 @@ function normalizeList(value: unknown, code: RelaySettingsErrorCode): string[] {
 
 function normalizeSettings(value: unknown, code: RelaySettingsErrorCode): RelaySettingsSnapshot {
   if (!isRecord(value) || Object.keys(value).length !== 3 || value.schemaVersion !== 1 ||
-    !Object.hasOwn(value, 'networkRelays') || !Object.hasOwn(value, 'lookupRelays')) return fail(code);
+    !Object.prototype.hasOwnProperty.call(value, 'networkRelays') || !Object.prototype.hasOwnProperty.call(value, 'lookupRelays')) return fail(code);
   return freezeSnapshot(
     normalizeList(value.networkRelays, code),
     normalizeList(value.lookupRelays, code),

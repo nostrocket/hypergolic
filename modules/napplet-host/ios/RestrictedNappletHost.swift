@@ -460,6 +460,9 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
       reply(nil, nil)
       return
     }
+    if value["type"] as? String == "cvm" {
+      receiveCvm(value, reply: reply); return
+    }
     if value["type"] as? String == "capability" {
       receiveCapability(value, reply: reply)
       return
@@ -548,6 +551,31 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
       }) else { return }
     onEvent?(["type": "capability", "lane": type == "outbox.subscribe" ? "outbox-subscription" : "subscription", "sessionId": configuration.sessionId,
       "generation": generation, "token": token])
+  }
+
+  private func receiveCvm(_ value: [String: Any], reply: @escaping @MainActor @Sendable (Any?, String?) -> Void) {
+    guard ready, publishedSource != nil, let configuration, configuration.cvmProfile == "free-foreground-v1",
+      configuration.domains.contains("cvm"), Set(value.keys) == ["type","sessionId","sequence","message"],
+      let sequence = streamInteger(value["sequence"]), let message = value["message"] as? String,
+      CapabilityTransport.leases.consumeSequence(generation, sequence: sequence),
+      let capturedView = webView, let capturedURL = expectedURL else { reply(nil, "CVM request denied"); return }
+    let deliver: @MainActor @Sendable (String?) -> Void = { [weak self, weak capturedView] response in
+      guard let self, let capturedView, self.live, !self.disposed, self.webView === capturedView,
+        capturedView.url?.absoluteString == capturedURL.absoluteString else { reply(nil, "Session unavailable"); return }
+      let result: [String: Any] = ["type":"cvm.response","sessionId":self.generation,"sequence":sequence,"response":response as Any? ?? NSNull()]
+      guard let data = try? JSONSerialization.data(withJSONObject: result) else { reply(nil,"CVM request denied"); return }
+      reply(String(decoding:data,as:UTF8.self),nil)
+    }
+    let token = CvmTransport.shared.receive(generation, config: configuration, raw: message, push: { [weak self, weak capturedView] response in
+      guard let self, let capturedView, self.live, !self.disposed, self.webView === capturedView,
+        capturedView.url?.absoluteString == capturedURL.absoluteString else { return }
+      let envelope: [String: Any] = ["type":"cvm.event","sessionId":self.generation,"message":response]
+      guard let data = try? JSONSerialization.data(withJSONObject:envelope) else { return }
+      let script = "window.postMessage({type:'hypergolic.native-response',message:" + self.jsString(String(decoding:data,as:UTF8.self)) + "}, '*')"
+      capturedView.evaluateJavaScript(script,in:nil,in:self.bridgeWorld) { [weak self] result in if case .failure = result { self?.fail("renderer-stopped") } }
+    }, reply: deliver)
+    guard let token else { deliver(nil); return }
+    if !token.isEmpty { onEvent?(["type":"capability","lane":"cvm","sessionId":configuration.sessionId,"generation":generation,"token":token]) }
   }
 
   private func receiveFiniteVideo(_ value: [String: Any], text: String) {
@@ -698,6 +726,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
   private func fail(_ code: String) {
     guard !disposed else { return }
     live = false
+    CvmTransport.shared.revoke(generation)
     UploadTransport.revoke(generation)
     LinkTransport.revoke(generation)
     ApprovalTransport.revoke(generation)
@@ -718,6 +747,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     live = false
     publishedReader?.clear()
     publishedReader = nil
+    CvmTransport.shared.revoke(generation)
     UploadTransport.revoke(generation)
     LinkTransport.revoke(generation)
     ApprovalTransport.revoke(generation)

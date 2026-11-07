@@ -72,7 +72,7 @@ then use a fresh output directory outside the repository:
 python3 -B tests/native/android-boundary/build.py --output /tmp/android-boundary-build-01
 ```
 
-`expected-inputs.json` pins the reviewed 70 native/build/runtime inputs. A changed
+`expected-inputs.json` pins the reviewed 76 native/build/runtime inputs. A changed
 input requires review before an explicit rebaseline. The helper seals the full
 source snapshot, unchanged generated packaging, signed app/test APKs, exact runtime
 bytes, JavaScript bundle and Gradle log. It refuses an existing output directory
@@ -80,7 +80,7 @@ and reports `compiled-not-executed`. Preserve every failed build and its log.
 The Media player, file handoff and parser are reviewed host inputs. The seven
 transport cases do not exercise native playback or protected Outbox/Common signing.
 The current inventory includes the Common plan/npub helpers and exact native
-source/template signing capture; historical run inventories retain their original counts.
+source/template signing capture and the CVM host registration/transport dependencies; historical run inventories retain their original counts. The seven boundary cases do not exercise CVM approval, encryption, provider responses or foreground service lifetime; those need the dedicated CVM proofs and ordinary app acceptance.
 
 The 9 October 2026 offline build compiles the signed ARM64 Release app and instrumentation APK with
 all inputs unchanged, exact runtime bytes and matching development certificates.

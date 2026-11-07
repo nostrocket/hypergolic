@@ -1,3 +1,5 @@
+import type {CvmService} from '../cvm/cvm-service';
+import {CvmReview,useCvmPresentation} from './CvmReview';
 import type { ReviewSlot } from './review-slot';
 import {PublicationReceiptSheet} from './PublicationReceiptSheet';
 import {useApprovalPresentation} from './useApprovalPresentation';
@@ -18,13 +20,15 @@ import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 const emptySubscribe = () => () => undefined;
 const emptySlot = () => null;
 
-type Props = Omit<ShellProps, 'pendingApprovals' | 'onBeforeClose'> & { service: ApprovalService; uploads?: UploadService; reviewSlot?: ReviewSlot; epoch: number };
+
+type Props = Omit<ShellProps, 'pendingApprovals' | 'onBeforeClose'> & { service: ApprovalService; uploads?: UploadService; cvm?:CvmService; reviewSlot?: ReviewSlot; epoch: number };
 
 /** Joins trusted presentation to the native-authoritative queue without blocking the guest host. */
-export function ApprovalWorkspace({ service, uploads, reviewSlot, epoch, workspace, footer, ...shell }: Props) {
+export function ApprovalWorkspace({ service, uploads, cvm, reviewSlot, epoch, workspace, footer, ...shell }: Props) {
   const subscribe = useCallback((listener: () => void) => service.subscribe(listener), [service]);
   const getSnapshot = useCallback(() => service.getSnapshot(), [service]);
   const snapshot = useSyncExternalStore(subscribe, getSnapshot);
+  const {snapshot:cvmSnapshot,shown:cvmShown}=useCvmPresentation(cvm,reviewSlot);
   const uploadSnapshot = useUploadPresentation(uploads, epoch);
   const presentation = useApprovalPresentation(service, epoch, reviewSlot);
   const {shown, held, showReceipt} = useReviewVisibility(reviewSlot, snapshot, presentation);
@@ -32,20 +36,27 @@ export function ApprovalWorkspace({ service, uploads, reviewSlot, epoch, workspa
   useApprovalLifecycle(service, epoch, reviewSlot, snapshot.pending);
   const title = workspace?.sessions.find(session => session.id === shown?.origin.sessionId)?.title ?? 'Napplet';
   return <ApprovalProvider value={service}><UploadProvider value={uploads ?? null}>
-    <Shell {...shell} workspace={workspace} pendingApprovals={new Set([...snapshot.pendingSessionIds, ...uploadSnapshot.pendingSessionIds])}
+    <Shell {...shell} blocked={Boolean(shell.blocked||cvmShown)} workspace={workspace} pendingApprovals={new Set([...snapshot.pendingSessionIds, ...uploadSnapshot.pendingSessionIds,...cvmSnapshot.pendingSessionIds])}
       footer={<>{!shown && !uploadSnapshot.current && !shell.blocked && <>{footer}<ApprovalResume snapshot={snapshot} service={service} /></>}<UploadWorkspace service={uploads} snapshot={uploadSnapshot} workspace={workspace} blocked={Boolean(shown || shell.blocked)} mayReview={id => !reviewSlot || reviewSlot.owns('upload', id)} /></>}
-      canCloseWithoutWarning={id => {
-        if (service.hasCloseRisk(id) || presentation.busy || (showReceipt && presentation.receipt) || presentation.outcome || uploads?.hasCloseRisk(id)) return false;
-        const session = workspace?.sessions.find(item => item.id === id);
-        if (session && uploads?.recovery?.hasUnresolvedOutcome(session.publisher, session.appId)) return false;
-        return true;
-      }}
-      onBeforeClose={session => {service.close(session.id); uploads?.close(session.id); reviewSlot?.close(session.id);}} />
+      canCloseWithoutWarning={workspaceCloseGuard({service,presentation,showReceipt,uploads,cvmPending:cvmSnapshot.pendingSessionIds,workspace})}
+      onBeforeClose={session => {service.close(session.id); uploads?.close(session.id); cvm?.close(session.id); reviewSlot?.close(session.id);}} />
+    {cvm&&<CvmReview service={cvm} slot={reviewSlot} workspace={workspace}/> }
     <ApprovalResults snapshot={snapshot} presentation={presentation} shown={shown!==null} showReceipt={showReceipt}/>
     <ApprovalSheet item={shown} nappletTitle={title} busy={held} error={null}
       onApprove={id => {if(mayApprove(id)&&snapshot.current?.id===id)presentation.approve(snapshot.current);}}
       onReject={id => {if(!held&&mayApprove(id))service.reject(id);}} onDismiss={id => {if(!held&&mayApprove(id))service.dismiss(id);}} />
   </UploadProvider></ApprovalProvider>;
+}
+
+function workspaceCloseGuard({service,presentation,showReceipt,uploads,cvmPending,workspace}: {
+  service:ApprovalService;presentation:ReturnType<typeof useApprovalPresentation>;showReceipt:boolean;uploads?:UploadService;
+  cvmPending:readonly string[];workspace:ShellProps['workspace'];
+}) {
+  return (id:string):boolean=>{
+    if(cvmPending.includes(id)||service.hasCloseRisk(id)||presentation.busy||(showReceipt&&presentation.receipt)||presentation.outcome||uploads?.hasCloseRisk(id))return false;
+    const session=workspace?.sessions.find(item=>item.id===id);
+    return !(session&&uploads?.recovery?.hasUnresolvedOutcome(session.publisher,session.appId));
+  };
 }
 
 function useReviewVisibility(reviewSlot: ReviewSlot | undefined, snapshot: ApprovalSnapshot,

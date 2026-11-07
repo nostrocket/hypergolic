@@ -37,6 +37,22 @@ class SignerCoreModule : Module() {
   private var androidSigners: NativeAndroidSignerActions? = null
   private val completedSignings = NativeCompletedSignings()
   private val publicVerification = NativePublicVerification()
+  private val cvmSessions: NativeCvmSessions by lazy { NativeCvmSessions(object : NativeCvmSessions.Events {
+    override fun message(session: String, payload: String) {
+      main.post {
+        if (cvmSessions.mayDeliver(session)) {
+          val row = JSONObject(payload)
+          val refs = row.getJSONArray("references")
+          val event = mutableMapOf<String, Any>("session" to session, "message" to row.getString("message"),
+            "eventId" to row.getString("eventId"), "references" to (0 until refs.length()).map { refs.getString(it) })
+          if (row.has("paymentInteraction")) event["paymentInteraction"] = row.getString("paymentInteraction")
+          sendEvent("onCvmMessage", event)
+        }
+      }
+    }
+    override fun closed(session: String, error: String) { main.post { sendEvent("onCvmClosed", mapOf("session" to session, "error" to error)) } }
+  }, ::active) }
+
 
   private class Signing(val kind: String, val token: String, val core: NativeSignerCore, val epoch: Long,
     val remote: NativeRemoteBinding? = null, val android: NativeAndroidSignerBinding? = null) {
@@ -232,6 +248,7 @@ class SignerCoreModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("HypergolicSignerCore")
+    Events("onCvmMessage", "onCvmClosed")
 
     Function("activateEphemeralSigner") { action {
       if (appContext.runtime.reactContext?.isOnJSQueueThread != true || !active()) throw NativeSignerCore.Denied()
@@ -730,19 +747,35 @@ class SignerCoreModule : Module() {
       try { withContext(Dispatchers.Default) { publicVerification.run(job) }.also { publicVerification.delivery(job) } }
       finally { publicVerification.abandon(job) }
     }
+    AsyncFunction("openCvmSession") Coroutine { permit: String ->
+      claimedOwner(); if (!active()) throw NativeSignerCore.Denied()
+      cvmSessions.foreground(true)
+      withContext(Dispatchers.Default) { cvmSessions.open(permit) }
+    }
+    AsyncFunction("prepareCvmMessage") Coroutine { session: String, permit: String, purpose: String, message: String, replyTo: String? ->
+      claimedOwner(); if (!active()) throw NativeSignerCore.Denied()
+      withContext(Dispatchers.IO) { cvmSessions.prepare(session, permit, purpose, message, replyTo).get() }
+    }
+    AsyncFunction("commitCvmMessage") Coroutine { session: String, plan: String ->
+      claimedOwner(); if (!active()) throw NativeSignerCore.Denied()
+      withContext(Dispatchers.IO) { cvmSessions.commit(session, plan).get(); Unit }
+    }
+    AsyncFunction("closeCvmSession") { session: String -> claimedOwner(); cvmSessions.close(session) }
+
     Function("cancelPublicSignatures") { operationId: String -> publicVerification.cancel(operationId) }
 
     OnActivityEntersForeground {
       publicVerification.foreground(true)
+      cvmSessions.foreground(active())
       androidSigners?.foreground(true)
       handoffs.foreground()
     }
-    OnActivityEntersBackground { publicVerification.foreground(false); background(); androidSigners?.foreground(false) }
-    OnUserLeavesActivity { publicVerification.foreground(false); background() }
+    OnActivityEntersBackground { cvmSessions.foreground(false); publicVerification.foreground(false); background(); androidSigners?.foreground(false) }
+    OnUserLeavesActivity { cvmSessions.foreground(false); publicVerification.foreground(false); background() }
     OnActivityResult { activity, result ->
       androidSigners?.result(activity, result.requestCode, result.resultCode, result.data)
     }
-    OnActivityDestroys { publicVerification.close(); retire() }
-    OnDestroy { publicVerification.close(); retire() }
+    OnActivityDestroys { cvmSessions.close(); publicVerification.close(); retire() }
+    OnDestroy { cvmSessions.close(); publicVerification.close(); retire() }
   }
 }

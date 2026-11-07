@@ -1,3 +1,4 @@
+import {createCvmNative} from './cvm-native';
 import {mediaEvent, type MediaEvent, type MediaRequest} from './media-wire';
 import {canDeferCapability, parseCapabilityRequest} from '../../src/runtime/capability-protocol';
 import {parseOutboxSubscribe,parseOutboxClose} from '../../src/outbox/subscription-contract';
@@ -28,7 +29,7 @@ type StreamState={domain:'relay'|'outbox';subId:string; filters:readonly QueryFi
 type StreamRequest = ReturnType<typeof parseRelaySubscribe> | ReturnType<typeof parseOutboxSubscribe>;
 type WaitingStream = Readonly<{request:StreamRequest;deliver:StreamState['deliver'];expiresAt:number;timer:number}>;
 type StreamEnvelope={sequence:number;delivery:number;response:unknown};
-type NativeClientOptions = Readonly<{ requestTimeoutsMs?: Readonly<Record<string, number>>; onRouting?: (message: NappletMessage, acknowledge: () => void) => void; onMedia?: (message: MediaEvent) => void }>;
+type NativeClientOptions = Readonly<{ requestTimeoutsMs?: Readonly<Record<string, number>>; onRouting?: (message: NappletMessage, acknowledge: () => void) => void; onMedia?: (message: MediaEvent) => void; onCvm?: (message:unknown)=>void }>;
 function receiveStream(envelope:StreamEnvelope,streams:Map<number,StreamState>,stopStream:(counter:number,notify:boolean)=>void,acknowledge:(envelope:StreamEnvelope)=>void, released:()=>void):void {
   const stream=streams.get(envelope.sequence);if(!stream)return;
   try {
@@ -242,11 +243,23 @@ function createStreamAdmission(streams: Map<number,StreamState>, canStart: () =>
 }
 
 /** Trusted top document only. A response never selects its destination window. */
+function createStreamStarter(native:NativeHost,generation:string,streams:Map<number,StreamState>,reserve:()=>number,stopStream:(counter:number,notify:boolean)=>void){
+  return (request:StreamRequest,deliver:StreamState['deliver']):void=>{
+    const counter=reserve();
+    const timer=window.setTimeout(()=>stopStream(counter,true),ordinaryTimeoutMs);
+    streams.set(counter,{domain:request.type==='outbox.subscribe'?'outbox':'relay',subId:request.subId,
+      filters:request.filters,timer,delivery:0,eose:false,controlRevision:-1,deliver});
+    try {native.postMessage(JSON.stringify({type:'relay-stream',sessionId:generation,sequence:counter,message:JSON.stringify(request)}));}
+    catch{stopStream(counter,true);}
+  };
+}
+
 export function createNativeClient(native: NativeHost, generation: string, options: NativeClientOptions = {}) {
   let sequence = 0, disposed = false;
   const pending = new Map<number, PendingRequest>();
   const streams = new Map<number, StreamState>();
   const uploads = new Map<number, UploadState>();
+  const cvm=createCvmNative(native,generation,()=>{if(disposed||sequence>=Number.MAX_SAFE_INTEGER)throw new Error('Native session closed');return ++sequence;},value=>options.onCvm?.(value));
   const closeNative = (subId:string,domain:'relay'|'outbox',id?:string):void => {
     if(disposed || sequence >= Number.MAX_SAFE_INTEGER)return;
     const counter=++sequence;
@@ -262,15 +275,7 @@ export function createNativeClient(native: NativeHost, generation: string, optio
     if(sequence>=Number.MAX_SAFE_INTEGER)throw new Error('Native sequence exhausted');
     native.postMessage(JSON.stringify({type:'relay-stream-ack',sessionId:generation,sequence:++sequence,streamSequence:envelope.sequence,delivery:envelope.delivery}));
   };
-  function startStream(request:StreamRequest,deliver:StreamState['deliver']):void {
-    if (disposed || sequence >= Number.MAX_SAFE_INTEGER) throw new Error('Native subscription unavailable');
-    const counter=++sequence;
-    const timer=window.setTimeout(()=>stopStream(counter,true),ordinaryTimeoutMs);
-    streams.set(counter,{domain:request.type==='outbox.subscribe'?'outbox':'relay',subId:request.subId,
-      filters:request.filters,timer,delivery:0,eose:false,controlRevision:-1,deliver});
-    try {native.postMessage(JSON.stringify({type:'relay-stream',sessionId:generation,sequence:counter,message:JSON.stringify(request)}));}
-    catch{stopStream(counter,true);}
-  }
+  const startStream=createStreamStarter(native,generation,streams,()=>{if(disposed||sequence>=Number.MAX_SAFE_INTEGER)throw new Error('Native subscription unavailable');return ++sequence;},stopStream);
   const admission = createStreamAdmission(streams, () => !disposed && sequence < Number.MAX_SAFE_INTEGER, startStream);
   function request(message: NappletMessage, upload?: Readonly<{uploadId: string; onStatus(message: NappletMessage): void}>, timeoutMs?: number): Promise<NappletMessage> {
       const deferred = deferredRequest(message);
@@ -301,6 +306,7 @@ export function createNativeClient(native: NativeHost, generation: string, optio
   native.addEventListener?.('message', android);
   window.addEventListener('message', ios);
   return Object.freeze({
+    cvm:cvm.request,
     subscribe: admission.subscribe,
     close(message:NappletMessage):void {
       const outbox=message.type==='outbox.close',request=outbox?parseOutboxClose(message):parseRelayClose(message);
@@ -319,6 +325,7 @@ export function createNativeClient(native: NativeHost, generation: string, optio
     ...createPresentationRequests(request),
     destroy(): void {
       disposed = true;
+      cvm.destroy();
       native.removeEventListener?.('message', android);
       window.removeEventListener('message', ios);
       for (const request of pending.values()) { window.clearTimeout(request.timer); request.reject(); }

@@ -183,6 +183,23 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
             }
             return@addWebMessageListener
           }
+          if (data.optString("type") == "cvm") {
+            if (!ready || published == null || configuration?.cvmProfile != "free-foreground-v1" ||
+                data.keys().asSequence().toSet() != setOf("type", "sessionId", "sequence", "message")) return@addWebMessageListener
+            val sequence = data.opt("sequence")
+            if ((sequence !is Int && sequence !is Long) || !CapabilityTransport.leases.consumeSequence(generation, (sequence as Number).toLong())) return@addWebMessageListener
+            val carrier = data.opt("message") as? String ?: return@addWebMessageListener
+            val capturedSequence = sequence.toLong()
+            val token = CvmTransport.receive(generation, carrier, { response ->
+              if (live && !disposed && view === webView && view.url == expectedUrl) reply.postMessage(
+                JSONObject().put("type","cvm.response").put("sessionId",generation).put("sequence",capturedSequence).put("response",response ?: JSONObject.NULL).toString())
+            }, { event ->
+              if (live && !disposed && view === webView && view.url == expectedUrl) reply.postMessage(
+                JSONObject().put("type","cvm.event").put("sessionId",generation).put("message",event).toString())
+            })
+            if (token != null && live && !disposed) onHostEvent(mapOf("type" to "capability", "lane" to "cvm", "sessionId" to (configuration?.sessionId ?: ""), "generation" to generation, "token" to token))
+            return@addWebMessageListener
+          }
           if (data.optString("type") == "media") {
             if (!ready || published == null || configuration?.grantedDomains?.contains("media") != true ||
                 data.keys().asSequence().toSet() != setOf("type", "sessionId", "sequence", "message")) return@addWebMessageListener
@@ -411,6 +428,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
       if (!RoutingTransport.register(generation, config)) { fail("routing-unavailable"); return }
       if (!LinkTransport.register(generation, config)) { fail("link-unavailable"); return }
       if (!UploadTransport.register(generation, config)) { fail("upload-unavailable"); return }
+      if (!CvmTransport.register(generation, config)) { fail("cvm-unavailable"); return }
       configuration = config
       ApprovalTransport.focus(generation, active)
     UploadTransport.focus(generation, active)
@@ -592,6 +610,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     if (configuration != null && !RoutingTransport.register(generation, configuration!!)) { fail("routing-unavailable"); return }
     if (configuration != null && !LinkTransport.register(generation, configuration!!)) { fail("link-unavailable"); return }
     configuration?.let { if (!UploadTransport.register(generation, it)) { fail("upload-unavailable"); return } }
+    configuration?.let { if (!CvmTransport.register(generation, it)) { fail("cvm-unavailable"); return } }
     UploadTransport.focus(generation, active)
     RoutingTransport.focus(generation, active)
     LinkTransport.focus(generation, active)
@@ -617,6 +636,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     publishedReader?.clear()
     SelectedFilePicker.revoke(generation)
     UploadTransport.revoke(generation)
+    CvmTransport.revoke(generation)
     LinkTransport.revoke(generation)
     ApprovalTransport.revoke(generation)
     CapabilityTransport.leases.revoke(generation)
@@ -635,6 +655,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     synchronized(publishedViews) { publishedViews.remove(this) }
     SelectedFilePicker.revoke(generation)
     UploadTransport.revoke(generation)
+    CvmTransport.revoke(generation)
     LinkTransport.revoke(generation)
     ApprovalTransport.revoke(generation)
     CapabilityTransport.revoke(generation)

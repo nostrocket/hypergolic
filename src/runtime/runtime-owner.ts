@@ -1,3 +1,4 @@
+import type {CvmService} from '../cvm/cvm-service';
 import {createOutboxSubscriptionBroker} from '../outbox/subscription-broker.ts';
 import type {createOutboxSubscriptions} from '../outbox/subscriptions.ts';
 import type { OutboxReadService } from '../outbox/read-service';
@@ -26,7 +27,7 @@ import type { DiscoveryOpenBroker } from '../napplets/discovery-open-broker.ts';
 import type { VerifiedNappletArtifact } from '../napplets/verified-artifact.ts';
 import type { NativeRegistration } from './capability-protocol.ts';
 
-export interface NativeCapabilityEvent { type: 'capability'; sessionId: string; generation: string; token: string; lane?: 'approval' | 'outbox-subscription' | 'subscription' | 'upload' | 'routing' | 'presentation' | 'configuration' | 'published-open' }
+export interface NativeCapabilityEvent { type: 'capability'; sessionId: string; generation: string; token: string; lane?: 'approval' | 'outbox-subscription' | 'subscription' | 'upload' | 'routing' | 'presentation' | 'configuration' | 'published-open' | 'cvm' }
 export interface RuntimeBinding { readonly configuration: string; receive(event: NativeCapabilityEvent): void; revoke(): void }
 type PublishedCapabilities = Readonly<{requiredDomains: readonly string[]; optionalDomains: readonly string[]}>;
 export interface PublishedRuntimeBinding { readonly publishedArtifact: string; readonly requestedDomains: PublishedCapabilities;
@@ -63,7 +64,7 @@ function configurationUser(ready: PreparedPublishedSession): string {
 function capabilityReceiver(database: ShellDatabase, native: RuntimeNativePort,
   approvals: Readonly<{ service: ApprovalService; destinations: () => readonly string[] }> | undefined,
   sessionId: string, configuration: Omit<NativeRegistration, 'generation'>, assertActive: () => void, queries?: RelayQueryService, subscriptions?: ReturnType<typeof createRelaySubscriptions>, resources?: ResourceHost, uploads?: UploadService, identityData?: IdentityDataPort, routing?: RoutingBroker, notify?: NotifyBroker, config?: ConfigBroker, outbox?: OutboxReadService, outboxStreams?:ReturnType<typeof createOutboxSubscriptions>,
-  discovery?: Readonly<{ broker: DiscoveryOpenBroker; source: NappletDescriptor }>) {
+  discovery?: Readonly<{ broker: DiscoveryOpenBroker; source: NappletDescriptor }>, cvm?:CvmService) {
   let generation: string | null = null;
   let broker: ReturnType<typeof createCapabilityBroker> | null = null;
   let streams:ReturnType<typeof createRelaySubscriptionBroker>|null=null;
@@ -84,7 +85,9 @@ function capabilityReceiver(database: ShellDatabase, native: RuntimeNativePort,
           broker = createCapabilityBroker(database, native, owner, queries, request=>streams?.close(request), resources, identityData, outbox,request=>outboxSubscriptions?.close(request), discovery !== undefined);
         }
         if (event.generation !== generation) return;
-        if (event.lane === 'published-open') {
+        if(event.lane==='cvm'){
+          if(configuration.cvmProfile==='free-foreground-v1'&&configuration.domains.includes('cvm'))void cvm?.receive(event.token);
+        } else if (event.lane === 'published-open') {
           void discovery?.broker.dispatch(event.token, {registration: {...configuration, generation}, assertActive}, discovery.source);
         } else if (event.lane === 'configuration') {
           void config?.dispatch(event.token, {registration: {...configuration, generation}, assertActive});
@@ -108,14 +111,14 @@ function capabilityReceiver(database: ShellDatabase, native: RuntimeNativePort,
 export function createRuntimeOwner(database: ShellDatabase,
   identity: Pick<IdentityTransition, 'getSnapshot' | 'sessionAuthority'>, native: RuntimeNativePort,
   approvals?: Readonly<{ service: ApprovalService; destinations: () => readonly string[]; closeReview?(sessionId: string): void }>,
-  published?: Omit<PublishedSessionDependencies, 'identity' | 'database' | 'newInstanceId'>, queries?: RelayQueryService, subscriptions?: ReturnType<typeof createRelaySubscriptions>, resources?: ResourceHost, uploads?: UploadService, identityData?: IdentityDataPort, routing?: Readonly<{broker: RoutingBroker; catalog: RoutingCatalog}>, notify?: NotifyBroker, config?: ConfigBroker, outbox?: OutboxReadService, outboxStreams?:ReturnType<typeof createOutboxSubscriptions>, discovery?: DiscoveryOpenBroker): RuntimeOwner {
+  published?: Omit<PublishedSessionDependencies, 'identity' | 'database' | 'newInstanceId'>, queries?: RelayQueryService, subscriptions?: ReturnType<typeof createRelaySubscriptions>, resources?: ResourceHost, uploads?: UploadService, identityData?: IdentityDataPort, routing?: Readonly<{broker: RoutingBroker; catalog: RoutingCatalog}>, notify?: NotifyBroker, config?: ConfigBroker, outbox?: OutboxReadService, outboxStreams?:ReturnType<typeof createOutboxSubscriptions>, discovery?: DiscoveryOpenBroker,cvm?:CvmService): RuntimeOwner {
   const coordinator = published ? createPublishedSessionCoordinator({
     ...published, identity, database, newInstanceId: () => native.newInstanceId(),
   }) : null;
   const prepared = new Map<string, PreparedPublishedSession>();
   const running = new Map<string, PublishedRuntimeBinding>();
   const closeCapabilityReviews = (id: string) => {
-    approvals?.service.close(id); uploads?.close(id); approvals?.closeReview?.(id);
+    approvals?.service.close(id); uploads?.close(id); cvm?.close(id); approvals?.closeReview?.(id);
   };
   const exactSession = (session: NappletDescriptor): NappletDescriptor => {
     const state = identity.getSnapshot().session.workspace.getSnapshot();
@@ -136,7 +139,7 @@ export function createRuntimeOwner(database: ShellDatabase,
       assertPreparedActive();
       exactSession(selected);
     };
-    const receiver = capabilityReceiver(database, native, approvals, selected.id, configuration, assertActive, queries, subscriptions, resources, uploads, identityData, routing?.broker, notify, config, outbox, outboxStreams, entry);
+    const receiver = capabilityReceiver(database, native, approvals, selected.id, configuration, assertActive, queries, subscriptions, resources, uploads, identityData, routing?.broker, notify, config, outbox, outboxStreams, entry, cvm);
     const binding: PublishedRuntimeBinding = Object.freeze({
       publishedArtifact: entry ? JSON.stringify({...host, configuration: JSON.stringify({...configuration, publishedOpen: true})}) : hostInput,
       requestedDomains: Object.freeze({ requiredDomains: ready.artifact.manifest.requiredDomains,

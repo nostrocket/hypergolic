@@ -34,6 +34,7 @@ public final class NappletHostModule: Module {
       RoutingTransport.shared.observeLifecycle(nil)
       UploadTransport.observeProgress(nil)
       CapabilityTransport.foreground(false)
+      CvmTransport.shared.foreground(false)
       RelaySubscriptionTransport.shared.observeLifecycle(nil)
     }
     Function("synchronizeLinkOwner") { (user: String, epoch: Double, available: Bool) throws in
@@ -142,7 +143,15 @@ public final class NappletHostModule: Module {
     Function("synchronizeRoutingOwner") { (user: String, epoch: Double, available: Bool) throws in
       guard epoch.isFinite, epoch >= 0, epoch <= 9_007_199_254_740_991, epoch.rounded(.towardZero) == epoch,
         RoutingTransport.shared.synchronizeOwner(user, epoch: UInt64(epoch), available: available) else { throw NSError(domain: "HypergolicRoutingOwner", code: 1) }
+      CvmTransport.shared.account(user: user, epoch: Int64(epoch), available: available)
     }
+    Function("synchronizeCvmRelays") { (relays: [String]) throws in try CvmTransport.shared.configure(relays: relays) }
+    Function("takeCvmRequest") { (token: String) -> String? in CvmTransport.shared.take(token) }
+    Function("isCvmSourceCurrent") { (generation: String, revision: String) -> Bool in CvmTransport.shared.current(generation,revision:revision) }
+    Function("approveCvmRequest") { (token: String) -> String? in CvmTransport.shared.approve(token) }
+    Function("rejectCvmRequest") { (token: String) in CvmTransport.shared.reject(token) }
+    Function("finishCvmRequest") { (token: String, response: String?) in CvmTransport.shared.finish(token, response: response) }
+    Function("sendCvmEvent") { (generation: String, revision: String, requestToken: String, response: String) -> Bool in CvmTransport.shared.send(generation,revision:revision,requestToken:requestToken,response:response) }
     Function("routingState") { RoutingTransport.shared.state() }
     Function("mayReviewRouting") { (generation: String, revision: UInt64) -> Bool in RoutingTransport.shared.mayReview(generation, revision: revision) }
     Function("routingReviewRevision") { (generation: String, revision: UInt64) -> Int64 in RoutingTransport.shared.reviewRevision(generation, revision: revision) }

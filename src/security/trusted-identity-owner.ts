@@ -1,3 +1,6 @@
+import {withCvmRelayDefaults} from '../cvm/cvm-relay-defaults';
+import {CvmService} from '../cvm/cvm-service';
+import {loadCvmNativePort} from '../cvm/cvm-native-loader';
 import { ReviewSlot } from '../shell/review-slot';
 import { createDiscoveryOpenBroker } from '../napplets/discovery-open-broker';
 import {createNativeFixturePublisher} from '../fixture-release/native-publisher';
@@ -60,6 +63,7 @@ export interface TrustedIdentityOwner {
   readonly notify?: NotifyBroker;
   readonly notificationSettings?: NotificationSettingsService;
   readonly config?: ConfigBroker;
+  readonly cvm?: CvmService;
   readonly routing?: Readonly<{broker: RoutingBroker; catalog: RoutingCatalog; reviews: RoutingReviewService; settings: RoutingSettingsService}>;
   readonly listAccess?: IdentityListAccess | null;
   readonly transition: IdentityTransition;
@@ -77,7 +81,7 @@ export interface TrustedIdentityOwner {
 export class WorkspaceStartupError extends Error {
   constructor() { super('Workspace could not be opened'); this.name = 'WorkspaceStartupError'; }
 }
-async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android' | 'ios'): Promise<{ profileAvatar: ProfileAvatarStore; notificationSettings: NotificationSettingsService; config: ConfigBroker; notify: NotifyBroker; routing: Readonly<{broker: RoutingBroker; catalog: RoutingCatalog; reviews: RoutingReviewService; settings: RoutingSettingsService}>; listAccess: IdentityListAccess | null; transition: IdentityTransition; runtime: RuntimeOwner; approvals: ApprovalService; relaySettings: NativeRelaySettings | null; resourceSettings: NativeResourceSettings | null; uploadSettings: NativeUploadSettings | null; uploads: UploadService; reviewSlot: ReviewSlot; fixturePublisher: FixturePublisher }> {
+async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android' | 'ios'): Promise<{ cvm:CvmService; profileAvatar: ProfileAvatarStore; notificationSettings: NotificationSettingsService; config: ConfigBroker; notify: NotifyBroker; routing: Readonly<{broker: RoutingBroker; catalog: RoutingCatalog; reviews: RoutingReviewService; settings: RoutingSettingsService}>; listAccess: IdentityListAccess | null; transition: IdentityTransition; runtime: RuntimeOwner; approvals: ApprovalService; relaySettings: NativeRelaySettings | null; resourceSettings: NativeResourceSettings | null; uploadSettings: NativeUploadSettings | null; uploads: UploadService; reviewSlot: ReviewSlot; fixturePublisher: FixturePublisher }> {
   const database = await openShellDatabase(SQLite, platform).catch(() => { throw new WorkspaceStartupError(); });
   let relaySettings: NativeRelaySettings | null = null;
   let resourceSettings: NativeResourceSettings | null = null;
@@ -92,6 +96,7 @@ async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android
   let notifyBroker: NotifyBroker | null = null;
   let configBroker: ConfigBroker | null = null;
   let reviewSlot: ReviewSlot | null = null;
+  let cvm:CvmService|null=null;
   let identityCache: Awaited<ReturnType<typeof openIdentityCache>> | null = null;
   let outboxCache: Awaited<ReturnType<typeof openOutboxRelayListCache>> | null = null;
   try {
@@ -117,21 +122,15 @@ async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android
       sign: (snapshot, execution) => vault.signApproved(snapshot, execution),
       publishEvent,
     },outbox.publication,outbox.common);
-    const uploads = new UploadService(loadNativeUploadPort(), createUploadOwner(transition, origin => {
-      if (!runtime) throw new Error('APPROVAL_DENIED');
-      runtime.assertPublishedUpload(origin);
-    }), {
-      handoffState: source => vault.signingHandoffState(source),
-      currentIdentity: () => transition.getSnapshot().phase === 'ready' ? transition.getSnapshot().session.vault.selectedPubkey : null,
-      sha256: async bytes => Array.from(new Uint8Array(await digest(CryptoDigestAlgorithm.SHA256, bytes)), byte => byte.toString(16).padStart(2, '0')).join(''),
-      nowSeconds: () => Math.floor(Date.now() / 1000),
-      sign: (snapshot, execution) => vault.signApprovedUpload(snapshot, execution),
-    });
+    const uploads=createWorkspaceUploads(vault,transition,()=>runtime);
     const capability = loadNativeCapabilityPort(), routingNative = loadRoutingNativePort();
     const slot = reviewSlot = new ReviewSlot(approvals, uploads, () => {
       const state = transition.getSnapshot();
       return state.phase === 'ready' ? state.session.epoch : null;
     }, transition.subscribe);
+    const cvmNative=loadCvmNativePort();
+    if(relaySettings)relaySettings=withCvmRelayDefaults(relaySettings,cvmNative.configure);else cvmNative.configure([]);
+    cvm=new CvmService(cvmNative.port);
     const reviews = new RoutingReviewService(slot);
     const discovery = createDiscoveryOpenBroker({ identity: transition, runtime: () => runtime, capability, native: routingNative, reviews });
     notifyBroker = new NotifyBroker(capability, routingNative, notifyPermissions);
@@ -148,11 +147,11 @@ async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android
         networkRelays: () => relaySettings?.getSettings().networkRelays ?? [] },
       queries,
       loadNativeRelaySubscriptions(() => relaySettings?.getSettings().networkRelays ?? []),
-      loadNativeResourceHost(() => resourceSettings?.servers() ?? [], queries), uploads, identityData, routing, notifyBroker, configBroker, outbox, loadNativeOutboxSubscriptions(outbox), discovery);
+      loadNativeResourceHost(() => resourceSettings?.servers() ?? [], queries), uploads, identityData, routing, notifyBroker, configBroker, outbox, loadNativeOutboxSubscriptions(outbox), discovery,cvm);
     const fixturePublisher=createNativeFixturePublisher(vault,transition);
-    return { profileAvatar, fixturePublisher, notificationSettings: createNotificationSettings(transition, routingNative, notifyBroker), config: configBroker, notify: notifyBroker, routing, listAccess, transition, approvals, relaySettings, resourceSettings, uploadSettings, uploads, reviewSlot, runtime };
+    return { cvm, profileAvatar, fixturePublisher, notificationSettings: createNotificationSettings(transition, routingNative, notifyBroker), config: configBroker, notify: notifyBroker, routing, listAccess, transition, approvals, relaySettings, resourceSettings, uploadSettings, uploads, reviewSlot, runtime };
   } catch {
-    releaseAvatar?.(); releaseLinks?.(); releaseRouting?.(); routingBroker?.stop(); notifyBroker?.stop(); configBroker?.stop(); reviewSlot?.dispose();
+    cvm?.dispose(); releaseAvatar?.(); releaseLinks?.(); releaseRouting?.(); routingBroker?.stop(); notifyBroker?.stop(); configBroker?.stop(); reviewSlot?.dispose();
     try { await notifyPermissions?.close(); } catch { /* Preserve the workspace failure. */ }
     try { await routingCatalog?.close(); } catch { /* Preserve the workspace failure. */ }
     try { await listAccess?.close(); } catch { /* Preserve the workspace failure. */ }
@@ -164,6 +163,19 @@ async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android
     try { await database.close(); } catch { /* Preserve the workspace failure. */ }
     throw new WorkspaceStartupError();
   }
+}
+
+function createWorkspaceUploads(vault:NativeIdentityVault,transition:IdentityTransition,runtime:()=>RuntimeOwner|null){
+  return new UploadService(loadNativeUploadPort(), createUploadOwner(transition, origin => {
+      const current=runtime();if(!current)throw new Error('APPROVAL_DENIED');
+      current.assertPublishedUpload(origin);
+    }), {
+      handoffState: source => vault.signingHandoffState(source),
+      currentIdentity: () => transition.getSnapshot().phase === 'ready' ? transition.getSnapshot().session.vault.selectedPubkey : null,
+      sha256: async bytes => Array.from(new Uint8Array(await digest(CryptoDigestAlgorithm.SHA256, bytes)), byte => byte.toString(16).padStart(2, '0')).join(''),
+      nowSeconds: () => Math.floor(Date.now() / 1000),
+      sign: (snapshot, execution) => vault.signApprovedUpload(snapshot, execution),
+    });
 }
 
 /** Dynamically imported only after the native process claim succeeds. */

@@ -5,7 +5,7 @@ import { parseRelayQuery, type RelayQueryRequest } from '../network/relay-query-
 import { LIMITS, type Scope } from '../storage/ports.ts';
 
 export const CAPABILITY_LIMITS = Object.freeze({ messageBytes: 2 * 1024 * 1024, sessionRequests: 1024 });
-export const SUPPORTED_CAPABILITY_DOMAINS = Object.freeze(['identity', 'storage', 'theme', 'relay', 'resource', 'upload', 'link', 'intent', 'inc', 'notify', 'config', 'outbox', 'keys', 'media', 'common']);
+export const SUPPORTED_CAPABILITY_DOMAINS = Object.freeze(['identity', 'storage', 'theme', 'relay', 'resource', 'upload', 'link', 'intent', 'inc', 'notify', 'config', 'outbox', 'keys', 'media', 'common', 'cvm']);
 // Published and bundled admission use the same reviewed domain set; operations still enforce grants.
 const NATIVE_CAPABILITY_DOMAINS = SUPPORTED_CAPABILITY_DOMAINS;
 export const IDENTITY_OPERATIONS = ['identity.getPublicKey', 'identity.getRelays', 'identity.getProfile',
@@ -27,7 +27,7 @@ export interface NativeRegistration {
   readonly sessionId: string; readonly generation: string; readonly epoch: number;
   readonly user: string; readonly publisher: string; readonly appId: string;
   readonly version: string; readonly instanceId: string;
-  readonly fixture: string; readonly domains: readonly string[]; readonly commonProfile?: 'social-v1';
+  readonly fixture: string; readonly domains: readonly string[]; readonly commonProfile?: 'social-v1'; readonly cvmProfile?: 'free-foreground-v1';
 }
 export type CapabilityRequest = CommonRequest | OutboxReadRequest | RelayQueryRequest | Readonly<{ type: IdentityOperation; id: string; listType?: string }>
   | Readonly<{ type: StorageOperation; id: string; key?: string; value?: string; scope: Scope }>;
@@ -49,14 +49,15 @@ function fields(value: Record<string, unknown>, required: readonly string[], opt
 }
 export function decodeNativeRegistration(value: unknown): NativeRegistration {
   const data = record(value);
-  fields(data, ['sessionId', 'generation', 'epoch', 'user', 'publisher', 'appId', 'version', 'instanceId', 'fixture', 'domains'],['commonProfile']);
+  fields(data, ['sessionId', 'generation', 'epoch', 'user', 'publisher', 'appId', 'version', 'instanceId', 'fixture', 'domains'],['commonProfile','cvmProfile']);
   if (!Array.isArray(data.domains) || data.domains.length > NATIVE_CAPABILITY_DOMAINS.length ||
       data.domains.some(domain => !NATIVE_CAPABILITY_DOMAINS.includes(domain)) || new Set(data.domains).size !== data.domains.length) return invalid();
   if(Object.prototype.hasOwnProperty.call(data,'commonProfile')&&(data.commonProfile!=='social-v1'||data.fixture!=='published'||!data.domains.includes('common')||!data.domains.includes('identity')||!data.domains.some(d=>d==='relay'||d==='outbox')))return invalid();
+  if(Object.prototype.hasOwnProperty.call(data,'cvmProfile')&&(data.cvmProfile!=='free-foreground-v1'||data.fixture!=='published'||!data.domains.includes('cvm')))return invalid();
   return Object.freeze({ sessionId: identifier(data.sessionId), generation: identifier(data.generation),
     epoch: revision(data.epoch), user: publicKey(data.user), publisher: publicKey(data.publisher),
     appId: text(data.appId, 1024), version: publicKey(data.version), instanceId: identifier(data.instanceId),
-    fixture: identifier(data.fixture), ...(data.commonProfile==='social-v1'?{commonProfile:'social-v1' as const}:{}), domains: Object.freeze([...data.domains].sort()) });
+    fixture: identifier(data.fixture), ...(data.cvmProfile==='free-foreground-v1'?{cvmProfile:'free-foreground-v1' as const}:{}), ...(data.commonProfile==='social-v1'?{commonProfile:'social-v1' as const}:{}), domains: Object.freeze([...data.domains].sort()) });
 }
 export function parseCapabilityRequest(value: unknown): CapabilityRequest {
   const data = record(value);

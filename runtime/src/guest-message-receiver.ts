@@ -13,6 +13,7 @@ type GuestMessageRoutes = Readonly<{
   catalogPage: ReturnType<typeof createCatalogPageReceiver> | null;
   keys: ReturnType<typeof createKeysSession> | null;
   sendMedia: ReturnType<typeof createNativeClient>['sendMedia'] | null;
+  cvm?:((value:unknown)=>void)|null;
   closed(): boolean;
   live(): boolean;
   dispatch(event: MessageEvent): void;
@@ -49,6 +50,7 @@ export function guestMessageReceiver(frame: HTMLIFrameElement, source: Window, r
       }
       return;
     }
+    if(typeof event.data?.type==='string'&&event.data.type.startsWith('cvm.')){routes.cvm?.(event.data);return;}
     routes.dispatch(event);
   };
 }
