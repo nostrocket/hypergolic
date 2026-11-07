@@ -1,11 +1,9 @@
 import './legacy-webview';
 import { injectMediaFacade } from './media-guest';
-import { mediaRequestId, projectMediaRequest } from './media-wire';
+import { guestMessageReceiver } from './guest-message-receiver';
 import { injectAndroidGuestHelpers } from './android-guest-helpers';
 import { createDiscoveryOpenReceiver, injectDiscoveryOpen } from './discovery-open';
-import { CATALOG_PAGE } from '../../src/napplets/catalog-page-contract';
 import { createCatalogPageReceiver } from './discovery-catalog';
-import { DISCOVERY_OPEN } from '../../src/napplets/discovery-open-contract';
 import { installCloseCheck, CLOSE_CHECK_SERVICE } from './close-check';
 import { injectSupportReport } from './support-report';
 import {parseOutboxSubscribe,parseOutboxClose} from '../../src/outbox/subscription-contract';
@@ -22,7 +20,7 @@ import { createUploadAdapter } from './upload-adapter';
 import { parseUploadRequest, UploadError, UPLOAD_LIMITS } from '../../src/uploads/upload-contract';
 import { text } from '../../src/storage/codec';
 import { bindResourceMedia, injectResourceMediaGate, isRuntimeInputActive } from './resource-media';
-import { createKeysSession, isKeysMessage } from './keys-adapter';
+import { createKeysSession } from './keys-adapter';
 import { createResourceAdapter } from './resource-adapter';
 import { parseRelaySubscribe, parseRelayClose } from '../../src/network/relay-subscription-contract';
 import {
@@ -284,51 +282,6 @@ function createGuestEndpoint(artifact: RuntimeMetadata, hooks: ShellAdapter) {
   return { bridge, frame, source, media, environment, policy };
 }
 
-type GuestMessageRoutes = Readonly<{
-  routing: ReturnType<typeof createGuestRouting>;
-  discoveryOpen: ReturnType<typeof createDiscoveryOpenReceiver> | null;
-  catalogPage: ReturnType<typeof createCatalogPageReceiver> | null;
-  keys: ReturnType<typeof createKeysSession> | null;
-  sendMedia: ReturnType<typeof createNativeClient>['sendMedia'] | null;
-  live(): boolean;
-  dispatch(event: MessageEvent): void;
-}>;
-function guestMessageReceiver(frame: HTMLIFrameElement, source: Window, routes: GuestMessageRoutes) {
-  let operations = 0;
-  let windowStart = performance.now();
-  return (event: MessageEvent): void => {
-    if (stopped || !event.isTrusted || event.source !== source || frame.contentWindow !== source) return;
-    if (performance.now() - windowStart > 1000) { operations = 0; windowStart = performance.now(); }
-    if (++operations > 64) {
-      for (const port of event.ports) port.close();
-      return;
-    }
-    if (routes.routing.connect(event)) return;
-    if (event.data?.type === DISCOVERY_OPEN) {
-      routes.discoveryOpen?.(event.data);
-      return;
-    }
-    if (event.data?.type === CATALOG_PAGE) {
-      routes.catalogPage?.(event.data);
-      return;
-    }
-    if (isKeysMessage(event.data)) {
-      if (routes.live()) routes.keys?.receive(event.data);
-      return;
-    }
-    if (routes.sendMedia && routes.live() && typeof event.data?.type === 'string' && event.data.type.startsWith('media.')) {
-      const request = projectMediaRequest(event.data);
-      if (request && routes.sendMedia(request)) return;
-      if (event.data.type === 'media.session.create') {
-        const id = mediaRequestId(event.data.id);
-        if (id) source.postMessage({type:'media.session.create.result', id, error:'Unsupported media request.'}, '*');
-      }
-      return;
-    }
-    routes.dispatch(event);
-  };
-}
-
 function mount(artifact: RuntimeMetadata) {
   const live = () => !stopped && ready && frame.contentWindow === source && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) !== undefined;
   const routing = createGuestRouting(artifact.domains, sessionId, live,
@@ -357,7 +310,8 @@ function mount(artifact: RuntimeMetadata) {
   const deadline = window.setTimeout(() => fail('runtime-timeout'), 10_000);
 
   const receive = guestMessageReceiver(frame, source, {
-    routing, discoveryOpen, catalogPage, keys, sendMedia: hasMedia ? native.sendMedia : null, live,
+    routing, discoveryOpen, catalogPage, keys, sendMedia: hasMedia ? native.sendMedia : null,
+    closed: () => stopped, live,
     dispatch(event) {
       if (!validEnvelope(event.data)) {
         if (ready && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId)) rejectEnvelope(event, source, artifact.domains);
