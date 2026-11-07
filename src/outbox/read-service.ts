@@ -1,3 +1,4 @@
+import {createOutboxReadAdmission} from './read-admission.ts';
 import {createNativeRelayQuery, type RelayQueryResult} from '../network/native-relay-query.ts';
 import type {NativePublishedRelayPort} from '../napplets/native-published-relay.ts';
 import type {RelaySettingsSnapshot} from '../network/relay-settings.ts';
@@ -36,15 +37,14 @@ function projectEvents(result: RelayQueryResult, limit: number): readonly Outbox
 export function createOutboxReadService(resolver: OutboxAuthorResolver,
   native: NativeOutboxQueryPort,
   settings: () => RelaySettingsSnapshot, now: () => number = Date.now) {
-  let pending = 0;
+  const admission = createOutboxReadAdmission();
   async function bounded<T>(timeoutMs: number, signal: AbortSignal, assertActive: () => void,
     work: (signal: AbortSignal, active: () => void, remaining: (handoff?: boolean) => number) => Promise<T>): Promise<T> {
-    if (pending >= QUERY_LIMITS.concurrent) throw new OutboxQueryError('relay timeout');
     const startedAt = now();
     if (!Number.isSafeInteger(startedAt) || startedAt < 0) throw new OutboxQueryError('relay timeout');
     const controller = new AbortController(), stop = () => controller.abort();
     const active = () => {assertActive(); if (signal.aborted || controller.signal.aborted) throw new OutboxQueryError('relay timeout');};
-    active(); pending++; signal.addEventListener('abort',stop,{once:true});
+    active(); signal.addEventListener('abort',stop,{once:true});
     const timer = setTimeout(stop,timeoutMs);
     let rejectCancelled!: () => void;
     const cancelled = new Promise<never>((_,reject) => {rejectCancelled = () => reject(new OutboxQueryError('relay timeout'));});
@@ -55,8 +55,19 @@ export function createOutboxReadService(resolver: OutboxAuthorResolver,
       if (handoff) clearTimeout(timer); // Data transport now owns the same remaining deadline and may return verified partial data.
       return ms;
     };
-    try {const result = await Promise.race([work(controller.signal,active,remaining),cancelled]); active(); return result;}
-    finally {clearTimeout(timer);signal.removeEventListener('abort',stop);controller.signal.removeEventListener('abort',rejectCancelled);controller.abort();pending--;}
+    let release:(()=>void)|undefined,started=false;
+    try {
+      release=await Promise.race([admission.acquire(controller.signal,()=>{remaining();}),cancelled]);
+      const settled=Promise.resolve().then(()=>{
+        remaining();return work(controller.signal,active,remaining);
+      }).finally(release);
+      started=true;
+      const result=await Promise.race([settled,cancelled]);active();return result;
+    } finally {
+      if(!started)release?.();
+      clearTimeout(timer);signal.removeEventListener('abort',stop);
+      controller.signal.removeEventListener('abort',rejectCancelled);controller.abort();
+    }
   }
   function route(request: OutboxQueryRequest, user: string, signal: AbortSignal, active: () => void, refresh = false, planning?: OutboxReadPlanning) {
     const search = request.filters[0]?.search !== undefined;

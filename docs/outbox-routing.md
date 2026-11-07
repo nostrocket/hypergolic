@@ -29,6 +29,21 @@ existing native ten-second maximum. The next peer starts after the prior
 native promise settles. Later tail peers remain best-effort under the original
 deadline. No new destinations or connection slots are added.
 
+One-shot reads and subscription route planning share two admitted app work
+slots. A FIFO queue holds at most eight waiting operations across that service;
+this accommodates small accepted startup bursts without raising active work,
+per-session broker limits or native connection limits. Queue overflow retains
+the canonical `relay timeout` result. The original request deadline starts
+before waiting, including the subscription's remaining planning budget. Exact
+caller authority, cancellation and absolute expiry are checked at promotion
+and immediately before work. Close/background cancels queued subscription
+revisions; returning creates fresh planning work rather than reviving them.
+A cancelled caller returns promptly, but its admitted app work retains its
+slot until that work settles. Nested resolvers can settle cancellation before a
+raw native carrier finishes unwinding; native owners still govern actual
+connection reservations. The app work count is not a socket-count guarantee.
+This admission stage neither retries nor replays a request.
+
 Only an active native claim for an exact Outbox query or getEvent can use
 the one-shot transport budget of 200 events and 256 text frames per relay.
 Signed result events remain limited to 512 KiB, with a 2 MiB ceiling on
