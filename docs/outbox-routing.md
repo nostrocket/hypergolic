@@ -8,7 +8,7 @@ Implementation through Outbox is complete; final CAP-12/CAP-14 acceptance remain
 
 Original SDK getEvent/query/resolveRelays/subscribe/close/publish use the trusted native host. The Outbox grant covers this API. The draft’s Relay dependency supplies the wire type for event results. Raw Relay operations require a separate Relay grant. Lookup relays discover verified signed kind10002 lists; data reads use author write relays and required recipient publication uses inbox read relays. Replacement winners follow NIP-01, including lowest lexical ID for equal timestamps. Signature/filter checks apply to stored and network data. Private/local/insecure destinations remain denied by the existing native DNS/TLS/public-WSS policy.
 
-The identity-specific persistent list cache is fresh for 24 hours after a successful verified lookup. Reads may retain verified stale data for up to seven days while refreshing. Missing/failed discovery or authorless reads use bounded Network fallback and validated hints, reporting incomplete results truthfully. Larger Outbox query and backfill limits are capped at 32 events. A one-shot query that fills the cap when the caller requested more reports a potentially incomplete result. Publication refreshes expired metadata before review and refuses stale required routing. Missing own usable metadata permits labelled Network fallback; missing required inbox metadata blocks before review/signing.
+The identity-specific persistent list cache is fresh for 24 hours after a successful verified lookup. Reads may retain verified stale data for up to seven days while refreshing. Missing/failed discovery or authorless reads use bounded Network fallback and validated hints, reporting incomplete results truthfully. One-shot queries default to 200 events and cap larger requests at 200. Subscription backfill still defaults to and caps at 32. A one-shot query that fills the event cap when the caller requested more reports a potentially incomplete result. Publication refreshes expired metadata before review and refuses stale required routing. Missing own usable metadata permits labelled Network fallback; missing required inbox metadata blocks before review/signing.
 
 One-shot Outbox queries accept up to 32 NIP-01 filters within the existing native
 8 KiB REQ and result limits. Raw Relay queries and live subscriptions keep their
@@ -20,6 +20,14 @@ would exceed 16 destinations, configured Network relays and validated hints
 leave room for whole author relay sets that fit. Omitted author routes make the
 result incomplete. Packs with more than 32 per-member filters still exceed
 this profile.
+
+Only an active native claim for an exact Outbox query or getEvent can use
+the one-shot transport budget of 200 events and 256 text frames per relay.
+Signed result events remain limited to 512 KiB, with a 2 MiB ceiling on
+native response bytes per relay. Advisory relay hints use a separate 256 KiB
+budget. Excess hints are omitted so they cannot crowd out signed events. It uses the existing shared native connection
+slots and deadlines. Raw Relay, catalog reads, author-list discovery
+and live subscriptions retain their existing budgets.
 
 One-shot Outbox also accepts a [NIP-50 search filter](https://github.com/nostr-protocol/nips/blob/0046368a747c5c25ae2bec28bae0e537744c8f10/50.md)
 with one nonblank search string of up to 1 KiB and one explicit policy-allowed

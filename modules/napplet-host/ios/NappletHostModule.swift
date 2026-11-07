@@ -122,6 +122,11 @@ public final class NappletHostModule: Module {
       try await publishedRelay.query(operationId: operationId, url: url, requestText: requestText,
                                       subscriptionId: subscriptionId)
     }
+    AsyncFunction("queryOutboxRelay") { (token: String, operationId: String, url: String, requestText: String,
+                                         subscriptionId: String) async throws -> [String] in
+      try await publishedRelay.queryOutbox(token: token, operationId: operationId, url: url,
+                                            requestText: requestText, subscriptionId: subscriptionId)
+    }
     Function("cancelPublishedRelay") { (operationId: String) in
       publishedRelay.cancel(operationId: operationId)
     }

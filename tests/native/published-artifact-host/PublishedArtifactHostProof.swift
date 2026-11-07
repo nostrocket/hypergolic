@@ -29,6 +29,33 @@ import Foundation
     func json(_ object: [String: Any]) throws -> String {
       String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self)
     }
+    let leases = CapabilityLeaseRegistry()
+    try check(leases.register(generation), "register query generation")
+    var capabilitySequence: UInt64 = 0
+    func issue(_ type: String, _ domains: [String]) throws -> String {
+      capabilitySequence += 1
+      let snapshot = try json(["registration": ["domains": domains], "request": try json(["type": type])])
+      return leases.admit(generation, sequence: capabilitySequence, snapshot: snapshot)!
+    }
+    func allowsOutbox(_ token: String) -> Bool { CapabilityTransport.outboxAdmitted(token, leases: leases) }
+    for (type, domains) in [("relay.query", ["outbox", "relay"]), ("outbox.resolveRelays", ["outbox"]), ("outbox.query", ["relay"])] {
+      let token = try issue(type, domains)
+      try check(leases.take(token) != nil && !allowsOutbox(token), "reject crossed query authority")
+      try check(leases.finish(token), "finish denied query")
+    }
+    let query = try issue("outbox.query", ["outbox"])
+    try check(!allowsOutbox(query) && leases.take(query) != nil && allowsOutbox(query), "only a claimed exact Outbox query can borrow")
+    try check(leases.take(query) == nil, "one-use claim")
+    try check(leases.finish(query) && !allowsOutbox(query), "finished query cannot borrow")
+    let event = try issue("outbox.getEvent", ["outbox"])
+    try check(leases.take(event) != nil && allowsOutbox(event), "allow claimed exact getEvent")
+    _ = leases.setForeground(false)
+    _ = leases.setForeground(true)
+    try check(!allowsOutbox(event), "foreground return cannot revive the old query")
+    let revoked = try issue("outbox.query", ["outbox"])
+    try check(leases.take(revoked) != nil && allowsOutbox(revoked), "allow live generation")
+    leases.revoke(generation)
+    try check(leases.register(generation) && !allowsOutbox(revoked), "generation replacement cannot revive the old query")
     try check(PublishedArtifactHostInput(try json(fields))?.configuration == nil,
       "legacy seven-field input has no capability")
     var publishedConfig: [String: Any] = ["sessionId": session, "epoch": 1, "user": String(repeating: "c", count: 64),

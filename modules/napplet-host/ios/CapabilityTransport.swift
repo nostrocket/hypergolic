@@ -122,6 +122,18 @@ struct CapabilityConfiguration {
 @MainActor
 enum CapabilityTransport {
   nonisolated static let leases = CapabilityLeaseRegistry()
+  nonisolated static func outboxAdmitted(_ token: String, leases: CapabilityLeaseRegistry) -> Bool {
+    guard let snapshot = leases.borrowedSnapshot(token),
+      let row = try? JSONSerialization.jsonObject(with: Data(snapshot.utf8)) as? [String: Any],
+      let registration = row["registration"] as? [String: Any],
+      let domains = registration["domains"] as? [String], domains.contains("outbox"),
+      let raw = row["request"] as? String,
+      let request = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any],
+      let type = request["type"] as? String, ["outbox.query", "outbox.getEvent"].contains(type)
+    else { return false }
+    return leases.isActive(token)
+  }
+
   // UIKit lifecycle and app-owned services are exercised by native app tests.
   #if canImport(UIKit)
   nonisolated static let lifecycle = CapabilityLifecycle()

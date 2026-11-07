@@ -14,7 +14,8 @@ const result = {events:[],incomplete:true,plan:{relays:['wss://nos.lol'],source:
 test('attested query uses captured identity and returns original correlation with incomplete evidence', async t => {
   const {database} = await setup(t), native = new NativeLeases(), owner = registration({domains: ['outbox']});
   const filters = Array.from({length:22},(_,index)=>({authors:[hex(index+1)],kinds:[0],limit:1}));
-  const broker = bind(database,native,owner,{async query(input,user,_signal,active){
+  const broker = bind(database,native,owner,{async query(input,user,_signal,active,nativeToken){
+    assert.equal(nativeToken,token);
     assert.equal(user,owner.user); assert.deepEqual((input as {filters:unknown}).filters,filters);
     assert.equal((input as {id:string}).id,'outbox-1'); active(); return result;
   }});

@@ -23,10 +23,10 @@ function harness(reply: Query, networkRelays = ['wss://nos.lol']) {
   let discovery = 0;
   const service = createOutboxReadService({async resolve() {discovery++; throw Error('unexpected discovery');}}, {
     newInstanceId: () => '00000000-0000-4000-8000-000000000001',
-    queryPublishedRelay(id, url, wire, sub) {destinations.push(url); return reply(id,url,wire,sub);},
+    queryOutboxRelay(token, id, url, wire, sub) {assert.equal(token,'search-token');destinations.push(url); return reply(id,url,wire,sub);},
     cancelPublishedRelay(id) {cancelled.push(id);},
   }, () => ({networkRelays,lookupRelays:['wss://relay.damus.io']}));
-  return {query:(value:unknown = request, active = signal()) => service.query(value,author,active,()=>{}),
+  return {query:(value:unknown = request, active = signal()) => service.query(value,author,active,()=>{},'search-token'),
     destinations,cancelled,discovery:()=>discovery};
 }
 const frames = (sub:string, events:readonly unknown[] = []) =>
@@ -35,7 +35,7 @@ const frames = (sub:string, events:readonly unknown[] = []) =>
 test('Funclet-shaped Outbox search uses only its explicit peer and preserves rank across deduplication', async () => {
   const first = station(1), second = station(2);
   const h = harness(async (_id,_relay,wire,sub) => {
-    assert.deepEqual(JSON.parse(wire),['REQ',sub,{kinds:[31237],limit:32,search:'café jazz'}]);
+    assert.deepEqual(JSON.parse(wire),['REQ',sub,{kinds:[31237],limit:48,search:'café jazz'}]);
     return frames(sub,[first,first,second]);
   });
   const result = await h.query();

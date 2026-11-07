@@ -4,6 +4,7 @@ import { text, utf8Bytes } from '../storage/codec.ts';
 export const QUERY_LIMITS = Object.freeze({ filters: 4, list: 64, requestBytes: 16 * 1024,
   events: 32, eventBytes: 64 * 1024, resultBytes: 512 * 1024, frames: 64,
   timeoutMs: 15_000, concurrent: 2 });
+export const OUTBOX_QUERY_COUNTS = Object.freeze({events: 200, frames: 256});
 export const NATIVE_RELAY_REQUEST_BYTES = 8_192;
 export type QueryFilter = Readonly<Record<string, readonly string[] | readonly number[] | number | string>>;
 export type RelayQueryRequest = Readonly<{ type: 'relay.query'; id: string; filters: readonly QueryFilter[] }>;
@@ -36,7 +37,7 @@ function dense(value: unknown, max: number): unknown[] {
   return output;
 }
 export function parseQueryFilters(input: unknown, maximumLimit: number = QUERY_LIMITS.events,
-  maximumFilters: number = QUERY_LIMITS.filters, allowSearch = false): readonly QueryFilter[] {
+  maximumFilters: number = QUERY_LIMITS.filters, allowSearch = false, defaultLimit: number = QUERY_LIMITS.events): readonly QueryFilter[] {
   const filters = dense(input, maximumFilters);
   if (filters.length === 0) return fail();
   const result = filters.map(value => {
@@ -67,7 +68,7 @@ export function parseQueryFilters(input: unknown, maximumLimit: number = QUERY_L
     }
     if (typeof filter.since === 'number' && typeof filter.until === 'number' && filter.since > filter.until) return fail();
     // Bound broad requests without changing caller-selected narrower limits.
-    if (filter.limit === undefined) filter.limit = QUERY_LIMITS.events;
+    if (filter.limit === undefined) filter.limit = defaultLimit;
     return Object.freeze(filter);
   });
   if (utf8Bytes(JSON.stringify(result)) > QUERY_LIMITS.requestBytes) return fail();

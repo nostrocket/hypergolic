@@ -3,6 +3,7 @@ package org.nostrocket.hypergolic.host;
 import org.nostrocket.hypergolic.host.PublishedRelayWssIo.DeadlineInput;
 import org.nostrocket.hypergolic.host.PublishedRelayWssIo.AbortMonitor;
 import org.nostrocket.hypergolic.host.PublishedRelayResponseClassifier.ResponseCollector;
+import org.nostrocket.hypergolic.host.PublishedRelayResponseClassifier.ResponseProfile;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -356,7 +357,10 @@ public final class PublishedRelayWssQuery {
   private static IOException invalidUrl() { return new IOException("Only credential-free public WSS DNS relay URLs are supported"); }
   public enum TextKind { EVENT, OTHER, EOSE }
   /** Classification is made only after the caller structurally validates JSON and subscription id. */
-  public interface TextStopPolicy { TextKind classify(String completeText) throws IOException; }
+  public interface TextStopPolicy {
+    TextKind classify(String completeText) throws IOException;
+    default ResponseProfile profile() { return ResponseProfile.STANDARD; }
+  }
 
   static final class RelayUrl {
     final String host;

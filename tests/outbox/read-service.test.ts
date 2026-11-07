@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {finalizeEvent, getPublicKey} from 'nostr-tools/pure';
-import {parseRelayQuery, QUERY_LIMITS} from '../../src/network/relay-query-contract.ts';
+import {parseRelayQuery, OUTBOX_QUERY_COUNTS} from '../../src/network/relay-query-contract.ts';
 import {createOutboxReadService} from '../../src/outbox/read-service.ts';
 import {parseOutboxQuery,parseOutboxEvent,parseOutboxResolve} from '../../src/outbox/query-contract.ts';
 import {parseOutboxSubscribe} from '../../src/outbox/subscription-contract.ts';
@@ -10,31 +10,32 @@ import {createOutboxAuthorResolver, type OutboxAuthorResolver} from '../../src/o
 const key = new Uint8Array(32).fill(36), author = getPublicKey(key);
 const event = JSON.parse(JSON.stringify(finalizeEvent({kind: 1, created_at: 1, tags: [], content: 'disjoint'}, key)));
 const list = parseOutboxRelayList(JSON.parse(JSON.stringify(finalizeEvent({kind: 10002, created_at: 1, content: '', tags: [['r','wss://read.nostr.net','read'],['r','wss://write.nostr.net','write']]}, key))), author);
+const token = 'claimed-outbox-test-token';
 const request = {type:'outbox.query', id:'query-1', filters:{authors:[author],kinds:[1]}};
 function harness(resolver: OutboxAuthorResolver, network = ['wss://network.nostr.net']) {
   let sequence = 0;
   const calls: string[] = [], cancelled: string[] = [];
   const native = {newInstanceId: () => '00000000-0000-4000-8000-'+String(++sequence).padStart(12,'0'),
-    async queryPublishedRelay(_id: string, relay: string, _wire: string, sub: string) {calls.push(relay); return [JSON.stringify(['EVENT',sub,event]),JSON.stringify(['EOSE',sub])];},
+    async queryOutboxRelay(nativeToken: string, _id: string, relay: string, _wire: string, sub: string) {assert.equal(nativeToken,token);calls.push(relay); return [JSON.stringify(['EVENT',sub,event]),JSON.stringify(['EOSE',sub])];},
     cancelPublishedRelay(id: string) {cancelled.push(id);}};
   return {calls, cancelled, native, service:createOutboxReadService(resolver,native,()=>({networkRelays:network,lookupRelays:['wss://lookup.nostr.net']}))};
 }
 const signal = () => new AbortController().signal;
 test('author query routes to signed write relay independently of configured Network and read role', async () => {
   const h = harness({async resolve(user, selectedAuthor) {assert.equal(user,author); assert.equal(selectedAuthor,author); return {list,source:'nip65',incomplete:false};}});
-  const result = await h.service.query(request,author,signal(),()=>{});
+  const result = await h.service.query(request,author,signal(),()=>{},token);
   assert.deepEqual(h.calls,['wss://write.nostr.net']);
   assert.equal(result.events[0]?.event.id,event.id); assert.equal(result.incomplete,false);
 });
 test('failed author discovery uses configured Network with truthful incomplete and missing author', async () => {
   const h = harness({async resolve() {throw Error('offline');}});
-  const result = await h.service.query(request,author,signal(),()=>{});
+  const result = await h.service.query(request,author,signal(),()=>{},token);
   assert.deepEqual(h.calls,['wss://network.nostr.net']);
   assert.equal(result.incomplete,true); assert.deepEqual(result.plan.missingAuthors,[author]);
 });
 test('authorless query uses Network plus bounded validated hints and deduplicates results', async () => {
   const h = harness({async resolve() {throw Error('must not discover');}});
-  const result = await h.service.query({...request, filters:{kinds:[1]}, options:{relays:['wss://hint.nostr.net']}},author,signal(),()=>{});
+  const result = await h.service.query({...request, filters:{kinds:[1]}, options:{relays:['wss://hint.nostr.net']}},author,signal(),()=>{},token);
   assert.deepEqual(h.calls,['wss://hint.nostr.net','wss://network.nostr.net']);
   assert.equal(result.events.length,1); assert.equal(result.plan.source,'fallback');
 });
@@ -48,71 +49,71 @@ test('query options are immutable and reject guest authority, private relays and
 });
 test('larger Outbox requests stay bounded on the relay wire and flag saturated results', async () => {
   const h = harness({async resolve(){return {list,source:'nip65',incomplete:false};}});
-  const large = {...request,filters:{...request.filters,limit:500},options:{limit:128}};
+  const large = {...request,filters:{...request.filters,limit:500},options:{limit:500}};
   const parsed = parseOutboxQuery(large);
   assert.equal(parsed.filters[0]?.limit,500);
-  assert.equal(parsed.options.limit,128);
+  assert.equal(parsed.options.limit,500);
   const raw = parseRelayQuery({type:'relay.query',id:request.id,filters:[large.filters]});
   assert.equal(raw.filters[0]?.limit,32);
   assert.throws(()=>parseOutboxQuery({...large,filters:{...large.filters,limit:1.5}}));
 
-  const fixtures = Array.from({length:QUERY_LIMITS.events},(_,index) =>
+  const fixtures = Array.from({length:OUTBOX_QUERY_COUNTS.events},(_,index) =>
     finalizeEvent({kind:1,created_at:index+1,tags:[],content:'bounded'},key));
-  for (const size of [QUERY_LIMITS.events, 1]) {
-    h.native.queryPublishedRelay = async (_id,_relay,wire,sub) => {
-      assert.deepEqual(JSON.parse(wire),['REQ',sub,{...request.filters,limit:QUERY_LIMITS.events}]);
+  for (const size of [OUTBOX_QUERY_COUNTS.events, 1]) {
+    h.native.queryOutboxRelay = async (_token,_id,_relay,wire,sub) => {
+      assert.deepEqual(JSON.parse(wire),['REQ',sub,{...request.filters,limit:OUTBOX_QUERY_COUNTS.events}]);
       return [...fixtures.slice(0,size).map(row=>JSON.stringify(['EVENT',sub,row])),JSON.stringify(['EOSE',sub])];
     };
-    const result = await h.service.query(parsed,author,signal(),()=>{});
+    const result = await h.service.query(parsed,author,signal(),()=>{},token);
     assert.equal(result.events.length,size);
-    assert.equal(result.incomplete,size===QUERY_LIMITS.events);
+    assert.equal(result.incomplete,size===OUTBOX_QUERY_COUNTS.events);
   }
 });
 test('routing overflow and revoked source produce zero data relay requests', async () => {
   const many = parseOutboxRelayList(JSON.parse(JSON.stringify(finalizeEvent({kind:10002,created_at:1,content:'',tags:Array.from({length:16},(_,i)=>['r',`wss://relay${i}.nostr.net`,'write'])},key))),author);
   const h = harness({async resolve(){return {list:many,source:'nip65',incomplete:false};}});
-  await assert.rejects(h.service.query({...request,options:{relays:['wss://extra.nostr.net']}},author,signal(),()=>{})); assert.equal(h.calls.length,0);
-  await assert.rejects(h.service.query(request,author,signal(),()=>{throw Error('revoked');})); assert.equal(h.calls.length,0);
+  await assert.rejects(h.service.query({...request,options:{relays:['wss://extra.nostr.net']}},author,signal(),()=>{},token)); assert.equal(h.calls.length,0);
+  await assert.rejects(h.service.query(request,author,signal(),()=>{throw Error('revoked');},token)); assert.equal(h.calls.length,0);
 });
 test('total deadline cancels hanging discovery before data query', async () => {
   const h = harness({async resolve(){return new Promise(()=>{});}});
-  await assert.rejects(h.service.query({...request,options:{timeoutMs:5}},author,signal(),()=>{})); assert.equal(h.calls.length,0);
+  await assert.rejects(h.service.query({...request,options:{timeoutMs:5}},author,signal(),()=>{},token)); assert.equal(h.calls.length,0);
 });
 
 
 test('end-to-end Outbox deadline returns verified partial data instead of losing an earlier complete relay', async () => {
   const routes=parseOutboxRelayList(JSON.parse(JSON.stringify(finalizeEvent({kind:10002,created_at:1,content:'',tags:[['r','wss://write.nostr.net','write'],['r','wss://slow.nostr.net','write']]},key))),author);
   const h=harness({async resolve(){return {list:routes,source:'nip65',incomplete:false};}});
-  h.native.queryPublishedRelay=async(_id,relay,_wire,sub)=>{h.calls.push(relay);return relay.includes('slow') ? new Promise(()=>{}) : [JSON.stringify(['EVENT',sub,event]),JSON.stringify(['EOSE',sub])];};
-  const result=await h.service.query({...request,options:{timeoutMs:20}},author,signal(),()=>{});
+  h.native.queryOutboxRelay=async(_token,_id,relay,_wire,sub)=>{h.calls.push(relay);return relay.includes('slow') ? new Promise(()=>{}) : [JSON.stringify(['EVENT',sub,event]),JSON.stringify(['EOSE',sub])];};
+  const result=await h.service.query({...request,options:{timeoutMs:20}},author,signal(),()=>{},token);
   assert.equal(result.events[0]?.event.id,event.id);assert.equal(result.incomplete,true);assert.equal(h.cancelled.length,1);
 });
 
 test('observed relay hints merge after deduplication and never include a failed destination', async () => {
   const h=harness({async resolve(){throw Error('unused');}});
-  h.native.queryPublishedRelay=async (_id,relay,_wire,sub)=>{h.calls.push(relay);if(relay.includes('failed'))throw Error('offline');return [JSON.stringify(['EVENT',sub,event]),JSON.stringify(['EOSE',sub])];};
-  const result=await h.service.query({...request,filters:{ids:[event.id]},options:{relays:['wss://hint.nostr.net','wss://failed.nostr.net']}},author,signal(),()=>{});
+  h.native.queryOutboxRelay=async (_token,_id,relay,_wire,sub)=>{h.calls.push(relay);if(relay.includes('failed'))throw Error('offline');return [JSON.stringify(['EVENT',sub,event]),JSON.stringify(['EOSE',sub])];};
+  const result=await h.service.query({...request,filters:{ids:[event.id]},options:{relays:['wss://hint.nostr.net','wss://failed.nostr.net']}},author,signal(),()=>{},token);
   assert.equal(result.events.length,1);assert.deepEqual(result.events[0]?.sidecar?.relayHints,['wss://hint.nostr.net','wss://network.nostr.net']);assert.ok(Object.isFrozen(result.events[0]?.sidecar?.relayHints));
   assert.equal(result.incomplete,true);
 });
 test('authorless and successfully missing relay lists report fallback discovery as incomplete', async () => {
   const h=harness({async resolve(){return {list:null,source:'cache',incomplete:false};}});
-  assert.equal((await h.service.query({...request,filters:{kinds:[1]}},author,signal(),()=>{})).incomplete,true);
-  const missing=await h.service.query(request,author,signal(),()=>{});
+  assert.equal((await h.service.query({...request,filters:{kinds:[1]}},author,signal(),()=>{},token)).incomplete,true);
+  const missing=await h.service.query(request,author,signal(),()=>{},token);
   assert.equal(missing.incomplete,true);assert.deepEqual(missing.plan.missingAuthors,[author]);
 });
 test('getEvent returns one exact signed id with observed hints, and distinguishes complete absence from partial absence', async () => {
   const h=harness({async resolve(){return {list,source:'cache',incomplete:false};}});
   const input={type:'outbox.getEvent',id:'event-1',eventId:event.id,options:{author}};
-  const result=await h.service.getEvent(input,author,signal(),()=>{});
+  const result=await h.service.getEvent(input,author,signal(),()=>{},token);
   assert.equal(result.result?.event.id,event.id);assert.equal(result.incomplete,undefined);assert.deepEqual(result.result?.sidecar?.relayHints,['wss://write.nostr.net']);
-  h.native.queryPublishedRelay=async (_id,relay,_wire,sub)=>{h.calls.push(relay);return [JSON.stringify(['EOSE',sub])];};
-  assert.deepEqual(await h.service.getEvent(input,author,signal(),()=>{}),{error:'not found'});
-  assert.deepEqual(await h.service.getEvent({...input,options:{}},author,signal(),()=>{}),{error:'not found',incomplete:true});
+  h.native.queryOutboxRelay=async (_token,_id,relay,_wire,sub)=>{h.calls.push(relay);return [JSON.stringify(['EOSE',sub])];};
+  assert.deepEqual(await h.service.getEvent(input,author,signal(),()=>{},token),{error:'not found'});
+  assert.deepEqual(await h.service.getEvent({...input,options:{}},author,signal(),()=>{},token),{error:'not found',incomplete:true});
 });
 test('getEvent rejects a signed event for another id rather than delivering it', async () => {
   const h=harness({async resolve(){return {list,source:'cache',incomplete:false};}});
-  await assert.rejects(h.service.getEvent({type:'outbox.getEvent',id:'wrong',eventId:'f'.repeat(64),options:{author}},author,signal(),()=>{}));
+  await assert.rejects(h.service.getEvent({type:'outbox.getEvent',id:'wrong',eventId:'f'.repeat(64),options:{author}},author,signal(),()=>{},token));
 });
 test('resolveRelays defaults to author writes for reads and requires fresh recipient reads for writes without data transport', async () => {
   const purposes:string[]=[];
@@ -144,9 +145,9 @@ test('event and relay-plan parsers reject guest authority and malformed alternat
 test('valid disjoint relay batches exceeding the global result bound retain newest verified partial events without changing legacy limits',async()=> {
   const routes=parseOutboxRelayList(JSON.parse(JSON.stringify(finalizeEvent({kind:10002,created_at:1,content:'',tags:[['r','wss://first.nostr.net','write'],['r','wss://second.nostr.net','write']]},key))),author);
   const h=harness({async resolve(){return {list:routes,source:'cache',incomplete:false};}});
-  h.native.queryPublishedRelay=async(_id,relay,_wire,sub)=>{h.calls.push(relay);const start=relay.includes('first')?1:33;return [...Array.from({length:32},(_,i)=>JSON.stringify(['EVENT',sub,JSON.parse(JSON.stringify(finalizeEvent({kind:1,created_at:start+i,tags:[],content:'bounded-'+(start+i)},key)))])),JSON.stringify(['EOSE',sub])];};
-  const result=await h.service.query({...request,options:{limit:2}},author,signal(),()=>{});
-  assert.deepEqual(result.events.map(row=>row.event.created_at),[64,63]);assert.equal(result.incomplete,true);assert.deepEqual(result.events[0]?.sidecar?.relayHints,['wss://second.nostr.net']);assert.equal(h.calls.length,2);
+  h.native.queryOutboxRelay=async(_token,_id,relay,_wire,sub)=>{h.calls.push(relay);const start=relay.includes('first')?1:111;return [...Array.from({length:110},(_,i)=>JSON.stringify(['EVENT',sub,JSON.parse(JSON.stringify(finalizeEvent({kind:1,created_at:start+i,tags:[],content:'bounded-'+(start+i)},key)))])),JSON.stringify(['EOSE',sub])];};
+  const result=await h.service.query({...request,options:{limit:2}},author,signal(),()=>{},token);
+  assert.deepEqual(result.events.map(row=>row.event.created_at),[220,219]);assert.equal(result.incomplete,true);assert.deepEqual(result.events[0]?.sidecar?.relayHints,['wss://second.nostr.net']);assert.equal(h.calls.length,2);
 });
 
 const profileKeys = Array.from({length:33}, (_, index) => new Uint8Array(32).fill(index + 1));
@@ -166,12 +167,12 @@ test('Follow Packs can query 22 independent profiles without losing less recent 
       return new Map(authors.map(author => [author,{list:routes,source:'nip65',incomplete:false}]));
     },
   });
-  h.native.queryPublishedRelay = async (_id,relay,wire,sub) => {
+  h.native.queryOutboxRelay = async (_token,_id,relay,wire,sub) => {
     h.calls.push(relay);
     assert.deepEqual(JSON.parse(wire),['REQ',sub,...filters]);
     return [...(relay.includes('first') ? old : winners).map(event => JSON.stringify(['EVENT',sub,event])),JSON.stringify(['EOSE',sub])];
   };
-  const result = await h.service.query({...request,filters},author,signal(),()=>{});
+  const result = await h.service.query({...request,filters},author,signal(),()=>{},token);
   assert.deepEqual(result.events.map(row => row.event.id),[...winners].sort((a,b)=>b.created_at-a.created_at).map(event => event.id));
   assert.deepEqual(result.events.find(row => row.event.id === winners[21]!.id)?.sidecar?.relayHints,routes.write);
   assert.deepEqual(h.calls,routes.write); assert.equal(result.incomplete,false);
@@ -181,7 +182,7 @@ test('wide one-shot count and native REQ byte bounds reject before resolving rou
   const h = harness({async resolve() {assert.fail('oversized request must not resolve authors');}});
   assert.equal(parseOutboxQuery({...request,filters:profileFilters.slice(0,32)}).filters.length,32);
   for (const filters of [profileFilters, profileFilters.slice(0,9).map(filter => ({...filter,'#t':['é'.repeat(500)]}))]) {
-    await assert.rejects(h.service.query({...request,filters},author,signal(),()=>{}),/invalid filter/);
+    await assert.rejects(h.service.query({...request,filters},author,signal(),()=>{},token),/invalid filter/);
   }
   const filters = profileFilters.slice(0,5);
   assert.throws(()=>parseRelayQuery({type:'relay.query',id:request.id,filters}));
@@ -199,10 +200,10 @@ test('wide route overflow retains configured fallback and whole author routes un
       }]));
     },
   },network);
-  h.native.queryPublishedRelay = async (_id,relay,_wire,sub) => {
+  h.native.queryOutboxRelay = async (_token,_id,relay,_wire,sub) => {
     h.calls.push(relay); return [JSON.stringify(['EOSE',sub])];
   };
-  const result = await h.service.query({...request,filters:profileFilters.slice(0,22),options:{relays:[hint]}},author,signal(),()=>{});
+  const result = await h.service.query({...request,filters:profileFilters.slice(0,22),options:{relays:[hint]}},author,signal(),()=>{},token);
   assert.deepEqual(h.calls,[hint,...network,...Array.from({length:14},(_,index)=>`wss://author-${index}.nostr.net`)]);
   assert.deepEqual(result.plan.missingAuthors,profileAuthors.slice(14,22));
   assert.equal(result.plan.source,'fallback'); assert.equal(result.incomplete,true);
@@ -219,10 +220,10 @@ test('wide discovery spends the original deadline and revocation prevents data d
     },
   });
   const controller = new AbortController();
-  const pending = h.service.query({...request,filters:profileFilters.slice(0,22)},author,controller.signal,()=>{});
+  const pending = h.service.query({...request,filters:profileFilters.slice(0,22)},author,controller.signal,()=>{},token);
   await enteredDiscovery; controller.abort();
   await assert.rejects(pending,/relay timeout/);
-  await assert.rejects(h.service.query({...request,filters:profileFilters.slice(0,22),options:{timeoutMs:15}},author,signal(),()=>{}),/relay timeout/);
+  await assert.rejects(h.service.query({...request,filters:profileFilters.slice(0,22),options:{timeoutMs:15}},author,signal(),()=>{},token),/relay timeout/);
   assert.deepEqual(h.calls,[]);
 });
 
@@ -233,7 +234,7 @@ test('wide authorless reads use configured Network fallback without discovery', 
     async resolveReadBatch() {assert.fail('authorless read must not open a discovery batch');},
   });
   const filters = profileFilters.slice(0,22).map(() => ({kinds:[1],limit:1}));
-  const result = await h.service.query({...request,filters},author,signal(),()=>{});
+  const result = await h.service.query({...request,filters},author,signal(),()=>{},token);
   assert.equal(result.events[0]?.event.id,event.id);
   assert.deepEqual(result.plan,{relays:['wss://network.nostr.net'],source:'fallback',missingAuthors:[],incomplete:true});
   assert.deepEqual(h.calls,['wss://network.nostr.net']);
@@ -253,11 +254,75 @@ test('wide planning timeout includes stalled cache reads and leaves time for dat
   },{query:unused, queryDetailed:unused});
   const h = harness(resolver);
   const profile = finalizeEvent({kind:0,created_at:10,tags:[],content:'{"name":"available"}'},profileKeys[0]!);
-  h.native.queryPublishedRelay = async (_id,relay,_wire,sub) => {
+  h.native.queryOutboxRelay = async (_token,_id,relay,_wire,sub) => {
     h.calls.push(relay); return [JSON.stringify(['EVENT',sub,profile]),JSON.stringify(['EOSE',sub])];
   };
-  const result = await h.service.query({...request,filters:profileFilters.slice(0,22),options:{timeoutMs:100}},author,signal(),()=>{});
+  const result = await h.service.query({...request,filters:profileFilters.slice(0,22),options:{timeoutMs:100}},author,signal(),()=>{},token);
   assert.equal(cacheStarted,true); assert.equal(cacheAborted,true);
   assert.equal(result.events[0]?.event.id,profile.id); assert.equal(result.incomplete,true);
   assert.deepEqual(h.calls,['wss://network.nostr.net']);
+});
+
+test('the default Outbox read retains a signed root after 68 newer matching child events', async () => {
+  const address = `30381:${author}:toy-rocket`;
+  const children = Array.from({length:68},(_,index) => finalizeEvent({
+    kind:1111,created_at:70-index,content:'child',tags:[['A',address],['t','child']],
+  },key));
+  const root = finalizeEvent({kind:1111,created_at:1,content:'root',tags:[['A',address],['t','root']]},key);
+  const h = harness({async resolve(){throw Error('unexpected author discovery');}});
+  h.native.queryOutboxRelay = async (captured,_id,relay,wire,sub) => {
+    assert.equal(captured,token);
+    assert.equal(relay,'wss://network.nostr.net');
+    assert.deepEqual(JSON.parse(wire),['REQ',sub,{kinds:[1111],'#A':[address],limit:200}]);
+    return [...children,root].map(event=>JSON.stringify(['EVENT',sub,event])).concat(JSON.stringify(['EOSE',sub]));
+  };
+  const input = {type:'outbox.query',id:'toy-like',filters:{kinds:[1111],'#A':[address]}};
+  const result = await h.service.query(input,author,signal(),()=>{},token);
+  assert.equal(result.events.length,69);
+  assert.equal(result.events[68]?.event.id,root.id);
+  assert.equal(result.plan.source,'fallback');
+  assert.equal(result.incomplete,true);
+  const stream = parseOutboxSubscribe({...input,type:'outbox.subscribe',subId:'test'});
+  assert.equal(stream.filters[0]?.limit,32);
+  assert.equal(stream.options.limit,32);
+});
+
+test('long advisory relay hints cannot crowd out signed Outbox events', async () => {
+  const relay = list.write[0]!;
+  const peers = Array.from({length:15},(_,index) => `wss://peer${index}.nostr.net/${'a'.repeat(1900)}`);
+  const h = harness({async resolve(){return {list,source:'cache',incomplete:false};}});
+  const events = Array.from({length:40},(_,index) => finalizeEvent({
+    kind:1,created_at:40-index,content:'bounded hints',tags:[],
+  },key));
+  h.native.queryOutboxRelay = async (_token,_id,_relay,_wire,sub) =>
+    [...events.map(event=>JSON.stringify(['EVENT',sub,event])),JSON.stringify(['EOSE',sub])];
+  const result = await h.service.query({...request,options:{relays:peers}},author,signal(),()=>{},token);
+  assert.deepEqual(result.events.map(row=>row.event.id),events.map(event=>event.id));
+  assert.deepEqual(result.events[0]?.sidecar?.relayHints,[...peers,relay]);
+  assert.ok(result.events.some(row=>row.sidecar === undefined));
+  assert.ok(Buffer.byteLength(JSON.stringify(result.events)) < 512 * 1024);
+  assert.equal(result.incomplete,false);
+});
+
+test('the one-shot deadline can expire between signed frames without opening another relay', async t => {
+  const first = 'wss://first.nostr.net', second = 'wss://second.nostr.net', third = 'wss://third.nostr.net';
+  const routes = {...list,write:[first,second,third]};
+  const h = harness({async resolve(){return {list:routes,source:'cache',incomplete:false};}});
+  const later = finalizeEvent({kind:1,created_at:2,tags:[],content:'late'},key);
+  let clock = 0;
+  t.mock.method(performance,'now',()=>clock);
+  h.native.queryOutboxRelay = async (_token,_id,relay,_wire,sub) => {
+    h.calls.push(relay);
+    const frame = JSON.stringify(['EVENT',sub,relay === first ? event : later]);
+    const frames = [frame,JSON.stringify(['EOSE',sub])];
+    if (relay === second) {
+      Object.defineProperty(frames,1,{get(){clock = 1_000; return JSON.stringify(['EOSE',sub]);}});
+    }
+    return frames;
+  };
+  const result = await h.service.query({...request,options:{timeoutMs:1000}},author,signal(),()=>{},token);
+  assert.deepEqual(h.calls,[first,second]);
+  assert.deepEqual(result.events.map(row=>row.event.id),[event.id]);
+  assert.equal(result.incomplete,true);
+  assert.equal(h.cancelled.length,1);
 });

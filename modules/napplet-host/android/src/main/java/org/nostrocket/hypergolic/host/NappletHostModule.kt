@@ -183,6 +183,17 @@ class NappletHostModule : Module() {
         }
       }
     }
+    AsyncFunction("queryOutboxRelay") Coroutine { token: String, operationId: String, url: String,
+      requestText: String, subscriptionId: String ->
+      val leases = CapabilityTransport.leases
+      if (!OutboxQueryCapability.admits(leases, token)) throw java.io.IOException("Inactive Outbox query")
+      val job = currentCoroutineContext()[Job]
+      withContext(Dispatchers.IO) {
+        PublishedRelayWssRequestOwner.INSTANCE.queryOutbox(operationId, url, requestText, subscriptionId) {
+          job?.isActive == true && leases.isActive(token)
+        }
+      }
+    }
     Function("cancelPublishedRelay") { operationId: String ->
       PublishedRelayWssRequestOwner.INSTANCE.cancel(operationId)
     }

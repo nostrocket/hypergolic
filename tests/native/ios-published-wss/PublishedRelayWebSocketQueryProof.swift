@@ -83,6 +83,36 @@ struct PublishedRelayWebSocketQueryProof {
     catch is ProofFailure { throw ProofFailure.failed("event cap assertion") }
     catch { /* expected */ }
 
+    let outboxEvents = Array(tooManyEvents.prefix(1))
+    let maximumEvents = Array(repeating: outboxEvents[0], count: 200)
+    let other = ("notice", PublishedRelayWebSocketQuery.TextKind.other)
+    var outbox = PublishedRelayWebSocketQuery.TextCollector(profile: .outbox)
+    let last = try outbox.accept(maximumEvents + Array(repeating: other, count: 55) + [("eose", .eose)])
+    try check(last && outbox.envelopes.count == 256, "Outbox accepts 200 events and 256 frames with matching EOSE")
+    var outboxEventOverflow = PublishedRelayWebSocketQuery.TextCollector(profile: .outbox)
+    do {
+      _ = try outboxEventOverflow.accept(maximumEvents + outboxEvents)
+      throw ProofFailure.failed("Outbox accepted 201 events")
+    } catch is ProofFailure { throw ProofFailure.failed("Outbox event cap assertion") }
+    catch { /* expected */ }
+    var outboxFrameOverflow = PublishedRelayWebSocketQuery.TextCollector(profile: .outbox)
+    do {
+      _ = try outboxFrameOverflow.accept(Array(repeating: other, count: 257))
+      throw ProofFailure.failed("Outbox accepted 257 frames")
+    } catch is ProofFailure { throw ProofFailure.failed("Outbox frame cap assertion") }
+    catch { /* expected */ }
+
+    let large = (String(repeating: "x", count: 64 * 1024), PublishedRelayWebSocketQuery.TextKind.other)
+    for profile in [PublishedRelayWebSocketQuery.ResponseProfile.standard, .outbox] {
+      var byteLimit = PublishedRelayWebSocketQuery.TextCollector(profile: profile)
+      _ = try byteLimit.accept(Array(repeating: large, count: 32))
+      do {
+        _ = try byteLimit.accept([large])
+        throw ProofFailure.failed("Response profile exceeded the shared 2 MiB byte cap")
+      } catch is ProofFailure { throw ProofFailure.failed("byte cap assertion") }
+      catch { /* expected */ }
+    }
+
     var textLimit = PublishedRelayWebSocketQuery.TextCollector()
     let tooManyTexts = (0...PublishedRelayWebSocketQuery.maxTextMessages).map { ("other-\($0)", PublishedRelayWebSocketQuery.TextKind.other) }
     do { _ = try textLimit.accept(tooManyTexts); throw ProofFailure.failed("65 text envelopes accepted") }

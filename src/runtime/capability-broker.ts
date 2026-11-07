@@ -51,12 +51,12 @@ async function readQuery(request: Extract<CapabilityRequest, {type: 'relay.query
   try { return {type: 'relay.query.result', id: request.id, events: await pending.schedule(active, signal => queries.query(request.filters, signal, active))}; }
   catch (error) { return queryFailure(request, error instanceof CapabilityReadBusy ? 'relay query unavailable or busy' : 'relay query failed')!; }
 }
-async function readOutboxQuery(request: OutboxReadRequest, service: OutboxReadService | undefined, registration: NativeRegistration, pending: CapabilityReadAdmission, active: () => void): Promise<CapabilityReply> {
+async function readOutboxQuery(request: OutboxReadRequest, service: OutboxReadService | undefined, registration: NativeRegistration, pending: CapabilityReadAdmission, active: () => void, nativeToken: string): Promise<CapabilityReply> {
   if (!service || pending.size >= 2) return outboxReadFailure(request, 'policy denied')!;
   try {
     if (request.type === 'outbox.getEvent') {
       if (!service.getEvent) return outboxReadFailure(request,'policy denied')!;
-      const result = await pending.run(active,signal => service.getEvent!(request,registration.user,signal,active));
+      const result = await pending.run(active,signal => service.getEvent!(request,registration.user,signal,active,nativeToken));
       return {type:'outbox.getEvent.result',id:request.id,...result};
     }
     if (request.type === 'outbox.resolveRelays') {
@@ -65,7 +65,7 @@ async function readOutboxQuery(request: OutboxReadRequest, service: OutboxReadSe
       const {relays,source,missingAuthors} = result;
       return {type:'outbox.resolveRelays.result',id:request.id,plan:{relays,source,...(missingAuthors.length ? {missingAuthors} : {})}};
     }
-    const result = await pending.run(active, signal => service.query(request, registration.user, signal, active));
+    const result = await pending.run(active, signal => service.query(request, registration.user, signal, active, nativeToken));
     return {type: 'outbox.query.result', id: request.id, events: result.events, ...(result.incomplete ? {incomplete: true} : {})};
   } catch (error) {
     const allowed = ['invalid filter', 'relay timeout', 'relay list unavailable', 'policy denied', 'no authors', 'not found'];
@@ -166,7 +166,7 @@ export function createCapabilityBroker(database: ShellDatabase, native: NativeCa
         }
         seen.add(correlation);
         let result: CapabilityReply;
-        if (request.type === 'outbox.query' || request.type === 'outbox.getEvent' || request.type === 'outbox.resolveRelays') result = await readOutboxQuery(request, outbox, registration, pending, () => assertActive(token));
+        if (request.type === 'outbox.query' || request.type === 'outbox.getEvent' || request.type === 'outbox.resolveRelays') result = await readOutboxQuery(request, outbox, registration, pending, () => assertActive(token), token);
         else if (request.type === 'relay.query') result = await readQuery(request, queries, pending, () => assertActive(token));
         else if (domain === 'identity') result = await readIdentity(request as IdentityRequest, identityData, registration, pending, () => assertActive(token));
         else {

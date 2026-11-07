@@ -25,7 +25,7 @@ const notes: Readonly<Record<string, string>> = Object.freeze({
   inc: 'Selected session-bound messages and channels; no background delivery.',
   notify: 'Foreground shell notifications. OS push is unavailable.',
   config: 'Selected bounded schemas and retained settings; unrestricted schema support is unavailable.',
-  outbox: 'Selected bounded Outbox reads, subscriptions and approved publication for verified napplets. Raw Relay operations require a separate grant.',
+  outbox: 'Outbox queries return up to 200 events. Bounded subscriptions and approved publication are available. Raw Relay operations require a separate grant.',
   keys: 'Hardware keyboard actions for the focused napplet. Ordinary suggested shortcuts can work outside text entry.',
   media: 'Shell-owned foreground HTTPS MP4 playback after trusted Play. Live streams, playlists and napplet-owned sessions are unavailable.',
 });

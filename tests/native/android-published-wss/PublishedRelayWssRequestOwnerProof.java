@@ -16,13 +16,14 @@ public final class PublishedRelayWssRequestOwnerProof {
 
   public static void main(String[] args) throws Exception {
     cancellationAndIdempotence();
+    outboxClaimAndProfile();
     concurrencyCap();
     System.out.println("PublishedRelayWssRequestOwnerProof: " + checks + " checks passed");
   }
 
   private static void cancellationAndIdempotence() throws Exception {
     PublishedRelayWssRequestOwner owner = new PublishedRelayWssRequestOwner(
-        (url, req, id, cancellation) -> Collections.singletonList("[\"EOSE\",\"sub-1\"]"));
+        (url, req, id, profile, cancellation) -> Collections.singletonList("[\"EOSE\",\"sub-1\"]"));
     String id = uuid();
     rejects(() -> owner.query(id, URL, REQ, "sub-1", () -> true));
     owner.setForeground(true);
@@ -36,7 +37,7 @@ public final class PublishedRelayWssRequestOwnerProof {
 
     CountDownLatch entered = new CountDownLatch(1);
     AtomicReference<Throwable> backgroundResult = new AtomicReference<>();
-    PublishedRelayWssRequestOwner waiting = new PublishedRelayWssRequestOwner((url, req, sub, cancellation) -> {
+    PublishedRelayWssRequestOwner waiting = new PublishedRelayWssRequestOwner((url, req, sub, profile, cancellation) -> {
       entered.countDown();
       awaitCancellation(cancellation);
       return Collections.singletonList("late result");
@@ -58,7 +59,7 @@ public final class PublishedRelayWssRequestOwnerProof {
     String revokeId = uuid();
     AtomicReference<Throwable> revokedResult = new AtomicReference<>();
     CountDownLatch secondEntered = new CountDownLatch(1);
-    PublishedRelayWssRequestOwner revoking = new PublishedRelayWssRequestOwner((url, req, sub, cancellation) -> {
+    PublishedRelayWssRequestOwner revoking = new PublishedRelayWssRequestOwner((url, req, sub, profile, cancellation) -> {
       secondEntered.countDown();
       awaitCancellation(cancellation);
       return Collections.singletonList("late result");
@@ -77,11 +78,28 @@ public final class PublishedRelayWssRequestOwnerProof {
     checks++;
   }
 
+  private static void outboxClaimAndProfile() throws Exception {
+    AtomicReference<PublishedRelayResponseClassifier.ResponseProfile> observed = new AtomicReference<>();
+    var owner = new PublishedRelayWssRequestOwner((url, req, sub, profile, cancel) -> {
+      observed.set(profile);
+      return Collections.singletonList("[\"EOSE\",\"sub-1\"]");
+    });
+    owner.setForeground(true);
+    String id = uuid();
+    rejects(() -> owner.queryOutbox(id, URL, REQ, "sub-1", () -> false));
+    check(observed.get() == null);
+    owner.queryOutbox(id, URL, REQ, "sub-1", () -> true);
+    equal(PublishedRelayResponseClassifier.ResponseProfile.OUTBOX, observed.get());
+    rejects(() -> owner.query(id, URL, REQ, "sub-1", () -> true));
+    owner.query(uuid(), URL, REQ, "sub-1", () -> true);
+    equal(PublishedRelayResponseClassifier.ResponseProfile.STANDARD, observed.get());
+  }
+
   private static void concurrencyCap() throws Exception {
     CountDownLatch entered = new CountDownLatch(4);
     CountDownLatch release = new CountDownLatch(1);
     ArrayList<Thread> threads = new ArrayList<>();
-    PublishedRelayWssRequestOwner owner = new PublishedRelayWssRequestOwner((url, request, id, cancel) -> {
+    PublishedRelayWssRequestOwner owner = new PublishedRelayWssRequestOwner((url, request, id, profile, cancel) -> {
       entered.countDown();
       try { if (!release.await(2, TimeUnit.SECONDS)) throw new IOException("test timeout"); }
       catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw new IOException(interrupted); }
@@ -100,7 +118,7 @@ public final class PublishedRelayWssRequestOwnerProof {
       thread.start();
     }
     check(entered.await(1, TimeUnit.SECONDS));
-    rejects(() -> owner.query(uuid(), URL, REQ, "sub-1", () -> true));
+    rejects(() -> owner.queryOutbox(uuid(), URL, REQ, "sub-1", () -> true));
     release.countDown();
     for (Thread thread : threads) thread.join(2_000L);
     for (Thread thread : threads) check(!thread.isAlive());

@@ -23,7 +23,46 @@ object CapabilityConfigurationProof {
     checkProof(runCatching { CapabilityConfiguration(raw, "view-generation", published) }.isFailure)
   }
 
+  private fun outboxQueryAuthority() {
+    var elapsed = 1L
+    var sequence = 0L
+    val generation = "outbox-generation"
+    val leases = CapabilityLeaseRegistry { elapsed }
+    checkProof(leases.register(generation))
+    fun issue(type: String, domains: List<String>): String {
+      val snapshot = JSONObject()
+        .put("registration", JSONObject().put("domains", JSONArray(domains)))
+        .put("request", JSONObject().put("type", type).toString())
+      return checkNotNull(leases.admit(generation, ++sequence, snapshot.toString()))
+    }
+    fun admitted(token: String) = OutboxQueryCapability.admits(leases, token)
+    for ((type, domains) in listOf("relay.query" to listOf("outbox", "relay"),
+        "outbox.resolveRelays" to listOf("outbox"), "outbox.query" to listOf("relay"))) {
+      val token = issue(type, domains)
+      checkProof(leases.take(token) != null && !admitted(token))
+      checkProof(leases.finish(token))
+    }
+    val query = issue("outbox.query", listOf("outbox"))
+    checkProof(!admitted(query) && leases.take(query) != null && admitted(query))
+    checkProof(leases.take(query) == null)
+    checkProof(leases.finish(query) && !admitted(query))
+    val event = issue("outbox.getEvent", listOf("outbox"))
+    checkProof(leases.take(event) != null && admitted(event))
+    elapsed += 25_000
+    checkProof(!admitted(event))
+    val old = issue("outbox.query", listOf("outbox"))
+    checkProof(leases.take(old) != null && admitted(old))
+    leases.setForeground(false)
+    leases.setForeground(true)
+    checkProof(!admitted(old))
+    val revoked = issue("outbox.query", listOf("outbox"))
+    checkProof(leases.take(revoked) != null && admitted(revoked))
+    leases.revoke(generation)
+    checkProof(leases.register(generation) && !admitted(revoked))
+  }
+
   @JvmStatic fun main(args: Array<String>) {
+    outboxQueryAuthority()
     val old = CapabilityConfiguration(raw("ux-lab", listOf("theme")), "old-generation")
     checkProof(old.fixture == "ux-lab" && old.grantedDomains == listOf("theme"))
     checkProof(old.snapshot.contains("old-generation"))

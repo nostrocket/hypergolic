@@ -35,7 +35,16 @@ final class PublishedRelayBridgeOwner: @unchecked Sendable {
     revokeAll()
   }
 
-  func query(operationId: String, url: String, requestText: String, subscriptionId: String) async throws -> [String] {
+  func queryOutbox(token: String, operationId: String, url: String, requestText: String, subscriptionId: String) async throws -> [String] {
+    let leases = CapabilityTransport.leases
+    guard CapabilityTransport.outboxAdmitted(token, leases: leases) else { throw Failure.inactive }
+    return try await query(operationId: operationId, url: url, requestText: requestText,
+      subscriptionId: subscriptionId, profile: .outbox, readAuthorized: { leases.isActive(token) })
+  }
+
+  func query(operationId: String, url: String, requestText: String, subscriptionId: String,
+    profile: PublishedRelayWebSocketQuery.ResponseProfile = .standard,
+    readAuthorized: @escaping @Sendable () -> Bool = { true }) async throws -> [String] {
     guard UUID(uuidString: operationId)?.uuidString.lowercased() == operationId else { throw Failure.invalidOperation }
     guard Self.validRequest(requestText, subscriptionId: subscriptionId) else { throw Failure.invalidRequest }
     return try await withCheckedThrowingContinuation { continuation in
@@ -51,7 +60,10 @@ final class PublishedRelayBridgeOwner: @unchecked Sendable {
       lock.unlock()
       Task {
         let active = await MainActor.run { UIApplication.shared.applicationState == .active }
-        if active { self.startOperation(operationId: operationId, url: url, requestText: requestText, subscriptionId: subscriptionId) }
+        if active && readAuthorized() {
+          self.startOperation(operationId: operationId, url: url, requestText: requestText,
+            subscriptionId: subscriptionId, profile: profile, readAuthorized: readAuthorized)
+        }
         else { self.complete(operationId: operationId, result: .failure(Failure.inactive)) }
       }
     }
@@ -88,16 +100,18 @@ final class PublishedRelayBridgeOwner: @unchecked Sendable {
     if !value { revokeAll() }
   }
 
-  private func startOperation(operationId: String, url: String, requestText: String, subscriptionId: String) {
+  private func startOperation(operationId: String, url: String, requestText: String, subscriptionId: String,
+    profile: PublishedRelayWebSocketQuery.ResponseProfile, readAuthorized: @escaping @Sendable () -> Bool) {
     lock.lock()
     let allowed = foreground && pending[operationId] != nil
     lock.unlock()
     guard allowed else { return }
     do {
-      let operation = try PublishedRelayWebSocketQuery.query(url, subscription: requestText, classifyText: { text in
+      let operation = try PublishedRelayWebSocketQuery.query(url, subscription: requestText, profile: profile,
+        readAuthorized: readAuthorized, classifyText: { text in
         PublishedRelayEnvelope.classify(text, subscriptionId: subscriptionId)
       }) { [weak self] result in
-        self?.complete(operationId: operationId, result: result)
+        self?.complete(operationId: operationId, result: readAuthorized() ? result : .failure(Failure.inactive))
       }
       lock.lock()
       if var current = pending[operationId] {

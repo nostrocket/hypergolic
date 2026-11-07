@@ -8,17 +8,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.nostrocket.hypergolic.host.PublishedRelayResponseClassifier.ResponseProfile;
 
 /** Process-scoped owner for trusted-shell initial relay lookups. */
 public final class PublishedRelayWssRequestOwner {
   private static final int MAX_CONCURRENT = 4;
   private static final int MAX_OPERATIONS = 65_536;
   private static final PublishedHttpsTransport.AddressPolicy POLICY = PublishedHttpsRequestOwner.addressPolicy();
-  public static final PublishedRelayWssRequestOwner INSTANCE = new PublishedRelayWssRequestOwner(
-      (url, request, subscriptionId, cancellation) -> PublishedRelayWssQuery.query(
-          url, request, POLICY, cancellation, new PublishedRelayResponseClassifier(subscriptionId)));
+  public static final PublishedRelayWssRequestOwner INSTANCE = new PublishedRelayWssRequestOwner();
 
-  interface Query { List<String> run(String url, String request, String subscriptionId,
+  interface Query { List<String> run(String url, String request, String subscriptionId, ResponseProfile profile,
       PublishedHttpsTransport.Cancellation cancellation) throws IOException; }
   public interface JobState { boolean isActive(); }
 
@@ -28,9 +27,9 @@ public final class PublishedRelayWssRequestOwner {
   private final Query query;
   private volatile boolean foreground;
 
-  public PublishedRelayWssRequestOwner() { this((url, request, subscriptionId, cancellation) ->
+  public PublishedRelayWssRequestOwner() { this((url, request, subscriptionId, profile, cancellation) ->
       PublishedRelayWssQuery.query(url, request, POLICY, cancellation,
-          new PublishedRelayResponseClassifier(subscriptionId))); }
+          new PublishedRelayResponseClassifier(subscriptionId, profile))); }
   PublishedRelayWssRequestOwner(Query query) {
     if (query == null) throw new IllegalArgumentException("Missing relay query");
     this.query = query;
@@ -45,6 +44,17 @@ public final class PublishedRelayWssRequestOwner {
 
   public List<String> query(String operationId, String url, String request, String subscriptionId, JobState job)
       throws IOException {
+    return query(operationId, url, request, subscriptionId, ResponseProfile.STANDARD, job);
+  }
+
+  List<String> queryOutbox(String operationId, String url, String request, String subscriptionId, JobState job)
+      throws IOException {
+    if (!isJobActive(job)) throw new IOException("Inactive Outbox query");
+    return query(operationId, url, request, subscriptionId, ResponseProfile.OUTBOX, job);
+  }
+
+  private List<String> query(String operationId, String url, String request, String subscriptionId,
+      ResponseProfile profile, JobState job) throws IOException {
     if (!isCanonicalUuid(operationId)) throw new IOException("Invalid relay operation id");
     if (subscriptionId == null || !subscriptionId.matches("[A-Za-z0-9_-]{1,64}")) {
       throw new IOException("Invalid relay subscription id");
@@ -60,10 +70,10 @@ public final class PublishedRelayWssRequestOwner {
       active.put(operationId, operation);
     }
     try {
-      List<String> result = query.run(url, request, subscriptionId, () ->
+      List<String> result = query.run(url, request, subscriptionId, profile, () ->
           operation.cancelled || !foreground || !isJobActive(job));
       ensureLive(operationId, operation, job);
-      if (result == null || result.isEmpty() || result.size() > PublishedRelayWssQuery.MAX_TEXT_MESSAGES) {
+      if (result == null || result.isEmpty() || result.size() > profile.frames) {
         throw new IOException("Invalid published relay result");
       }
       return Collections.unmodifiableList(result);

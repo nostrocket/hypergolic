@@ -39,7 +39,36 @@ public final class PublishedRelayResponseClassifierProof {
     rejectsResponse(classifier, "[\"EVENT\",\"sub-1\",{\"id\":01}]");
     rejectsResponse(classifier, "[\"EVENT\",\"sub-1\",{\"id\":\"x\",}]");
     rejectsResponse(classifier, "[\"EVENT\",\"sub-1\",{\"s\":\"\\uD800\"}]");
+    responseProfiles(classifier);
     System.out.println("PublishedRelayResponseClassifierProof: " + checks + " checks passed");
+  }
+  private static void responseProfiles(PublishedRelayResponseClassifier standard) throws Exception {
+    var wide = new PublishedRelayResponseClassifier("sub-1", PublishedRelayResponseClassifier.ResponseProfile.OUTBOX);
+    String event = "[\"EVENT\",\"sub-1\",{}]", eose = "[\"EOSE\",\"sub-1\"]", notice = "[\"NOTICE\",\"test\"]";
+    var raw = new PublishedRelayResponseClassifier.ResponseCollector(standard);
+    for (int i = 0; i < 32; i++) raw.accept(event);
+    rejectsBound(raw, event);
+    var outbox = new PublishedRelayResponseClassifier.ResponseCollector(wide);
+    for (int i = 0; i < 200; i++) outbox.accept(event);
+    for (int i = 0; i < 55; i++) outbox.accept(notice);
+    equal(true, outbox.accept(eose));
+    equal(256, outbox.result().size());
+    var events = new PublishedRelayResponseClassifier.ResponseCollector(wide);
+    for (int i = 0; i < 200; i++) events.accept(event);
+    rejectsBound(events, event);
+    var frames = new PublishedRelayResponseClassifier.ResponseCollector(wide);
+    for (int i = 0; i < 256; i++) frames.accept(notice);
+    rejectsBound(frames, eose);
+    String large = "[\"AUTH\",\"" + repeat('x', 64 * 1024 - 11) + "\"]";
+    for (var policy : java.util.List.of(standard, wide)) {
+      var bytes = new PublishedRelayResponseClassifier.ResponseCollector(policy);
+      for (int i = 0; i < 32; i++) bytes.accept(large);
+      rejectsBound(bytes, eose);
+    }
+  }
+  private static void rejectsBound(PublishedRelayResponseClassifier.ResponseCollector collector, String text) throws Exception {
+    try { collector.accept(text); throw new AssertionError("Response bound was exceeded"); }
+    catch (IOException expected) { checks++; }
   }
   private static void rejectsRequest(String text, String id) throws Exception {
     try { PublishedRelayResponseClassifier.validateRequest(text, id); throw new AssertionError("REQ accepted"); }

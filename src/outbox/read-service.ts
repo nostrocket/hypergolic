@@ -1,7 +1,8 @@
 import {createNativeRelayQuery, type RelayQueryResult} from '../network/native-relay-query.ts';
 import type {NativePublishedRelayPort} from '../napplets/native-published-relay.ts';
 import type {RelaySettingsSnapshot} from '../network/relay-settings.ts';
-import {QUERY_LIMITS} from '../network/relay-query-contract.ts';
+import {utf8Bytes} from '../storage/codec.ts';
+import {OUTBOX_QUERY_COUNTS, QUERY_LIMITS} from '../network/relay-query-contract.ts';
 import type {OutboxAuthorResolver} from './author-resolver.ts';
 import {OUTBOX_QUERY_FILTERS, capOutboxFilters, parseOutboxQuery, parseOutboxEvent, parseOutboxResolve, OutboxQueryError, type OutboxQueryRequest} from './query-contract.ts';
 import {resolveOutboxPlan, type OutboxReadPlan} from './route-plan.ts';
@@ -9,15 +10,31 @@ export type {OutboxReadPlan} from './route-plan.ts';
 export type OutboxEventRow = Readonly<RelayQueryResult['events'][number] & {sidecar?: Readonly<{relayHints: readonly string[]}>}>;
 export type OutboxReadResult = Readonly<{events: readonly OutboxEventRow[]; incomplete: boolean; plan: OutboxReadPlan}>;
 export type OutboxEventResult = Readonly<{result?: OutboxEventRow; incomplete?: true; error?: string}>;
+export type NativeOutboxQueryPort = Pick<NativePublishedRelayPort, 'newInstanceId' | 'cancelPublishedRelay'> & {
+  queryOutboxRelay(token: string, operationId: string, url: string, requestText: string, subscriptionId: string): Promise<string[]>;
+};
 export interface OutboxReadService {
-  query(input: unknown, user: string, signal: AbortSignal, assertActive: () => void): Promise<OutboxReadResult>;
-  getEvent?(input: unknown, user: string, signal: AbortSignal, assertActive: () => void): Promise<OutboxEventResult>;
+  query(input: unknown, user: string, signal: AbortSignal, assertActive: () => void, nativeToken: string): Promise<OutboxReadResult>;
+  getEvent?(input: unknown, user: string, signal: AbortSignal, assertActive: () => void, nativeToken: string): Promise<OutboxEventResult>;
   resolveRelays?(input: unknown, user: string, signal: AbortSignal, assertActive: () => void): Promise<OutboxReadPlan>;
   plan?(input: unknown, user: string, signal: AbortSignal, assertActive: () => void, refresh?: boolean): Promise<OutboxReadPlan>;
 }
+const MAX_RELAY_HINT_BYTES = 256 * 1024;
+function projectEvents(result: RelayQueryResult, limit: number): readonly OutboxEventRow[] {
+  let remaining = MAX_RELAY_HINT_BYTES;
+  return Object.freeze(result.events.slice(0,limit).map(row => {
+    const hints = result.relayHints?.[row.event.id];
+    if (!hints?.length) return row;
+    const sidecar = Object.freeze({relayHints:hints});
+    const bytes = utf8Bytes(JSON.stringify({sidecar}));
+    if (bytes > remaining) return row;
+    remaining -= bytes;
+    return Object.freeze({...row,sidecar});
+  }));
+}
 /** App-owned transport and settings are captured separately from parsed guest options. */
 export function createOutboxReadService(resolver: OutboxAuthorResolver,
-  native: Pick<NativePublishedRelayPort,'newInstanceId' | 'queryPublishedRelay' | 'cancelPublishedRelay'>,
+  native: NativeOutboxQueryPort,
   settings: () => RelaySettingsSnapshot, now: () => number = Date.now) {
   let pending = 0;
   async function bounded<T>(timeoutMs: number, signal: AbortSignal, assertActive: () => void,
@@ -54,31 +71,34 @@ export function createOutboxReadService(resolver: OutboxAuthorResolver,
       return Object.freeze({...selected,relays:Object.freeze(relays),incomplete:false});
     });
   }
-  async function query(input: unknown,user: string,signal: AbortSignal,assertActive: () => void): Promise<OutboxReadResult> {
+  async function query(input: unknown,user: string,signal: AbortSignal,assertActive: () => void, nativeToken: string): Promise<OutboxReadResult> {
     const request = parseOutboxQuery(input);
+    if (!nativeToken) throw new OutboxQueryError('policy denied');
     return bounded(request.options.timeoutMs,signal,assertActive,async (leased,active,remaining) => {
       const wide = request.filters.length > QUERY_LIMITS.filters;
       const discoveryBudget = wide ? Math.max(1, Math.floor(remaining() / 2)) : undefined;
       const plan = await route(request,user,leased,active,false,discoveryBudget); active();
-      const transport = createNativeRelayQuery(native,() => plan.relays,remaining(true),{allowPartialOnLimit:true});
-      const result = await transport.queryDetailed(capOutboxFilters(request.filters),leased,active,
+      const transport = createNativeRelayQuery({
+        newInstanceId: () => native.newInstanceId(),
+        queryPublishedRelay: (id, url, wire, sub) => native.queryOutboxRelay(nativeToken,id,url,wire,sub),
+        cancelPublishedRelay: id => native.cancelPublishedRelay(id),
+      },() => plan.relays,remaining(true),{allowPartialOnLimit:true,outbox:true});
+      const result = await transport.queryDetailed(capOutboxFilters(request.filters,OUTBOX_QUERY_COUNTS.events),leased,active,
         {maximumFilters:wide ? OUTBOX_QUERY_FILTERS : QUERY_LIMITS.filters, allowSearch:true}); active();
-      const capped = result.events.length === QUERY_LIMITS.events &&
-        (request.options.limit > QUERY_LIMITS.events ||
-          request.options.limit === QUERY_LIMITS.events && request.filters.some(filter => (filter.limit as number) > QUERY_LIMITS.events));
-      const events = result.events.slice(0,request.options.limit).map(row => {
-        const hints = result.relayHints?.[row.event.id];
-        return Object.freeze({...row,...(hints?.length ? {sidecar:Object.freeze({relayHints:hints})} : {})});
-      });
-      return Object.freeze({events:Object.freeze(events),incomplete:plan.incomplete || result.incomplete || capped,plan});
+      const maximum = OUTBOX_QUERY_COUNTS.events;
+      const capped = result.events.length === maximum &&
+        (request.options.limit > maximum ||
+          request.options.limit === maximum && request.filters.some(filter => (filter.limit as number) > maximum));
+      const events = projectEvents(result, request.options.limit);
+      return Object.freeze({events,incomplete:plan.incomplete || result.incomplete || capped,plan});
     });
   }
   return Object.freeze({
     query,
-    async getEvent(input: unknown,user: string,signal: AbortSignal,active: () => void): Promise<OutboxEventResult> {
+    async getEvent(input: unknown,user: string,signal: AbortSignal,active: () => void,nativeToken: string): Promise<OutboxEventResult> {
       const request = parseOutboxEvent(input);
       const result = await query({type:'outbox.query',id:request.id,filters:{ids:[request.eventId],limit:1},
-        options:{authors:request.options.author ? [request.options.author] : [],relays:request.options.relays,timeoutMs:request.options.timeoutMs,limit:1}},user,signal,active);
+        options:{authors:request.options.author ? [request.options.author] : [],relays:request.options.relays,timeoutMs:request.options.timeoutMs,limit:1}},user,signal,active,nativeToken);
       const row = result.events[0];
       if (row && row.event.id !== request.eventId) throw new OutboxQueryError('invalid filter');
       return Object.freeze({...(row ? {result:row} : {error:'not found'}),...(result.incomplete ? {incomplete:true as const} : {})});
