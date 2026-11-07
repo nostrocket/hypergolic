@@ -63,6 +63,7 @@ test('the exact prior Support descriptor survives upgrade without reseeding or c
 for (const version of [
   '6eb956ead5bc710d70c3511715bf1dab281314d4979ff4bd99d9d1785176655c',
   'ec8f1cb8dddca04865f59105f86e6b9741e4e2d6c1f3cab586bcaf48645fae0a',
+  '54f25dd032cb8916b526f0a55888fdfd0fc9e685d622a112cd760424dc32c6ce',
 ]) test(`the bundled Discover card at ${version.slice(0, 8)} restores under the current packaged authority`, async t => {
   const {database} = await setup(t);
   const instance = '58274370-ec8f-4058-a4cc-b63e7e75ca4b';

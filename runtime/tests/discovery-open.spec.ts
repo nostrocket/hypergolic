@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
+import { createHash } from 'node:crypto';
+import { finalizeEvent } from 'nostr-tools/pure';
 import { naddrEncode } from 'nostr-tools/nip19';
 
 const type = 'hypergolic.publishedOpen';
@@ -6,7 +8,7 @@ const address = naddrEncode({kind: 35129, pubkey: 'a'.repeat(64), identifier: 'd
 const expectedEventId = 'b'.repeat(64);
 const target = {address, expectedEventId};
 type Request = {type: string; id: string; address: string; expectedEventId: string};
-type State = { ready: boolean; calls: Request[]; catalogCalls: object[]; finish?: (status: string) => void };
+type State = { ready: boolean; calls: Request[]; catalogCalls: object[]; catalogEvents: object[]; finish?: (status: string) => void };
 type TestWindow = Window & { discoveryOpenTest: State; HypergolicHost: object };
 type GuestWindow = Window & { hypergolic?: { publishedOpen?: {
   version: number; open(address: string, expectedEventId: string): Promise<{status: string; reason?: string}>;
@@ -14,11 +16,11 @@ type GuestWindow = Window & { hypergolic?: { publishedOpen?: {
   version: number; read(reset: boolean, round: string, after: number): Promise<unknown>;
 } }; receivedOpenStatus?: string; receivedOpenResult?: {status: string; reason?: string} };
 
-async function openRuntime(page: Page, fixture: string) {
-  await page.addInitScript(() => {
+async function openRuntime(page: Page, fixture: string, catalogEvents: object[] = []) {
+  await page.addInitScript(catalogEvents => {
     if (window !== window.top) return;
     const root = window as unknown as TestWindow;
-    const state: State = { ready: false, calls: [], catalogCalls: [] };
+    const state: State = { ready: false, calls: [], catalogCalls: [], catalogEvents };
     const listeners = new Set<(event: {data: string}) => void>();
     root.discoveryOpenTest = state;
     root.HypergolicHost = {
@@ -41,14 +43,14 @@ async function openRuntime(page: Page, fixture: string) {
         if (request.type === 'relay.catalogPage') {
           state.catalogCalls.push(request);
           respond({type: 'relay.catalogPage.result', id: request.id, result: {
-            page: request.after + 1, until: Math.floor(Date.now() / 1000), events: [],
+            page: request.after + 1, until: Math.floor(Date.now() / 1000), events: state.catalogEvents,
             more: false, partial: false, gap: false, bounded: false,
           }});
         }
         if (request.type === 'relay.query') respond({type: 'relay.query.result', id: request.id, events: []});
       },
     };
-  });
+  }, catalogEvents);
   await page.goto('/assets/runtime/index.html?sessionId=discovery-browser&fixture=' + fixture);
   await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.ready)).toBe(true);
   return page.frames().find(frame => frame.parentFrame() === page.mainFrame())!;
@@ -124,4 +126,39 @@ test('catalog paging is exact-Discover-only and carries no destinations or filte
   expect(calls).not.toContainEqual(expect.objectContaining({id: 'forged'}));
   const ordinary = await openRuntime(page, 'nap-support');
   expect(await ordinary.evaluate(() => Boolean((window as GuestWindow).hypergolic?.catalogPage))).toBe(false);
+});
+
+
+test('packaged Discover scopes late and completed row feedback to its search', async ({page}) => {
+  const artifact = 'c'.repeat(64);
+  const aggregate = createHash('sha256').update(`${artifact} /index.html\n`).digest('hex');
+  const event = finalizeEvent({kind: 35129, created_at: Math.floor(Date.now() / 1000) - 10,
+    content: 'A local signed catalog control.', tags: [['d', 'feedback-control'],
+      ['title', 'Feedback control'], ['path', '/index.html', artifact], ['x', aggregate, 'aggregate']]},
+    new Uint8Array(32).fill(1));
+  const guest = await openRuntime(page, 'napplet-discovery', [{event}]);
+  const open = guest.getByRole('button', {name: 'Open Feedback control', exact: true});
+  const search = guest.getByRole('searchbox', {name: 'Search Napplets'});
+  const feedback = guest.locator('#row-open-status');
+  await open.click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length)).toBe(1);
+  const calls = await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls);
+  expect(calls[0]).toEqual({type, id: expect.any(String), expectedEventId: event.id,
+    address: naddrEncode({kind: 35129, pubkey: event.pubkey, identifier: 'feedback-control'})});
+  await search.fill('A different search');
+  await expect(guest.getByText('No matches in the loaded results.')).toBeVisible();
+  await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.finish?.('opened'));
+  await expect(feedback).toBeHidden();
+  await expect(feedback).toBeEmpty();
+  await expect(search).toBeFocused();
+
+  await guest.getByRole('button', {name: 'Clear search'}).click();
+  await open.click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length)).toBe(2);
+  await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.finish?.('opened'));
+  await expect(feedback).toHaveText('Opened in Hypergolic.');
+  await search.fill('Another different search');
+  await expect(feedback).toBeHidden();
+  await expect(feedback).toBeEmpty();
+  await expect(search).toBeFocused();
 });
