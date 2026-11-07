@@ -8,6 +8,8 @@ public final class NativeSignerCore implements AutoCloseable {
   public static final long LIFETIME_MS = 600_000;
   public static final class Denied extends RuntimeException {
     public Denied() { super("Native signing request denied."); }
+    /** JNI ThrowNew requires the String signature; keep the same fixed public error. */
+    private Denied(String ignored) { this(); }
   }
   public static final class Review {
     final NativeEvent event;
