@@ -102,7 +102,7 @@ async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android
     notifyPermissions = await openNotifyPermissions(SQLite, platform);
     identityCache = await openIdentityCache(SQLite, platform);
     outboxCache = await openOutboxRelayListCache(SQLite, platform);
-    const outbox = loadNativeOutboxReadService(outboxCache, () => relaySettings?.getSettings() ?? {networkRelays: [], lookupRelays: []});
+    const outbox = loadNativeOutboxReadService(outboxCache, () => relaySettings?.getSettings() ?? {networkRelays: [], lookupRelays: []},async(user,active)=>{active();const methods=await vault.getSigningMethods(user);active();return methods.selectedMethod!==null;});
     const queries = loadNativeRelayQuery(() => relaySettings?.getSettings().networkRelays ?? []);
     const transition = await IdentityTransition.open({ vault, database, seed: initialTestWorkspace, assertAvailable: assertWorkspaceAvailability });
     releaseRouting = bindRoutingOwner(transition, requireNativeModule<NativeRoutingOwner>('HypergolicNappletHost'));
@@ -116,7 +116,7 @@ async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android
       handoffState: source => vault.signingHandoffState(source),
       sign: (snapshot, execution) => vault.signApproved(snapshot, execution),
       publishEvent,
-    },outbox.publication);
+    },outbox.publication,outbox.common);
     const uploads = new UploadService(loadNativeUploadPort(), createUploadOwner(transition, origin => {
       if (!runtime) throw new Error('APPROVAL_DENIED');
       runtime.assertPublishedUpload(origin);

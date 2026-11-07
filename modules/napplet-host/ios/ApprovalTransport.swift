@@ -18,6 +18,7 @@ final class ApprovalTransportRegistry: @unchecked Sendable {
     let reply: Reply
     var claimed = false
     var outboxPlan: NativeOutboxPlan?
+    var commonPlan:NativeCommonPlan?
     var approval: NativeApprovalHandle?
     var signingSnapshot: String?
     var nativeSigningClaimed = false
@@ -115,7 +116,7 @@ final class ApprovalTransportRegistry: @unchecked Sendable {
     let result = lock.withLock {
       deliveries = sweepLocked()
       guard let row = rows[token], row.claimed, !row.nativeHandoffPending, sessionLiveLocked(row),
-        !isOutbox(row) || row.outboxPlan != nil, let review = authority.currentReview() else { return false }
+        !requiresPlan(row) || row.outboxPlan != nil, let review = authority.currentReview() else { return false }
       return review.request == row.request && review.snapshot.utf8.elementsEqual(row.snapshot.utf8)
     }
     dispatch(deliveries)
@@ -127,7 +128,7 @@ final class ApprovalTransportRegistry: @unchecked Sendable {
     let result = lock.withLock {
       deliveries = sweepLocked()
       guard var row = rows[token], row.claimed, row.approval == nil, !row.nativeHandoffPending, sessionLiveLocked(row),
-        !isOutbox(row) || row.outboxPlan != nil, let review = authority.currentReview(), review.request == row.request,
+        !requiresPlan(row) || row.outboxPlan != nil, let review = authority.currentReview(), review.request == row.request,
         review.snapshot.utf8.elementsEqual(row.snapshot.utf8), let approval = authority.approve(row.request) else { return false }
       guard authority.take(approval) == row.snapshot else {
         _ = authority.cancel(approval)
@@ -147,7 +148,7 @@ final class ApprovalTransportRegistry: @unchecked Sendable {
   func prepareSigning(_ token: String, raw: String) -> Bool {
     lock.withLock {
       guard var row = rows[token], row.claimed, signingEligibleLocked(row),
-        let captured = try? NativeOutboxPlan.signingSnapshot(snapshot: row.snapshot, raw: raw),
+        let captured = try? NativeOutboxPlan.signingSnapshot(snapshot: row.snapshot, raw: raw, derived:row.commonPlan?.template),
         row.outboxPlan == nil || row.outboxPlan?.destinations == captured.destinations else { return false }
       if let existing = row.signingSnapshot { return existing.utf8.elementsEqual(captured.json.utf8) }
       guard !row.nativeSigningClaimed else { return false }
@@ -169,7 +170,7 @@ final class ApprovalTransportRegistry: @unchecked Sendable {
     }
   }
   private func signingEligibleLocked(_ row: Row) -> Bool {
-    guard sessionLiveLocked(row), authority.contains(row.request), !isOutbox(row) || row.outboxPlan != nil else { return false }
+    guard sessionLiveLocked(row), authority.contains(row.request), !requiresPlan(row) || row.outboxPlan != nil else { return false }
     if let approval = row.approval { return authority.isApproved(approval) }
     guard let review = authority.currentReview() else { return false }
     return review.request == row.request && review.snapshot.utf8.elementsEqual(row.snapshot.utf8)
@@ -187,6 +188,29 @@ final class ApprovalTransportRegistry: @unchecked Sendable {
         sessionLiveLocked(row), authority.pauseExecution(row.request, paused: paused) else { return false }
       row.nativeHandoffPending = paused; rows[token] = row; return true
     }
+  }
+  func prepareCommon(_ token:String,raw:String)->Bool{
+    lock.withLock{
+      guard var row=rows[token],row.claimed,row.approval==nil,row.outboxPlan==nil,sessionLiveLocked(row),authority.contains(row.request),NativeCommonPlan.operations.contains(requestType(row)),let plan=try? NativeCommonPlan.capture(snapshot:row.snapshot,raw:raw),let publication=plan.publication else{return false}
+      row.commonPlan=plan;row.outboxPlan=publication;rows[token]=row;return true
+    }
+  }
+  func completeCommonNoop(_ token:String,raw:String)->Bool{
+    var deliveries:[Delivery]=[]
+    let result=lock.withLock{
+      guard let row=rows[token],row.claimed,row.approval==nil,row.outboxPlan==nil,sessionLiveLocked(row),authority.contains(row.request),let plan=try? NativeCommonPlan.capture(snapshot:row.snapshot,raw:raw),plan.publication==nil,let id=row.wireId else{return false}
+      let value:[String:Any]=["type":resultType(row),"id":id,"ok":true]
+      guard let data=try? JSONSerialization.data(withJSONObject:value) else{return false}
+      rows.removeValue(forKey:token);_ = authority.cancel(row.request)
+      deliveries.append(Delivery(reply:row.reply,response:String(decoding:data,as:UTF8.self)));return true
+    };dispatch(deliveries);return result
+  }
+  func failCommon(_ token:String,error:String){
+    let deliveries:[Delivery]=lock.withLock{
+      guard let row=rows[token],NativeCommonPlan.operations.contains(requestType(row)) else{return []}
+      rows.removeValue(forKey:token);if let approval=row.approval{_ = authority.cancel(approval)}else{_ = authority.cancel(row.request)}
+      return sessionLiveLocked(row) ? [denial(row,error:error.utf8.count<=4096 && !error.isEmpty ? error:"user-denied")]:[]
+    };dispatch(deliveries)
   }
   func prepareOutbox(_ token: String, raw: String) -> Bool {
     lock.withLock {
@@ -222,6 +246,11 @@ final class ApprovalTransportRegistry: @unchecked Sendable {
     }
     dispatch(deliveries)
   }
+  private func requestType(_ row:Row)->String{
+    guard let envelope=try? NativeOutboxPlan.object(row.snapshot),let raw=envelope["request"] as? String,let request=try? NativeOutboxPlan.object(raw) else{return ""};return request["type"] as? String ?? ""
+  }
+  private func resultType(_ row:Row)->String{let type=requestType(row);return NativeCommonPlan.operations.contains(type) ? type+".result" : isOutbox(row) ? "outbox.publish.result":"relay.publish.result"}
+  private func requiresPlan(_ row:Row)->Bool{isOutbox(row)||NativeCommonPlan.operations.contains(requestType(row))}
   private func isOutbox(_ row: Row) -> Bool {
     guard let envelope = try? JSONSerialization.jsonObject(with: Data(row.snapshot.utf8)) as? [String: Any],
       let raw = envelope["request"] as? String,
@@ -376,8 +405,8 @@ final class ApprovalTransportRegistry: @unchecked Sendable {
 
   private func denial(_ row: Row, error: String = "approval denied") -> Delivery {
     guard let id = row.wireId else { return Delivery(reply: row.reply, response: nil) }
-    let value: [String: Any] = ["type": isOutbox(row) ? "outbox.publish.result" : "relay.publish.result", "id": id,
-      "ok": false, "error": error]
+    let value: [String: Any] = ["type": resultType(row), "id": id,
+      "ok": false, "error": error == "approval denied" && NativeCommonPlan.operations.contains(requestType(row)) ? "user-denied":error]
     let data = try? JSONSerialization.data(withJSONObject: value)
     return Delivery(reply: row.reply, response: data.map { String(decoding: $0, as: UTF8.self) })
   }
@@ -386,7 +415,7 @@ final class ApprovalTransportRegistry: @unchecked Sendable {
     guard response.utf8.count <= CapabilityLeaseRegistry.maxBytes,
       let id = row.wireId, let data = response.data(using: .utf8),
       let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      value["type"] as? String == (isOutbox(row) ? "outbox.publish.result" : "relay.publish.result"), value["id"] as? String == id,
+      value["type"] as? String == (resultType(row)), value["id"] as? String == id,
       value["ok"] is Bool else { return false }
     return true
   }

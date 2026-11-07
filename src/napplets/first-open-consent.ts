@@ -55,8 +55,9 @@ function sameSet(left: readonly string[], right: readonly string[]): boolean {
 /** Keep the single-set grant format for publications without optional domains. */
 export function publishedCapabilityCompatibility(required: readonly string[], optional: readonly string[],
   profile: ReviewedSupportProfile = 'current') {
-  const requiredSupport = reviewedCapabilityCompatibility(required, profile);
-  const optionalSupport = reviewedCapabilityCompatibility(optional, profile);
+  const combined=Object.freeze([...required,...optional]);
+  const requiredSupport = reviewedCapabilityCompatibility(required, profile,combined);
+  const optionalSupport = reviewedCapabilityCompatibility(optional, profile,combined);
   const grantedDomains = Object.freeze([...requiredSupport.domains, ...optionalSupport.domains].sort());
   const domains = profile === 'legacy' && !grantedDomains.includes('relay')
     ? Object.freeze(grantedDomains.filter(domain => domain !== 'outbox')) : grantedDomains;
@@ -110,10 +111,10 @@ export async function requestFirstOpenConsent(
   if (current?.supportReview === supportReview && sameSet(existing, domains)) {
     accepted = { domains, supportProfile: 'current' };
   } else {
-    for (const profile of ['before-common','legacy'] as const) {
+    for (const profile of ['before-social','before-common','legacy'] as const) {
       const previous = publishedCapabilityCompatibility(requestedDomains, optionalDomains, profile);
       if (current?.supportReview === previous.review && sameSet(existing, previous.grantedDomains) &&
-          (mode === 'saved-pin' || sameSet(previous.domains, domains))) {
+          (mode === 'saved-pin' || (!domains.includes('common') || !domains.includes('identity') || !domains.some(domain=>domain==='relay'||domain==='outbox')) && sameSet(previous.domains, domains))) {
         accepted = { domains: previous.domains, supportProfile: profile };
         break;
       }

@@ -427,3 +427,19 @@ test('saved mixed pins keep effective legacy authority until a new review accept
     assert.deepEqual(hostDomains(await reopen()), granted);
   });
 });
+
+test('Common social authority needs fresh review even with identical old domains split across required/optional',async t=>{
+  for(const partition of [0,1,2])await t.test(String(partition),async t=>{
+    const {database}=await setup(t),{owner,storage}=control(database);
+    const required=partition===0?['common','identity','relay']:partition===1?['common']:['common','identity'];
+    const optional=partition===0?[]:partition===1?['identity','outbox']:['relay'];
+    const candidate=await artifact(required,optional),prior=publishedCapabilityCompatibility(required,optional,'before-social');
+    await storage.replaceAccessGrant(prior.domains,null,{},prior.review);const old=await storage.readAccessGrant();
+    const signal=new AbortController().signal,descriptor=descriptorForPublishedArtifact(candidate,'58274370-ec8f-4058-a4cc-b63e7e75ca4b');
+    const config=(admission:unknown)=>JSON.parse(JSON.parse(publishedHostInput(candidate,admission,descriptor,{user,epoch:0,assertActive:owner.assertActive},'stage')).configuration);
+    const saved=await requestFirstOpenConsent(candidate,owner,storage,signal,owner.assertActive,async()=>assert.fail('Saved read pin cannot broaden'),'saved-pin');assert.equal(config(saved).commonProfile,undefined);
+    await assert.rejects(requestFirstOpenConsent(candidate,owner,storage,signal,owner.assertActive,async()=>false),FirstOpenConsentError);assert.deepEqual(await storage.readAccessGrant(),old);
+    const approved=await requestFirstOpenConsent(candidate,owner,storage,signal,owner.assertActive,async()=>true);assert.equal(config(approved).commonProfile,'social-v1');assert.deepEqual(config(approved).domains,prior.domains);
+    assert.notEqual((await storage.readAccessGrant())!.supportReview,prior.review);assert.equal(config(saved).commonProfile,undefined);
+  });
+});

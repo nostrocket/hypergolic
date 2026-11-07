@@ -1,3 +1,4 @@
+import {createNativeCommonSocialPlanner} from '../common/native-social-plan';
 import {createOutboxPublicationPlanner} from './publication-plan';
 import {requireNativeModule} from 'expo';
 import type {NativePublishedRelayPort} from '../napplets/native-published-relay';
@@ -8,9 +9,10 @@ import {createOutboxReadService, type NativeOutboxQueryPort} from './read-servic
 import type {OutboxRelayListCache} from './relay-list-cache';
 
 /** Native module and trusted Lookup/Network settings never enter guest configuration. */
-export function loadNativeOutboxReadService(cache: OutboxRelayListCache, settings: () => RelaySettingsSnapshot) {
+export function loadNativeOutboxReadService(cache: OutboxRelayListCache, settings: () => RelaySettingsSnapshot,signer:(user:string,active:()=>void)=>Promise<boolean> = async()=>false) {
   const native = requireNativeModule<NativePublishedRelayPort & NativeOutboxQueryPort>('HypergolicNappletHost');
   const discovery = createNativeRelayQuery(native, () => settings().lookupRelays);
   const resolver=createOutboxAuthorResolver(cache,discovery);
-  return Object.freeze({...createOutboxReadService(resolver,native,settings),publication:createOutboxPublicationPlanner(resolver,settings,{ancillaryWhenOutboxSkipped:'omit'})});
+  const publication=createOutboxPublicationPlanner(resolver,settings,{ancillaryWhenOutboxSkipped:'omit'});
+  return Object.freeze({...createOutboxReadService(resolver,native,settings),publication,common:createNativeCommonSocialPlanner(native,resolver,settings,publication,signer)});
 }

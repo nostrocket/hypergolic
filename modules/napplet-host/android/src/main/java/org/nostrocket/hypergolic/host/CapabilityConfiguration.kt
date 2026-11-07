@@ -16,12 +16,14 @@ internal class CapabilityConfiguration(raw: String, generation: String, allowPub
   val appId: String
   val version: String
   val grantedDomains: List<String>
+  val commonProfile: String?
   init {
     require(raw.toByteArray(Charsets.UTF_8).size <= 8192)
     val value = JSONObject(raw)
     val names = setOf("sessionId", "epoch", "user", "publisher", "appId", "version", "instanceId", "fixture", "domains")
     val open = value.has("publishedOpen")
-    require(value.keys().asSequence().toSet() == if (open) names + "publishedOpen" else names)
+    val common = value.has("commonProfile")
+    require(value.keys().asSequence().toSet() == names + (if(open)setOf("publishedOpen") else emptySet()) + (if(common)setOf("commonProfile") else emptySet()))
     require(!open || value.remove("publishedOpen") == true)
     fun string(name: String): String = (value.get(name) as? String) ?: error("Invalid configuration")
     for (name in listOf("sessionId", "instanceId", "fixture")) require(string(name).matches(Regex("[A-Za-z0-9_-]{1,80}")))
@@ -57,6 +59,7 @@ internal class CapabilityConfiguration(raw: String, generation: String, allowPub
     allowsUpload = "upload" in granted
     allowsRelay = "relay" in granted
     grantedDomains = granted.sorted()
+    commonProfile = if(common) string("commonProfile").also { require(it=="social-v1"&&fixture=="published"&&granted.containsAll(listOf("common","identity"))&&granted.any { domain->domain=="relay"||domain=="outbox" }) } else null
     sessionId = string("sessionId")
     publisher = string("publisher")
     appId = string("appId")
@@ -66,6 +69,7 @@ internal class CapabilityConfiguration(raw: String, generation: String, allowPub
     value.put("generation", generation)
     snapshot = value.toString()
   }
+  fun allowsCommonSocial(type:String):Boolean=commonProfile=="social-v1"&&type in setOf("common.follow","common.unfollow","common.react","common.report")
   fun allowsRelayOperation(type: String): Boolean = when (type) {
     "relay.subscribe", "relay.publish" -> "relay" in grantedDomains
     "outbox.subscribe", "outbox.publish" -> "outbox" in grantedDomains

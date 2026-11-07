@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {finalizeEvent,generateSecretKey,type NostrEvent} from 'nostr-tools/pure';
-import {encodeBytes,nsecEncode,nprofileEncode} from 'nostr-tools/nip19';
+import {encodeBytes,nsecEncode,nprofileEncode,npubEncode} from 'nostr-tools/nip19';
 import {commonFailure,parseCommonRequest} from '../../src/common/common-contract.ts';
 import {decodeCommonNip19,encodeCommonNip19} from '../../src/common/common-codec.ts';
 import {createNativeRelayQuery} from '../../src/network/native-relay-query.ts';
@@ -76,7 +76,7 @@ test('Common alone provides codecs and explicit unsupported operations without i
   assert.deepEqual(denied,{type:'common.getProfile.result',id:'request',ok:false,pubkey:publisher,error:'unsupported'});
   assert.equal((await readCommon(request('common.follows'),owner,signal(),active,services)).error,'unsupported');
   for (const type of ['common.follow','common.unfollow','common.react','common.report']) {
-    assert.deepEqual(await readCommon(request(type),owner,signal(),active,services),{type:type+'.result',id:'request',ok:false,error:'unsupported'});
+    assert.deepEqual(await readCommon(request(type,type==='common.follow'||type==='common.unfollow'?{pubkeys:[npubEncode(publisher)]}:type==='common.react'?{targetEventId:profile.id,reaction:'+'}:{target:{type:'pubkey',pubkey:publisher},reason:'spam',text:''}),owner,signal(),active,services),{type:type+'.result',id:'request',ok:false,error:'unsupported'});
   }
   await assert.rejects(readCommon(request('common.follows'),registration(['identity']),signal(),active,services));
 });

@@ -30,7 +30,7 @@ export interface NativeCapabilityEvent { type: 'capability'; sessionId: string; 
 export interface RuntimeBinding { readonly configuration: string; receive(event: NativeCapabilityEvent): void; revoke(): void }
 type PublishedCapabilities = Readonly<{requiredDomains: readonly string[]; optionalDomains: readonly string[]}>;
 export interface PublishedRuntimeBinding { readonly publishedArtifact: string; readonly requestedDomains: PublishedCapabilities;
-  ready(generation: string): void; readyGeneration(): string | null; receive(event: NativeCapabilityEvent): void; assertApproval(origin: ApprovalOrigin,domain?:'outbox'): void; assertUpload(origin: ApprovalOrigin): void; revoke(): void }
+  ready(generation: string): void; readyGeneration(): string | null; receive(event: NativeCapabilityEvent): void; assertApproval(origin: ApprovalOrigin,domain?:'outbox'|'common'): void; assertUpload(origin: ApprovalOrigin): void; revoke(): void }
 export interface RuntimeNativePort extends NativeCapabilityPort { newInstanceId(): string; subscriptions?: NativeRelaySubscriptionPort }
 export interface RuntimeOwner {
   publishedCapabilities(session: NappletDescriptor): PublishedCapabilities | null;
@@ -48,7 +48,7 @@ export interface RuntimeOwner {
   prepareInstalled(handler: CatalogHandler, signal: AbortSignal, review: (request: NappletConsentReview) => Promise<boolean>): Promise<NappletDescriptor>;
   discardPublished(sessionId: string): void;
   revokeAllPublished(): void;
-  assertPublishedApproval(origin: ApprovalOrigin,domain?:'outbox'): void;
+  assertPublishedApproval(origin: ApprovalOrigin,domain?:'outbox'|'common'): void;
   assertPublishedUpload(origin: ApprovalOrigin): void;
 }
 
@@ -149,9 +149,10 @@ export function createRuntimeOwner(database: ShellDatabase,
         assertActive();
         return mounted;
       },
-      assertApproval(origin: ApprovalOrigin,domain?:'outbox'): void {
+      assertApproval(origin: ApprovalOrigin,domain?:'outbox'|'common'): void {
         assertActive();
         receiver.assertGeneration(origin.generation);
+        if (domain==='common'&&(configuration.commonProfile!=='social-v1'||!configuration.domains.includes('identity')||!configuration.domains.some(value=>value==='relay'||value==='outbox')))throw new ShellStorageError('REVOKED');
         if (!configuration.domains.includes(domain ?? 'relay') ||
             origin.sessionId !== configuration.sessionId || origin.epoch !== configuration.epoch ||
             origin.user !== configuration.user || origin.publisher !== configuration.publisher ||
@@ -273,7 +274,7 @@ export function createRuntimeOwner(database: ShellDatabase,
       if (!binding) throw new ShellStorageError('REVOKED');
       binding.assertUpload(origin);
     },
-    assertPublishedApproval(origin: ApprovalOrigin,domain?:'outbox') {
+    assertPublishedApproval(origin: ApprovalOrigin,domain?:'outbox'|'common') {
       const binding = running.get(origin.sessionId);
       if (!binding) throw new ShellStorageError('REVOKED');
       binding.assertApproval(origin,domain);

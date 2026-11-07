@@ -21,6 +21,25 @@ export type ApprovalSheetProps = Readonly<{
 
 function requestedKind(kind: number): string { return kind === 1 ? 'Note' : `Event kind ${kind}`; }
 
+function commonAction(common:NonNullable<ApprovalItem['common']>):string{
+  const request=common.request;
+  if(request.type==='common.follow')return 'Follow people';
+  if(request.type==='common.unfollow')return 'Unfollow people';
+  if(request.type==='common.react')return 'React to event';
+  return request.target.type==='event'?'Report event':'Report account';
+}
+
+function commonTargets(common:NonNullable<ApprovalItem['common']>):string{
+  const request=common.request;
+  if(request.type==='common.follow'||request.type==='common.unfollow')return [...new Set(request.pubkeys)].join('\n');
+  const rows:string[]=[];
+  if(request.type==='common.react')rows.push('Event: '+request.targetEventId);
+  else if(request.target.type==='pubkey')rows.push('Public key: '+request.target.pubkey);
+  else rows.push('Event: '+request.target.id);
+  if(common.target)rows.push('Author: '+common.target.pubkey);
+  return rows.join('\n');
+}
+
 function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismiss }: Omit<ApprovalSheetProps, 'item'> & { item: ApprovalItem }) {
   const { styles } = useShellStyles(createStyles);
   const approve = useRef<ViewInstance>(null);
@@ -40,7 +59,9 @@ function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismis
         <TrustedBand />
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text accessibilityRole="header" style={styles.eyebrow}>Approve signing request</Text>
-          <Text style={styles.title}>{requestedKind(item.event.event.kind)}</Text>
+          <Text style={styles.title}>{item.common ? commonAction(item.common) : requestedKind(item.event.event.kind)}</Text>
+          {item.common && <><Text style={styles.label}>Targets</Text><Text selectable style={styles.mono}>{commonTargets(item.common)}</Text></>}
+          {item.common?.request.type==='common.report'&&<><Text style={styles.label}>Report reason</Text><Text style={styles.value}>{item.common.request.reason}</Text></>}
           <Text testID="approval-sheet-content" selectable style={styles.content}>{item.event.event.content}</Text>
           <View style={styles.divider} />
           <Text style={styles.label}>Requesting napplet</Text>

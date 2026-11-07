@@ -560,10 +560,10 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
       })
       return
     }
-    if (request != null && request.optString("type") in listOf("relay.publish", "outbox.publish")) {
+    if (request != null && (request.optString("type") in listOf("relay.publish", "outbox.publish") || config.allowsCommonSocial(request.optString("type")))) {
       if (!CapabilityTransport.leases.consumeSequence(generation, sequence)) { reply(null); return }
       val id = request.opt("id") as? String
-      if (!config.allowsRelayOperation(request.optString("type")) || id == null || id.isEmpty() || id.toByteArray(Charsets.UTF_8).size > 128) { reply(null); return }
+      if (!(config.allowsRelayOperation(request.optString("type")) || config.allowsCommonSocial(request.optString("type"))) || id == null || id.isEmpty() || id.toByteArray(Charsets.UTF_8).size > 128) { reply(null); return }
       val approval = ApprovalTransport.admit(generation, config.request(message), id, reply)
       if (approval == null) { reply(null); return }
       onHostEvent(mapOf("type" to "capability", "lane" to "approval", "sessionId" to config.sessionId, "generation" to generation, "token" to approval))

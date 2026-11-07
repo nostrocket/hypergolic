@@ -156,6 +156,9 @@ public final class NappletHostModule: Module {
     Function("prepareApprovalSigning") { (token: String, snapshot: String) -> Bool in
       ApprovalTransport.registry.prepareSigning(token, raw: snapshot)
     }
+    Function("prepareCommonApproval") { (token:String,plan:String)->Bool in ApprovalTransport.registry.prepareCommon(token,raw:plan) }
+    Function("completeCommonNoop") { (token:String,plan:String)->Bool in ApprovalTransport.registry.completeCommonNoop(token,raw:plan) }
+    Function("failCommonApproval") { (token:String,error:String) in ApprovalTransport.registry.failCommon(token,error:error) }
     Function("prepareOutboxApproval") { (token: String, plan: String) -> Bool in ApprovalTransport.registry.prepareOutbox(token, raw: plan) }
     Function("failOutboxApproval") { (token: String, error: String) in ApprovalTransport.registry.failOutbox(token, error: error) }
     AsyncFunction("publishOutboxApproval") { (token: String, group: String, event: String, relay: String) async throws -> String in

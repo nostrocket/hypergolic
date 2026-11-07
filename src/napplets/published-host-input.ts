@@ -71,7 +71,7 @@ export function publishedHostInput(artifactInput: unknown, admissionInput: unkno
   if (domains.length !== expected.length || domains.some((domain, index) => domain !== expected[index])) return fail();
   const configuration = JSON.stringify({ sessionId: descriptor.id, epoch: authority.epoch,
     user: authority.user, publisher: verified.publisher, appId: verified.appId,
-    version: verified.version, instanceId: descriptor.id, fixture: 'published', domains });
+    version: verified.version, instanceId: descriptor.id, fixture: 'published', domains,...(admission.supportProfile==='current'&&domains.includes('common')&&domains.includes('identity')&&domains.some(domain=>domain==='relay'||domain==='outbox')?{commonProfile:'social-v1'}:{}) });
   try { authority.assertActive(); } catch { return fail(); }
   admission.assertActive();
   return JSON.stringify({ sessionId: descriptor.id, publisher: verified.publisher, appId: verified.appId,

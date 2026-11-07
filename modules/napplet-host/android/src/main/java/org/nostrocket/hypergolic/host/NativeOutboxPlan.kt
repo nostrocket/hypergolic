@@ -35,7 +35,9 @@ internal class NativeOutboxPlan private constructor(
     internal fun signingTemplate(event: JSONObject): String = unsigned(event,true)
     internal fun signingHash(event: JSONObject,user: String): String = eventHash(event,user)
     fun transportUrl(relay: String): String = if (java.net.URI(relay).rawPath == "/") relay.dropLast(1) else relay
-    fun capture(snapshot: String, raw: String): NativeOutboxPlan {
+    fun capture(snapshot: String, raw: String): NativeOutboxPlan = captureCaptured(snapshot,raw,null)
+    internal fun captureCommon(snapshot:String,raw:String,derived:JSONObject):NativeOutboxPlan = captureCaptured(snapshot,raw,derived)
+    private fun captureCaptured(snapshot:String,raw:String,derived:JSONObject?):NativeOutboxPlan {
       require(UploadJsonBounds.accepts(raw, NativeApprovalAuthority.MAX_BYTES))
       val envelope = JSONObject(snapshot)
       val registration = envelope.getJSONObject("registration")
@@ -43,15 +45,17 @@ internal class NativeOutboxPlan private constructor(
       val identity = registration.getString("user")
       require(identity.matches(Regex("[0-9a-f]{64}")))
       val domains = strings(registration.getJSONArray("domains"))
-      require("outbox" in domains && request.getString("type") == "outbox.publish")
+      require(if (derived == null) "outbox" in domains && request.getString("type") == "outbox.publish"
+        else NativeCommonPlan.granted(registration) && request.getString("type") in NativeCommonPlan.operations)
       val plan = JSONObject(raw)
       fields(plan, setOf("requestId", "event", "destinations", "requiredInboxes", "ownSource", "ancillary"))
       val event = plan.getJSONObject("event")
       fields(event, setOf("event", "selectedPubkey", "destinations", "hash"))
       require(plan.getString("requestId") == request.getString("id") && event.getString("selectedPubkey") == identity)
-      val template = unsigned(request.getJSONObject("event"), true)
+      val original = derived ?: request.getJSONObject("event")
+      val template = unsigned(original, true)
       require(unsigned(event.getJSONObject("event"), true) == template)
-      val kind = request.getJSONObject("event").getInt("kind")
+      val kind = original.getInt("kind")
       require(kind != 22242 && kind != 24242)
       val hash = eventHash(event.getJSONObject("event"), identity)
       require(event.getString("hash") == hash)

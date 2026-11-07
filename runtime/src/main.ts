@@ -243,6 +243,7 @@ function approvalTimeouts(artifact: RuntimeMetadata): Readonly<Record<string, nu
     ...(artifact.domains.includes('relay')
       ? { 'relay.publish': artifact.publishTimeoutMs ?? 660_000 } : {}),
     ...(artifact.domains.includes('outbox') ? { 'outbox.publish': 660_000 } : {}),
+    ...(artifact.domains.includes('common') ? {'common.follow':660_000,'common.unfollow':660_000,'common.react':660_000,'common.report':660_000}:{}),
   });
 }
 

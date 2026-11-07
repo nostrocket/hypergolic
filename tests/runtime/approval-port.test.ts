@@ -65,3 +65,17 @@ test('failed native snapshot binding stops before review approval or signing', a
   await assert.rejects(service.approve(service.getSnapshot().current!.id), /APPROVAL_DENIED/);
   assert(calls.some(row => row[0] === 'cancel'));
 });
+
+
+const commonRegistration={...registration,fixture:'published',domains:['common','identity','relay'],commonProfile:'social-v1'};
+test('malformed Common take preserves captured native token for cancel+finish if failure reporting throws',()=>{
+  const {port,native,calls}=setup(JSON.stringify({registration:commonRegistration,request:JSON.stringify({type:'common.follow',id:'wire',pubkeys:[]})}));
+  native.failCommonApproval=(token)=>{calls.push(['fail-common',token]);throw Error('native module failed');};
+  assert.equal(port.take('owned-common'),null);assert.deepEqual(calls.slice(-3),[['fail-common','owned-common'],['cancel','owned-common'],['finish','owned-common',null]]);
+});
+test('Common failure reporting throws only after captured native cancellation+finish and lease token release',()=>{
+  const {port,native,calls}=setup(JSON.stringify({registration:commonRegistration,request:JSON.stringify({type:'common.report',id:'wire',target:{type:'pubkey',pubkey:'4'.repeat(64)},reason:'spam',text:''})}));
+  native.failCommonApproval=(token)=>{calls.push(['fail-common',token]);throw Error('native module failed');};
+  const taken=port.take('owned-common');assert(taken);assert.throws(()=>port.failCommon!(taken.lease,'invalid-target'),/native module failed/);
+  assert.deepEqual(calls.slice(-3),[['fail-common','owned-common'],['cancel','owned-common'],['finish','owned-common',null]]);assert.throws(()=>port.isLive(taken.lease));
+});

@@ -1,17 +1,19 @@
+import {npubEncode} from 'nostr-tools/nip19';
 import {createHash} from 'node:crypto';
 import {expect,test,type Page} from '@playwright/test';
 
 const generation = '8487e847-a1e9-4ad5-ac5d-42c3a5e104d9';
 const pubkey = '1'.repeat(64);
-async function open(page:Page,domains = ['common','identity','relay']) {
+async function open(page:Page,domains = ['common','identity','relay'],social=false) {
   const html = '<!doctype html><html><head><title>Common proof</title></head><body><p>Common proof</p></body></html>';
   const digest = (value:string) => createHash('sha256').update(value).digest('hex');
-  await page.addInitScript(({generation,domains,html,hash,version,pubkey}) => {
+  await page.addInitScript(({generation,domains,html,hash,version,pubkey,social}) => {
     if (window !== window.top) return;
     const listeners = new Set<(value:{data:string})=>void>();
     const requests:Record<string,unknown>[] = [];
     const send = (value:object) => {for(const listener of listeners)listener({data:JSON.stringify(value)});};
-    (window as any).__commonProof = {requests};
+    const awaiting:Record<string,unknown>[]=[];
+    (window as any).__commonProof = {requests,awaiting,review:()=>{const captured=awaiting.shift();if(!captured)throw Error('No pending native review');const request=JSON.parse(captured.message as string);send({type:'capability.result',sessionId:generation,sequence:captured.sequence,response:JSON.stringify({type:request.type+'.result',id:request.id,ok:false,error:'user-denied'})});}};
     Object.defineProperty(window,'HypergolicHost',{value:{
       addEventListener(_type:string,listener:(value:{data:string})=>void){listeners.add(listener);},
       removeEventListener(_type:string,listener:(value:{data:string})=>void){listeners.delete(listener);},
@@ -26,6 +28,7 @@ async function open(page:Page,domains = ['common','identity','relay']) {
         const request = JSON.parse(captured.message);
         requests.push(request);
         if (!domains.includes('common')) return;
+        if(social&&['common.follow','common.unfollow','common.react','common.report'].includes(request.type)){awaiting.push(captured);return;}
         const base = {type:request.type+'.result',id:request.id};
         let response;
         if (request.type === 'common.getProfile') response = domains.includes('relay') || domains.includes('outbox')
@@ -37,7 +40,7 @@ async function open(page:Page,domains = ['common','identity','relay']) {
         send({type:'capability.result',sessionId:generation,sequence:captured.sequence,response:JSON.stringify(response)});
       },
     }});
-  },{generation,domains,html,hash:digest(html),version:digest(digest(html)+' /index.html\n'),pubkey});
+  },{generation,domains,html,social,hash:digest(html),version:digest(digest(html)+' /index.html\n'),pubkey});
   await page.goto(`/assets/runtime/index.html?source=published&sessionId=${generation}`);
   await expect(page.frameLocator('#napplet').getByText('Common proof')).toBeVisible();
   const frame = await (await page.locator('#napplet').elementHandle())?.contentFrame();
@@ -81,4 +84,20 @@ test('Common cannot be manufactured by an ungranted raw post',async({page})=>{
   });
   expect(absent).toEqual({namespace:'undefined',reported:false});
   expect(await page.evaluate(()=>(window as any).__commonProof.requests)).toEqual([]);
+});
+
+
+test('four Common social SDK methods retain original fields and a native-review promise beyond ordinary timeout',async({page})=>{
+  await page.clock.install();const guest=await open(page,['common','identity','outbox'],true),npub=npubEncode(pubkey);
+  const cases=[{method:'follow',args:[npub],payload:{pubkeys:[npub]}},{method:'unfollow',args:[npub],payload:{pubkeys:[npub]}},
+    {method:'react',args:['2'.repeat(64),':wave:','https://emoji.example.org/wave.png'],payload:{targetEventId:'2'.repeat(64),reaction:':wave:',customEmojiHref:'https://emoji.example.org/wave.png'}},
+    {method:'report',args:[{type:'event',id:'2'.repeat(64)},'spam','review text'],payload:{target:{type:'event',id:'2'.repeat(64)},reason:'spam',text:'review text'}}];
+  for(const [index,value] of cases.entries()){
+    await guest.evaluate(({method,args})=>{(window as any).__socialSettled=false;(window as any).__socialReply=null;void (window as any).napplet.common[method](...args).then((result:unknown)=>{(window as any).__socialReply=result;(window as any).__socialSettled=true;});},value);
+    await expect.poll(()=>page.evaluate(()=>(window as any).__commonProof.awaiting.length)).toBe(1);
+    const captured=await page.evaluate(()=>(window as any).__commonProof.requests.at(-1));expect(captured.type).toBe('common.'+value.method);expect(captured).toMatchObject(value.payload);
+    if(index===0){await page.clock.fastForward(30_000);expect(await guest.evaluate(()=>(window as any).__socialSettled)).toBe(false);}
+    await page.evaluate(()=>(window as any).__commonProof.review());
+    await expect.poll(()=>guest.evaluate(()=>(window as any).__socialReply)).toEqual({ok:false,error:'user-denied'});
+  }
 });

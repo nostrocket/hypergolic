@@ -225,6 +225,9 @@ class NappletHostModule : Module() {
     }
     Function("takeApproval") { token: String -> ApprovalTransport.leases.take(token) }
     Function("prepareApprovalSigning") { token: String, snapshot: String -> NativeSigningSourceFacade.prepareApproval(token,snapshot) }
+    Function("prepareCommonApproval") { token:String,plan:String -> ApprovalTransport.prepareCommon(token,plan) }
+    Function("completeCommonNoop") { token:String,plan:String -> ApprovalTransport.completeCommonNoop(token,plan) }
+    Function("failCommonApproval") { token:String,error:String -> ApprovalTransport.failCommon(token,error) }
     Function("prepareOutboxApproval") { token: String, plan: String -> ApprovalTransport.prepareOutbox(token, plan) }
     Function("failOutboxApproval") { token: String, error: String -> ApprovalTransport.failOutbox(token, error) }
     AsyncFunction("publishOutboxApproval") Coroutine { token: String, group: String, event: String, relay: String ->

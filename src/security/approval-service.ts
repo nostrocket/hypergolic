@@ -1,3 +1,7 @@
+import {CommonApprovalPreparation} from '../common/social-preparation.ts';
+import type {CommonSocialPlanner,CommonSocialPlan} from '../common/social-plan.ts';
+import {CommonError,type CommonSocialRequest} from '../common/common-contract.ts';
+import type {NativeRegistration} from '../runtime/capability-protocol.ts';
 import { SigningForeground, signingHandoffState, type SigningHandoffReader } from './signing-handoff.ts';
 import {OutboxApprovalPreparation,type OutboxPublicationPlanner} from '../outbox/approval-preparation.ts';
 import type {OutboxPublishRequest} from '../outbox/publication-contract.ts';
@@ -11,9 +15,12 @@ import type { RelayOutcome } from '../network/relay-service.ts';
 
 export type ApprovalOrigin = Readonly<{ sessionId: string; generation: string; epoch: number; user: string; publisher: string; appId: string; version: string; instanceId: string }>;
 export type NativeApprovalLease = object;
-export type NativeTakenApproval = Readonly<{ lease: NativeApprovalLease; origin: ApprovalOrigin; requestId: string; event: unknown; outboxRequest?:OutboxPublishRequest }>;
+export type NativeTakenApproval = Readonly<{ lease: NativeApprovalLease; origin: ApprovalOrigin; requestId: string; event: unknown; outboxRequest?:OutboxPublishRequest; commonRequest?:CommonSocialRequest;commonRegistration?:NativeRegistration }>;
 export interface NativeApprovalLeasePort {
   take(token: string): NativeTakenApproval | null;
+  prepareCommon?(lease:NativeApprovalLease,plan:CommonSocialPlan):boolean;
+  completeCommonNoop?(lease:NativeApprovalLease,plan:CommonSocialPlan):boolean;
+  failCommon?(lease:NativeApprovalLease,error:string):void;
   prepareOutbox?(lease:NativeApprovalLease,plan:OutboxPublicationPlan):boolean;
   failOutbox?(lease:NativeApprovalLease,error:string):void;
   publishOutbox?(lease:NativeApprovalLease,group:'primary'|'relay-list',event:VerifiedSignedEvent,destinations:readonly string[],execution:EffectAuthority):Promise<readonly RelayOutcome[]>;
@@ -33,8 +40,8 @@ export interface ApprovalEffects extends SigningHandoffReader {
   sign(snapshot: EventSnapshot, execution: EffectAuthority): Promise<unknown>;
   publishEvent(event: VerifiedSignedEvent, destinations: readonly string[], execution: EffectAuthority): Promise<readonly RelayOutcome[]>;
 }
-export interface TrustedApprovalOwner { assertActive(origin: ApprovalOrigin,domain?:'outbox'): void }
-export type ApprovalItem = Readonly<{ id: string; origin: ApprovalOrigin; event: EventSnapshot; outbox?:OutboxPublicationPlan }>;
+export interface TrustedApprovalOwner { assertActive(origin: ApprovalOrigin,domain?:'outbox'|'common'): void }
+export type ApprovalItem = Readonly<{ id: string; origin: ApprovalOrigin; event: EventSnapshot; outbox?:OutboxPublicationPlan;common?:CommonSocialPlan }>;
 export type ApprovalSnapshot = Readonly<{ focusedSessionId: string | null; reviewPaused: boolean; current: ApprovalItem | null; pending: number; pendingSessionIds: readonly string[] }>;
 type Entry = ApprovalItem & { requestId: string; lease: NativeApprovalLease; controller: AbortController | null; signingPending?: boolean; publicationStarted?: boolean };
 const PER_SESSION = 4, GLOBAL = 16;
@@ -48,7 +55,7 @@ function captureOrigin(origin: ApprovalOrigin): ApprovalOrigin {
 function current(entries: readonly Entry[], focus: string | null, paused: boolean, native: NativeApprovalLeasePort): ApprovalItem | null {
   if (paused || focus === null) return null;
   const entry = entries.find(item => item.origin.sessionId === focus && item.controller === null && native.mayReview(item.lease));
-  return entry ? Object.freeze({ id: entry.id, origin: entry.origin, event: entry.event,...(entry.outbox?{outbox:entry.outbox}:{}) }) : null;
+  return entry ? Object.freeze({ id: entry.id, origin: entry.origin, event: entry.event,...(entry.outbox?{outbox:entry.outbox}:{}),...(entry.common?{common:entry.common}:{}) }) : null;
 }
 
 /** Presentation-only approval queue. Native code owns admission, expiry, keys, and lifecycle authority. */
@@ -63,11 +70,18 @@ export class ApprovalService {
   private readonly foregroundState = new SigningForeground();
   private snapshot: ApprovalSnapshot;
   private readonly preparing:OutboxApprovalPreparation;
+  private readonly commonPreparing:CommonApprovalPreparation;
+  private readonly commonPlanner:CommonSocialPlanner|undefined;
   private readonly closeRisks = new Map<string, number>();
   private readonly receipts=new WeakMap<readonly RelayOutcome[],OutboxPublicationReceipt>();
-  constructor(native: NativeApprovalLeasePort, owner: TrustedApprovalOwner, effects: ApprovalEffects,planner?:OutboxPublicationPlanner) {
+  constructor(native: NativeApprovalLeasePort, owner: TrustedApprovalOwner, effects: ApprovalEffects,planner?:OutboxPublicationPlanner,commonPlanner?:CommonSocialPlanner) {
+    this.commonPlanner=commonPlanner;
     this.native = native; this.owner = owner; this.effects = effects;
     this.snapshot = Object.freeze({ focusedSessionId: null, reviewPaused: false, current: null, pending: 0, pendingSessionIds: Object.freeze([]) });
+    this.commonPreparing=new CommonApprovalPreparation(native,owner,commonPlanner,()=>this.foregroundState.active,(taken,plan)=>{
+      if(nextPresentationId>=Number.MAX_SAFE_INTEGER||!plan.publication)denied();
+      this.entries.push({requestId:taken.requestId,id:`approval_${++nextPresentationId}`,origin:captureOrigin(taken.origin),event:plan.publication.event,common:plan,lease:taken.lease,controller:null});
+    },()=>this.publish());
     this.preparing=new OutboxApprovalPreparation(native,owner,planner,()=>this.foregroundState.active,(taken,plan)=>{
       if(nextPresentationId>=Number.MAX_SAFE_INTEGER)denied();
       this.entries.push({requestId:taken.requestId,id:`approval_${++nextPresentationId}`,origin:captureOrigin(taken.origin),event:plan.event,outbox:plan,lease:taken.lease,controller:null});
@@ -78,7 +92,7 @@ export class ApprovalService {
   private publish() {
     let shown: ApprovalItem | null = null;
     try { shown = current(this.entries, this.focusedSessionId, this.reviewPaused || !this.foregroundState.active, this.native); } catch { shown = null; }
-    const next = Object.freeze({ focusedSessionId: this.focusedSessionId, reviewPaused: this.reviewPaused, current: shown, pending: this.entries.length+this.preparing.origins().length, pendingSessionIds: Object.freeze([...new Set([...this.entries.map(entry => entry.origin.sessionId),...this.preparing.origins().map(origin=>origin.sessionId)])]) });
+    const next = Object.freeze({ focusedSessionId: this.focusedSessionId, reviewPaused: this.reviewPaused, current: shown, pending: this.entries.length+[...this.preparing.origins(),...this.commonPreparing.origins()].length, pendingSessionIds: Object.freeze([...new Set([...this.entries.map(entry => entry.origin.sessionId),...[...this.preparing.origins(),...this.commonPreparing.origins()].map(origin=>origin.sessionId)])]) });
     if (next.focusedSessionId === this.snapshot.focusedSessionId && next.reviewPaused === this.snapshot.reviewPaused && next.pending === this.snapshot.pending && next.current?.id === this.snapshot.current?.id && next.pendingSessionIds.join() === this.snapshot.pendingSessionIds.join()) return;
     this.snapshot = next;
     for (const listener of this.listeners) try { listener(); } catch { /* UI observers never hold approval authority. */ }
@@ -87,6 +101,7 @@ export class ApprovalService {
     if (!this.entries.includes(entry)) return;
     if (response === null && entry.publicationStarted) this.closeRisks.set(entry.origin.sessionId, entry.origin.epoch);
     this.entries = this.entries.filter(item => item !== entry);
+    if(entry.common)this.commonPlanner?.release(entry.common);
     try { if (cancel) this.native.cancel(entry.lease); } catch { /* Native lease remains authoritative. */ }
     try { entry.controller?.abort(); } catch { /* Effect cleanup cannot skip native terminal cleanup. */ }
     try { this.native.finish(entry.lease, response); } catch { /* Terminal native cleanup. */ }
@@ -94,7 +109,7 @@ export class ApprovalService {
   hasCloseRisk(sessionId: string): boolean { return this.closeRisks.has(sessionId) || this.getSnapshot().pendingSessionIds.includes(sessionId); }
   outboxReceipt(results:readonly RelayOutcome[]):OutboxPublicationReceipt|null{return this.receipts.get(results)??null;}
   refresh() {
-    this.preparing.refresh();
+    this.preparing.refresh();this.commonPreparing.refresh();
     for (const entry of this.entries) { try { if (!this.handoffPending(entry) && !this.native.isLive(entry.lease)) this.end(entry, false); } catch { this.end(entry, true); } }
     this.publish();
   }
@@ -105,9 +120,10 @@ export class ApprovalService {
     if (!taken) return false;
     try {
       if (expectedOrigin && Object.keys(captureOrigin(expectedOrigin)).some(key => taken.origin[key as keyof ApprovalOrigin] !== expectedOrigin[key as keyof ApprovalOrigin])) denied();
-      this.owner.assertActive(taken.origin,taken.outboxRequest?'outbox':undefined);
-      const origins=[...this.entries.map(entry=>entry.origin),...this.preparing.origins()];
+      this.owner.assertActive(taken.origin,taken.commonRequest?'common':taken.outboxRequest?'outbox':undefined);
+      const origins=[...this.entries.map(entry=>entry.origin),...this.preparing.origins(),...this.commonPreparing.origins()];
       if(origins.length>=GLOBAL||origins.filter(origin=>origin.sessionId===taken!.origin.sessionId).length>=PER_SESSION)denied();
+      if(taken.commonRequest){if(!this.commonPreparing.start(taken))denied();return true;}
       if(taken.outboxRequest){if(!this.preparing.start(taken))denied();return true;}
       const event = captureEventSnapshot(taken.event, taken.origin.user, destinationsFromTrustedConfig);
       if (event.event.kind === 22242 || event.event.kind === 24242 || this.entries.length >= GLOBAL || this.entries.filter(entry => entry.origin.sessionId === taken!.origin.sessionId).length >= PER_SESSION) denied();
@@ -144,13 +160,13 @@ export class ApprovalService {
   }
   background() {
     this.foregroundState.setActive(false);
-    this.preparing.cancel(()=>true);
+    this.preparing.cancel(()=>true);this.commonPreparing.cancel(()=>true);
     this.reviewPaused = true;
     for (const entry of this.entries) if (entry.controller !== null && !this.handoffPending(entry)) this.end(entry, true);
     this.publish();
   }
-  close(sessionId: string) { this.preparing.cancel(origin=>origin.sessionId===sessionId); for (const entry of this.entries) if (entry.origin.sessionId === sessionId) this.end(entry, true); this.closeRisks.delete(sessionId); this.publish(); }
-  revisionChanged(epoch: number) { this.preparing.cancel(origin=>origin.epoch!==epoch); for (const entry of this.entries) if (entry.origin.epoch !== epoch) this.end(entry, true); for (const [id, value] of this.closeRisks) if (value !== epoch) this.closeRisks.delete(id); this.publish(); }
+  close(sessionId: string) { this.preparing.cancel(origin=>origin.sessionId===sessionId);this.commonPreparing.cancel(origin=>origin.sessionId===sessionId); for (const entry of this.entries) if (entry.origin.sessionId === sessionId) this.end(entry, true); this.closeRisks.delete(sessionId); this.publish(); }
+  revisionChanged(epoch: number) { this.preparing.cancel(origin=>origin.epoch!==epoch);this.commonPreparing.cancel(origin=>origin.epoch!==epoch); for (const entry of this.entries) if (entry.origin.epoch !== epoch) this.end(entry, true); for (const [id, value] of this.closeRisks) if (value !== epoch) this.closeRisks.delete(id); this.publish(); }
   private handoffState(entry: Entry) {
     try { return signingHandoffState(this.effects, this.native.signingSource?.(entry.lease)); } catch { return null; }
   }
@@ -165,7 +181,7 @@ export class ApprovalService {
     const assertActive = () => {
       if (!this.foregroundState.active || (this.reviewPaused && this.handoffState(entry) !== 'resumed') || this.focusedSessionId !== entry.origin.sessionId || entry.controller?.signal.aborted || !this.entries.includes(entry)) denied();
       try { if (!this.native.isLive(entry.lease) || !this.native.isApproved(entry.lease)) denied(); } catch { denied(); }
-      this.owner.assertActive(entry.origin,entry.outbox?'outbox':undefined);
+      this.owner.assertActive(entry.origin,entry.common?'common':entry.outbox?'outbox':undefined);
     };
     return Object.freeze({ assertActive, awaitForeground: () => this.awaitForeground(entry), signal: entry.controller!.signal, nativeSource: this.native.signingSource?.(entry.lease) });
   }
@@ -191,7 +207,14 @@ export class ApprovalService {
     let response: string | null = null;
     let publicationStarted = false;
     try {
-      this.owner.assertActive(entry.origin,entry.outbox?'outbox':undefined);
+      this.owner.assertActive(entry.origin,entry.common?'common':entry.outbox?'outbox':undefined);
+      if(entry.common){
+        entry.controller=new AbortController();this.publish();
+        await this.commonPlanner!.revalidate(entry.common,entry.controller.signal,()=>{
+          this.owner.assertActive(entry.origin,'common');
+          if(!this.foregroundState.active||this.reviewPaused||this.focusedSessionId!==entry.origin.sessionId||entry.controller!.signal.aborted||!this.entries.includes(entry)||!this.native.isLive(entry.lease))denied();
+        });
+      }
       if (this.native.prepareSigning && !this.native.prepareSigning(entry.lease, entry.event)) denied();
       if (!this.native.mayReview(entry.lease) || !this.native.approveOnce(entry.lease)) denied();
       entry.controller = new AbortController(); this.publish();
@@ -203,6 +226,20 @@ export class ApprovalService {
       execution.assertActive();
       const verified = validateSignedEvent(entry.event, signed);
       execution.assertActive();
+      if(entry.common){
+        if(!entry.common.publication||!this.native.publishOutbox)denied();
+        publicationStarted=true;entry.publicationStarted=true;
+        const destinations=entry.event.destinations;
+        let raw:readonly RelayOutcome[];
+        try{raw=await this.native.publishOutbox(entry.lease,'primary',verified,destinations,execution);}
+        catch{execution.assertActive();raw=destinations.map(relay=>({relay,eventId:verified.id,status:'unknown',reason:'publication result unavailable'}));}
+        const outcomes=captureRelayOutcomes(raw,destinations,verified.id);execution.assertActive();
+        const accepted=outcomes.some(row=>row.status==='accepted'),unknown=outcomes.some(row=>row.status==='unknown');
+        if(unknown)this.closeRisks.set(entry.origin.sessionId,entry.origin.epoch);
+        response=JSON.stringify({type:`${entry.common.request.type}.result`,id:entry.requestId,ok:accepted,
+          ...(accepted?{event:verified,eventId:verified.id}:{error:unknown?'publication-result-unknown':'publish-failed'})});
+        return outcomes;
+      }
       if(entry.outbox){
         publicationStarted = true; entry.publicationStarted = true;
         const receipt=await this.publishOutbox(entry,verified,execution);execution.assertActive();response=JSON.stringify(receipt.response);
@@ -221,6 +258,7 @@ export class ApprovalService {
       response = completedResponse;
       return captured;
     } catch (error) {
+      if(entry.common&&!publicationStarted&&error instanceof CommonError)try{this.native.failCommon?.(entry.lease,error.message);}catch{/* Native denial still revokes the original request. */}
       if (publicationStarted && this.entries.includes(entry)) this.closeRisks.set(entry.origin.sessionId, entry.origin.epoch);
       throw error;
     } finally { this.end(entry, response === null, response); this.publish(); }

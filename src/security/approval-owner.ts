@@ -4,8 +4,8 @@ import { resolveBundledSession } from '../shell/fixtures.ts';
 
 /** Resolve persisted descriptors through the same trusted catalogue as native registration. */
 function createCapabilityOwner(identity: Pick<IdentityTransition, 'getSnapshot' | 'sessionAuthority'>,
-  domain: 'relay' | 'upload', assertPublished?: (origin: ApprovalOrigin,domain?:'outbox') => void): TrustedApprovalOwner {
-  return Object.freeze({ assertActive(origin: ApprovalOrigin,requestedDomain?:'outbox') {
+  domain: 'relay' | 'upload', assertPublished?: (origin: ApprovalOrigin,domain?:'outbox'|'common') => void): TrustedApprovalOwner {
+  return Object.freeze({ assertActive(origin: ApprovalOrigin,requestedDomain?:'outbox'|'common') {
     const authority = identity.sessionAuthority();
     authority.assertActive();
     const state = identity.getSnapshot().session.workspace.getSnapshot();
@@ -23,10 +23,10 @@ function createCapabilityOwner(identity: Pick<IdentityTransition, 'getSnapshot' 
 }
 
 export function createApprovalOwner(identity: Pick<IdentityTransition, 'getSnapshot' | 'sessionAuthority'>,
-  assertPublished?: (origin: ApprovalOrigin,domain?:'outbox') => void): TrustedApprovalOwner {
+  assertPublished?: (origin: ApprovalOrigin,domain?:'outbox'|'common') => void): TrustedApprovalOwner {
   return createCapabilityOwner(identity, 'relay', assertPublished);
 }
 export function createUploadOwner(identity: Pick<IdentityTransition, 'getSnapshot' | 'sessionAuthority'>,
-  assertPublished?: (origin: ApprovalOrigin,domain?:'outbox') => void): TrustedApprovalOwner {
+  assertPublished?: (origin: ApprovalOrigin,domain?:'outbox'|'common') => void): TrustedApprovalOwner {
   return createCapabilityOwner(identity, 'upload', assertPublished);
 }

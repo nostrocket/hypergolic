@@ -28,6 +28,7 @@ struct CapabilityConfiguration {
   let sessionId: String
   let fixture: String
   let domains: Set<String>
+  let commonProfile:String?
   let publishedOpen: Bool
   let publisher: String
   let appId: String
@@ -36,7 +37,7 @@ struct CapabilityConfiguration {
     enum Invalid: Error { case configuration }
     guard raw.utf8.count <= 8192, let bytes = raw.data(using: .utf8),
       var value = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
-      Set(value.keys).subtracting(["publishedOpen"]) == Set(["sessionId", "epoch", "user", "publisher", "appId", "version", "instanceId", "fixture", "domains"])
+      Set(value.keys).subtracting(["publishedOpen","commonProfile"]) == Set(["sessionId", "epoch", "user", "publisher", "appId", "version", "instanceId", "fixture", "domains"])
       else { throw Invalid.configuration }
     let open = value.removeValue(forKey: "publishedOpen")
     if let open {
@@ -84,6 +85,10 @@ struct CapabilityConfiguration {
     self.epoch = epoch.uint64Value
     self.sessionId = sessionId
     self.fixture = fixture
+    if let profile=value["commonProfile"]{
+      guard profile as? String=="social-v1",fixture=="published",expected.contains("common"),expected.contains("identity"),!expected.isDisjoint(with:["relay","outbox"]) else{throw Invalid.configuration}
+      self.commonProfile="social-v1"
+    }else{self.commonProfile=nil}
     self.domains = expected
     self.publishedOpen = (fixture == "napplet-discovery" && appId == "napplet-discovery") || open != nil
     self.publisher = publisher
@@ -100,6 +105,7 @@ struct CapabilityConfiguration {
     let value = ["registration": try JSONSerialization.jsonObject(with: Data(snapshot.utf8)), "request": message] as [String: Any]
     return String(decoding: try JSONSerialization.data(withJSONObject: value), as: UTF8.self)
   }
+  func allowsCommonSocial(_ type:String)->Bool{commonProfile=="social-v1" && ["common.follow","common.unfollow","common.react","common.report"].contains(type)}
   func allowsRelayOperation(_ type: String) -> Bool {
     switch type {
     case "relay.subscribe", "relay.publish": domains.contains("relay")
@@ -112,8 +118,8 @@ struct CapabilityConfiguration {
     guard let data = message.data(using: .utf8),
       let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
       let type = value["type"] as? String,
-      type == "relay.publish" || type == "outbox.publish" else { return (false, nil) }
-    guard allowsRelayOperation(type), let id = value["id"] as? String, (1...128).contains(id.utf8.count) else { return (true, nil) }
+      type == "relay.publish" || type == "outbox.publish" || allowsCommonSocial(type) else { return (false, nil) }
+    guard allowsRelayOperation(type) || allowsCommonSocial(type), let id = value["id"] as? String, (1...128).contains(id.utf8.count) else { return (true, nil) }
     return (true, id)
   }
 }

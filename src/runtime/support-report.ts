@@ -7,8 +7,9 @@ const BASE_SUPPORT_PROFILE = `${PROFILE_PREFIX}-v1`;
 const INTENT_SUPPORT_PROFILE = 'hypergolic-native-2026-11-06-intent-v1';
 export const MEDIA_ACCESS_DETAIL = 'Media access lets this napplet offer a public HTTPS video. Play in the shell authorizes playback and a download of up to 256 MiB for the selected video. The source may redirect to another public HTTPS site.';
 const MEDIA_SUPPORT_PROFILE = `${PROFILE_PREFIX}-media-file-v1`;
-export const REPORTED_SUPPORT_PROFILE = `${PROFILE_PREFIX}-outbox-keys-v1/${MEDIA_SUPPORT_PROFILE}/${PROFILE_PREFIX}-common-read-v1`;
-export type ReviewedSupportProfile = 'current' | 'before-common' | 'legacy';
+const COMMON_SOCIAL_SUPPORT_PROFILE=`${PROFILE_PREFIX}-common-social-v1`;
+export const REPORTED_SUPPORT_PROFILE = `${PROFILE_PREFIX}-outbox-keys-v1/${MEDIA_SUPPORT_PROFILE}/${PROFILE_PREFIX}-common-read-v1/${COMMON_SOCIAL_SUPPORT_PROFILE}`;
+export type ReviewedSupportProfile = 'current' | 'before-social' | 'before-common' | 'legacy';
 const beforeCommonDomains = Object.freeze(SUPPORTED_CAPABILITY_DOMAINS.filter(domain => domain !== 'common'));
 const legacyDomains = Object.freeze(['identity', 'storage', 'theme', 'relay', 'resource', 'upload',
   'link', 'intent', 'inc', 'notify', 'config', 'outbox']);
@@ -29,7 +30,7 @@ const notes: Readonly<Record<string, string>> = Object.freeze({
   outbox: 'Outbox queries return up to 200 events. Bounded subscriptions and approved publication are available. Raw Relay operations require a separate grant.',
   keys: 'Hardware keyboard actions for the focused napplet. Ordinary suggested shortcuts can work outside text entry.',
   media: 'Shell-owned foreground HTTPS MP4 playback after trusted Play. Live streams, playlists and napplet-owned sessions are unavailable.',
-  common: 'Public NIP-19 helpers. Profile lookup needs a Relay or Outbox grant; follows needs Identity. Social writes are unavailable.',
+  common: 'Public NIP-19 helpers. Profile lookup needs a Relay or Outbox grant; follows needs Identity. Social writes need renewed Common access, Identity and Relay or Outbox, a selected signing method and exact event approval. Follow replacements are bounded by the existing 8 KiB publication frame.',
 });
 
 export function supportForDomain(domain: string): Readonly<{status: SupportAvailability; detail: string}> {
@@ -38,7 +39,7 @@ export function supportForDomain(domain: string): Readonly<{status: SupportAvail
     detail: notes[domain] ?? 'This shell does not provide this NAP. No permission can enable it.'});
 }
 
-function supportProfile(requested: readonly string[], policy: ReviewedSupportProfile): string {
+function supportProfile(requested: readonly string[], policy: ReviewedSupportProfile,granted:readonly string[]): string {
   const intent = requested.includes('intent');
   const previous = intent ? INTENT_SUPPORT_PROFILE : BASE_SUPPORT_PROFILE;
   if (policy === 'legacy') return previous;
@@ -46,20 +47,22 @@ function supportProfile(requested: readonly string[], policy: ReviewedSupportPro
   if (intent && added.length) added.push('intent');
   const profile = added.length ? `${PROFILE_PREFIX}-${added.join('-')}-v1` : previous;
   const media = requested.includes('media') ? `${profile}/${MEDIA_SUPPORT_PROFILE}` : profile;
-  return policy === 'current' && requested.includes('common') ? `${media}/${PROFILE_PREFIX}-common-read-v1` : media;
+  const read=policy!=='before-common'&&requested.includes('common')?`${media}/${PROFILE_PREFIX}-common-read-v1`:media;
+  const social=granted.includes('common')&&granted.includes('identity')&&(granted.includes('relay')||granted.includes('outbox'));
+  return policy==='current'&&social&&requested.includes('common')?`${read}/${COMMON_SOCIAL_SUPPORT_PROFILE}`:read;
 }
 
 export function capabilityCompatibility(requested: readonly string[], available: readonly string[] = SUPPORTED_CAPABILITY_DOMAINS,
-  policy: ReviewedSupportProfile = 'current') {
+  policy: ReviewedSupportProfile = 'current',combinedRequested:readonly string[]=requested) {
   const offered = new Set(available);
   const domains = Object.freeze([...requested].filter(domain => offered.has(domain)).sort());
   const unsupportedDomains = Object.freeze([...requested].filter(domain => domain !== 'shell' && !offered.has(domain)).sort());
-  const profile = supportProfile(requested, policy);
+  const profile = supportProfile(requested, policy,combinedRequested.filter(domain=>offered.has(domain)));
   return Object.freeze({domains, unsupportedDomains,
     review: JSON.stringify({profile, requested: [...requested].sort(), domains})});
 }
 
-export function reviewedCapabilityCompatibility(requested: readonly string[], policy: ReviewedSupportProfile) {
+export function reviewedCapabilityCompatibility(requested: readonly string[], policy: ReviewedSupportProfile,combinedRequested:readonly string[]=requested) {
   const available = policy === 'legacy' ? legacyDomains : policy === 'before-common' ? beforeCommonDomains : SUPPORTED_CAPABILITY_DOMAINS;
-  return capabilityCompatibility(requested, available, policy);
+  return capabilityCompatibility(requested, available, policy,combinedRequested);
 }
