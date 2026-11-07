@@ -52,7 +52,7 @@ export function decodeNativeRegistration(value: unknown): NativeRegistration {
   fields(data, ['sessionId', 'generation', 'epoch', 'user', 'publisher', 'appId', 'version', 'instanceId', 'fixture', 'domains'],['commonProfile']);
   if (!Array.isArray(data.domains) || data.domains.length > NATIVE_CAPABILITY_DOMAINS.length ||
       data.domains.some(domain => !NATIVE_CAPABILITY_DOMAINS.includes(domain)) || new Set(data.domains).size !== data.domains.length) return invalid();
-  if(Object.hasOwn(data,'commonProfile')&&(data.commonProfile!=='social-v1'||data.fixture!=='published'||!data.domains.includes('common')||!data.domains.includes('identity')||!data.domains.some(d=>d==='relay'||d==='outbox')))return invalid();
+  if(Object.prototype.hasOwnProperty.call(data,'commonProfile')&&(data.commonProfile!=='social-v1'||data.fixture!=='published'||!data.domains.includes('common')||!data.domains.includes('identity')||!data.domains.some(d=>d==='relay'||d==='outbox')))return invalid();
   return Object.freeze({ sessionId: identifier(data.sessionId), generation: identifier(data.generation),
     epoch: revision(data.epoch), user: publicKey(data.user), publisher: publicKey(data.publisher),
     appId: text(data.appId, 1024), version: publicKey(data.version), instanceId: identifier(data.instanceId),
