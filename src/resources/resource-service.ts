@@ -1,3 +1,4 @@
+import { createResourceScheduler } from './resource-scheduler.ts';
 import { mapResourceItems } from './bounded-map.ts';
 import { decode } from 'nostr-tools/nip19';
 import type { NativeRegistration } from '../runtime/capability-protocol.ts';
@@ -23,13 +24,20 @@ type CacheEntry = { value: ResourceBytes; used: number };
 type Active = (signal?: AbortSignal, authority?: ResourceAuthority) => void;
 async function executeResource(request: ResourceRequest, authority: ResourceAuthority, active: Active,
   pending: Map<string, AbortController>, seen: Set<string>, info: () => ReturnType<typeof resourceInfo>,
-  bytes: (target: ResourceTarget, signal: AbortSignal, authority: ResourceAuthority) => Promise<ResourceBytes>)
+  now: () => number, bytes: (target: ResourceTarget, signal: AbortSignal, authority: ResourceAuthority) => Promise<ResourceBytes>)
   : Promise<Readonly<Record<string, unknown>> | null> {
 active(undefined, authority);
 if (request.type === 'resource.cancel') { pending.get(request.id)?.abort(); return null; }
 if (seen.has(request.id) || seen.size >= 1024) throw new ResourceError('invalid-request');
 seen.add(request.id);
 if (request.type === 'resource.info') return { type: 'resource.info.result', id: request.id, info: info() };
+const start = now(), deadline = start + RESOURCE_LIMITS.requestMs;
+const original = authority;
+authority = {nativeToken: original.nativeToken, assertActive() {
+  original.assertActive();
+  const time = now();
+  if (!Number.isFinite(time) || time < start || time >= deadline) throw new ResourceError('timeout');
+}};
 const controller = new AbortController(); pending.set(request.id, controller);
 const timer = setTimeout(() => controller.abort(), RESOURCE_LIMITS.requestMs);
 const watcher = setInterval(() => { try { active(undefined, authority); } catch { controller.abort(); } }, 25);
@@ -112,7 +120,8 @@ function bindResourceSession(resolvers: ResourceResolvers, process: ResourceProc
       const cache = new Map<string, CacheEntry>();
       const pending = new Map<string, AbortController>();
       const seen = new Set<string>();
-      let disposed = false, fetching = 0, cacheBytes = 0, deliveredBytes = 0;
+      const admission = process.scheduler.bind();
+      let disposed = false, cacheBytes = 0, deliveredBytes = 0;
       let windowStart = now(), requests = 0;
       const active = (signal?: AbortSignal, authority?: ResourceAuthority): void => {
         if (disposed || signal?.aborted) throw new ResourceError('timeout');
@@ -128,7 +137,7 @@ function bindResourceSession(resolvers: ResourceResolvers, process: ResourceProc
       };
       const lifetime = { destroy() {
         if (disposed) return;
-        disposed = true; for (const value of pending.values()) value.abort(); pending.clear();
+        disposed = true; admission.close(); for (const value of pending.values()) value.abort(); pending.clear();
         process.cacheBytes -= cacheBytes; cacheBytes = 0; cache.clear(); seen.clear(); sessions.delete(lifetime);
       }, evict, oldest: () => cache.values().next().value?.used ?? Infinity };
       sessions.add(lifetime);
@@ -154,15 +163,23 @@ function bindResourceSession(resolvers: ResourceResolvers, process: ResourceProc
         const key = target.scheme === 'blossom' ? 'blossom:sha256:' + target.hash : request.url;
         const hit = cache.get(key);
         if (hit) { cache.delete(key); hit.used = ++process.revision; cache.set(key, hit); return charge(hit.value); }
-        if (fetching >= RESOURCE_LIMITS.sessionConcurrent || process.fetching >= RESOURCE_LIMITS.processConcurrent) throw new ResourceError('quota-exceeded');
-        fetching++; process.fetching++;
+        const release = await admission.acquire(signal, () => active(signal, authority));
+        try {
+          active(signal, authority);
+          if (target.scheme === 'blossom') {
+            const current = resolvers.servers();
+            if (current.length !== configured.length || configured.some((server, index) => server !== current[index])) {
+              throw new ResourceError('blocked-by-policy');
+            }
+          }
+        } catch (error) { release(); throw error; }
         const scoped = new AbortController();
         const cancelURL = () => scoped.abort();
         signal.addEventListener('abort', cancelURL, { once: true });
         if (signal.aborted) cancelURL();
         const timeout = setTimeout(cancelURL, RESOURCE_LIMITS.urlMs);
         const work = resolve(resolvers, active, target, {configured, hints: request.servers}, scoped.signal, authority);
-        const settled = work.finally(() => { fetching--; process.fetching--; });
+        const settled = work.finally(release);
         // Timeout drops delivery; an uncooperative resolver retains its reservation until it really settles.
         let abort!: () => void;
         const cancelled = new Promise<never>((_, reject) => { abort = () => reject(new ResourceError('timeout')); });
@@ -181,11 +198,11 @@ function bindResourceSession(resolvers: ResourceResolvers, process: ResourceProc
         } finally { clearTimeout(timeout); signal.removeEventListener('abort', cancelURL); scoped.signal.removeEventListener('abort', abort); }
       }
       return Object.freeze({ registration: captured, revoke: lifetime.destroy,
-        execute: (request: ResourceRequest, authority: ResourceAuthority) => executeResource(request, authority, active, pending, seen, () => resourceInfo(resolvers.servers().length > 0, Boolean(resolvers.query)), bytes) });
+        execute: (request: ResourceRequest, authority: ResourceAuthority) => executeResource(request, authority, active, pending, seen, () => resourceInfo(resolvers.servers().length > 0, Boolean(resolvers.query)), now, bytes) });
 
 }
 type ResourceProcess = { sessions: Set<{ destroy(): void; evict(): number; oldest(): number }>; now: () => number;
-  fetching: number; cacheBytes: number; revision: number };
+  scheduler: ReturnType<typeof createResourceScheduler>; cacheBytes: number; revision: number };
 function evictProcess(process: ResourceProcess): void {
   while (process.cacheBytes > RESOURCE_LIMITS.processCacheBytes) {
     const oldest = [...process.sessions].sort((a, b) => a.oldest() - b.oldest())[0];
@@ -194,7 +211,7 @@ function evictProcess(process: ResourceProcess): void {
   }
 }
 export function createResourceService(resolvers: ResourceResolvers) {
-  const process: ResourceProcess = { sessions: new Set(), now: resolvers.now ?? (() => performance.now()), fetching: 0, cacheBytes: 0, revision: 0 };
+  const process: ResourceProcess = { sessions: new Set(), now: resolvers.now ?? (() => performance.now()), scheduler: createResourceScheduler(), cacheBytes: 0, revision: 0 };
   return Object.freeze({
     bind: (registration: NativeRegistration, assertOwner: () => void) => bindResourceSession(resolvers, process, registration, assertOwner),
     revokeAll(): void { for (const session of process.sessions) session.destroy(); },

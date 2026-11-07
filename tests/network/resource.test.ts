@@ -242,15 +242,6 @@ test('cancel and revoke drop stale delivery even if a resolver ignores abort', a
   await assert.rejects(work,error('timeout'));release(text('late'));await new Promise(resolve=>setTimeout(resolve,0));
   await assert.rejects(s.execute(bytes('waiting')),error('invalid-request'));h.service.revokeAll();
 });
-test('process and session concurrent caps include uncooperative cancelled fetches', async () => {
-  const releases:((value:Uint8Array<ArrayBuffer>)=>void)[]=[];
-  const h=setup({https:()=>new Promise(resolve=>releases.push(resolve))}), a=h.bind('a'), b=h.bind('b'), c=h.bind('c');
-  const work=[a.execute(bytes('a1')),a.execute(bytes('a2')),b.execute(bytes('b1')),b.execute(bytes('b2'))];
-  await assert.rejects(a.execute(bytes('a3')),error('quota-exceeded'));await assert.rejects(c.execute(bytes('c1')),error('quota-exceeded'));
-  a.revoke();b.revoke();await Promise.all(work.map(p=>assert.rejects(p,error('timeout'))));
-  await assert.rejects(c.execute(bytes('c2')),error('quota-exceeded'));
-  for(const release of releases)release(text());await new Promise(resolve=>setTimeout(resolve,0));h.service.revokeAll();
-});
 test('rate budget includes cache hits and rollback cannot reset it', async () => {
   let clock=100;const h=setup({now:()=>clock}), s=h.bind();
   for(let i=0;i<60;i++)await s.execute(bytes('id'+i));

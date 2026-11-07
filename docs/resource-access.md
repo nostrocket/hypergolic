@@ -38,6 +38,7 @@ Resource response headers never reach guests. Repeated informational headers, su
 | URLs per bulk call / explicit hints per resource / URI `xs` hints per resource | 8 / 16 / 16 |
 | URL / data-URL bytes | 8 KiB / 64 KiB |
 | Concurrent retrievals per realm / process | 2 / 4 |
+| Waiting retrieval targets per realm / process | 6 / 16 |
 | URL attempts per realm per minute, including cache hits | 60 |
 | Memory cache per realm / process | 30 MiB / 50 MiB |
 | Cached entries per realm | 64, exact URL or verified Blossom hash, LRU eviction |
@@ -47,7 +48,7 @@ Resource response headers never reach guests. Repeated informational headers, su
 | Private staged handles per realm | 8 |
 | PNG, GIF, JPEG, WebP header dimensions | nonzero, at most 4096 per axis |
 
-These are bounded implementation candidates tested for this profile, not a user-approved universal prohibition on larger resources. Streaming and large-file delivery remain unresolved separate work. Cancelled resolvers that ignore abort retain their concurrency reservation until they actually settle.
+These are bounded implementation candidates tested for this profile, not a user-approved universal prohibition on larger resources. Streaming and large-file delivery remain unresolved separate work. Uncached targets wait in a bounded queue when active retrieval slots are occupied. The runtime still accepts at most four pending Resource calls per realm; each bulk call has two workers. Six waiting targets therefore accommodate that accepted fan-out behind the two active slots. The process queue holds at most sixteen targets. Overflow returns `quota-exceeded`; no native work is started for overflow or cancelled waiting targets. Each realm keeps FIFO order, and eligible realms rotate after each admission. The original 20-second root deadline includes waiting; the 15-second URL deadline starts at admission. Exact request authority, cancellation and the original deadline are checked again before retrieval. A changed Blossom settings snapshot rejects queued Blossom work before fetching. Cancelled resolvers that ignore abort retain their active concurrency reservation until they actually settle; waiting cancellation cannot free an active resolver's slot.
 
 Native retrieval uses small metadata and app-only chunks. A separate host transfer pool binds opaque one-use cursors to the captured realm. The adapter reconstructs and checks the complete bytes/MIME before giving the SDK a Blob. No public resource message can access the private `resource.__chunk` transport. The ordinary 2 MiB JSON message ceiling remains intact.
 
