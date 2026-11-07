@@ -641,6 +641,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
         (request["target"] as? String).map { (1...5000).contains($0.utf8.count) } == true
     case "common.follows": return configuration.domains.contains("common") && request.count == 2
     case "relay.query": return configuration.domains.contains("relay")
+    case "outbox.query", "outbox.getEvent", "outbox.resolveRelays": return configuration.domains.contains("outbox")
     case "storage.get", "storage.keys", "storage.set", "storage.remove": return configuration.domains.contains("storage")
     default: return false
     }

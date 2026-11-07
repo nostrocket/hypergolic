@@ -78,3 +78,57 @@ test('valid startup requests cross the bridge once with native deferral while pu
   expect(observed.calls.every(call => call.deferred)).toBe(true);
   expect(observed.calls.map(call => call.sequence)).toEqual([1,2,3,4,5,6,7,8]);
 });
+
+test('Outbox-only startup queues all three reads beyond four held calls without deferring publication', async ({page}) => {
+  const body = Buffer.from(`<!doctype html><html><head><title>Outbox startup</title></head><body><output>starting</output><script>
+    const api=window.napplet;
+    const reads=Promise.all([
+      ...Array.from({length:4},(_,i)=>api.storage.getItem('held-'+i)),
+      api.outbox.query({kinds:[31237],limit:48},{relays:['wss://relay.wavefunc.live'],timeoutMs:8000,limit:200}),
+      api.outbox.getEvent('a'.repeat(64),{author:'b'.repeat(64)}),
+      api.outbox.resolveRelays({pubkey:'b'.repeat(64),direction:'read'})
+    ]);
+    const publish=api.outbox.publish({kind:1,created_at:1700000000,tags:[],content:'never sent'})
+      .then(value=>value.error?'denied':'sent',()=> 'denied');
+    Promise.all([reads,publish]).then(([rows,publish])=>document.querySelector('output').textContent=
+      JSON.stringify({storage:rows.slice(0,4),query:rows[4].events,queryError:rows[4].error??null,event:rows[5].error,plan:rows[6].source,publish}),
+      error=>document.querySelector('output').textContent='failed: '+error.message);
+  </script></body></html>`);
+  const generation=randomUUID(),htmlHash=digest(body),version=digest(htmlHash+' /index.html\n');
+  await page.addInitScript(({generation,htmlHash,version,body,byteLength})=>{
+    if(window!==window.top)return;
+    const listeners=new Set<(value:{data:string})=>void>(),queue:Array<()=>void>=[];
+    const calls:Array<{type:string;deferred:boolean;sequence:number}>=[];
+    let active=0,peak=0;
+    const emit=(value:unknown)=>{for(const listener of listeners)listener({data:JSON.stringify(value)});};
+    const pump=()=>{while(active<4&&queue.length)queue.shift()!();};
+    Object.defineProperty(window,'__outboxStartup',{value:()=>({calls,peak})});
+    Object.defineProperty(window,'HypergolicHost',{value:{
+      addEventListener(_type:string,listener:(value:{data:string})=>void){listeners.add(listener);},
+      removeEventListener(_type:string,listener:(value:{data:string})=>void){listeners.delete(listener);},
+      postMessage(raw:string){
+        const req=JSON.parse(raw);
+        if(req.type==='artifact.read')emit({type:'artifact.chunk',sessionId:generation,sequence:req.sequence,base64:body,
+          byteLength,totalBytes:byteLength,done:true,publisher:'1'.repeat(64),eventId:'2'.repeat(64),appId:'outbox-startup',
+          htmlHash,version,domains:['outbox','storage']});
+        if(req.type!=='capability')return;
+        const wire=JSON.parse(req.message);calls.push({type:wire.type,deferred:req.deferred===true,sequence:req.sequence});
+        if(req.deferred!==true)throw Error('Publication/control is not admitted by the safe read queue');
+        queue.push(()=>{peak=Math.max(peak,++active);setTimeout(()=>{
+          const reply={type:wire.type+'.result',id:wire.id};
+          const result=wire.type==='storage.get'?{...reply,value:null}:wire.type==='outbox.query'?{...reply,events:[]}:
+            wire.type==='outbox.getEvent'?{...reply,error:'not found'}:
+              {...reply,plan:{relays:['wss://relay.example.com/'],source:'cache'}};
+          active--;emit({type:'capability.result',sessionId:generation,sequence:req.sequence,response:JSON.stringify(result)});pump();
+        },75);});pump();
+      },
+    }});
+  },{generation,htmlHash,version,body:body.toString('base64'),byteLength:body.length});
+  await page.goto('/assets/runtime/index.html?sessionId='+generation+'&source=published');
+  await expect(page.frameLocator('#napplet').locator('output')).toHaveText('{"storage":[null,null,null,null],"query":[],"queryError":null,"event":"not found","plan":"cache","publish":"denied"}');
+  const observed=await page.evaluate(()=>(window as unknown as {__outboxStartup():{calls:Array<{type:string;deferred:boolean;sequence:number}>;peak:number}}).__outboxStartup());
+  expect(observed.peak).toBe(4);
+  expect(observed.calls.map(call=>call.type)).toEqual(['storage.get','storage.get','storage.get','storage.get','outbox.query','outbox.getEvent','outbox.resolveRelays']);
+  expect(observed.calls.every(call=>call.deferred)).toBe(true);
+  expect(observed.calls.map(call=>call.sequence)).toEqual([1,2,3,4,5,6,7]);
+});

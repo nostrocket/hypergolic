@@ -18,6 +18,7 @@ export const DEFERRED_IDENTITY_OPERATIONS: readonly string[] = Object.freeze([
 export function canDeferCapability(type: string): boolean {
   return DEFERRED_IDENTITY_OPERATIONS.includes(type) || type === 'relay.query' ||
     type === 'common.getProfile' || type === 'common.follows' ||
+    type === 'outbox.query' || type === 'outbox.getEvent' || type === 'outbox.resolveRelays' ||
     STORAGE_OPERATIONS.some(operation => operation === type);
 }
 export type IdentityOperation = typeof IDENTITY_OPERATIONS[number];

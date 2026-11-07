@@ -24,7 +24,8 @@ the selected shell account.
 The supported domains are identity, storage, theme, relay, resource, upload, link,
 intent, inc, notify, config and outbox. A domain's presence does not grant every
 operation or claim full draft conformance. Dedicated owners retain publication,
-link, routing and upload authorization. Outbox also requires the Relay grant.
+link, routing and upload authorization. Outbox operations require their own grant;
+the Relay grant is neither required nor inferred.
 
 ## Ownership and request lifetime
 
@@ -80,6 +81,32 @@ Relay query and selected Outbox reads use the captured registration and their
 bounded read services. Subscriptions, publication, uploads, resources, links,
 routing and notification/configuration operations retain dedicated owner checks;
 ordinary lease admission cannot substitute for their permissions or review.
+
+### Deferred Outbox reads
+
+The existing bounded ordinary-read admission includes `outbox.query`,
+`outbox.getEvent` and `outbox.resolveRelays`. The native selectors require the
+actual Outbox grant, including when resolving a public write-relay plan; a plan
+does not authorize publication. Original request parsing, immutable registration,
+one-use correlation and revocation checks still apply. Outbox publication,
+subscriptions and close/control messages do not join this deferred-read profile.
+
+The runtime permits at most 12 outstanding deferred requests. Native admission
+retains eight active requests globally and four per source, with at most 16
+waiting globally and eight per source, within a 2 MiB waiting budget. The shared
+broker uses its existing two active plus two waiting read slots. Overflow still
+fails with the existing error; requests are never automatically replayed.
+
+These limits have distinct clocks. The bridge's 27-second timer begins when the
+request is posted. The native 25-second lease begins at ingress and includes
+native waiting; promotion never renews it. The Outbox service timeout (normally
+15 seconds, or the requested value) begins when the service is invoked after
+native and broker admission, and includes its own process-wide admission wait.
+It is not an admission-inclusive whole-call timeout. Waiting or promotion never
+extends the native lease. Expired or revoked queued work cannot start; late
+results cannot pass the original owner checks. Broker revocation releases its
+logical slots; deeper service and native transport owners independently retain
+their actual-work reservations until settlement.
 
 ## Verification
 

@@ -553,6 +553,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
         (request.opt("target") as? String)?.let { it.toByteArray(Charsets.UTF_8).size in 1..5000 } == true
       "common.follows" -> "common" in config.grantedDomains && request.length() == 2
       "relay.query" -> config.allowsRelay
+      "outbox.query", "outbox.getEvent", "outbox.resolveRelays" -> "outbox" in config.grantedDomains
       "storage.get", "storage.keys", "storage.set", "storage.remove" -> "storage" in config.grantedDomains
       else -> false
     }
