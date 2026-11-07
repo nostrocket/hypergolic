@@ -23,7 +23,7 @@ Pod::Spec.new do |s|
   s.swift_version = '6.0'
   s.static_framework = true
   s.dependency 'ExpoModulesCore'
-  s.frameworks = 'WebKit', 'CryptoKit', 'Network', 'Security'
+  s.frameworks = 'WebKit', 'CryptoKit', 'Network', 'Security', 'AVFoundation'
   s.source_files = '**/*.swift'
   s.resource_bundles = { 'HypergolicNappletHostAssets' => ['Resources/runtime/*', 'Resources/notices/*', 'Resources/shell-notices/*'] }
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }

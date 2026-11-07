@@ -10,7 +10,7 @@ type Row = {request:OutboxSubscribeRequest;emit:Emit;token:string;started:boolea
 /** Native epochs stop transport immediately; every return resolves fresh metadata before opening replacement sockets. */
 export function createOutboxSubscriptions(port:NativeRelayStreamPort,reads:OutboxReadService) {
   if(!reads.plan)throw new OutboxQueryError('policy denied');
-  const manager=createRelaySubscriptions(port,()=>[]),sessions=new Map<string,ReturnType<typeof session>>();
+  const manager=createRelaySubscriptions(port,()=>[],{domain:'outbox'}),sessions=new Map<string,ReturnType<typeof session>>();
   let foreground=true,epoch=0,total=0,planning=0;
   const waiting=new Set<()=>void>();
   async function slot(signal:AbortSignal):Promise<()=>void> {
@@ -29,7 +29,7 @@ export function createOutboxSubscriptions(port:NativeRelayStreamPort,reads:Outbo
   }
   function session(owner:RelaySubscriptionOwner) {
     const registration=decodeNativeRegistration(owner.registration);
-    if(!registration.domains.includes('outbox')||!registration.domains.includes('relay')||sessions.has(registration.generation)||sessions.size>=SUBSCRIPTION_LIMITS.sessions)throw new OutboxQueryError('policy denied');
+    if(!registration.domains.includes('outbox')||sessions.has(registration.generation)||sessions.size>=SUBSCRIPTION_LIMITS.sessions)throw new OutboxQueryError('policy denied');
     let revoked=false;
     const active=()=>{if(revoked)throw new OutboxQueryError('policy denied');owner.assertActive();};
     active();const transport=manager.session({registration,assertActive:active}),rows=new Map<string,Row>(),used=new Set<string>();

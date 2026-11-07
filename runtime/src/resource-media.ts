@@ -1,14 +1,16 @@
 /** Trusted top-document control; native calls never enter the guest namespace. */
 let mediaActive = true;
+let inputActive = false;
+export const isRuntimeInputActive = (): boolean => inputActive;
 let recipient: Window | null = null;
 const controlType = 'hypergolic.private.media-active';
-const publish = (): void => { recipient?.postMessage({type:controlType,active:mediaActive}, '*'); };
+const publish = (): void => { recipient?.postMessage({type:controlType,active:mediaActive,inputActive}, '*'); };
 Object.defineProperty(window, '__hypergolicMediaActive', {
-  value(active: boolean) { mediaActive = active === true; publish(); }, writable: false, configurable: false,
+  value(active: boolean) { mediaActive = active === true; inputActive = mediaActive; publish(); }, writable: false, configurable: false,
 });
 export function bindResourceMedia(source: Window): Readonly<{refresh: () => void; close: () => void}> {
   recipient = source;
-  return {refresh:publish,close(){mediaActive=false;publish();recipient=null;}};
+  return {refresh:publish,close(){mediaActive=false;inputActive=false;publish();recipient=null;}};
 }
 /** Executes before publisher scripts in the opaque guest. Captures the parent and DOM methods. */
 function guestMediaGate(): void {

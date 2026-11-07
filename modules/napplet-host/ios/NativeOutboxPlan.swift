@@ -72,7 +72,7 @@ final class NativeOutboxPlan: @unchecked Sendable {
     let envelope = try object(snapshot), plan = try object(raw)
     guard let registration = envelope["registration"] as? [String: Any],
       let requestText = envelope["request"] as? String, let identity = registration["user"] as? String,
-      hex(identity, 64), let domains = registration["domains"] as? [String], domains.contains("relay"), domains.contains("outbox")
+      hex(identity, 64), let domains = registration["domains"] as? [String], domains.contains("outbox")
     else { throw Failure.invalid }
     let request = try object(requestText)
     try fields(plan, ["requestId", "event", "destinations", "requiredInboxes", "ownSource", "ancillary"])

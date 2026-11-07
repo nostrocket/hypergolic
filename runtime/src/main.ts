@@ -1,4 +1,6 @@
 import './legacy-webview';
+import { injectMediaFacade } from './media-guest';
+import { mediaRequestId, projectMediaRequest } from './media-wire';
 import { injectAndroidGuestHelpers } from './android-guest-helpers';
 import { createDiscoveryOpenReceiver, injectDiscoveryOpen } from './discovery-open';
 import { CATALOG_PAGE } from '../../src/napplets/catalog-page-contract';
@@ -19,7 +21,8 @@ import { linkRequestId } from '../../src/links/link-contract';
 import { createUploadAdapter } from './upload-adapter';
 import { parseUploadRequest, UploadError, UPLOAD_LIMITS } from '../../src/uploads/upload-contract';
 import { text } from '../../src/storage/codec';
-import { bindResourceMedia, injectResourceMediaGate } from './resource-media';
+import { bindResourceMedia, injectResourceMediaGate, isRuntimeInputActive } from './resource-media';
+import { createKeysSession, isKeysMessage } from './keys-adapter';
 import { createResourceAdapter } from './resource-adapter';
 import { parseRelaySubscribe, parseRelayClose } from '../../src/network/relay-subscription-contract';
 import {
@@ -98,7 +101,6 @@ function makeHooks(native: ReturnType<typeof createNativeClient>, captureRecipie
   artifact: RuntimeMetadata, theme: ThemeService, registerRouting: (context: ServiceRuntimeContext | null) => void): ShellAdapter {
   const unavailable = (): never => { throw new Error('Capability unavailable'); };
   const supported = new Set(artifact.domains);
-  if (!supported.has('relay')) supported.delete('outbox');
   const routing = createRoutingAdapter(native, captureRecipient);
   const notify = createNotifyAdapter(native, captureRecipient);
   const config = createConfigAdapter(native, captureRecipient);
@@ -257,7 +259,8 @@ function rejectEnvelope(event: MessageEvent, source: Window, domains: readonly s
       }
       // A denied subscribe acquires no Kehto/native authority. Reply only to the captured
       // registered frame with an independently validated caller correlation identifier.
-      if (domains.includes('relay') && (event.data?.type === 'relay.subscribe' || domains.includes('outbox') && event.data?.type === 'outbox.subscribe')) {
+      if ((event.data?.type === 'relay.subscribe' && domains.includes('relay')) ||
+          (event.data?.type === 'outbox.subscribe' && domains.includes('outbox'))) {
         try {
           const outbox=event.data.type==='outbox.subscribe';
           const denied = outbox?parseOutboxClose({type:'outbox.close',id:event.data.id,subId:event.data.subId}):parseRelayClose({type:'relay.close',id:event.data.id,subId:event.data.subId});
@@ -281,22 +284,70 @@ function createGuestEndpoint(artifact: RuntimeMetadata, hooks: ShellAdapter) {
   return { bridge, frame, source, media, environment, policy };
 }
 
+type GuestMessageRoutes = Readonly<{
+  routing: ReturnType<typeof createGuestRouting>;
+  discoveryOpen: ReturnType<typeof createDiscoveryOpenReceiver> | null;
+  catalogPage: ReturnType<typeof createCatalogPageReceiver> | null;
+  keys: ReturnType<typeof createKeysSession> | null;
+  sendMedia: ReturnType<typeof createNativeClient>['sendMedia'] | null;
+  live(): boolean;
+  dispatch(event: MessageEvent): void;
+}>;
+function guestMessageReceiver(frame: HTMLIFrameElement, source: Window, routes: GuestMessageRoutes) {
+  let operations = 0;
+  let windowStart = performance.now();
+  return (event: MessageEvent): void => {
+    if (stopped || !event.isTrusted || event.source !== source || frame.contentWindow !== source) return;
+    if (performance.now() - windowStart > 1000) { operations = 0; windowStart = performance.now(); }
+    if (++operations > 64) {
+      for (const port of event.ports) port.close();
+      return;
+    }
+    if (routes.routing.connect(event)) return;
+    if (event.data?.type === DISCOVERY_OPEN) {
+      routes.discoveryOpen?.(event.data);
+      return;
+    }
+    if (event.data?.type === CATALOG_PAGE) {
+      routes.catalogPage?.(event.data);
+      return;
+    }
+    if (isKeysMessage(event.data)) {
+      if (routes.live()) routes.keys?.receive(event.data);
+      return;
+    }
+    if (routes.sendMedia && routes.live() && typeof event.data?.type === 'string' && event.data.type.startsWith('media.')) {
+      const request = projectMediaRequest(event.data);
+      if (request && routes.sendMedia(request)) return;
+      if (event.data.type === 'media.session.create') {
+        const id = mediaRequestId(event.data.id);
+        if (id) source.postMessage({type:'media.session.create.result', id, error:'Unsupported media request.'}, '*');
+      }
+      return;
+    }
+    routes.dispatch(event);
+  };
+}
+
 function mount(artifact: RuntimeMetadata) {
   const live = () => !stopped && ready && frame.contentWindow === source && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) !== undefined;
   const routing = createGuestRouting(artifact.domains, sessionId, live,
     () => { void native.routing({type: 'routing.__register'}).catch(() => {}); }, () => fail('runtime-bootstrap'));
   const native = createNativeClient(hostWindow.HypergolicHost!, sessionId,
-    {requestTimeoutsMs: approvalTimeouts(artifact), onRouting: routing.deliver});
+    {requestTimeoutsMs: approvalTimeouts(artifact), onRouting: routing.deliver, onMedia: message => {
+      if (hasMedia && live()) source.postMessage(message, '*');
+    }});
   const shellTheme = createShellTheme(theme => bridge.publishTheme(theme));
   const hooks = makeHooks(native, () => {
     const entry = bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId);
     return () => !stopped && entry !== undefined && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) === entry;
   }, artifact, shellTheme.theme, routing.setContext);
   const { bridge, frame, source, media, environment, policy } = createGuestEndpoint(artifact, hooks);
+  const hasMedia = artifact.published && artifact.domains.includes('media');
   let ready = false;
+  const keys = artifact.domains.includes('keys') ? createKeysSession(source, () =>
+    live() && isRuntimeInputActive() && document.hasFocus() && document.activeElement === frame) : null;
   let frameLoaded = false;
-  let operations = 0;
-  let windowStart = performance.now();
   const closeCheck = installCloseCheck(source, live,
     (id, state) => hostWindow.HypergolicHost?.postMessage(JSON.stringify({type: 'close-check.result', sessionId, id, state})));
   const discoveryToken = artifact.discoveryOpen ? crypto.randomUUID() : null;
@@ -305,36 +356,25 @@ function mount(artifact: RuntimeMetadata) {
     ? createCatalogPageReceiver(source, native, discoveryToken, live) : null;
   const deadline = window.setTimeout(() => fail('runtime-timeout'), 10_000);
 
-  const receive = (event: MessageEvent): void => {
-    if (stopped || !event.isTrusted || event.source !== source || frame.contentWindow !== source) return;
-    if (performance.now() - windowStart > 1000) { operations = 0; windowStart = performance.now(); }
-    if (++operations > 64) {
-      for (const port of event.ports) port.close();
-      return;
-    }
-    if (routing.connect(event)) return;
-    if (event.data?.type === DISCOVERY_OPEN) {
-      discoveryOpen?.(event.data);
-      return;
-    }
-    if (event.data?.type === CATALOG_PAGE) {
-      catalogPage?.(event.data);
-      return;
-    }
-    if (!validEnvelope(event.data)) {
-      if (ready && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId)) rejectEnvelope(event, source, artifact.domains);
-      return;
-    }
-    // Kehto performs session gating, frozen capability enforcement and theme dispatch.
-    bridge.handleMessage(event);
-    if (!ready && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId)) {
-      ready = true;
-      window.clearTimeout(deadline);
-      diagnostic({ type: 'ready', sessionId });
-      if (artifact.domains.includes('notify')) void native.notify({type: 'notify.__register'}).catch(() => {});
-      routing.ready();
-    }
-  };
+  const receive = guestMessageReceiver(frame, source, {
+    routing, discoveryOpen, catalogPage, keys, sendMedia: hasMedia ? native.sendMedia : null, live,
+    dispatch(event) {
+      if (!validEnvelope(event.data)) {
+        if (ready && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId)) rejectEnvelope(event, source, artifact.domains);
+        return;
+      }
+      // Kehto performs session gating, frozen capability enforcement and theme dispatch.
+      bridge.handleMessage(event);
+      if (!ready && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId)) {
+        ready = true;
+        window.clearTimeout(deadline);
+        diagnostic({ type: 'ready', sessionId });
+        keys?.refresh();
+        if (artifact.domains.includes('notify')) void native.notify({type: 'notify.__register'}).catch(() => {});
+        routing.ready();
+      }
+    },
+  });
   const loaded = (): void => {
     // Registered WindowProxy references can survive self-navigation. End the
     // generation on any subsequent document load; never bless new source bytes.
@@ -347,6 +387,7 @@ function mount(artifact: RuntimeMetadata) {
     shellTheme.close();
     closeCheck();
     routing.close();
+    keys?.close();
     media.close();
     window.clearTimeout(deadline);
     window.removeEventListener('message', receive);
@@ -370,10 +411,11 @@ function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
     ? publishedCspParts(rawHtml, policy) : ['', injectCsp(rawHtml, policy)] as const;
   const html = discoveryToken ? injectDiscoveryOpen(withCsp, discoveryToken, artifact.domains.includes('relay')) : withCsp;
   const guest = injectAndroidGuestHelpers(injectResourceMediaGate(html));
-  frame.srcdoc = prefix + injectNappletNamespacePrelude(injectSupportReport(guest), {
+  const injected = injectNappletNamespacePrelude(injectSupportReport(guest), {
     ...environment.capabilities,
     requestTimeoutsMs: approvalTimeouts(artifact),
   });
+  frame.srcdoc = prefix + (artifact.published && artifact.domains.includes('media') ? injectMediaFacade(injected) : injected);
 }
 
 async function start(): Promise<void> {

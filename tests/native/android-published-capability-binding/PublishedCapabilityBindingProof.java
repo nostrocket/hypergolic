@@ -28,6 +28,9 @@ public final class PublishedCapabilityBindingProof {
     check(PublishedCapabilityBinding.validDomains(Arrays.asList("identity", "storage", "theme", "relay")));
     check(PublishedCapabilityBinding.validDomains(Collections.singletonList("theme")));
     check(PublishedCapabilityBinding.validDomains(Arrays.asList("outbox", "relay")));
+    check(PublishedCapabilityBinding.validDomains(Collections.singletonList("keys")));
+    check(!PublishedCapabilityBinding.validDomains(Arrays.asList("keys", "keys")));
+    check(!PublishedCapabilityBinding.validDomains(Arrays.asList("keys", "gamepad")));
     check(PublishedCapabilityBinding.validDomains(Collections.singletonList("outbox")));
     check(!PublishedCapabilityBinding.validDomains(Arrays.asList("outbox", "outbox", "relay")));
     check(!PublishedCapabilityBinding.validDomains(Arrays.asList("outbox", "relay", "sign")));

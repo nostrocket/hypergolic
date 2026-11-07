@@ -1,6 +1,5 @@
 package org.nostrocket.hypergolic.host;
 
-import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -24,6 +23,8 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import org.nostrocket.hypergolic.host.PublishedHttpsResponseReader.DeadlineInputStream;
+import org.nostrocket.hypergolic.host.PublishedHttpsResponseReader.TransferIdle;
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
@@ -106,13 +107,33 @@ public final class PublishedHttpsTransport {
   private static byte[] getBoundedWithTransport(String rawUrl, AddressPolicy policy, Cancellation cancellation,
       HostResolver resolver, ThreadPoolExecutor executor, SSLSocketFactory socketFactory,
       HostnameVerifier hostnameVerifier, ReadProfile profile, int timeoutMs) throws IOException {
+    return fetchWithTransport(rawUrl, policy, cancellation, resolver, executor, socketFactory, hostnameVerifier,
+        profile, Deadline.afterMillis(timeoutMs), READ_TIMEOUT_MS, null,
+        (input, abort) -> PublishedHttpsResponseReader.readGet(input, cancellation, profile));
+  }
+
+  static <T> T getMedia(String rawUrl, AddressPolicy policy, Cancellation cancellation, Deadline deadline,
+      int idleMs, ResponseReader<T> reader) throws IOException {
+    TransferIdle idle = new TransferIdle(idleMs);
+    Cancellation active = () -> idle.expired() || (cancellation != null && cancellation.isCancelled());
+    return fetchWithTransport(rawUrl, policy, active, InetAddress::getAllByName, DNS,
+        defaultSocketFactory(), HttpsURLConnection.getDefaultHostnameVerifier(), ReadProfile.RESOURCE,
+        deadline, idleMs, idle, reader);
+  }
+  interface ResponseReader<T> {
+    T read(InputStream input, AbortMonitor abort) throws IOException;
+  }
+
+  private static <T> T fetchWithTransport(String rawUrl, AddressPolicy policy, Cancellation cancellation,
+      HostResolver resolver, ThreadPoolExecutor executor, SSLSocketFactory socketFactory,
+      HostnameVerifier hostnameVerifier, ReadProfile wireProfile, Deadline deadline, int idleMs,
+      TransferIdle idle, ResponseReader<T> reader) throws IOException {
     if (cancellationRequested(cancellation)) throw new IOException("Request cancelled");
-    Deadline deadline = Deadline.afterMillis(timeoutMs);
     AbortMonitor abort = new AbortMonitor(cancellation, deadline);
     String current = rawUrl;
     java.util.Set<String> visited = new java.util.HashSet<>();
     try {
-      for (int hop = 0; hop <= profile.redirects; hop++) {
+      for (int hop = 0; hop <= wireProfile.redirects; hop++) {
         abort.check();
         URL url = validateRequest(current, policy);
         if (!visited.add(url.toExternalForm())) throw new PublishedHttpsResponseReader.ResourceFailure("blocked-by-policy", "Resource redirect loop");
@@ -122,13 +143,15 @@ public final class PublishedHttpsTransport {
         SSLSocket socket = openPinnedTls(url.getHost(), url.getPort() < 0 ? 443 : url.getPort(), policy,
             abort, deadline, resolver, executor, socketFactory, hostnameVerifier);
         try (SSLSocket closeable = socket) {
-          closeable.setSoTimeout(deadline.timeoutMs(READ_TIMEOUT_MS));
-          sendRequest(closeable.getOutputStream(), uri, url, profile);
-          byte[] body = PublishedHttpsResponseReader.readGet(new DeadlineInputStream(closeable.getInputStream(), closeable, deadline), cancellation, profile);
+          closeable.setSoTimeout(deadline.timeoutMs(idleMs));
+          OutputStream output = closeable.getOutputStream();
           abort.check();
-          return body;
+          sendRequest(output, uri, url, wireProfile);
+          T result = reader.read(new DeadlineInputStream(closeable.getInputStream(), closeable, deadline, idleMs, idle), abort);
+          abort.check();
+          return result;
         } catch (PublishedHttpsResponseReader.ResourceRedirect redirect) {
-          if (hop == profile.redirects) throw new PublishedHttpsResponseReader.ResourceFailure("blocked-by-policy", "Resource redirect limit");
+          if (hop == wireProfile.redirects) throw new PublishedHttpsResponseReader.ResourceFailure("blocked-by-policy", "Resource redirect limit");
           try { current = uri.resolve(redirect.location).toString(); validateRequest(current, policy); }
           catch (IOException | IllegalArgumentException invalid) {
             throw new PublishedHttpsResponseReader.ResourceFailure("blocked-by-policy", "Invalid resource redirect target");
@@ -320,22 +343,6 @@ public final class PublishedHttpsTransport {
       if (remaining <= 0) throw new SocketTimeoutException("Published napplet HTTPS request timed out");
       long rounded = (remaining + 999_999L) / 1_000_000L;
       return (int) Math.max(1L, Math.min((long) maximumMs, rounded));
-    }
-  }
-
-  static final class DeadlineInputStream extends FilterInputStream {
-    private final Socket socket;
-    private final Deadline deadline;
-    DeadlineInputStream(InputStream input, Socket socket, Deadline deadline) {
-      super(input);
-      this.socket = socket;
-      this.deadline = deadline;
-    }
-    private void updateTimeout() throws IOException { socket.setSoTimeout(deadline.timeoutMs(READ_TIMEOUT_MS)); }
-    @Override public int read() throws IOException { updateTimeout(); return super.read(); }
-    @Override public int read(byte[] bytes, int offset, int length) throws IOException {
-      updateTimeout();
-      return super.read(bytes, offset, length);
     }
   }
 

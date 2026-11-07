@@ -32,11 +32,11 @@ export function createNativeApprovalPort(module: ApprovalModule): NativeApproval
       if (raw === null) return null;
       try {
         const { registration, request } = decodeNativeRequest(raw);
-        if (!registration.domains.includes('relay') || !request || typeof request !== 'object' || Array.isArray(request)) throw new Error('APPROVAL_DENIED');
+        if (!request || typeof request !== 'object' || Array.isArray(request)) throw new Error('APPROVAL_DENIED');
         const fields = Object.keys(request);
         const value = request as Record<string, unknown>;
         const outbox=value.type==='outbox.publish';
-        if(outbox&&!registration.domains.includes('outbox'))throw new Error('APPROVAL_DENIED');
+        if (!registration.domains.includes(outbox ? 'outbox' : 'relay')) throw new Error('APPROVAL_DENIED');
         if(!outbox&&(fields.length!==3||!fields.includes('event')||value.type!=='relay.publish'))throw new Error('APPROVAL_DENIED');
         const outboxRequest=outbox?parseOutboxPublish(value,registration.user):undefined;
         const requestId = text(value.id, 128);

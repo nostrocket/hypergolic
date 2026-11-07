@@ -21,7 +21,7 @@ type Subscription={request:RelaySubscribeRequest;emit:Emit;connections:Connectio
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 type SessionProcess={foreground:boolean;total:number;port:NativeRelayStreamPort;newId:()=>string;
-  destinations:()=>readonly string[];now:()=>number;retryMs:readonly number[];
+  destinations:()=>readonly string[];domain:'relay'|'outbox';now:()=>number;retryMs:readonly number[];
   sessions:Map<string,{pause:()=>void;resume:()=>void;revoke:()=>void}>};
 type SessionCallbacks={active:()=>void;emit:(subscription:Subscription,message:RelaySubscriptionMessage)=>boolean;eose:(subscription:Subscription)=>void};
 function receiveFrame(process:SessionProcess,callbacks:SessionCallbacks,subscription:Subscription,connection:Connection,text:string):void {
@@ -127,13 +127,13 @@ function createSession(owner:RelaySubscriptionOwner,registration:NativeRegistrat
         revoked=true;for(const subscription of Array.from(subscriptions.values()))finish(subscription);callerIds.clear();sessions.delete(registration.generation);
       }
       sessions.set(registration.generation,{pause,resume,revoke});
-      return sessionCommands({registration,process,subscriptions,callerIds,active,connect,deadline,finish,revoke,stopConnection});
+      return sessionCommands({process,subscriptions,callerIds,active,connect,deadline,finish,revoke,stopConnection});
 }
-type CommandScope={registration:NativeRegistration;process:SessionProcess;subscriptions:Map<string,Subscription>;callerIds:Set<string>;
+type CommandScope={process:SessionProcess;subscriptions:Map<string,Subscription>;callerIds:Set<string>;
   active:()=>void;connect:(subscription:Subscription,connection:Connection)=>void;deadline:(subscription:Subscription)=>void;
   finish:(subscription:Subscription,reason?:string)=>void;revoke:()=>void;stopConnection:(connection:Connection)=>void};
 function sessionCommands(scope:CommandScope) {
-  const {registration,process,subscriptions,callerIds,active,connect,deadline,finish,revoke,stopConnection}=scope;
+  const {process,subscriptions,callerIds,active,connect,deadline,finish,revoke,stopConnection}=scope;
   const destinations=process.destinations;
       function connections(relays:readonly string[]):Connection[] {return relays.map(relay=>({id:'',sub:'',relay,stop:null,retry:null,revision:0,attempts:0,state:'opening',windowStart:0,frames:0}));}
       function plannedRelays(input:readonly string[]):readonly string[] {
@@ -143,13 +143,15 @@ function sessionCommands(scope:CommandScope) {
         return selected;
       }
       function subscribe(input:unknown,send:Emit,authorityToken?:string,plan?:Readonly<{relays:readonly string[];limit:number;timeoutMs:number}>) {
-        active();let request=parseRelaySubscribe(input);
+        active();
+        if ((plan ? 'outbox' : 'relay') !== process.domain) throw new RelaySubscriptionError('relay plan denied');
+        let request=parseRelaySubscribe(input);
         const mixed = plan !== undefined || Array.from(subscriptions.values()).some(subscription => subscription.planned);
         const sessionLimit = mixed ? SUBSCRIPTION_LIMITS.session : SUBSCRIPTION_LIMITS.rawSession;
         if(callerIds.has(request.subId)||callerIds.size>=SUBSCRIPTION_LIMITS.callerIds||subscriptions.size>=sessionLimit||process.total>=SUBSCRIPTION_LIMITS.process)throw new RelaySubscriptionError('relay subscription limit or reused ID');
         let selected:readonly string[];
         if(plan) {
-          if(!registration.domains.includes('outbox')||request.relay!==undefined||!Number.isSafeInteger(plan.limit)||plan.limit<0||plan.limit>32||!Number.isSafeInteger(plan.timeoutMs)||plan.timeoutMs<1||plan.timeoutMs>15000)throw new RelaySubscriptionError('relay plan denied');
+          if(request.relay!==undefined||!Number.isSafeInteger(plan.limit)||plan.limit<0||plan.limit>32||!Number.isSafeInteger(plan.timeoutMs)||plan.timeoutMs<1||plan.timeoutMs>15000)throw new RelaySubscriptionError('relay plan denied');
           selected=plannedRelays(plan.relays);
           request=Object.freeze({...request,filters:Object.freeze(request.filters.map(filter=>Object.freeze({...filter,limit:Math.min(filter.limit as number,plan.limit)})))});
         } else {
@@ -180,7 +182,7 @@ function sessionCommands(scope:CommandScope) {
 }
 /** Logical intent survives transport suspension. Generation revocation is terminal. */
 export function createRelaySubscriptions(port:NativeRelayStreamPort,destinations:()=>readonly string[],
-  options:Readonly<{now?:()=>number;retryMs?:readonly number[]}>= {}) {
+  options:Readonly<{domain?:'relay'|'outbox';now?:()=>number;retryMs?:readonly number[]}>= {}) {
   const now=options.now??(()=>performance.now()),retryMs=options.retryMs??SUBSCRIPTION_LIMITS.retryMs;
   if(retryMs.length!==SUBSCRIPTION_LIMITS.retries||retryMs.some(ms=>!Number.isSafeInteger(ms)||ms<1||ms>16000))throw new RelaySubscriptionError();
   let foreground=true,total=0;
@@ -191,7 +193,7 @@ export function createRelaySubscriptions(port:NativeRelayStreamPort,destinations
     if(!uuid.test(id)||usedOperations.has(id)||usedOperations.size>=65536)throw new RelaySubscriptionError();
     usedOperations.add(id);return id;
   };
-  const process:SessionProcess={port,newId,destinations,now,retryMs,sessions,
+  const process:SessionProcess={port,newId,destinations,domain:options.domain??'relay',now,retryMs,sessions,
     get foreground(){return foreground;},set foreground(value){foreground=value;},
     get total(){return total;},set total(value){total=value;}};
   return Object.freeze({
@@ -202,7 +204,7 @@ export function createRelaySubscriptions(port:NativeRelayStreamPort,destinations
     },
     session(owner:RelaySubscriptionOwner) {
       const registration=decodeNativeRegistration(owner.registration);
-      if(!registration.domains.includes('relay')||sessions.has(registration.generation)||sessions.size>=SUBSCRIPTION_LIMITS.sessions)throw new RelaySubscriptionError();
+      if(!registration.domains.includes(process.domain)||sessions.has(registration.generation)||sessions.size>=SUBSCRIPTION_LIMITS.sessions)throw new RelaySubscriptionError();
       owner.assertActive();
       return createSession(owner,registration,process);
     },

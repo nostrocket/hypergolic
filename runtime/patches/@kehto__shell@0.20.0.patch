@@ -23,10 +23,9 @@ index 0ec36f0..a6bdd59 100644
  /**
   * Render the host-owned NIP-5D bootstrap that exposes available NAP domains
 diff --git a/dist/index.js b/dist/index.js
-index 523bcf1..3595c82 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -312,6 +312,7 @@ function adaptHooks(shellHooks, deps) {
+@@ -312,6 +312,7 @@
      onAclCheck: shellHooks.onAclCheck,
      onHashMismatch: shellHooks.onHashMismatch,
      services: shellHooks.services,
@@ -34,7 +33,7 @@ index 523bcf1..3595c82 100644
      getConfigOverrides: shellHooks.getConfigOverrides
    };
  }
-@@ -1032,6 +1033,7 @@ function isServiceDomainLive(hooks, domain) {
+@@ -1032,6 +1033,7 @@
      case "outbox":
        return Boolean(hooks.relayPool);
      case "upload":
@@ -42,7 +41,7 @@ index 523bcf1..3595c82 100644
        return hooks.upload?.getUploader() !== null && hooks.upload?.getUploader() !== void 0;
      case "intent":
        return hooks.intent?.isAvailable() === true;
-@@ -1265,7 +1267,15 @@ function scriptJson(value) {
+@@ -1265,7 +1267,15 @@
  }
  function renderNappletNamespacePrelude(options) {
    const domains = uniqueBareDomains(["shell", ...options.domains]);
@@ -59,7 +58,7 @@ index 523bcf1..3595c82 100644
  }
  function injectNappletNamespacePrelude(html, options) {
    const prelude = renderNappletNamespacePrelude(options);
-@@ -1281,13 +1291,18 @@ function injectNappletNamespacePrelude(html, options) {
+@@ -1281,13 +1291,18 @@
    }
    return `${prelude}${html}`;
  }
@@ -81,7 +80,16 @@ index 523bcf1..3595c82 100644
    }
    function post(message) {
      target.parent.postMessage(message, "*");
-@@ -1326,7 +1341,7 @@ function nappletNamespacePrelude(domains) {
+@@ -1304,7 +1319,7 @@
+     const outbound = { ...message, id: requestId };
+     return new Promise((resolve, reject) => {
+       const off = listen((event) => {
+-        if (!isParentMessage(event)) return;
++        if (!isParentMessage(event) || resultType === "keys.registerAction.result" && !event.isTrusted) return;
+         const incoming = event.data;
+         if (typeof incoming !== "object" || incoming === null) return;
+         const msg = incoming;
+@@ -1326,7 +1341,7 @@
        const timer = setTimeout(() => {
          off();
          reject(new Error(`${message.type} timed out`));
@@ -90,7 +98,67 @@ index 523bcf1..3595c82 100644
        post(outbound);
      });
    }
-@@ -2047,7 +2062,7 @@ function nappletNamespacePrelude(domains) {
+@@ -1813,6 +1828,8 @@
+     "submit"
+   ]);
+   let keysSmartForwardingInstalled = false;
++  let keysInputActive = false;
++  let protectedKeys;
+   function normalizeKeyName(key) {
+     if (typeof key !== "string") return "";
+     return key.length === 1 ? key.toUpperCase() : key;
+@@ -1821,6 +1838,7 @@
+     return `${value.ctrl}|${value.alt}|${value.shift}|${value.meta}|${normalizeKeyName(value.key)}`;
+   }
+   function bindingComboKey(binding) {
++    if (binding === " ") return keyComboKey({ ctrl: false, alt: false, shift: false, meta: false, key: binding });
+     if (typeof binding !== "string" || binding.trim() === "") return null;
+     const parts = binding.split("+");
+     const key = parts.pop()?.trim();
+@@ -1904,8 +1922,9 @@
+     if (keysSmartForwardingInstalled) return;
+     keysSmartForwardingInstalled = true;
+     listen((event) => {
+-      if (!isParentMessage(event)) return;
++      if (!event.isTrusted || !isParentMessage(event)) return;
+       const msg = event.data;
++      if (msg?.type === "hypergolic.private.media-active") keysInputActive = msg.inputActive === true;
+       if (typeof msg === "object" && msg !== null && msg.type === "keys.bindings") {
+         replaceKeyBindings(msg.bindings);
+       }
+@@ -1915,13 +1934,17 @@
+     if (typeof listenerTarget.addEventListener !== "function") return;
+     listenerTarget.addEventListener("keydown", (event) => {
+       const keyEvent = event;
+-      if (keyEvent.isComposing) return;
+-      if (typeof keyEvent.key === "string" && modifierKeys.has(keyEvent.key)) return;
+-      if (isTextEntryTarget(keyEvent.target ?? documentLike?.activeElement)) return;
++      if (!keysInputActive || !keyEvent.isTrusted || !documentLike?.hasFocus() || documentLike.hidden ||
++          keyEvent.isComposing || keyEvent.keyCode === 229 || keyEvent.repeat || keyEvent.defaultPrevented ||
++          keyEvent.ctrlKey || keyEvent.altKey || keyEvent.shiftKey || keyEvent.metaKey) return;
++      if (typeof keyEvent.key === "string" && (modifierKeys.has(keyEvent.key) || reservedKeyNames.has(keyEvent.key))) return;
++      if (keyEvent.composedPath().some((node) => isTextEntryTarget(node) ||
++          node instanceof Element && node.matches('input,textarea,select,[role="textbox"],[role="combobox"]'))) return;
++      if (keyEvent.key === " " && keyEvent.composedPath().some((node) =>
++          node instanceof Element && node.matches('button,summary,[role="button"],[role="checkbox"],[role="switch"]'))) return;
+       const combo = eventComboKey(keyEvent);
+       const actionId = combo ? keyBindingActions.get(combo) : void 0;
+-      const isReserved = typeof keyEvent.key === "string" && reservedKeyNames.has(keyEvent.key);
+-      if (actionId && !isReserved) {
++      if (actionId) {
+         keyEvent.preventDefault?.();
+         notifyKeyAction(actionId);
+         return;
+@@ -1958,7 +1981,7 @@
+         }
+         callbacks.add(callback);
+         const off = listen((event) => {
+-          if (!isParentMessage(event)) return;
++          if (!event.isTrusted || !isParentMessage(event) || !keysInputActive || !target.document?.hasFocus()) return;
+           const msg = event.data;
+           if (typeof msg === "object" && msg !== null && msg.type === "keys.action" && msg.actionId === actionId) callback();
+         });
+@@ -2047,7 +2070,7 @@
          const off = listen((event) => {
            if (!isParentMessage(event)) return;
            const msg = event.data;
@@ -99,7 +167,7 @@ index 523bcf1..3595c82 100644
          });
          fire({ type: "config.subscribe" });
          return subscriptionHandle(() => {
-@@ -2071,18 +2086,42 @@ function nappletNamespacePrelude(domains) {
+@@ -2071,18 +2094,42 @@
    }
    function makeResource() {
      const objectUrls = /* @__PURE__ */ new Set();
@@ -144,7 +212,7 @@ index 523bcf1..3595c82 100644
              if (objectUrl) {
                URL.revokeObjectURL(objectUrl);
                objectUrls.delete(objectUrl);
-@@ -2090,14 +2129,17 @@ function nappletNamespacePrelude(domains) {
+@@ -2090,14 +2137,17 @@
              }
            }
          };
@@ -163,7 +231,7 @@ index 523bcf1..3595c82 100644
          for (const url of objectUrls) URL.revokeObjectURL(url);
          objectUrls.clear();
        }
-@@ -2265,25 +2307,85 @@ function nappletNamespacePrelude(domains) {
+@@ -2265,25 +2315,85 @@
          ...Object.keys(sanitizedBehavior).length === 0 ? {} : { behavior: sanitizedBehavior }
        };
      };
@@ -177,6 +245,7 @@ index 523bcf1..3595c82 100644
 -        "intent.invoke.result",
 -        (msg) => fieldOrThrow(msg, "result", "intent.invoke.result missing result")
 -      );
+-    };
 +    const fromUri = (uri, options = {}) => {
 +      if (!options || typeof options !== "object" || Array.isArray(options) ||
 +          Object.keys(options).some((key) => !["payload", "handler", "behavior"].includes(key))) {
@@ -207,7 +276,7 @@ index 523bcf1..3595c82 100644
 +    const dropDelivery = pendingDeliveries.delete.bind(pendingDeliveries);
 +    const notify = (handler, delivery) => {
 +      try { handler(delivery); } catch { /* Other subscriptions still receive their delivery. */ }
-     };
++    };
 +    const channel = new MessageChannel();
 +    const consume = channel.port1.postMessage.bind(channel.port1);
 +    const readData = Function.call.bind(Object.getOwnPropertyDescriptor(MessageEvent.prototype, "data").get);
@@ -265,7 +334,7 @@ index 523bcf1..3595c82 100644
        available: (archetype) => request(
          { type: "intent.available", archetype },
          "intent.available.result",
-@@ -2367,7 +2469,10 @@ function nappletNamespacePrelude(domains) {
+@@ -2367,7 +2477,10 @@
        open: (url, options) => request(
          { type: "link.open", url, ...options ? { options } : {} },
          "link.open.result",
@@ -277,3 +346,28 @@ index 523bcf1..3595c82 100644
          { rejectOnError: false }
        )
      };
+@@ -2479,7 +2592,7 @@
+     return intent;
+   }
+   function isProtectedDomain(domain) {
+-    return domain === "shell" || domain === "inc" || domain === "identity" || domain === "theme" || domain === "intent";
++    return domain === "shell" || domain === "inc" || domain === "identity" || domain === "theme" || domain === "intent" || domain === "keys";
+   }
+   function makeDomain(domain, existing) {
+     if (domain === "shell") return shell;
+@@ -2487,14 +2600,13 @@
+     if (domain === "identity") return makeProtectedIdentity();
+     if (domain === "theme") return makeProtectedTheme();
+     if (domain === "intent") return makeProtectedIntent();
++    if (domain === "keys") return protectedKeys ??= Object.freeze(makeKeys());
+     if (existing && typeof existing === "object" && Object.keys(existing).length > 0) return existing;
+     switch (domain) {
+       case "relay":
+         return makeRelay();
+       case "storage":
+         return makeStorage();
+-      case "keys":
+-        return makeKeys();
+       case "media":
+         return makeMedia();
+       case "notify":

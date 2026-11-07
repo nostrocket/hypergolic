@@ -2,7 +2,7 @@ import { ReviewBusyError } from '../shell/review-slot.ts';
 import { assertVerifiedArtifact, type VerifiedNappletArtifact } from './verified-artifact.ts';
 import type { AppStorageControl } from '../storage/database.ts';
 import type { TrustedApp } from '../storage/ports.ts';
-import { capabilityCompatibility } from '../runtime/support-report.ts';
+import { reviewedCapabilityCompatibility, type ReviewedSupportProfile } from '../runtime/support-report.ts';
 
 export class FirstOpenConsentError extends Error {
   readonly code = 'NAPPLET_CONSENT_DENIED';
@@ -25,6 +25,7 @@ export type VerifiedNappletAdmission = Readonly<{
   appId: string;
   eventId: string;
   domains: readonly string[];
+  supportProfile: ReviewedSupportProfile;
   assertActive(): void;
 }>;
 
@@ -52,11 +53,15 @@ function sameSet(left: readonly string[], right: readonly string[]): boolean {
 }
 
 /** Keep the single-set grant format for publications without optional domains. */
-export function publishedCapabilityCompatibility(required: readonly string[], optional: readonly string[]) {
-  const requiredSupport = capabilityCompatibility(required);
-  const optionalSupport = capabilityCompatibility(optional);
+export function publishedCapabilityCompatibility(required: readonly string[], optional: readonly string[],
+  profile: ReviewedSupportProfile = 'current') {
+  const requiredSupport = reviewedCapabilityCompatibility(required, profile);
+  const optionalSupport = reviewedCapabilityCompatibility(optional, profile);
+  const grantedDomains = Object.freeze([...requiredSupport.domains, ...optionalSupport.domains].sort());
+  const domains = profile === 'legacy' && !grantedDomains.includes('relay')
+    ? Object.freeze(grantedDomains.filter(domain => domain !== 'outbox')) : grantedDomains;
   return Object.freeze({
-    domains: Object.freeze([...requiredSupport.domains, ...optionalSupport.domains].sort()),
+    domains, grantedDomains,
     unsupportedDomains: requiredSupport.unsupportedDomains,
     unsupportedOptionalDomains: optionalSupport.unsupportedDomains,
     review: optional.length ? JSON.stringify([requiredSupport.review, optionalSupport.review]) : requiredSupport.review,
@@ -75,6 +80,7 @@ export async function requestFirstOpenConsent(
   signal: AbortSignal,
   assertActive: () => void,
   review: (request: NappletConsentReview) => Promise<boolean>,
+  mode: 'review' | 'saved-pin' = 'review',
 ): Promise<VerifiedNappletAdmission> {
   assertVerifiedArtifact(artifactInput);
   const artifact: VerifiedNappletArtifact = artifactInput;
@@ -99,10 +105,19 @@ export async function requestFirstOpenConsent(
     current = await storage.readAccessGrant({ signal });
   } catch { return fail(); }
   active(signal, owner, identity, assertActive);
-  const existing = current ? [...current.domains].sort() : null;
-  let admitted = current !== null && existing !== null && sameSet(existing, domains) && current.supportReview === supportReview;
+  const existing = current ? [...current.domains].sort() : [];
+  let accepted: Readonly<{domains: readonly string[]; supportProfile: ReviewedSupportProfile}> | undefined;
+  if (current?.supportReview === supportReview && sameSet(existing, domains)) {
+    accepted = { domains, supportProfile: 'current' };
+  } else {
+    const previous = publishedCapabilityCompatibility(requestedDomains, optionalDomains, 'legacy');
+    if (current?.supportReview === previous.review && sameSet(existing, previous.grantedDomains) &&
+        (mode === 'saved-pin' || sameSet(previous.domains, domains))) {
+      accepted = { domains: previous.domains, supportProfile: 'legacy' };
+    }
+  }
 
-  if (!admitted) {
+  if (!accepted) {
     const request = Object.freeze({ user, publisher, appId, eventId, domains: requestedDomains, unsupportedDomains,
       optionalDomains, unsupportedOptionalDomains });
     let approved = false;
@@ -114,12 +129,11 @@ export async function requestFirstOpenConsent(
       await storage.replaceAccessGrant(domains, current?.revision ?? null, { signal }, supportReview);
     } catch { return fail(); }
     active(signal, owner, identity, assertActive);
-    admitted = true;
+    accepted = { domains, supportProfile: 'current' };
   }
 
-  if (!admitted) return fail();
   const assertAdmissionActive = (): void => active(signal, owner, identity, assertActive);
-  const admission = Object.freeze({ publisher, appId, eventId, domains, assertActive: assertAdmissionActive });
+  const admission = Object.freeze({ publisher, appId, eventId, ...accepted, assertActive: assertAdmissionActive });
   admissions.add(admission);
   assertAdmissionActive();
   return admission;
@@ -134,8 +148,9 @@ export function assertVerifiedNappletAdmission(
   assertVerifiedArtifact(artifactInput);
   const artifact: VerifiedNappletArtifact = artifactInput;
   const verified = admission as VerifiedNappletAdmission;
+  const expected = publishedCapabilityCompatibility(artifact.manifest.requiredDomains,
+    artifact.manifest.optionalDomains, verified.supportProfile).domains;
   if (verified.publisher !== artifact.manifest.pubkey || verified.appId !== exactIdentifier(artifact) ||
-      verified.eventId !== artifact.manifest.eventId ||
-      !sameSet(verified.domains, publishedCapabilityCompatibility(artifact.manifest.requiredDomains, artifact.manifest.optionalDomains).domains)) return fail();
+      verified.eventId !== artifact.manifest.eventId || !sameSet(verified.domains, expected)) return fail();
   verified.assertActive();
 }

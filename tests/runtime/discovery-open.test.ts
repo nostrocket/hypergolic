@@ -26,7 +26,7 @@ const address = naddrEncode({ kind: 35129, pubkey: publisher, identifier: appId 
 const html = new TextEncoder().encode('<!doctype html><html lang="en"><head></head><body>Test</body></html>');
 const hash = createHash('sha256').update(html).digest('hex');
 const signed = finalizeEvent({ kind: 35129, created_at: 1_700_000_001, content: 'Open test',
-  tags: [['d', appId], ['x', hash], ['server', 'https://blossom.example.org/'], ['R', 'relay'], ['O', 'pow']] }, secret);
+  tags: [['d', appId], ['x', hash], ['server', 'https://blossom.example.org/'], ['R', 'relay'], ['O', 'pow'], ['O', 'keys']] }, secret);
 const wire = { id: signed.id, pubkey: signed.pubkey, created_at: signed.created_at, kind: signed.kind,
   tags: signed.tags.map(tag => [...tag]), content: signed.content, sig: signed.sig };
 let artifact: VerifiedNappletArtifact;
@@ -163,7 +163,9 @@ test('the actual bundled source opens a verified exact cold target after review 
   assert.equal(review.request.target.publisher, publisher);
   assert.equal(review.request.target.eventId, artifact.manifest.eventId);
   assert.deepEqual(review.request.target.requiredDomains, ['relay']);
+  assert.deepEqual(review.request.target.optionalDomains, ['keys', 'pow']);
   assert.deepEqual(review.request.target.unsupportedOptionalDomains, ['pow']);
+  assert.equal(review.request.changesAccess, true);
   assert.equal(env.staged(), 0);
   await env.run('second');
   assert.equal(env.responses.get('second'), 'busy');
@@ -185,7 +187,10 @@ test('exact mounted pins are reviewed and reused, different saved revisions keep
   existing.ready();
   const pending = existing.run('open');
   const review = await existing.review();
-  assert.equal(review.request.kind === 'published-open' && review.request.changesAccess, false);
+  assert.equal(review.request.kind, 'published-open');
+  if (review.request.kind !== 'published-open') return;
+  assert.deepEqual(review.request.target.optionalDomains, ['keys', 'pow']);
+  assert.equal(review.request.changesAccess, false);
   existing.decide(review.id, true);
   existing.focusTarget();
   await pending;

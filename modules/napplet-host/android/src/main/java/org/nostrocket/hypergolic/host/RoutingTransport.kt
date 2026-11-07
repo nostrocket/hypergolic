@@ -21,6 +21,10 @@ internal object RoutingTransport {
     val replaced = user != endpoints.user() || epoch != endpoints.epoch()
     if (!endpoints.synchronizeOwner(user, epoch, available)) return false
     if (before != endpoints.revision()) {
+      if (replaced || !available) {
+        val generations = rows.keys.toSet()
+        main.post { NativeFiniteVideo.revokeGenerations(generations) }
+      }
       if (replaced) rows.values.forEach { it.credits.clear() }
       else resumeIntents()
       sink?.invoke(state())
@@ -41,6 +45,12 @@ internal object RoutingTransport {
   @Synchronized fun ready(generation: String) { endpoints.ready(generation) }
   @Synchronized fun focus(generation: String, value: Boolean) { if (endpoints.focus(generation, value)) sink?.invoke(state()) }
   @Synchronized fun revoke(generation: String) { endpoints.revoke(generation); rows.remove(generation) }
+  @Synchronized fun mediaRevision(generation: String): String? {
+    val config = rows[generation]?.config ?: return null
+    val revision = endpoints.revision()
+    if (config.fixture != "published" || "media" !in config.grantedDomains || !mayReview(generation, revision)) return null
+    return "$revision:${endpoints.reviewRevision(generation)}"
+  }
   @Synchronized fun mayReview(generation: String, revision: Long): Boolean = endpoints.matchesRevision(revision) && endpoints.mayReview(generation) && CapabilityTransport.leases.sessionActive(generation)
   @Synchronized fun reviewRevision(generation: String, revision: Long): Long = if (endpoints.matchesRevision(revision)) endpoints.reviewRevision(generation) else -1
   @Synchronized fun mayDeliver(generation: String, revision: Long, domain: String): Boolean =

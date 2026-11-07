@@ -66,6 +66,12 @@ internal class CapabilityConfiguration(raw: String, generation: String, allowPub
     value.put("generation", generation)
     snapshot = value.toString()
   }
+  fun allowsRelayOperation(type: String): Boolean = when (type) {
+    "relay.subscribe", "relay.publish" -> "relay" in grantedDomains
+    "outbox.subscribe", "outbox.publish" -> "outbox" in grantedDomains
+    else -> false
+  }
+
   fun request(message: String): String = JSONObject().put("registration", JSONObject(snapshot))
     .put("request", message).toString()
 }

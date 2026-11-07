@@ -29,29 +29,8 @@ struct PublishedHTTPResponse {
           wire.count <= maximumBodyBytes + maximumHeaderBytes + maximumFramingBytes else { throw Failure.tooLarge }
     let separator = Data([13, 10, 13, 10])
     guard let boundary = wire.range(of: separator), boundary.lowerBound <= maximumHeaderBytes else { throw Failure.invalidResponse }
-    let rawHead = wire.prefix(upTo: boundary.lowerBound)
-    guard rawHead.allSatisfy({ $0 >= 32 && $0 <= 126 || $0 == 13 || $0 == 10 }),
-          let head = String(data: rawHead, encoding: .ascii) else { throw Failure.invalidResponse }
-    let lines = head.components(separatedBy: "\r\n")
-    guard let statusLine = lines.first, statusLine.hasPrefix("HTTP/1.1 "),
-          statusLine.count >= 12, let status = Int(statusLine.dropFirst(9).prefix(3)),
-          (statusLine.count == 12 || statusLine[statusLine.index(statusLine.startIndex, offsetBy: 12)] == " "),
-          statusLine.dropFirst(12).allSatisfy({ $0 == " " || $0.isASCII && !$0.isNewline }),
-          lines.dropFirst().allSatisfy({ !$0.isEmpty && !$0.hasPrefix(" ") && !$0.hasPrefix("\t") })
-    else { throw Failure.invalidResponse }
-    let singular = Set(["content-length", "transfer-encoding", "content-encoding", "location", "connection"])
-    var headers: [String: String] = [:]
-    for line in lines.dropFirst() {
-      guard let colon = line.firstIndex(of: ":") else { throw Failure.invalidResponse }
-      let name = String(line[..<colon]).lowercased()
-      let value = String(line[line.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
-      guard !name.isEmpty, name.utf8.allSatisfy({ byte in
-        (byte >= 97 && byte <= 122) || (byte >= 48 && byte <= 57) || byte == 45
-      }), (!headers.keys.contains(name) || (resourceProfile || uploadProfile || recoveryProfile || artifactProfile) && !singular.contains(name)), !value.contains("\r"), !value.contains("\n")
-      else { throw Failure.invalidResponse }
-      // Resource headers never enter the SDK; repeated informational values have no authority.
-      if headers[name] == nil { headers[name] = value }
-    }
+    let (status, headers) = try parseHead(wire.prefix(upTo: boundary.lowerBound),
+      allowsRepeatedInformational: resourceProfile || uploadProfile || recoveryProfile || artifactProfile)
     if (resourceProfile || artifactProfile) && [301,302,303,307,308].contains(status) {
       guard let location = headers["location"], !location.isEmpty, location.utf8.count <= 8192 else { throw Failure.resourcePolicy }
       throw Failure.resourceRedirect(location)
@@ -88,6 +67,32 @@ struct PublishedHTTPResponse {
     }
     let body = try decodeChunked(Data(payload), limit: maximumBodyBytes)
     return try complete(body)
+  }
+
+  static func parseHead(_ rawHead: Data, allowsRepeatedInformational: Bool) throws -> (Int, [String: String]) {
+    guard rawHead.allSatisfy({ $0 >= 32 && $0 <= 126 || $0 == 13 || $0 == 10 }),
+          let head = String(data: rawHead, encoding: .ascii) else { throw Failure.invalidResponse }
+    let lines = head.components(separatedBy: "\r\n")
+    guard let statusLine = lines.first, statusLine.hasPrefix("HTTP/1.1 "),
+          statusLine.count >= 12, let status = Int(statusLine.dropFirst(9).prefix(3)),
+          (statusLine.count == 12 || statusLine[statusLine.index(statusLine.startIndex, offsetBy: 12)] == " "),
+          statusLine.dropFirst(12).allSatisfy({ $0 == " " || $0.isASCII && !$0.isNewline }),
+          lines.dropFirst().allSatisfy({ !$0.isEmpty && !$0.hasPrefix(" ") && !$0.hasPrefix("\t") })
+    else { throw Failure.invalidResponse }
+    let singular = Set(["content-length", "transfer-encoding", "content-encoding", "location", "connection"])
+    var headers: [String: String] = [:]
+    for line in lines.dropFirst() {
+      guard let colon = line.firstIndex(of: ":") else { throw Failure.invalidResponse }
+      let name = String(line[..<colon]).lowercased()
+      let value = String(line[line.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+      guard !name.isEmpty, name.utf8.allSatisfy({ byte in
+        (byte >= 97 && byte <= 122) || (byte >= 48 && byte <= 57) || byte == 45
+      }), (!headers.keys.contains(name) || allowsRepeatedInformational && !singular.contains(name)), !value.contains("\r"), !value.contains("\n")
+      else { throw Failure.invalidResponse }
+      // Resource headers never enter the SDK; repeated informational values have no authority.
+      if headers[name] == nil { headers[name] = value }
+    }
+    return (status, headers)
   }
 
   private static func decodeChunked(_ payload: Data, limit: Int) throws -> Data {
@@ -164,4 +169,13 @@ final class PublishedHTTPResponseAccumulator {
     defer { discard() }
     return try PublishedHTTPResponse.parse(wire, maximumBodyBytes: maximumBodyBytes, resourceProfile: resourceProfile, uploadProfile: uploadProfile, recoveryProfile: recoveryProfile, artifactProfile: artifactProfile)
   }
+}
+
+
+/// A private sink for pinned HTTPS owners that stage files without buffering their bodies.
+protocol PublishedHTTPFileSink: AnyObject {
+  var idleSeconds: Int { get }
+  func append(_ chunk: Data) throws
+  func finish() throws -> URL
+  func discard()
 }

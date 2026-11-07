@@ -71,7 +71,7 @@ struct CapabilityConfiguration {
     case "feed-lab": expected = Set(domains).contains("outbox") ? ["identity", "outbox", "relay", "theme"] : ["identity", "relay", "theme"]
     case "published":
       expected = Set(domains)
-      let supported: Set<String> = ["identity", "storage", "theme", "relay", "resource", "upload", "link", "intent", "inc", "notify", "config", "outbox"]
+      let supported: Set<String> = ["identity", "storage", "theme", "relay", "resource", "upload", "link", "intent", "inc", "notify", "config", "outbox", "keys", "media"]
       guard domains.count <= supported.count, expected.isSubset(of: supported) else {
         throw Invalid.configuration
       }
@@ -100,13 +100,20 @@ struct CapabilityConfiguration {
     let value = ["registration": try JSONSerialization.jsonObject(with: Data(snapshot.utf8)), "request": message] as [String: Any]
     return String(decoding: try JSONSerialization.data(withJSONObject: value), as: UTF8.self)
   }
+  func allowsRelayOperation(_ type: String) -> Bool {
+    switch type {
+    case "relay.subscribe", "relay.publish": domains.contains("relay")
+    case "outbox.subscribe", "outbox.publish": domains.contains("outbox")
+    default: false
+    }
+  }
   /// Recognition is deliberately narrow. Event validation and signing remain outside this transport.
   func approvalWireId(_ message: String) -> (recognized: Bool, wireId: String?) {
-    guard domains.contains("relay"), let data = message.data(using: .utf8),
+    guard let data = message.data(using: .utf8),
       let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
       let type = value["type"] as? String,
-      type == "relay.publish" || (type == "outbox.publish" && domains.contains("outbox")) else { return (false, nil) }
-    guard let id = value["id"] as? String, (1...128).contains(id.utf8.count) else { return (true, nil) }
+      type == "relay.publish" || type == "outbox.publish" else { return (false, nil) }
+    guard allowsRelayOperation(type), let id = value["id"] as? String, (1...128).contains(id.utf8.count) else { return (true, nil) }
     return (true, id)
   }
 }

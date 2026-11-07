@@ -58,7 +58,7 @@ final class UploadPinnedHttpsTransport {
           if (progress != null) try { progress.sent(offset); } catch (RuntimeException ignored) { /* Presentation has no transfer authority. */ }
         }
         abort.check(); output.flush();
-        var response = PublishedHttpsResponseReader.readUpload(new PublishedHttpsTransport.DeadlineInputStream(socket.getInputStream(), socket, deadline), cancellation);
+        var response = PublishedHttpsResponseReader.readUpload(new PublishedHttpsResponseReader.DeadlineInputStream(socket.getInputStream(), socket, deadline), cancellation);
         abort.check(); return response;
       }
     } catch (PublishedHttpsResponseReader.UploadStatus rejected) {

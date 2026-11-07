@@ -1,3 +1,4 @@
+import { MEDIA_ACCESS_DETAIL } from '../runtime/support-report';
 import type { ReviewSlot } from './review-slot';
 import { TrustedBand } from './TrustedBand';
 import { useEffect, useState, useSyncExternalStore } from 'react';
@@ -68,6 +69,9 @@ function PermissionReviewDetails({request}: {request: Extract<RoutingReviewReque
     <Text style={styles.label}>Handler</Text><NappletIdentity appId={consent.appId} publisher={consent.publisher} fixture="published"/>
     <Text style={styles.label}>Required capabilities</Text><Text selectable style={styles.text}>{consent.domains.join(', ') || 'None'}</Text>
     {consent.optionalDomains.length > 0 && <><Text style={styles.label}>Optional capabilities</Text><Text selectable style={styles.text}>{consent.optionalDomains.join(', ')}</Text></>}
+    {(consent.domains.includes('keys') || consent.optionalDomains.includes('keys')) &&
+      <Text style={styles.detail}>Keys lets this napplet use hardware shortcuts while it has focus.</Text>}
+    {(consent.domains.includes('media') || consent.optionalDomains.includes('media')) && <Text style={styles.text}>{MEDIA_ACCESS_DETAIL}</Text>}
     {consent.unsupportedDomains.length > 0 && <Text style={styles.detail}>Unavailable required capabilities: {consent.unsupportedDomains.join(', ')}.</Text>}
     {consent.unsupportedOptionalDomains.length > 0 && <Text style={styles.detail}>Unavailable optional capabilities: {consent.unsupportedOptionalDomains.join(', ')}.</Text>}
     <Text style={styles.detail}>Hypergolic saves available access for this identity, publisher and app. Uploads, intent dispatch and new communication permissions still need their own approval.</Text>
@@ -82,6 +86,9 @@ function PublishedOpenDetails({request}: {request: Extract<RoutingReviewRequest,
     <Text style={styles.label}>Verified artifact version</Text><Text selectable style={styles.mono}>{target.version}</Text>
     <Text style={styles.label}>Required capabilities</Text><Text style={styles.text}>{target.requiredDomains.join(', ') || 'None'}</Text>
     <Text style={styles.label}>Optional capabilities</Text><Text style={styles.text}>{target.optionalDomains.join(', ') || 'None'}</Text>
+    {(target.requiredDomains.includes('keys') || target.optionalDomains.includes('keys')) &&
+      <Text style={styles.detail}>Keys lets this napplet use hardware shortcuts while it has focus.</Text>}
+    {(target.requiredDomains.includes('media') || target.optionalDomains.includes('media')) && <Text style={styles.detail}>{MEDIA_ACCESS_DETAIL}</Text>}
     {target.unsupportedDomains.length > 0 && <Text style={styles.detail}>Unavailable required capabilities: {target.unsupportedDomains.join(', ')}. Features using these capabilities will be unavailable.</Text>}
     {target.unsupportedOptionalDomains.length > 0 && <Text style={styles.detail}>Unavailable optional capabilities: {target.unsupportedOptionalDomains.join(', ')}.</Text>}
     {request.changesAccess && <Text style={styles.detail}>Hypergolic will save the available access for this publisher and napplet under your selected identity.</Text>}

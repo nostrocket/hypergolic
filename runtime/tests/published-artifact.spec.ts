@@ -12,7 +12,7 @@ const identity = {
   publisher: '1'.repeat(64), appId: 'published-test', eventId: '2'.repeat(64), version, htmlHash,
 };
 
-type Mode = 'normal' | 'bad-hash' | 'malformed-base64' | 'replayed-sequence' | 'unknown-domain' | 'relay-domain' | 'attributed-head' | 'commented-head' | 'unsafe-head-comment' | 'upload-domain' | 'all-domains' | 'outbox-domain' | 'outbox-only' | 'published-approval' | 'intent-only';
+type Mode = 'normal' | 'keys-domain' | 'bad-hash' | 'malformed-base64' | 'replayed-sequence' | 'unknown-domain' | 'relay-domain' | 'attributed-head' | 'commented-head' | 'unsafe-head-comment' | 'upload-domain' | 'all-domains' | 'outbox-domain' | 'outbox-only' | 'published-approval' | 'intent-only';
 
 function artifactFor(mode: Mode): Buffer {
   if (mode === 'published-approval') return approvalHtml;
@@ -74,7 +74,7 @@ async function openPublished(page: Page, mode: Mode = 'normal', extraQuery = '')
         type: 'artifact.chunk', sessionId: generation,
         sequence: mode === 'replayed-sequence' ? sequence + 1 : sequence,
         base64, byteLength: payload.length, totalBytes: htmlLength,
-        ...claims, domains: mode === 'intent-only' ? ['intent'] : mode === 'published-approval' ? ['identity', 'relay', 'theme'] : mode === 'unknown-domain' ? ['future-domain'] : mode === 'outbox-domain' ? ['outbox', 'relay', 'theme'] : mode === 'outbox-only' ? ['outbox', 'theme'] : mode === 'relay-domain' ? ['relay', 'theme'] : mode === 'upload-domain' ? ['upload'] : mode === 'all-domains' ? ['config', 'identity', 'inc', 'intent', 'link', 'notify', 'outbox', 'relay', 'resource', 'storage', 'theme', 'upload'] : ['theme'],
+        ...claims, domains: mode === 'intent-only' ? ['intent'] : mode === 'published-approval' ? ['identity', 'relay', 'theme'] : mode === 'unknown-domain' ? ['future-domain'] : mode === 'outbox-domain' ? ['outbox', 'relay', 'theme'] : mode === 'outbox-only' ? ['outbox', 'theme'] : mode === 'relay-domain' ? ['relay', 'theme'] : mode === 'upload-domain' ? ['upload'] : mode === 'keys-domain' ? ['keys', 'theme'] : mode === 'all-domains' ? ['config', 'identity', 'inc', 'intent', 'link', 'notify', 'outbox', 'relay', 'resource', 'storage', 'theme', 'upload'] : ['theme'],
         done: (sequence + 1) * 48 * 1024 >= htmlLength,
       };
       for (const listener of listenerSet) listener({ data: JSON.stringify(envelope) });
@@ -262,13 +262,18 @@ test('URL parameters cannot grant published Outbox or bypass the exact native ar
   await expect(page.locator('#napplet')).toHaveCount(0);
   expect(await page.evaluate(() => (window as any).__publishedTest.requests)).toHaveLength(1);
 });
-test('an Outbox-only native grant neither exposes usable Outbox nor acquires relay authority', async ({page}) => {
-  await openPublished(page, 'outbox-only'); await expect(page.locator('#napplet')).toHaveCount(1);
+test('an Outbox-only native grant exposes Outbox while raw Relay stays denied', async ({page}) => {
+  await openPublished(page, 'outbox-only');
   const guest = await publishedGuest(page);
-  await expect.poll(() => guest.evaluate(() => (window as any).napplet.shell.supports('outbox'))).toBe(false);
+  expect(await guest.evaluate(() => (window as any).napplet.shell.supports('outbox'))).toBe(true);
   expect(await guest.evaluate(() => (window as any).napplet.shell.supports('relay'))).toBe(false);
-  await guest.evaluate(() => {parent.postMessage({type: 'outbox.query', id: 'missing-relay', filters: [{kinds: [1], limit: 0}]}, '*');});
-  expect(await page.evaluate(() => (window as any).__publishedTest.requests.filter((x: any) => x.type === 'capability'))).toHaveLength(0);
+  await guest.evaluate(() => {
+    parent.postMessage({type: 'relay.query', id: 'ungranted-relay', filters: [{kinds: [1], limit: 0}]}, '*');
+  });
+  expect(await guest.evaluate(() => (window as any).napplet.outbox.query({kinds: [1], limit: 0})))
+    .toMatchObject({type: 'outbox.query.result', events: []});
+  const calls = await page.evaluate(() => (window as any).__publishedTest.requests.filter((x: any) => x.type === 'capability'));
+  expect(calls.map((x: any) => JSON.parse(x.message).type)).toEqual(['outbox.query']);
 });
 
 
@@ -461,4 +466,119 @@ test('verified Intent-only guest holds four credits until consumption and cannot
   }));
   await expect(output).toHaveText('1234hello+world');
   await expect.poll(nativeAcks).toBe(5);
+});
+
+test('Keys dispatches real focused hardware shortcuts and scopes its action list', async ({page, browserName}) => {
+  await openPublished(page, 'keys-domain');
+  const guest = await publishedGuest(page);
+  const state = await guest.evaluate(async () => {
+    const keys = (window as any).napplet.keys;
+    (window as any).keyActions = [];
+    window.addEventListener('message', event => {
+      if (event.isTrusted && event.source === parent && event.data?.type === 'hypergolic.private.media-active') {
+        (window as any).keysActive = event.data.inputActive;
+      }
+    });
+    const id = 'test-keys-registration';
+    Object.defineProperty(crypto, 'randomUUID', {configurable: true, value: () => id});
+    let pending: Promise<{binding?: string}>;
+    try {
+      pending = keys.registerAction({id: 'game.shoot', label: 'Shoot', defaultKey: 'Space'});
+      window.dispatchEvent(new MessageEvent('message', {source: parent, data: {
+        type: 'keys.registerAction.result', id, actionId: 'game.shoot', binding: 'B',
+      }}));
+    } finally {
+      Reflect.deleteProperty(crypto, 'randomUUID');
+    }
+    const first = await pending;
+    keys.onAction('game.shoot', () => (window as any).keyActions.push('shoot'));
+    const second = await keys.registerAction({id: 'game.pause', label: 'Pause', defaultKey: 'p'});
+    const spaceCollision = await keys.registerAction({id: 'game.other-space', label: 'Other space', defaultKey: ' '});
+    keys.onAction('game.pause', () => (window as any).keyActions.push('pause'));
+    const reserved = await keys.registerAction({id: 'game.tab', label: 'Tab', defaultKey: 'Tab'});
+    const collision = await keys.registerAction({id: 'game.other', label: 'Other', defaultKey: 'p'});
+    let duplicate = false;
+    try { await keys.registerAction({id: 'game.pause', label: 'Duplicate'}); } catch { duplicate = true; }
+    const surface = document.createElement('div');
+    surface.tabIndex = 0;
+    surface.dataset.testid = 'keys-surface';
+    surface.textContent = 'Game surface';
+    const editor = document.createElement('input');
+    editor.dataset.testid = 'keys-editor';
+    document.body.prepend(surface, editor);
+    return {first, second, spaceCollision, reserved, collision, duplicate};
+  });
+  expect(state.first.binding).toBe(' ');
+  expect(state.second.binding).toBe('P');
+  expect(state.spaceCollision.binding).toBeUndefined();
+  expect(state.reserved.binding).toBeUndefined();
+  expect(state.collision.binding).toBeUndefined();
+  expect(state.duplicate).toBe(true);
+  const actions = () => guest.evaluate(() => (window as any).keyActions);
+  const surface = guest.getByTestId('keys-surface');
+  const editor = guest.getByTestId('keys-editor');
+  await surface.focus();
+  await page.keyboard.press('p');
+  expect(await actions()).toEqual([]);
+  await page.evaluate(() => (window as any).__hypergolicMediaActive(true));
+  await expect.poll(() => guest.evaluate(() => (window as any).keysActive)).toBe(true);
+  await guest.evaluate(() => {
+    document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', {key: 'p', bubbles: true}));
+    window.dispatchEvent(new MessageEvent('message', {source: parent, data: {type: 'keys.action', actionId: 'game.shoot'}}));
+  });
+  expect(await actions()).toEqual([]);
+  await page.keyboard.press('p');
+  await page.keyboard.press('Space');
+  expect(await actions()).toEqual(['pause', 'shoot']);
+  await editor.focus();
+  await page.keyboard.press('p');
+  await expect(editor).toHaveValue('p');
+  expect(await actions()).toEqual(['pause', 'shoot']);
+  await surface.focus();
+  await page.keyboard.press('Control+p');
+  await page.keyboard.press('Escape');
+  expect(await actions()).toEqual(['pause', 'shoot']);
+  if (browserName === 'chromium') {
+    // DevTools emits a trusted Android/IME-style Process keydown (keyCode 229).
+    await guest.evaluate(() => document.addEventListener('keydown', event => {
+      (window as any).imeProbe = {trusted: event.isTrusted, code: event.keyCode};
+    }, {once: true}));
+    const session = await page.context().newCDPSession(page);
+    await session.send('Input.dispatchKeyEvent', {type: 'rawKeyDown', key: 'p', code: 'KeyP', windowsVirtualKeyCode: 229});
+    await session.send('Input.dispatchKeyEvent', {type: 'keyUp', key: 'p', code: 'KeyP', windowsVirtualKeyCode: 229});
+    await session.detach();
+    expect(await guest.evaluate(() => (window as any).imeProbe)).toEqual({trusted: true, code: 229});
+    expect(await actions()).toEqual(['pause', 'shoot']);
+  }
+
+  await page.evaluate(() => (window as any).__hypergolicMediaActive(false));
+  await expect.poll(() => guest.evaluate(() => (window as any).keysActive)).toBe(false);
+  await page.keyboard.press('p');
+  expect(await actions()).toEqual(['pause', 'shoot']);
+  await page.evaluate(() => (window as any).__hypergolicMediaActive(true));
+  await expect.poll(() => guest.evaluate(() => (window as any).keysActive)).toBe(true);
+  await guest.evaluate(() => (window as any).napplet.keys.unregisterAction('game.pause'));
+  await page.keyboard.press('p');
+  expect(await actions()).toEqual(['pause', 'shoot']);
+  expect(await guest.evaluate(async () => (await (window as any).napplet.keys.registerAction({
+    id: 'game.new-pause', label: 'New pause', defaultKey: 'p',
+  })).binding)).toBe('P');
+
+  await guest.evaluate(() => location.replace('about:blank'));
+  await expect(page.locator('#napplet')).toHaveCount(0);
+});
+
+test('ungranted Keys remains absent and raw requests get no reply', async ({page}) => {
+  await openPublished(page);
+  const guest = await publishedGuest(page);
+  const supported = await guest.evaluate(() => {
+    window.addEventListener('message', event => {
+      if (event.data?.type === 'keys.registerAction.result') (window as any).gotUnapprovedKeys = true;
+    });
+    parent.postMessage({type: 'keys.registerAction', id: 'raw', action: {id: 'game.shoot', label: 'Shoot'}}, '*');
+    return (window as any).napplet.shell.supports('keys') || Boolean((window as any).napplet.keys);
+  });
+  expect(supported).toBe(false);
+  await guest.evaluate(() => (window as any).napplet.shell.ready());
+  expect(await guest.evaluate(() => (window as any).gotUnapprovedKeys)).toBeUndefined();
 });

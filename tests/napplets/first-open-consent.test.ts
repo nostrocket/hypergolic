@@ -151,10 +151,10 @@ test('native staging refuses a forged admission and revokes an upload after iden
 
 test('unsupported names remain warning-only and a changed requested set or host profile requires review', async t => {
   const { database } = await setup(t); const { owner, storage } = control(database);
-  const first = await artifact(['theme', 'fs', 'media']);
+  const first = await artifact(['theme', 'fs', 'gamepad']);
   let prompts = 0;
   const accept = async (request: import('../../src/napplets/first-open-consent.ts').NappletConsentReview) => {
-    prompts++; assert.deepEqual(request.unsupportedDomains, ['fs', 'media']); return true;
+    prompts++; assert.deepEqual(request.unsupportedDomains, ['fs', 'gamepad']); return true;
   };
   const admitted = await requestFirstOpenConsent(first, owner, storage, new AbortController().signal, owner.assertActive, accept);
   assert.deepEqual(admitted.domains, ['theme']);
@@ -163,16 +163,16 @@ test('unsupported names remain warning-only and a changed requested set or host 
   assert.equal(prompts, 1);
   const current = (await storage.readAccessGrant())!;
   const olderReview = JSON.stringify({profile: 'hypergolic-native-2026-10-13-v1',
-    requested: ['fs', 'media', 'theme'], domains: ['theme']});
+    requested: ['fs', 'gamepad', 'theme'], domains: ['theme']});
   await storage.replaceAccessGrant(current.domains, current.revision, {}, olderReview);
   await assert.rejects(requestFirstOpenConsent(first, owner, storage, new AbortController().signal, owner.assertActive, async () => false),
     FirstOpenConsentError);
   assert.equal((await storage.readAccessGrant())?.supportReview, olderReview);
   await requestFirstOpenConsent(first, owner, storage, new AbortController().signal, owner.assertActive, accept);
   assert.equal(prompts, 2);
-  const changed = await artifact(['theme', 'media']);
+  const changed = await artifact(['theme', 'gamepad']);
   await requestFirstOpenConsent(changed, owner, storage, new AbortController().signal, owner.assertActive, async request => {
-    prompts++; assert.deepEqual(request.unsupportedDomains, ['media']); return true;
+    prompts++; assert.deepEqual(request.unsupportedDomains, ['gamepad']); return true;
   });
   assert.equal(prompts, 3);
 });
@@ -255,4 +255,149 @@ test('Intent requires explicit renewal while an unchanged non-Intent baseline gr
   await requestFirstOpenConsent(handler, owner, storage, signal, owner.assertActive, async () => true);
   assert.match((await storage.readAccessGrant())!.supportReview, /hypergolic-native-2026-11-06-intent-v1/);
   await requestFirstOpenConsent(handler, owner, storage, signal, owner.assertActive, async () => assert.fail('renewed Intent grant must reopen'));
+});
+
+
+for (const previouslyOffered of [false, true]) {
+  test(`the file profile renews Media consent after ${previouslyOffered ? 'the 10 MiB profile' : 'unavailable Media'}`, async t => {
+    const {database} = await setup(t);
+    const {owner, storage} = control(database);
+    const candidate = await artifact(['media', 'theme'], []);
+    const baseline = 'hypergolic-native-2026-11-06-v1';
+    const profile = previouslyOffered ? `${baseline}/hypergolic-native-2026-11-06-media-v1` : baseline;
+    const domains = previouslyOffered ? ['media', 'theme'] : ['theme'];
+    const older = JSON.stringify({profile, requested:['media','theme'], domains});
+    await storage.replaceAccessGrant(domains, null, {}, older);
+    const signal = new AbortController().signal;
+    await assert.rejects(requestFirstOpenConsent(candidate, owner, storage, signal, owner.assertActive, async request => {
+      assert.deepEqual(request.domains, ['media','theme']);
+      assert.deepEqual(request.unsupportedDomains, []);
+      return false;
+    }), FirstOpenConsentError);
+    assert.equal((await storage.readAccessGrant())?.supportReview, older);
+    const accepted = await requestFirstOpenConsent(candidate, owner, storage, signal, owner.assertActive, async () => true);
+    assert.deepEqual(accepted.domains, ['media','theme']);
+    assert.match((await storage.readAccessGrant())!.supportReview, /media-file-v1/);
+  });
+}
+
+test('previous profile reopens an exact saved pin with its old grant and fresh review enables Keys', async t => {
+  for (const intent of [false, true]) await t.test(intent ? 'existing Intent profile' : 'existing base profile', async t => {
+    const {database} = await setup(t); const {owner, storage} = control(database);
+    const required = ['theme'];
+    const optional = intent ? ['gamepad', 'intent', 'keys'] : ['gamepad', 'keys'];
+    const previousOptional = intent ? ['intent'] : [];
+    const previousDomains = [...previousOptional, 'theme'];
+    const candidate = await artifact(required, optional);
+    const oldReview = JSON.stringify([
+      JSON.stringify({profile: 'hypergolic-native-2026-11-06-v1', requested: ['theme'], domains: ['theme']}),
+      JSON.stringify({profile: intent ? 'hypergolic-native-2026-11-06-intent-v1' : 'hypergolic-native-2026-11-06-v1',
+        requested: optional, domains: previousOptional}),
+    ]);
+    await storage.replaceAccessGrant(previousDomains, null, {}, oldReview);
+    const signal = new AbortController().signal;
+    const hostDomains = (admission: unknown) => {
+      const descriptor = descriptorForPublishedArtifact(candidate, '58274370-ec8f-4058-a4cc-b63e7e75ca4b');
+      const wire = JSON.parse(publishedHostInput(candidate, admission, descriptor,
+        {user, epoch: 0, assertActive: owner.assertActive}, 'stage'));
+      return JSON.parse(wire.configuration).domains;
+    };
+    const reopen = () => requestFirstOpenConsent(candidate, owner, storage, signal, owner.assertActive,
+      async () => assert.fail('exact saved pin must keep its previous grant'), 'saved-pin');
+    const oldAdmission = await reopen();
+    assert.deepEqual(hostDomains(oldAdmission), previousDomains);
+    assert.throws(() => hostDomains({...oldAdmission, domains: ['keys', 'theme']}));
+    assert.throws(() => hostDomains({...oldAdmission, supportProfile: 'current'}));
+
+    await assert.rejects(requestFirstOpenConsent(candidate, owner, storage, signal, owner.assertActive, async review => {
+      assert.deepEqual(review.optionalDomains, optional);
+      assert.deepEqual(review.unsupportedOptionalDomains, ['gamepad']);
+      return false;
+    }), FirstOpenConsentError);
+    assert.equal((await storage.readAccessGrant())?.supportReview, oldReview);
+    assert.deepEqual(hostDomains(await reopen()), previousDomains);
+
+    const current = (await storage.readAccessGrant())!;
+    await storage.replaceAccessGrant([...previousOptional, 'keys', 'theme'], current.revision, {}, oldReview);
+    await assert.rejects(requestFirstOpenConsent(candidate, owner, storage, signal, owner.assertActive,
+      async () => false, 'saved-pin'), FirstOpenConsentError);
+
+    const approved = await requestFirstOpenConsent(candidate, owner, storage, signal, owner.assertActive, async () => true);
+    assert.deepEqual(hostDomains(approved), [...previousOptional, 'keys', 'theme']);
+  });
+});
+
+test('a remembered Outbox and Intent grant without Relay needs consent for independent Outbox authority', async t => {
+  const {database} = await setup(t); const {owner, storage} = control(database);
+  const signal = new AbortController().signal;
+  const candidate = await artifact(['intent', 'outbox'], []);
+  const domains = ['intent', 'outbox'];
+  const prior = JSON.stringify({profile: 'hypergolic-native-2026-11-06-intent-v1', requested: domains, domains});
+  await storage.replaceAccessGrant(domains, null, {}, prior);
+  await assert.rejects(requestFirstOpenConsent(candidate, owner, storage, signal, owner.assertActive, async () => false),
+    FirstOpenConsentError);
+  assert.equal((await storage.readAccessGrant())?.supportReview, prior);
+  const approved = await requestFirstOpenConsent(candidate, owner, storage, signal, owner.assertActive, async () => true);
+  assert.deepEqual(approved.domains, domains);
+  assert.match((await storage.readAccessGrant())!.supportReview, /hypergolic-native-2026-11-06-outbox-intent-v1/);
+});
+
+
+test('a remembered active Outbox and Relay grant with the same effective access needs no new review', async t => {
+  const {database} = await setup(t); const {owner, storage} = control(database);
+  const required = ['outbox', 'theme'];
+  const optional = ['intent', 'relay'];
+  const candidate = await artifact(required, optional);
+  const prior = JSON.stringify([
+    JSON.stringify({profile: 'hypergolic-native-2026-11-06-v1', requested: required, domains: required}),
+    JSON.stringify({profile: 'hypergolic-native-2026-11-06-intent-v1', requested: optional, domains: optional}),
+  ]);
+  const stored = await storage.replaceAccessGrant([...required, ...optional], null, {}, prior);
+  const accepted = await requestFirstOpenConsent(candidate, owner, storage, new AbortController().signal,
+    owner.assertActive, async () => assert.fail('unchanged effective access must reuse the exact old grant'));
+  assert.deepEqual(accepted.domains, ['intent', 'outbox', 'relay', 'theme']);
+  assert.deepEqual(await storage.readAccessGrant(), stored);
+});
+
+test('saved mixed pins keep effective legacy authority until a new review accepts the exact set', async t => {
+  for (const relay of [false, true]) await t.test(relay ? 'previous Relay grant' : 'no previous Relay grant', async t => {
+    const {database} = await setup(t); const {owner, storage} = control(database);
+    const required = ['intent', 'keys', 'outbox', 'theme'];
+    const optional = relay ? ['media', 'relay'] : ['media'];
+    const candidate = await artifact(required, optional);
+    const priorRequired = ['intent', 'outbox', 'theme'];
+    const priorOptional = relay ? ['relay'] : [];
+    const prior = JSON.stringify([
+      JSON.stringify({profile: 'hypergolic-native-2026-11-06-intent-v1', requested: required, domains: priorRequired}),
+      JSON.stringify({profile: 'hypergolic-native-2026-11-06-v1', requested: optional, domains: priorOptional}),
+    ]);
+    await storage.replaceAccessGrant([...priorRequired, ...priorOptional], null, {}, prior);
+    const previous = await storage.readAccessGrant();
+    const signal = new AbortController().signal;
+    const descriptor = descriptorForPublishedArtifact(candidate, '58274370-ec8f-4058-a4cc-b63e7e75ca4b');
+    const hostDomains = (admission: unknown) => JSON.parse(JSON.parse(publishedHostInput(candidate, admission,
+      descriptor, {user, epoch: 0, assertActive: owner.assertActive}, 'stage')).configuration).domains;
+    const reopen = () => requestFirstOpenConsent(candidate, owner, storage, signal, owner.assertActive,
+      async () => assert.fail('saved pin must keep effective legacy authority'), 'saved-pin');
+    const effective = relay ? ['intent', 'outbox', 'relay', 'theme'] : ['intent', 'theme'];
+    assert.deepEqual(hostDomains(await reopen()), effective);
+    await assert.rejects(requestFirstOpenConsent(candidate, owner, storage, signal, owner.assertActive, async review => {
+      assert.deepEqual(review.domains, required);
+      assert.deepEqual(review.optionalDomains, optional);
+      assert.deepEqual(review.unsupportedDomains, []);
+      assert.deepEqual(review.unsupportedOptionalDomains, []);
+      return false;
+    }), FirstOpenConsentError);
+    assert.deepEqual(await storage.readAccessGrant(), previous);
+    assert.deepEqual(hostDomains(await reopen()), effective);
+
+    const accepted = await requestFirstOpenConsent(candidate, owner, storage, signal, owner.assertActive, async () => true);
+    const granted = [...required, ...optional].sort();
+    assert.deepEqual(hostDomains(accepted), granted);
+    const current = (await storage.readAccessGrant())!;
+    assert.deepEqual(current.domains, granted);
+    assert.match(current.supportReview!, /outbox-keys-intent-v1/);
+    assert.match(current.supportReview!, /media-file-v1/);
+    assert.deepEqual(hostDomains(await reopen()), granted);
+  });
 });

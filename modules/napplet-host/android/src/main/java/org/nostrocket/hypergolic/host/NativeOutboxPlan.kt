@@ -43,7 +43,7 @@ internal class NativeOutboxPlan private constructor(
       val identity = registration.getString("user")
       require(identity.matches(Regex("[0-9a-f]{64}")))
       val domains = strings(registration.getJSONArray("domains"))
-      require("outbox" in domains && "relay" in domains && request.getString("type") == "outbox.publish")
+      require("outbox" in domains && request.getString("type") == "outbox.publish")
       val plan = JSONObject(raw)
       fields(plan, setOf("requestId", "event", "destinations", "requiredInboxes", "ownSource", "ancillary"))
       val event = plan.getJSONObject("event")

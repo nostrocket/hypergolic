@@ -1,3 +1,4 @@
+import { MEDIA_ACCESS_DETAIL } from '../runtime/support-report';
 import { useRef } from 'react';
 import { AccessibilityInfo, ScrollView, StyleSheet, Text, type TextInstance } from 'react-native';
 import { ShellModal as Modal } from './ShellModal';
@@ -24,6 +25,9 @@ export function DiscoveryAccessReview({ review, decide }: {
       <Text style={styles.body}>Release</Text><Text selectable style={styles.claim}>{review.eventId}</Text>
       <Text style={styles.body}>Required access · {review.domains.join(', ') || 'none'}</Text>
       <Text style={styles.body}>Optional access · {review.optionalDomains.join(', ') || 'none'}</Text>
+      {(review.domains.includes('keys') || review.optionalDomains.includes('keys')) &&
+        <Text style={styles.body}>Keys lets this napplet use hardware shortcuts while it has focus.</Text>}
+      {(review.domains.includes('media') || review.optionalDomains.includes('media')) && <Text style={styles.body}>{MEDIA_ACCESS_DETAIL}</Text>}
       {review.unsupportedDomains.length > 0 && <Text style={styles.body}>Required capabilities unavailable · {review.unsupportedDomains.join(', ')}</Text>}
       {review.unsupportedOptionalDomains.length > 0 && <Text style={styles.body}>Optional capabilities unavailable · {review.unsupportedOptionalDomains.join(', ')}</Text>}
       <Pressable accessibilityRole="button" testID="discovery-access-accept" onPress={() => decide(true)} style={styles.primary}><Text style={styles.primaryText}>Allow and update</Text></Pressable>

@@ -17,7 +17,9 @@ revision before changing wire behavior:
 | RELAY | [0be8abc](https://github.com/napplet/naps/blob/0be8abce18beb46ca37bd4ddd042f58d30b4eedc/naps/NAP-RELAY.md) | Bounded query/subscribe/close and individually approved publish |
 | RESOURCE | [8c0645d](https://github.com/napplet/naps/blob/8c0645d32ceb159bc3e8bcec1107a92862b7e86a/naps/NAP-RESOURCE.md) | Bounded info/bytes/bytesMany/cancel; [limits](resource-access.md) |
 | UPLOAD | [a7cc174](https://github.com/napplet/naps/blob/a7cc17463cbf5d9cb87884b31071bc4fc826034c/naps/NAP-UPLOAD.md), [Blossom b5bd280](https://github.com/hzrd149/blossom/tree/b5bd2801d1763aa635fc8fea7a76597e0eb18990) | Per-file approval and metadata-only recovery; [profile](upload-access.md) |
-| OUTBOX | [4589a8f](https://github.com/napplet/naps/blob/4589a8f9a16d8aa29b3740e2b3b0cdca11e0976e/naps/NAP-OUTBOX.md) | Selected reads, subscriptions and approved publication; [routing](outbox-routing.md) |
+| OUTBOX | [8865f73](https://github.com/napplet/naps/blob/8865f73d52a4864afee145f28d26520476273927/naps/NAP-OUTBOX.md) | Selected reads, subscriptions and approved publication; [routing](outbox-routing.md) |
+| KEYS | [8869a4c](https://github.com/napplet/naps/blob/8869a4cf77b023f4b049f47c546910a0280dc1a6/naps/NAP-KEYS.md) | Focused ordinary shortcuts for a verified frame |
+| MEDIA | [7806f43](https://github.com/napplet/naps/blob/7806f438530251fce5129f8e6239d6b642278759/naps/NAP-MEDIA.md) | [Foreground finite HTTPS MP4](media-playback.md) after trusted Play |
 | Relay authentication | [NIP-42 a2494f4](https://github.com/nostr-protocol/nips/blob/a2494f4f81d46684e5814a9bf35e2b1df978f955/42.md) | Separate exact approval or auth-required denial |
 
 Other selected capabilities have their own references: [links](external-links.md),
@@ -25,9 +27,13 @@ Other selected capabilities have their own references: [links](external-links.md
 NAP-IDENTITY is read-only; NAP-KEYS concerns keyboard bindings. There is no
 `identity.signEvent` or `keys.sign`. Required domain tags are bare names, not ACL
 strings. Supported published domains are identity, storage, theme, relay,
-resource, upload, link, intent, inc, notify, config and outbox. Outbox operations
-also require Relay access. [Tolerant admission](nap-support.md) never grants an
-unavailable domain.
+resource, upload, link, intent, inc, notify, config, outbox, keys and media. The Outbox grant
+covers selected Outbox operations. Raw Relay operations require a separate grant.
+[Tolerant admission](nap-support.md) never grants an unavailable domain. Keys
+allows up to 32 registered actions per verified frame. The trusted binding only
+reacts to eligible keyboard events in the focused foreground frame and excludes
+text editing, composition, repeated events, modifier chords and reserved controls.
+Bindings are local to that frame and expire with it.
 
 The selected SDK/core exports accept an unsigned `EventTemplate`. The NAP 0.31.1
 `RelayPublishMessage` signed-event type disagrees with that owning draft/API;

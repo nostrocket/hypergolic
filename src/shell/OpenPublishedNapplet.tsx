@@ -1,3 +1,4 @@
+import { MEDIA_ACCESS_DETAIL } from '../runtime/support-report';
 import { TrustedBand } from './TrustedBand';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEffect, useRef, useState } from 'react';
@@ -79,9 +80,12 @@ function OpenAccessReview({review, decide}: {review: NappletConsentReview; decid
     <Text style={styles.detail}>Napplet</Text><Text selectable style={styles.claim}>{review.appId}</Text>
     <Text style={styles.detail}>Signed event</Text><Text selectable style={styles.claim}>{review.eventId}</Text>
     {(review.domains.includes('resource') || review.optionalDomains.includes('resource')) && <Text style={styles.detail}>Resource access allows bounded downloads from public HTTPS sites and your configured Blossom servers. Files stay in memory while this napplet is loaded.</Text>}
+    {(review.domains.includes('media') || review.optionalDomains.includes('media')) && <Text style={styles.detail}>{MEDIA_ACCESS_DETAIL}</Text>}
     {(review.domains.includes('upload') || review.optionalDomains.includes('upload')) && <Text style={styles.detail}>Upload access allows this napplet to read files you select. Every upload still needs your separate approval of the file, identity and server.</Text>}
     <Text style={styles.detail}>{review.optionalDomains.length ? 'Required access · ' : 'Requested access: '}{review.domains.join(', ') || 'none'}</Text>
     {review.optionalDomains.length > 0 && <Text style={styles.detail}>Optional access · {review.optionalDomains.join(', ')}</Text>}
+    {(review.domains.includes('keys') || review.optionalDomains.includes('keys')) &&
+      <Text style={styles.detail}>Keys lets this napplet use hardware shortcuts while it has focus.</Text>}
     {review.unsupportedDomains.length > 0 && <Text testID="settings-napplet-unsupported" accessibilityLiveRegion="polite" style={styles.error}>Required capabilities unavailable · {review.unsupportedDomains.join(', ')}. The napplet can open with limited features.</Text>}
     {review.unsupportedOptionalDomains.length > 0 && <Text style={styles.detail}>Optional capabilities unavailable · {review.unsupportedOptionalDomains.join(', ')}</Text>}
     <Pressable accessibilityRole="button" testID="settings-napplet-approve" onPress={() => decide(true)} style={styles.action}><Text style={styles.actionText}>Allow and open</Text></Pressable>

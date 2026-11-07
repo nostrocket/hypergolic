@@ -62,6 +62,10 @@ object CapabilityConfigurationProof {
     checkProof(outbox.snapshot.contains("outbox-generation"))
     val noRelay = CapabilityConfiguration(raw("published", listOf("outbox")), "outbox-only", true)
     checkProof(!noRelay.allowsRelay && noRelay.grantedDomains == listOf("outbox"))
+    val mixed = listOf("intent", "keys", "media", "outbox")
+    val mixedConfig = CapabilityConfiguration(raw("published", mixed), "mixed-generation", true)
+    checkProof(!mixedConfig.allowsRelay && mixedConfig.grantedDomains == mixed)
+    denied(raw("published", mixed + "gamepad"))
     denied(raw("published", listOf("outbox", "outbox", "relay")))
     denied(raw("published", listOf("outbox", "relay")), published = false)
     val published = CapabilityConfiguration(raw("published", listOf("identity", "storage", "theme", "relay")),

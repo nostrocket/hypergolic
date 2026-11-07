@@ -66,7 +66,8 @@ export function publishedHostInput(artifactInput: unknown, admissionInput: unkno
       admission.publisher !== verified.publisher || admission.appId !== verified.appId ||
       admission.eventId !== verified.eventId) return fail();
   const domains = [...admission.domains].sort();
-  const expected = publishedCapabilityCompatibility(artifact.manifest.requiredDomains, artifact.manifest.optionalDomains).domains;
+  const expected = publishedCapabilityCompatibility(artifact.manifest.requiredDomains,
+    artifact.manifest.optionalDomains, admission.supportProfile).domains;
   if (domains.length !== expected.length || domains.some((domain, index) => domain !== expected[index])) return fail();
   const configuration = JSON.stringify({ sessionId: descriptor.id, epoch: authority.epoch,
     user: authority.user, publisher: verified.publisher, appId: verified.appId,

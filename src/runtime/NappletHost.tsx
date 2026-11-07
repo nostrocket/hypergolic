@@ -107,6 +107,8 @@ function PublishedNappletHost({ session, onHostEvent, ...props }: Props) {
       <Text style={styles.detail}>Access: {review.domains.length ? review.domains.join(', ') : 'none'}</Text>
       {review.optionalDomains.length > 0 && <Text style={styles.detail}>Optional access: {review.optionalDomains.join(', ')}</Text>}
       {review.unsupportedOptionalDomains.length > 0 && <Text style={styles.detail}>Unavailable optional access: {review.unsupportedOptionalDomains.join(', ')}</Text>}
+      {(review.domains.includes('keys') || review.optionalDomains.includes('keys')) &&
+        <Text style={styles.detail}>Keys lets this napplet use hardware shortcuts while it has focus.</Text>}
       {review.unsupportedDomains.length > 0 && <Text accessibilityLiveRegion="polite" style={styles.detail}>Unavailable: {review.unsupportedDomains.join(', ')}. This napplet can open, but features using these capabilities will not work. They will not be granted.</Text>}
       <Pressable accessibilityRole="button" testID={`published-approve-${session.id}`} onPress={() => decide(true)} style={styles.action}><Text style={styles.actionText}>Allow and open</Text></Pressable>
       <Pressable accessibilityRole="button" testID={`published-reject-${session.id}`} onPress={() => decide(false)} style={styles.secondary}><Text style={styles.secondaryText}>Cancel</Text></Pressable></ScrollView>

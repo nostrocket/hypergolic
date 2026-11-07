@@ -128,7 +128,7 @@ async function preparePublishedSession(ports: PublishedSessionDependencies, requ
       admission = await requestFirstOpenConsent(artifact, owner, grant.port, controller.signal, active, exact ? async () => {
         reviewed = true;
         return exact.reviewLaunch(true);
-      } : review);
+      } : review, reopensPin ? 'saved-pin' : 'review');
     } finally { grant.revoke(); }
     active();
     if (exact && !reviewed && await exact.reviewLaunch(false) !== true) fail();

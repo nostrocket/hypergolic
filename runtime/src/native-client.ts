@@ -1,3 +1,4 @@
+import {mediaEvent, type MediaEvent, type MediaRequest} from './media-wire';
 import {canDeferCapability, parseCapabilityRequest} from '../../src/runtime/capability-protocol';
 import {parseOutboxSubscribe,parseOutboxClose} from '../../src/outbox/subscription-contract';
 import {normalizeRelayUrl} from '../../src/network/relay-settings';
@@ -27,7 +28,7 @@ type StreamState={domain:'relay'|'outbox';subId:string; filters:readonly QueryFi
 type StreamRequest = ReturnType<typeof parseRelaySubscribe> | ReturnType<typeof parseOutboxSubscribe>;
 type WaitingStream = Readonly<{request:StreamRequest;deliver:StreamState['deliver'];expiresAt:number;timer:number}>;
 type StreamEnvelope={sequence:number;delivery:number;response:unknown};
-type NativeClientOptions = Readonly<{ requestTimeoutsMs?: Readonly<Record<string, number>>; onRouting?: (message: NappletMessage, acknowledge: () => void) => void }>;
+type NativeClientOptions = Readonly<{ requestTimeoutsMs?: Readonly<Record<string, number>>; onRouting?: (message: NappletMessage, acknowledge: () => void) => void; onMedia?: (message: MediaEvent) => void }>;
 function receiveStream(envelope:StreamEnvelope,streams:Map<number,StreamState>,stopStream:(counter:number,notify:boolean)=>void,acknowledge:(envelope:StreamEnvelope)=>void, released:()=>void):void {
   const stream=streams.get(envelope.sequence);if(!stream)return;
   try {
@@ -93,12 +94,17 @@ function receiveOrdinary(envelope:{sequence:number;response:unknown},pending:Map
 }
 type UploadState = {uploadId: string; delivery: number; bytesSent: number; onStatus(message: NappletMessage): void};
 interface NativeReceiveState {generation: string; pending: Map<number, PendingRequest>; streams: Map<number, StreamState>; uploads: Map<number, UploadState>;
-  stopStream(counter: number, notify: boolean): void; acknowledge(envelope: StreamEnvelope): void; released():void; routing(raw: unknown): boolean}
+  stopStream(counter: number, notify: boolean): void; acknowledge(envelope: StreamEnvelope): void; released():void; routing(raw: unknown): boolean; media: NativeClientOptions['onMedia']}
 function receiveNative(raw: unknown, state: NativeReceiveState): void {
   const {generation, pending, streams, uploads, stopStream, acknowledge, released} = state;
     if (typeof raw !== 'string' || new TextEncoder().encode(raw).length > maxBytes) return;
     try {
       const envelope = JSON.parse(raw);
+      if (envelope?.type === 'media.event') {
+        const message = raw.length <= 4096 && envelope.sessionId === generation && Object.keys(envelope).length === 3 && mediaEvent(envelope.message);
+        if (message) state.media?.(message);
+        return;
+      }
       if(state.routing(envelope))return;
       if(receiveControl(envelope,generation,streams,stopStream))return;
       if (envelope?.type === 'capability.upload' && Object.keys(envelope).length === 5 && envelope.sessionId === generation) {
@@ -285,7 +291,7 @@ export function createNativeClient(native: NativeHost, generation: string, optio
     if (sequence >= Number.MAX_SAFE_INTEGER) throw new Error('Native sequence exhausted');
     native.postMessage(JSON.stringify({type: 'routing-ack', sessionId: generation, sequence: ++sequence, delivery}));
   });
-  const receiving: NativeReceiveState = {generation, pending, streams, uploads, stopStream, acknowledge, released:admission.released, routing};
+  const receiving: NativeReceiveState = {generation, pending, streams, uploads, stopStream, acknowledge, released:admission.released, routing, media:options.onMedia};
   const receive = (raw: unknown): void => {if (!disposed) receiveNative(raw, receiving);};
   const android = (event: { data: unknown }): void => receive(event.data);
   const ios = (event: MessageEvent): void => {
@@ -300,6 +306,14 @@ export function createNativeClient(native: NativeHost, generation: string, optio
       const outbox=message.type==='outbox.close',request=outbox?parseOutboxClose(message):parseRelayClose(message);
       if(!outbox&&admission.removeWaiting(request.subId))return;
       for(const [counter,stream] of streams)if(stream.subId===request.subId&&stream.domain===(outbox?'outbox':'relay')){stopStream(counter,false,request.id);return;}
+    },
+    sendMedia(message: MediaRequest): boolean {
+      if (disposed || sequence >= Number.MAX_SAFE_INTEGER) return false;
+      const encoded = JSON.stringify({type:'media', sessionId:generation, sequence:sequence + 1, message});
+      if (new TextEncoder().encode(encoded).length > 32 * 1024) return false;
+      sequence++;
+      try { native.postMessage(encoded); return true; }
+      catch { return false; }
     },
     request,
     ...createPresentationRequests(request),

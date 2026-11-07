@@ -94,7 +94,7 @@ async function readCatalogPage(value: unknown, catalog: ReturnType<typeof create
 function invalidRequestReply(payload: unknown, domains: readonly string[]): CapabilityReply | null {
   const relay = domains.includes('relay') ? queryFailure(payload, 'invalid relay query') : null;
   const storage = domains.includes('storage') ? storageFailure(payload, 'invalid storage request') : null;
-  const outbox = domains.includes('outbox') && domains.includes('relay') ? outboxReadFailure(payload, 'invalid filter') : null;
+  const outbox = domains.includes('outbox') ? outboxReadFailure(payload, 'invalid filter') : null;
   return relay ?? storage ?? outbox;
 }
 
@@ -134,7 +134,7 @@ export function createCapabilityBroker(database: ShellDatabase, native: NativeCa
         const payload = captured.request;
         const type = payload && typeof payload === 'object' && 'type' in payload ? payload.type : null;
         if (type === 'outbox.close') {
-          if (registration.domains.includes('outbox') && registration.domains.includes('relay')) closeOutbox?.(payload);
+          if (registration.domains.includes('outbox')) closeOutbox?.(payload);
           return;
         }
         if (type === 'relay.close') {
@@ -157,7 +157,7 @@ export function createCapabilityBroker(database: ShellDatabase, native: NativeCa
           return;
         }
         const domain = request.type.split('.')[0]!;
-        if (!registration.domains.includes(domain) || (domain === 'outbox' && !registration.domains.includes('relay'))) return;
+        if (!registration.domains.includes(domain)) return;
         const correlation = JSON.stringify([request.type, request.id]);
         if (seen.has(correlation) || seen.size >= CAPABILITY_LIMITS.sessionRequests) {
           const failure = outboxReadFailure(request, 'policy denied') ?? queryFailure(request, 'request already used or session limit reached') ?? storageFailure(request, 'request already used or session limit reached');

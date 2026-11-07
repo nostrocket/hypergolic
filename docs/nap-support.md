@@ -14,7 +14,7 @@ pinning, update review, one-use native claim, identity epoch and session revocat
 remain mandatory. Review lists every requested domain and unavailable feature.
 Only the requested/supported intersection is granted and sent to native
 configuration. Native parsers still reject unsupported domains. Outbox admission
-uses [its selected profile](outbox-routing.md) and also requires Relay access.
+uses [its selected profile](outbox-routing.md). Raw Relay access requires a separate grant.
 
 SQLite schema v4 stores bounded trusted `support_review` metadata beside the
 grant: requested set, allowed intersection and support-profile revision. The v3
@@ -34,8 +34,9 @@ approve signing, upload, external links or sensitive identity reads.
 The [bundled support napplet](../napplets/nap-support/README.md) reports reviewed
 metadata using Available/Unavailable/Unknown. A tick describes the shell's
 configured published-napplet profile, not full conformance or the current guest's
-grant. Expanded details state concrete limits. FS/media remain unavailable;
-selected Outbox operations are available subject to both grants and their bounds.
+grant. Expanded details state concrete limits. Focused Keys and [foreground finite
+Media](media-playback.md) have bounded profiles. FS remains unavailable. Selected
+Outbox operations use the reviewed Outbox grant. Raw Relay uses its own grant.
 
 The advisory schema-v2 report names its scope and is separate from standard
 permission discovery and native enforcement. Without that report, standard

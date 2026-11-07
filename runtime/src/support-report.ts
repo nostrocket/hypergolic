@@ -1,9 +1,9 @@
 import { NAP_CATALOGUE } from '../../src/runtime/nap-catalogue.ts';
-import { supportForDomain, SUPPORT_PROFILE } from '../../src/runtime/support-report.ts';
+import { supportForDomain, REPORTED_SUPPORT_PROFILE } from '../../src/runtime/support-report.ts';
 
 /** Public advisory metadata. This does not grant permissions or extend the NAP wire. */
 export function injectSupportReport(html: string): string {
-  const report = {schemaVersion: 2, scope: 'published-napplets', shell: 'Hypergolic', profile: SUPPORT_PROFILE,
+  const report = {schemaVersion: 2, scope: 'published-napplets', shell: 'Hypergolic', profile: REPORTED_SUPPORT_PROFILE,
     namedManifestFormats: ['legacy', 'nip-5d'],
     domains: NAP_CATALOGUE.map(row => ({domain: row.domain, ...supportForDomain(row.domain)}))};
   const encoded = JSON.stringify(report).replace(/</g, '\\u003c');

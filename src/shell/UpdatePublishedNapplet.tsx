@@ -1,3 +1,4 @@
+import { MEDIA_ACCESS_DETAIL } from '../runtime/support-report';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { ShellPressable as Pressable } from './ShellPressable';
@@ -90,6 +91,7 @@ function UpdateVersionReview({sessionId, request, decide}: {
     <Text style={styles.detail}>Current event</Text><Text selectable style={styles.claim}>{request.previousEventId}</Text>
     <Text style={styles.detail}>New event</Text><Text selectable style={styles.claim}>{request.nextEventId}</Text>
     {(request.domains.includes('resource') || request.optionalDomains.includes('resource')) && <Text style={styles.detail}>Resource access allows bounded public HTTPS downloads and your configured Blossom servers, retained in memory while loaded.</Text>}
+    {(request.domains.includes('media') || request.optionalDomains.includes('media')) && <Text style={styles.detail}>{MEDIA_ACCESS_DETAIL}</Text>}
     <Text style={styles.detail}>{request.optionalDomains.length ? 'Required access · ' : 'Requested access: '}{request.domains.join(', ') || 'none'}</Text>
     {request.optionalDomains.length > 0 && <Text style={styles.detail}>Optional access · {request.optionalDomains.join(', ')}</Text>}
     {updateSupport.unsupportedDomains.length > 0 && <Text style={styles.warning}>Required capabilities unavailable · {updateSupport.unsupportedDomains.join(', ')}. The napplet can open with limited features.</Text>}
@@ -110,6 +112,9 @@ function UpdateAccessReview({sessionId, request, decide}: {
     <Text style={styles.detail}>Napplet</Text><Text selectable style={styles.claim}>{request.appId}</Text>
     <Text style={styles.detail}>{request.optionalDomains.length ? 'Required access · ' : 'The update requests: '}{request.domains.join(', ') || 'none'}</Text>
     {request.optionalDomains.length > 0 && <Text style={styles.detail}>Optional access · {request.optionalDomains.join(', ')}</Text>}
+    {(request.domains.includes('keys') || request.optionalDomains.includes('keys')) &&
+      <Text style={styles.detail}>Keys lets this napplet use hardware shortcuts while it has focus.</Text>}
+    {(request.domains.includes('media') || request.optionalDomains.includes('media')) && <Text style={styles.detail}>{MEDIA_ACCESS_DETAIL}</Text>}
     {request.unsupportedDomains.length > 0 && <Text style={styles.warning}>Required capabilities unavailable · {request.unsupportedDomains.join(', ')}</Text>}
     {request.unsupportedOptionalDomains.length > 0 && <Text style={styles.detail}>Optional capabilities unavailable · {request.unsupportedOptionalDomains.join(', ')}</Text>}
     <Pressable accessibilityRole="button" testID={`published-update-access-accept-${sessionId}`} onPress={() => decide(true)} style={styles.action}><Text style={styles.actionText}>Allow and update</Text></Pressable>

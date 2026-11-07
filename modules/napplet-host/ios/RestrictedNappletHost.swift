@@ -36,6 +36,15 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
 #endif
   // A newly mounted hidden host cannot claim focus before the trusted active prop.
   private var active = false
+  private lazy var finiteVideo: NativeFiniteVideo = {
+    let generation = self.generation
+    return NativeFiniteVideo(host:self, generation:generation, permit:{ RoutingTransport.shared.mediaRevision(generation) }) { [weak self] in
+      guard let self else { return false }
+      return self.live && self.ready && self.loaded && !self.disposed && self.active && self.publishedSource != nil &&
+        self.configuration?.domains.contains("media") == true && self.webView?.url == self.expectedURL &&
+        UIApplication.shared.applicationState == .active
+    }
+  }()
   private lazy var selectedFilePicker = SelectedFilePicker(live: { [weak self] in self?.maySelectFile() == true })
   private func maySelectFile() -> Bool {
     live && ready && loaded && !disposed && active && configuration?.domains.contains("upload") == true && UploadTransport.leases.isRegistered(generation)
@@ -56,6 +65,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
   override func layoutSubviews() {
     super.layoutSubviews()
     webView?.frame = bounds
+    finiteVideo.layout()
   }
 
   override func willMove(toSuperview newSuperview: UIView?) {
@@ -96,8 +106,8 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     guard active != isActive else { return }
     active = isActive
     if !isActive {selectedFilePicker.cancel()}
-    updateMediaPlayback()
     if configuration != nil { ApprovalTransport.setFocused(generation, active: isActive); UploadTransport.focus(generation, active: isActive); LinkTransport.focus(generation, isActive); RoutingTransport.shared.focus(generation, isActive) }
+    updateMediaPlayback()
     // Dismiss only this retained view's editor; keep its loaded document and position.
     if !isActive { webView?.endEditing(true) }
   }
@@ -107,6 +117,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
   private func updateMediaPlayback(foreground: Bool? = nil) {
     guard let view = webView, !disposed else { return }
     let allowed = active && (foreground ?? (UIApplication.shared.applicationState == .active))
+    finiteVideo.focusChanged(visible: allowed)
     if loaded { view.evaluateJavaScript("window.__hypergolicMediaActive?.(\(allowed))", completionHandler: nil) }
     if !allowed { view.setAllMediaPlaybackSuspended(true, completionHandler: nil) }
     else {
@@ -423,6 +434,11 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
       reply(nil, nil)
       return
     }
+    if value["type"] as? String == "media" {
+      receiveFiniteVideo(value, text: text)
+      reply(nil, nil)
+      return
+    }
     if value["type"] as? String == "capability" {
       receiveCapability(value, reply: reply)
       return
@@ -488,14 +504,14 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     RelaySubscriptionTransport.shared.acknowledge(generation, streamSequence: stream, delivery: delivery)
   }
   private func receiveSubscription(_ value: [String: Any]) {
-    guard ready, let configuration, configuration.domains.contains("relay"),
+    guard ready, let configuration,
       Set(value.keys) == Set(["type", "sessionId", "sequence", "message"]),
       let counter = streamInteger(value["sequence"]),
       CapabilityTransport.leases.consumeSequence(generation, sequence: counter),
       let message = value["message"] as? String, message.utf8.count <= 16 * 1024,
       let request = try? JSONSerialization.jsonObject(with: Data(message.utf8)) as? [String: Any],
       let type = request["type"] as? String,
-      (type == "relay.subscribe" || (type == "outbox.subscribe" && configuration.domains.contains("outbox"))), let subId = request["subId"] as? String,
+      (type == "relay.subscribe" || type == "outbox.subscribe"), configuration.allowsRelayOperation(type), let subId = request["subId"] as? String,
       (1...128).contains(subId.utf8.count), !subId.utf8.contains(where: { $0 < 32 || $0 == 127 }),
       let id = request["id"] as? String, (1...128).contains(id.utf8.count),
       let snapshot = try? configuration.request(message), let capturedView = webView, let capturedURL = expectedURL else { return }
@@ -511,6 +527,26 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
       }) else { return }
     onEvent?(["type": "capability", "lane": type == "outbox.subscribe" ? "outbox-subscription" : "subscription", "sessionId": configuration.sessionId,
       "generation": generation, "token": token])
+  }
+
+  private func receiveFiniteVideo(_ value: [String: Any], text: String) {
+    guard ready, publishedSource != nil, configuration?.domains.contains("media") == true,
+      Set(value.keys) == ["type", "sessionId", "sequence", "message"],
+      let sequence = value["sequence"] as? NSNumber, CFGetTypeID(sequence) != CFBooleanGetTypeID(),
+      sequence.doubleValue.isFinite, sequence.doubleValue >= 1, sequence.doubleValue <= 9_007_199_254_740_991,
+      sequence.doubleValue.rounded(.towardZero) == sequence.doubleValue,
+      CapabilityTransport.leases.consumeSequence(generation, sequence: sequence.uint64Value),
+      UploadWire.boundedJSON(text, limit: 32 * 1024),
+      let request = value["message"] as? [String: Any], let capturedView = webView, let capturedURL = expectedURL else { return }
+    finiteVideo.receive(request) { [weak self, weak capturedView] message in
+      guard let self, let capturedView, self.live, !self.disposed, self.webView === capturedView,
+        capturedView.url?.absoluteString == capturedURL.absoluteString,
+        let data = try? JSONSerialization.data(withJSONObject: ["type":"media.event", "sessionId":self.generation, "message":message]) else { return }
+      let script = "window.postMessage({type:'hypergolic.native-response',message:" + self.jsString(String(decoding:data, as:UTF8.self)) + "}, '*')"
+      capturedView.evaluateJavaScript(script, in:nil, in:self.bridgeWorld) { [weak self] result in
+        if case .failure = result { self?.fail("renderer-stopped") }
+      }
+    }
   }
 
   private func mayDeferCapability(_ message: String, configuration: CapabilityConfiguration) -> Bool {
@@ -614,8 +650,8 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     let approval = configuration.approvalWireId(message)
     if approval.recognized {
       guard CapabilityTransport.leases.consumeSequence(generation, sequence: counter),
-        let token = ApprovalTransport.admit(generation, snapshot: snapshot,
-          wireId: approval.wireId, reply: respond) else { respond(nil); return }
+        let wireId = approval.wireId,
+        let token = ApprovalTransport.admit(generation, snapshot: snapshot, wireId: wireId, reply: respond) else { respond(nil); return }
       onEvent?(["type": "capability", "sessionId": configuration.sessionId,
         "generation": generation, "token": token, "lane": "approval"])
       return
@@ -647,6 +683,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
   func destroySession() {
     guard !disposed else { return }
     disposed = true
+    finiteVideo.retire()
     closeCheckId = nil
     pendingNativeReplies.removeAll()
     selectedFilePicker.cancel()

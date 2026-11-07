@@ -59,6 +59,12 @@ import Foundation
       try check((try? CapabilityConfiguration(parsed.configuration!, generation: generation)) == nil,
         "reject invalid published domain set")
     }
+    publishedConfig["domains"] = ["keys"]
+    let keysConfig = try CapabilityConfiguration(try json(publishedConfig), generation: generation)
+    try check(keysConfig.domains == ["keys"], "Keys retains the exact granted domain")
+    publishedConfig["domains"] = ["keys", "gamepad"]
+    try check((try? CapabilityConfiguration(try json(publishedConfig), generation: generation)) == nil,
+      "Keys does not allow Gamepad")
     publishedConfig["domains"] = ["outbox", "relay"]
     let outboxConfig = try CapabilityConfiguration(try json(publishedConfig), generation: generation)
     try check(outboxConfig.domains == ["outbox", "relay"], "published Outbox retains exact granted domains")
@@ -67,19 +73,28 @@ import Foundation
     publishedConfig["domains"] = ["outbox"]
     let isolatedOutbox = try CapabilityConfiguration(try json(publishedConfig), generation: generation)
     try check(!isolatedOutbox.domains.contains("relay"), "Outbox never silently adds relay authority")
+    let mixed = ["intent", "keys", "media", "outbox"]
+    publishedConfig["domains"] = mixed
+    let mixedConfig = try CapabilityConfiguration(try json(publishedConfig), generation: generation)
+    try check(mixedConfig.domains == Set(mixed), "Mixed published grants retain exact domains without adding Relay")
+    publishedConfig["domains"] = mixed + ["gamepad"]
+    try check((try? CapabilityConfiguration(try json(publishedConfig), generation: generation)) == nil,
+      "Mixed grants do not enable Gamepad")
     publishedConfig["domains"] = ["outbox", "outbox", "relay"]
     try check((try? CapabilityConfiguration(try json(publishedConfig), generation: generation)) == nil, "duplicate Outbox grant rejected")
     publishedConfig["domains"] = ["identity", "relay"]
     configuredFields["configuration"] = try json(publishedConfig)
     let configured = PublishedArtifactHostInput(try json(configuredFields))!
-    let configuredHandle = registry.stage(html, claims: configured.claims)!
+    let configuredRegistry = PublishedArtifactRegistry()
+    try check(configuredRegistry.registerSession(session), "register configured owner session")
+    let configuredHandle = configuredRegistry.stage(html, claims: configured.claims)!
     var wrongAppConfig = publishedConfig
     wrongAppConfig["appId"] = "other-app"
     let mismatchedConfig = try CapabilityConfiguration(try json(wrongAppConfig), generation: generation)
     try check(!mismatchedConfig.matchesPublishedClaims(sessionId: configured.claims.sessionId,
       publisher: configured.claims.publisher, appId: configured.claims.identifier,
       version: configured.claims.aggregateHash), "mismatch checked before one-use claim")
-    let configuredClaim = registry.claim(configuredHandle, claims: configured.claims, viewGeneration: generation)
+    let configuredClaim = configuredRegistry.claim(configuredHandle, claims: configured.claims, viewGeneration: generation)
     try check(configuredClaim != nil, "invalid config did not consume staged artifact")
     let configuredReader = PublishedArtifactReadOwner(claimed: configuredClaim!, domains: boundConfiguration.domains)
     let configuredChunk = try JSONSerialization.jsonObject(with: Data(configuredReader.read(sequence: 0)!.utf8)) as! [String: Any]

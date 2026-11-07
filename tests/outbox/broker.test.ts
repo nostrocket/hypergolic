@@ -12,7 +12,7 @@ function bind(database: Parameters<typeof createCapabilityBroker>[0], native: Na
 }
 const result = {events:[],incomplete:true,plan:{relays:['wss://nos.lol'],source:'fallback' as const,missingAuthors:[],incomplete:true}};
 test('attested query uses captured identity and returns original correlation with incomplete evidence', async t => {
-  const {database} = await setup(t), native = new NativeLeases(), owner = registration();
+  const {database} = await setup(t), native = new NativeLeases(), owner = registration({domains: ['outbox']});
   const filters = Array.from({length:22},(_,index)=>({authors:[hex(index+1)],kinds:[0],limit:1}));
   const broker = bind(database,native,owner,{async query(input,user,_signal,active){
     assert.equal(user,owner.user); assert.deepEqual((input as {filters:unknown}).filters,filters);
@@ -21,10 +21,10 @@ test('attested query uses captured identity and returns original correlation wit
   const token = native.add(owner,{...request(),filters}); await broker.dispatch(token);
   assert.deepEqual(native.results.get(token),{type:'outbox.query.result',id:'outbox-1',events:[],incomplete:true});
 });
-test('both outbox and relay grants, exact generation and namespace are required before routing', async t => {
+test('Outbox grant, exact generation and namespace are required before routing', async t => {
   const {database} = await setup(t), native = new NativeLeases(); let calls = 0;
   const service = {async query(){calls++;return result;}};
-  for (const patch of [{domains:['outbox']},{domains:['relay']},{generation:'foreign'},{user:hex(5)}]) {
+  for (const patch of [{domains:['relay']},{generation:'foreign'},{user:hex(5)}]) {
     const owner = registration(), captured = registration(patch);
     const broker = bind(database,native, patch.domains ? captured : owner,service);
     const token = native.add(captured,request());await broker.dispatch(token);assert.equal(native.results.get(token),null);

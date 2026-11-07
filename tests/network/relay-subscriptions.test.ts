@@ -10,12 +10,12 @@ const signed=(content='known',kind=1,tags:string[][]=[])=>JSON.parse(JSON.string
 const request=(subId='caller')=>({type:'relay.subscribe',id:'request-'+subId,subId,filters:[{kinds:[1],limit:2}]});
 const close=(subId='caller')=>({type:'relay.close',id:'close-'+subId,subId});
 const registration=(generation='generation-1'):NativeRegistration=>({sessionId:generation,generation,epoch:0,user:'1'.repeat(64),publisher:'2'.repeat(64),appId:'feed-lab',version:'3'.repeat(64),instanceId:generation,fixture:'feed-lab',domains:['relay']});
-function harness(relays=['wss://one.example.org'], owner = registration()) {
+function harness(relays=['wss://one.example.org'], owner = registration(), domain: 'relay' | 'outbox' = 'relay') {
   let sequence=0,clock=0;
   const calls:{id:string;url:string;wire:string;sub:string;frame:(text:string)=>void;failed:()=>void;stopped:number}[]=[];
   const port:NativeRelayStreamPort={newInstanceId:()=>`00000000-0000-4000-8000-${String(++sequence).padStart(12,'0')}`,
     open(id,url,wire,sub,frame,failed){const call={id,url,wire,sub,frame,failed,stopped:0};calls.push(call);return()=>{call.stopped++;};}};
-  const manager=createRelaySubscriptions(port,()=>relays,{now:()=>clock,retryMs:[1,1,1,1,1]});
+  const manager=createRelaySubscriptions(port,()=>relays,{domain,now:()=>clock,retryMs:[1,1,1,1,1]});
   let active=true;
   const messages:RelaySubscriptionMessage[]=[];
   const session=manager.session({registration:owner,assertActive(){if(!active)throw new Error('identity changed');}});
@@ -192,25 +192,25 @@ test('equal caller IDs across native sessions remain isolated and process/sessio
   assert.throws(()=>h.manager.session({registration:registration('generation-4'),assertActive(){}}));
   h.manager.revokeAll();assert.ok(h.calls.every(call=>call.stopped===1));
 });
-test('mixed stream admission keeps two slots and releases them on close in either order', () => {
-  for (const outboxFirst of [true, false]) {
-    const relays = ['wss://one.example.org'];
-    const h = harness(relays, {...registration(), domains: ['outbox', 'relay']});
-    const outbox = () => h.session.subscribePlanned(request('outbox'), h.send, 'token', relays, 1);
-    if (outboxFirst) outbox();
-    h.session.subscribe(request(), h.send);
-    if (!outboxFirst) outbox();
-    assert.throws(() => h.session.subscribe(request('second'), h.send));
-    assert.throws(() => h.session.subscribePlanned(request('other-outbox'), h.send, 'token', relays, 1));
-    assert.equal(h.calls.length, 2);
-    h.session.close(close('outbox'));
-    h.session.subscribe(request('second'), h.send);
-    h.session.subscribe(request('third'), h.send);
-    assert.throws(() => h.session.subscribePlanned(request('after-three'), h.send, 'token', relays, 1));
-    assert.throws(() => h.session.subscribe(request('fourth'), h.send));
-    assert.equal(h.calls.length, 4);
-    h.session.revoke();
-  }
+test('raw and planned stream managers reject crossover and enforce their own caps', () => {
+  const relays = ['wss://one.example.org'];
+  const raw = harness(relays, {...registration(), domains: ['outbox', 'relay']});
+  assert.throws(() => raw.session.subscribePlanned(request(), raw.send, 'token', relays, 1));
+  assert.equal(raw.calls.length, 0);
+  raw.session.revoke();
+
+  assert.throws(() => harness(relays, registration(), 'outbox'));
+  const planned = harness(relays, {...registration(), domains: ['outbox']}, 'outbox');
+  assert.throws(() => planned.session.subscribe(request(), planned.send));
+  assert.equal(planned.calls.length, 0);
+  const subscribe = (id: string) => planned.session.subscribePlanned(request(id), planned.send, 'token', relays, 1);
+  subscribe('one');
+  subscribe('two');
+  assert.throws(() => subscribe('three'));
+  planned.session.close(close('one'));
+  subscribe('three');
+  assert.equal(planned.calls.length, 3);
+  planned.session.revoke();
 });
 test('scoped destinations must be in trusted snapshot and pool selection stays bounded',()=> {
   const h=harness(['wss://one.example.org','wss://two.example.org','wss://three.example.org']);

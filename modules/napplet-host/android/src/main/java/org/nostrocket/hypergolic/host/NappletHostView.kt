@@ -49,6 +49,10 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
   private var closeUnsafeUntil = 0L
   private var pickerFaultProof: String? = null
   private val webView = WebView(context)
+  private val finiteVideo = NativeFiniteVideo(this, generation, { RoutingTransport.mediaRevision(generation) }) {
+    live && ready && loaded && !disposed && active && mediaForeground &&
+      published != null && configuration?.grantedDomains?.contains("media") == true && webView.url == expectedUrl
+  }
   private val imeLocation = IntArray(2)
   private val assetLoader = WebViewAssetLoader.Builder()
     .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context)).build()
@@ -179,6 +183,20 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
             }
             return@addWebMessageListener
           }
+          if (data.optString("type") == "media") {
+            if (!ready || published == null || configuration?.grantedDomains?.contains("media") != true ||
+                data.keys().asSequence().toSet() != setOf("type", "sessionId", "sequence", "message")) return@addWebMessageListener
+            val sequence = data.opt("sequence")
+            if ((sequence !is Int && sequence !is Long) || !CapabilityTransport.leases.consumeSequence(generation, (sequence as Number).toLong())) return@addWebMessageListener
+            if (!UploadJsonBounds.accepts(text, 32 * 1024)) return@addWebMessageListener
+            val request = data.optJSONObject("message") ?: return@addWebMessageListener
+            finiteVideo.receive(request) { event ->
+              if (live && !disposed && view === webView && view.url == expectedUrl) {
+                reply.postMessage(JSONObject().put("type", "media.event").put("sessionId", generation).put("message", event).toString())
+              }
+            }
+            return@addWebMessageListener
+          }
           if (data.optString("type") == "capability") {
             val responseSequence = data.optLong("sequence")
             receiveCapability(data, { envelope ->
@@ -222,6 +240,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
   override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
     super.onLayout(changed, left, top, right, bottom)
     if (changed) refreshImeViewport()
+    finiteVideo.layout()
   }
 
   override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
@@ -293,11 +312,11 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     this.active = active
     refreshImeViewport()
     if (!active) SelectedFilePicker.revoke(generation)
-    updateMediaPlayback()
     ApprovalTransport.focus(generation, active)
     UploadTransport.focus(generation, active)
     RoutingTransport.focus(generation, active)
     LinkTransport.focus(generation, active)
+    updateMediaPlayback()
     webView.importantForAccessibility = if (active) View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
       else View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
     if (active || !webView.hasFocus()) return
@@ -309,6 +328,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
 
   private fun updateMediaPlayback() {
     if (disposed) return
+    finiteVideo.focusChanged()
     val playingAllowed = active && mediaForeground
     if (loaded) webView.evaluateJavascript("window.__hypergolicMediaActive?.($playingAllowed)", null)
     // Loaded foreground views also render the live overview. Focus gates media and
@@ -460,8 +480,9 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     val request = runCatching { UploadWire.objectValue(message, CapabilityLeaseRegistry.MAX_BYTES) }.getOrNull() ?: return
     val subId = request.opt("subId") as? String ?: return
     val id = request.opt("id") as? String ?: return
-    val outbox = request.optString("type") == "outbox.subscribe"
-    if (!config.allowsRelay || (if (outbox) !config.grantedDomains.contains("outbox") else request.optString("type") != "relay.subscribe") ||
+    val type = request.optString("type")
+    val outbox = type == "outbox.subscribe"
+    if ((!outbox && type != "relay.subscribe") || !config.allowsRelayOperation(type) ||
       subId.isEmpty() || subId.toByteArray(Charsets.UTF_8).size > 128 || subId.any { it.code < 32 || it.code == 127 } ||
       id.isEmpty() || id.toByteArray(Charsets.UTF_8).size > 128 || message.toByteArray(Charsets.UTF_8).size > 16 * 1024) return
     val token = RelaySubscriptionTransport.admit(generation, sequence, config.request(message), subId, push, outbox) ?: return
@@ -538,7 +559,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     if (request != null && request.optString("type") in listOf("relay.publish", "outbox.publish")) {
       if (!CapabilityTransport.leases.consumeSequence(generation, sequence)) { reply(null); return }
       val id = request.opt("id") as? String
-      if (!config.allowsRelay || (request.optString("type") == "outbox.publish" && "outbox" !in config.grantedDomains) || id == null || id.isEmpty() || id.toByteArray(Charsets.UTF_8).size > 128) { reply(null); return }
+      if (!config.allowsRelayOperation(request.optString("type")) || id == null || id.isEmpty() || id.toByteArray(Charsets.UTF_8).size > 128) { reply(null); return }
       val approval = ApprovalTransport.admit(generation, config.request(message), id, reply)
       if (approval == null) { reply(null); return }
       onHostEvent(mapOf("type" to "capability", "lane" to "approval", "sessionId" to config.sessionId, "generation" to generation, "token" to approval))
@@ -601,6 +622,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
   fun destroySession() {
     if (disposed) return
     disposed = true
+    finiteVideo.retire()
     closeCheckId = null
     pendingNativeReplies.clear()
     live = false

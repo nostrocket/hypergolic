@@ -27,12 +27,15 @@ struct VettedAddressCursor<Address> {
 /// HTTPS fetch over a numeric, vetted endpoint. URLSession cannot bind a DNS result
 /// before connecting, so this owner resolves first and never gives NWConnection a name.
 enum PublishedPinnedHTTPS {
-  private final class RecoveryResolutionSlots: @unchecked Sendable {
+  private final class ResolutionSlots: @unchecked Sendable {
     private let lock = NSLock(); private var count = 0
-    func acquire() -> Bool { lock.withLock { guard count < 2 else { return false }; count += 1; return true } }
+    private let limit: Int
+    init(_ limit: Int) { self.limit = limit }
+    func acquire() -> Bool { lock.withLock { guard count < limit else { return false }; count += 1; return true } }
     func release() { lock.withLock { count -= 1 } }
   }
-  private static let recoveryResolutionSlots = RecoveryResolutionSlots()
+  private static let recoveryResolutionSlots = ResolutionSlots(2)
+  private static let mediaResolutionSlots = ResolutionSlots(1)
   enum Failure: Error { case invalidURL, resolution, privateAddress, connection, cancelled }
 
   struct Request {
@@ -159,13 +162,21 @@ enum PublishedPinnedHTTPS {
   }
 
   /// Separate resource profile; ordinary published fetch keeps its 2 MiB parser and URL policy.
-  static func fetchResource(_ input: String,
+  static func fetchResource(_ input: String, active: @escaping @Sendable () -> Bool = {true},
                             completion: @escaping @Sendable (Result<PublishedHTTPResponse, Error>) -> Void) throws -> Operation {
     let request = try Request(input, resourceProfile: true)
     let operation = try Operation(request: request, maximumBodyBytes: PublishedHTTPResponse.maximumResourceBodyBytes,
-                                  timeout: 15, completion: completion)
+                                  timeout: 15, active: active, completion: completion)
     operation.start()
     return operation
+  }
+
+  /// Trusted Media owns the directory, foreground lease, and staged file.
+  static func fetchMediaFile(_ input: String, sink: any PublishedHTTPFileSink, deadline: DispatchTime,
+      active: @escaping @Sendable () -> Bool, completion: @escaping @Sendable (Result<URL, Error>) -> Void) throws -> Operation {
+    let request = try Request(input, resourceProfile: true)
+    let operation = Operation(request: request, mediaFile: sink, deadline: deadline, active: active, completion: completion)
+    operation.start(); return operation
   }
 
 #if HYPERGOLIC_NETWORK_PROOF
@@ -188,10 +199,14 @@ enum PublishedPinnedHTTPS {
 
   final class Operation: @unchecked Sendable {
     private var request: Request
-    private let timeout: TimeInterval
+    private enum Output { case response(PublishedHTTPResponse), file(URL) }
+    private let deadline: DispatchTime
     private let queue = DispatchQueue(label: "org.nostrocket.hypergolic.published-https")
-    private let completion: @Sendable (Result<PublishedHTTPResponse, Error>) -> Void
-    private var accumulator: PublishedHTTPResponseAccumulator
+    private let completion: @Sendable (Result<Output, Error>) -> Void
+    private var accumulator: PublishedHTTPResponseAccumulator?
+    private let mediaFile: (any PublishedHTTPFileSink)?
+    private var idleTimer: DispatchSourceTimer?
+    private var mediaIdleDeadline = DispatchTime.distantFuture
     private let maximumBodyBytes: Int
     private let originalRequest: Request
     private var redirects = 0
@@ -212,9 +227,24 @@ enum PublishedPinnedHTTPS {
       self.request = request; self.originalRequest = request; self.active = active
       self.maximumBodyBytes = maximumBodyBytes
       self.visited.insert(request.source)
-      self.timeout = timeout
-      self.completion = completion
+      self.deadline = .now() + timeout
+      self.mediaFile = nil
+      self.completion = { result in
+        completion(result.flatMap { guard case .response(let value) = $0 else { return .failure(Failure.connection) }; return .success(value) })
+      }
       self.accumulator = try PublishedHTTPResponseAccumulator(maximumBodyBytes: maximumBodyBytes, resourceProfile: request.resourceProfile, recoveryProfile: request.recoveryProfile, artifactProfile: request.artifactProfile)
+    }
+
+    fileprivate init(request: Request, mediaFile: any PublishedHTTPFileSink, deadline: DispatchTime, active: @escaping @Sendable () -> Bool,
+                     completion: @escaping @Sendable (Result<URL, Error>) -> Void) {
+      self.request = request; self.originalRequest = request; self.active = active
+      self.maximumBodyBytes = 0
+      self.visited.insert(request.source)
+      self.deadline = deadline
+      self.mediaFile = mediaFile
+      self.completion = { result in
+        completion(result.flatMap { guard case .file(let value) = $0 else { return .failure(Failure.connection) }; return .success(value) })
+      }
     }
 
 #if HYPERGOLIC_NETWORK_PROOF
@@ -226,7 +256,23 @@ enum PublishedPinnedHTTPS {
         timer.schedule(deadline: .now(), repeating: .milliseconds(25))
         timer.setEventHandler { [weak self] in guard let self, !self.ended else { return }; if !self.active() { self.finish(.failure(Failure.cancelled)) } }; timer.resume()
       }
-      queue.asyncAfter(deadline: .now() + timeout) { self.finish(.failure(Failure.connection)) }
+      if mediaFile != nil {
+        queue.asyncAfter(deadline: deadline) { [weak self] in self?.finish(.failure(Failure.connection)) }
+        queue.async { [self] in
+          guard !self.ended else { return }
+          let timer = DispatchSource.makeTimerSource(queue: self.queue)
+          timer.setEventHandler { [weak self] in
+            guard let self, .now() >= self.mediaIdleDeadline else { return }
+            self.finish(.failure(Failure.connection))
+          }
+          self.idleTimer = timer
+          self.armMediaIdleTimer()
+          timer.resume()
+          self.resolveCurrent()
+        }
+        return
+      }
+      queue.asyncAfter(deadline: deadline) { self.finish(.failure(Failure.connection)) }
 #if HYPERGOLIC_NETWORK_PROOF
       if let proofAddresses {
         queue.async {
@@ -242,8 +288,9 @@ enum PublishedPinnedHTTPS {
 
     private func resolveCurrent() {
       guard active() else { finish(.failure(Failure.cancelled)); return }
-      let recovery = request.recoveryProfile
-      guard !recovery || PublishedPinnedHTTPS.recoveryResolutionSlots.acquire() else { finish(.failure(Failure.resolution)); return }
+      let slots = mediaFile != nil ? PublishedPinnedHTTPS.mediaResolutionSlots
+        : request.recoveryProfile ? PublishedPinnedHTTPS.recoveryResolutionSlots : nil
+      guard slots?.acquire() ?? true else { finish(.failure(Failure.resolution)); return }
       let host = request.host
       DispatchQueue.global(qos: .utility).async {
         let result = Result {
@@ -252,7 +299,7 @@ enum PublishedPinnedHTTPS {
 #endif
           return try PublishedPinnedHTTPS.resolve(host)
         }
-        if recovery { PublishedPinnedHTTPS.recoveryResolutionSlots.release() }
+        slots?.release()
         self.queue.async {
           guard !self.ended else { return }
           switch result {
@@ -273,7 +320,8 @@ enum PublishedPinnedHTTPS {
       connection?.stateUpdateHandler = nil
       connection?.cancel()
       connection = nil
-      accumulator.discard()
+      accumulator?.discard()
+      mediaFile?.discard()
       connect(address)
     }
 
@@ -324,6 +372,12 @@ enum PublishedPinnedHTTPS {
       connection.start(queue: queue)
     }
 
+    private func armMediaIdleTimer() {
+      guard let mediaFile else { return }
+      mediaIdleDeadline = .now() + .seconds(mediaFile.idleSeconds)
+      idleTimer?.schedule(deadline: mediaIdleDeadline)
+    }
+
     private func receive() {
       guard !ended, let connection else { return }
       guard active() else { finish(.failure(Failure.cancelled)); return }
@@ -332,13 +386,25 @@ enum PublishedPinnedHTTPS {
         guard self.active() else { self.finish(.failure(Failure.cancelled)); return }
         if error != nil { self.finish(.failure(Failure.connection)); return }
         do {
-          if let data { try self.accumulator.append(data) }
+          if let receiver = self.mediaFile {
+            guard .now() < self.mediaIdleDeadline else { throw Failure.connection }
+            if let data, !data.isEmpty {
+              self.armMediaIdleTimer()
+              try receiver.append(data)
+            }
+            if complete { self.finish(.success(.file(try receiver.finish()))) }
+            else if data?.isEmpty != false || .now() >= self.mediaIdleDeadline { self.finish(.failure(Failure.connection)) }
+            else { self.receive() }
+            return
+          }
+          guard let accumulator = self.accumulator else { throw Failure.connection }
+          if let data { try accumulator.append(data) }
           if complete {
-            let response = try self.accumulator.finish()
+            let response = try accumulator.finish()
             // An alternate origin cannot prove absence at the saved provider.
             guard !self.request.recoveryProfile || response.status != 404 ||
               self.request.host == self.originalRequest.host && self.request.port == self.originalRequest.port else { throw Failure.invalidURL }
-            self.finish(.success(response))
+            self.finish(.success(.response(response)))
           }
           else if data == nil || data?.isEmpty == true { self.finish(.failure(Failure.connection)) }
           else { self.receive() }
@@ -363,16 +429,20 @@ enum PublishedPinnedHTTPS {
         }
         connection?.stateUpdateHandler = nil;connection?.cancel();connection = nil
         redirects += 1;visited.insert(next.source);request = next
-        accumulator = try PublishedHTTPResponseAccumulator(maximumBodyBytes:maximumBodyBytes,resourceProfile:next.resourceProfile,recoveryProfile:next.recoveryProfile,artifactProfile:next.artifactProfile)
+        if mediaFile == nil {
+          accumulator = try PublishedHTTPResponseAccumulator(maximumBodyBytes:maximumBodyBytes,resourceProfile:next.resourceProfile,recoveryProfile:next.recoveryProfile,artifactProfile:next.artifactProfile)
+        } else { mediaFile?.discard() }
         addresses = nil
         resolveCurrent()
       } catch { finish(.failure(error)) }
     }
 
-    private func finish(_ result: Result<PublishedHTTPResponse, Error>) {
+    private func finish(_ result: Result<Output, Error>) {
       guard !ended else { return }
       ended = true; recoveryTimer?.cancel(); recoveryTimer = nil
-      accumulator.discard()
+      idleTimer?.cancel(); idleTimer = nil
+      accumulator?.discard()
+      mediaFile?.discard()
       connection?.stateUpdateHandler = nil
       connection?.cancel()
       connection = nil

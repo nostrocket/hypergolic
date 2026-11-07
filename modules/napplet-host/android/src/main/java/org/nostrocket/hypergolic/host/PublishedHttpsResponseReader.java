@@ -1,14 +1,20 @@
 package org.nostrocket.hypergolic.host;
 
 import java.io.ByteArrayOutputStream;
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.LongSupplier;
+import org.nostrocket.hypergolic.host.PublishedHttpsTransport.Deadline;
+import static org.nostrocket.hypergolic.host.PublishedHttpsTransport.READ_TIMEOUT_MS;
 
 /** Parses bounded HTTP response framing for published HTTPS retrieval. */
 final class PublishedHttpsResponseReader {
@@ -72,14 +78,7 @@ final class PublishedHttpsResponseReader {
     }
     HeaderBlock block = readHeaders(input, PublishedHttpsTransport.MAX_RESPONSE_HEADER_BYTES);
     String[] lines = block.text.split("\r\n", -1);
-    if (lines.length < 1 || !lines[0].matches("HTTP/1\\.[01] [0-9]{3}( .*)?")) {
-      throw new IOException("Invalid HTTPS response status");
-    }
-    for (int i = 0; i < lines[0].length(); i++) {
-      char c = lines[0].charAt(i);
-      if ((c < 0x20 && c != '\t') || c == 0x7f) throw new IOException("Malformed HTTPS status line");
-    }
-    int status = Integer.parseInt(lines[0].substring(9, 12));
+    int status = status(lines);
     if (redirectsAllowed &&
         (status == 301 || status == 302 || status == 303 || status == 307 || status == 308)) {
       String location = uniqueHeader(parseHeaders(lines), "location");
@@ -119,6 +118,46 @@ final class PublishedHttpsResponseReader {
     if (uploadProfile && status != 200 && status != 201) throw new UploadStatus(status);
     if (recoveryProfile && status != 200 && status != 404) throw new ResourceFailure("network-error", "Unresolved recovery response");
     return new UploadResponse(status, body);
+  }
+
+  static int readMediaLength(InputStream input, int maxBytes) throws IOException {
+    HeaderBlock block = readHeaders(input, PublishedHttpsTransport.MAX_RESPONSE_HEADER_BYTES);
+    if (!block.text.startsWith("HTTP/1.1 ")) throw new IOException("Invalid Media response version");
+    for (int i = 0; i < block.text.length(); i++) {
+      char c = block.text.charAt(i);
+      if (c != '\r' && c != '\n' && (c < 32 || c > 126)) throw new IOException("Invalid Media response head");
+    }
+    String[] lines = block.text.split("\r\n", -1);
+    int status = status(lines);
+    Map<String, List<String>> headers = parseHeaders(lines);
+    String location = uniqueHeader(headers, "location");
+    String encoding = uniqueHeader(headers, "content-encoding");
+    String connection = uniqueHeader(headers, "connection");
+    String rawLength = uniqueHeader(headers, "content-length");
+    String transfer = uniqueHeader(headers, "transfer-encoding");
+    if (status == 301 || status == 302 || status == 303 || status == 307 || status == 308) {
+      if (location == null || location.isEmpty() || location.length() > 8192) throw new IOException("Invalid Media redirect");
+      throw new ResourceRedirect(location);
+    }
+    if (status != 200 || location != null || rawLength == null || transfer != null ||
+        headers.containsKey("content-range") || encoding != null && !encoding.equalsIgnoreCase("identity") ||
+        connection != null && !connection.equalsIgnoreCase("close")) {
+      throw new IOException("Invalid Media response framing");
+    }
+    long length = parseLength(rawLength);
+    if (length < 1 || length > maxBytes) throw new IOException("Invalid Media body length");
+    return (int)length;
+  }
+
+  private static int status(String[] lines) throws IOException {
+    if (lines.length < 1 || !lines[0].matches("HTTP/1\\.[01] [0-9]{3}( .*)?")) {
+      throw new IOException("Invalid HTTPS response status");
+    }
+    for (int i = 0; i < lines[0].length(); i++) {
+      char c = lines[0].charAt(i);
+      if ((c < 0x20 && c != '\t') || c == 0x7f) throw new IOException("Malformed HTTPS status line");
+    }
+    return Integer.parseInt(lines[0].substring(9, 12));
   }
 
   private static HeaderBlock readHeaders(InputStream input, int maximumBytes) throws IOException {
@@ -267,6 +306,55 @@ final class PublishedHttpsResponseReader {
     for (int i = 0; i < line.length(); i++) {
       char c = line.charAt(i);
       if (c < 0x20 || c > 0x7e) throw new IOException("Malformed HTTPS framing line");
+    }
+  }
+
+  static final class TransferIdle {
+    private final long limitNanos;
+    private final LongSupplier clock;
+    private volatile long lastProgress;
+    TransferIdle(int limitMs) { this(limitMs, System::nanoTime); }
+    TransferIdle(int limitMs, LongSupplier clock) {
+      this.limitNanos = limitMs * 1_000_000L;
+      this.clock = clock;
+      this.lastProgress = clock.getAsLong();
+    }
+    boolean expired() { return expiredAt(clock.getAsLong()); }
+    private boolean expiredAt(long now) { return now - lastProgress >= limitNanos; }
+    void progress() throws IOException {
+      long now = clock.getAsLong();
+      if (expiredAt(now)) throw new SocketTimeoutException("Media transfer stalled");
+      lastProgress = now;
+    }
+  }
+
+  static final class DeadlineInputStream extends FilterInputStream {
+    private final Socket socket;
+    private final Deadline deadline;
+    private final int idleMs;
+    private final TransferIdle idle;
+    DeadlineInputStream(InputStream input, Socket socket, Deadline deadline) {
+      this(input, socket, deadline, READ_TIMEOUT_MS, null);
+    }
+    DeadlineInputStream(InputStream input, Socket socket, Deadline deadline, int idleMs, TransferIdle idle) {
+      super(input);
+      this.socket = socket;
+      this.deadline = deadline;
+      this.idleMs = idleMs;
+      this.idle = idle;
+    }
+    private void updateTimeout() throws IOException { socket.setSoTimeout(deadline.timeoutMs(idleMs)); }
+    @Override public int read() throws IOException {
+      updateTimeout();
+      int value = super.read();
+      if (value >= 0 && idle != null) idle.progress();
+      return value;
+    }
+    @Override public int read(byte[] bytes, int offset, int length) throws IOException {
+      updateTimeout();
+      int count = super.read(bytes, offset, length);
+      if (count > 0 && idle != null) idle.progress();
+      return count;
     }
   }
 

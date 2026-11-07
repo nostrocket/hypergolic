@@ -25,6 +25,10 @@ final class RoutingTransportRegistry: @unchecked Sendable {
     let before = endpoints.state()
     guard endpoints.synchronizeOwner(user, epoch: epoch, available: available) else { return false }
     if before.revision != endpoints.state().revision {
+      if before.user != user || before.epoch != epoch || !available {
+        let generations = Set(rows.keys)
+        Task { @MainActor in NativeFiniteVideo.revokeGenerations(generations) }
+      }
       if before.user != user || before.epoch != epoch {
         for generation in Array(rows.keys) { rows[generation]?.credits.clear() }
       } else { resumeIntents() }
@@ -67,6 +71,12 @@ final class RoutingTransportRegistry: @unchecked Sendable {
   func ready(_ generation: String) { lock.withLock { endpoints.ready(generation) } }
   func focus(_ generation: String, _ value: Bool) { lock.withLock { if endpoints.focus(generation, value) { sink?(state()) } } }
   func revoke(_ generation: String) { lock.withLock { endpoints.revoke(generation); _ = rows.removeValue(forKey: generation) } }
+  func mediaRevision(_ generation: String) -> String? { lock.withLock {
+    let revision = endpoints.state().revision
+    guard let row = rows[generation], row.config.fixture == "published", row.config.domains.contains("media"),
+      mayReview(generation, revision: revision) else { return nil }
+    return "\(revision):\(endpoints.reviewRevision(generation))"
+  } }
   func mayReview(_ generation: String, revision: UInt64) -> Bool { lock.withLock { endpoints.matchesRevision(revision) && endpoints.mayReview(generation) && CapabilityTransport.leases.sessionActive(generation) } }
   func reviewRevision(_ generation: String, revision: UInt64) -> Int64 { lock.withLock { endpoints.matchesRevision(revision) ? endpoints.reviewRevision(generation) : -1 } }
   func mayDeliver(_ generation: String, revision: UInt64, domain: String) -> Bool { lock.withLock {

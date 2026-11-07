@@ -80,7 +80,7 @@ function capabilityReceiver(database: ShellDatabase, native: RuntimeNativePort,
           generation = event.generation;
           const owner={registration:{...configuration,generation},assertActive};
           if(configuration.domains.includes('relay')&&native.subscriptions&&subscriptions)streams=createRelaySubscriptionBroker(native.subscriptions,subscriptions,owner);
-          if(configuration.domains.includes('outbox')&&configuration.domains.includes('relay')&&native.subscriptions&&outboxStreams)outboxSubscriptions=createOutboxSubscriptionBroker(native.subscriptions,outboxStreams,owner);
+          if(configuration.domains.includes('outbox')&&native.subscriptions&&outboxStreams)outboxSubscriptions=createOutboxSubscriptionBroker(native.subscriptions,outboxStreams,owner);
           broker = createCapabilityBroker(database, native, owner, queries, request=>streams?.close(request), resources, identityData, outbox,request=>outboxSubscriptions?.close(request), discovery !== undefined);
         }
         if (event.generation !== generation) return;
@@ -95,7 +95,7 @@ function capabilityReceiver(database: ShellDatabase, native: RuntimeNativePort,
         } else if (event.lane === 'upload') {
           if (configuration.domains.includes('upload')) uploads?.enqueue(event.token, {...configuration, generation});
         } else if (event.lane === 'approval') {
-          if (!configuration.domains.includes('relay')) return;
+          if (!configuration.domains.includes('relay') && !configuration.domains.includes('outbox')) return;
           approvals?.service.enqueue(event.token, approvals.destinations(), { ...configuration, generation });
         } else if(event.lane==='outbox-subscription')outboxSubscriptions?.dispatch(event.token);
         else if(event.lane==='subscription')streams?.dispatch(event.token);
@@ -152,7 +152,7 @@ export function createRuntimeOwner(database: ShellDatabase,
       assertApproval(origin: ApprovalOrigin,domain?:'outbox'): void {
         assertActive();
         receiver.assertGeneration(origin.generation);
-        if ((domain==='outbox'&&!configuration.domains.includes('outbox'))||!configuration.domains.includes('relay') ||
+        if (!configuration.domains.includes(domain ?? 'relay') ||
             origin.sessionId !== configuration.sessionId || origin.epoch !== configuration.epoch ||
             origin.user !== configuration.user || origin.publisher !== configuration.publisher ||
             origin.appId !== configuration.appId || origin.version !== configuration.version ||

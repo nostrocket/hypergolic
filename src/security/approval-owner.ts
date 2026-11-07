@@ -17,8 +17,7 @@ function createCapabilityOwner(identity: Pick<IdentityTransition, 'getSnapshot' 
       return;
     }
     const catalog = resolveBundledSession(session);
-    if(requestedDomain==='outbox'&&!catalog.domains.includes('outbox'))throw new Error('APPROVAL_DENIED');
-    if (!catalog.domains.includes(domain) || catalog.publisher !== origin.publisher || catalog.appId !== origin.appId ||
+    if (!catalog.domains.includes(requestedDomain ?? domain) || catalog.publisher !== origin.publisher || catalog.appId !== origin.appId ||
         catalog.version !== origin.version || catalog.instanceId !== origin.instanceId) throw new Error('APPROVAL_DENIED');
   } });
 }

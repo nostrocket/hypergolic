@@ -12,8 +12,14 @@ internal class NativeApprovalSigningData private constructor(val source: String,
       require(UploadJsonBounds.accepts(raw,NativeApprovalAuthority.MAX_BYTES+4096))
       val original=JSONObject(source);val registration=original.getJSONObject("registration");val request=JSONObject(original.getString("request"))
       val user=registration.getString("user");require(user.matches(Regex("[0-9a-f]{64}")))
-      val domains=registration.getJSONArray("domains");require((0 until domains.length()).any { domains.getString(it)=="relay" })
-      val type=request.getString("type");require(type=="relay.publish" || type=="outbox.publish")
+      val type = request.getString("type")
+      val grant = when (type) {
+        "relay.publish" -> "relay"
+        "outbox.publish" -> "outbox"
+        else -> error("Invalid publication")
+      }
+      val domains = registration.getJSONArray("domains")
+      require((0 until domains.length()).any { domains.getString(it) == grant })
       val snapshot=JSONObject(raw);require(snapshot.keys().asSequence().toSet()==setOf("event","selectedPubkey","destinations","hash"))
       require(snapshot.getString("selectedPubkey")==user)
       val event=snapshot.getJSONObject("event");val template=NativeOutboxPlan.signingTemplate(request.getJSONObject("event"))
