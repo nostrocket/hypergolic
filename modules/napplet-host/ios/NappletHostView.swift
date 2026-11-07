@@ -33,6 +33,7 @@ final class NappletHostView: ExpoView {
   func armPickerFaultProof(_ action: String) { host.armPickerFaultProof(action) }
   func armUploadFaultProof(_ action: String) { host.armUploadFaultProof(action) }
   func setCloseCheck(_ raw: String) { host.setCloseCheck(raw) }
+  func setZoomReset(_ raw: String) { host.setZoomReset(raw) }
   func setActive(_ active: Bool) { host.setActive(active) }
   func startConfiguredSession(_ raw: String) { host.startConfiguredSession(raw) }
   func startPublishedArtifact(_ raw: String) { host.startPublishedArtifact(raw) }

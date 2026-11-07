@@ -197,6 +197,7 @@ public final class NappletHostModule: Module {
     Function("revokeAllPublishedArtifacts") { PublishedArtifactTransfer.shared.revokeAll() }
     View(NappletHostView.self) {
       Events("onHostEvent")
+      Prop("zoomReset") { (view: NappletHostView, raw: String) in view.setZoomReset(raw) }
       Prop("pickerFaultProof") { (view: NappletHostView, action: String) in view.armPickerFaultProof(action) }
       Prop("uploadFaultProof") { (view: NappletHostView, action: String) in view.armUploadFaultProof(action) }
       Prop("closeCheck") { (view: NappletHostView, raw: String) in view.setCloseCheck(raw) }

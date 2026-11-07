@@ -1,6 +1,8 @@
 import { TrustedBand } from '../shell/TrustedBand';
 import type { CloseCheckEvent } from '../shell/close-check';
-import { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState, type Ref } from 'react';
+import {useNativeZoomTarget} from './useNativeZoomTarget';
+import type {NativeZoomReply, ZoomResetRegistration} from '../shell/zoom-reset';
 import { requireNativeView } from 'expo';
 import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, View, type NativeSyntheticEvent, type ViewProps } from 'react-native';
 import { ShellPressable as Pressable } from '../shell/ShellPressable';
@@ -14,11 +16,14 @@ export type HostEvent = { type: 'ready'; sessionId: string; generation?: string 
 interface Props extends ViewProps {
   session: NappletDescriptor;
   closeCheck?: string;
+  onZoomTarget?: ZoomResetRegistration;
   active?: boolean;
   onHostEvent: (event: NativeSyntheticEvent<HostEvent>) => void;
 }
-type NativeEvent = HostEvent | NativeCapabilityEvent;
+type NativeEvent = HostEvent | NativeCapabilityEvent | NativeZoomReply;
 interface NativeProps extends ViewProps {
+  ref?: Ref<object>;
+  zoomReset?: string;
   sessionId?: string;
   closeCheck?: string;
   configuration?: string;
@@ -33,22 +38,26 @@ export function NappletHost(props: Props) {
   return props.session.source === 'published' ? <PublishedNappletHost {...props} /> : <BundledNappletHost {...props} />;
 }
 
-function BundledNappletHost({ session, onHostEvent, ...props }: Props) {
+function BundledNappletHost({ session, onHostEvent, onZoomTarget, ...props }: Props) {
+  const {zoomRef, zoomReady, clearZoomTarget, zoomReply, zoomNativeProps} = useNativeZoomTarget(session.id, props.active === true, onZoomTarget);
   const runtime = useContext(RuntimeContext);
   const [binding] = useState(() => runtime?.open(session) ?? null);
   useEffect(() => () => binding?.revoke(), [binding]);
   const receive = useCallback((event: NativeSyntheticEvent<NativeEvent>) => {
     const message = event.nativeEvent;
     if (message.sessionId !== session.id) return;
+    if (zoomReply(message)) return;
     if (message.type === 'capability') { binding?.receive(message); return; }
-    if (message.type === 'error') binding?.revoke();
+    if (message.type === 'ready' && message.generation) zoomReady(message.generation);
+    if (message.type === 'error') {clearZoomTarget(); binding?.revoke();}
     onHostEvent(event as NativeSyntheticEvent<HostEvent>);
-  }, [binding, onHostEvent, session.id]);
+  }, [binding, onHostEvent, session.id, zoomReady, clearZoomTarget, zoomReply]);
   if (NativeHost === null) return <Text>Napplet execution is available in the Android and iOS builds.</Text>;
-  return <NativeHost {...props} {...(binding ? { configuration: binding.configuration } : { sessionId: session.id })} onHostEvent={receive} />;
+  return <NativeHost {...props} {...zoomNativeProps} ref={zoomRef} {...(binding ? { configuration: binding.configuration } : { sessionId: session.id })} onHostEvent={receive} />;
 }
 
-function PublishedNappletHost({ session, onHostEvent, ...props }: Props) {
+function PublishedNappletHost({ session, onHostEvent, onZoomTarget, ...props }: Props) {
+  const {zoomRef, zoomReady, clearZoomTarget, zoomReply, zoomNativeProps} = useNativeZoomTarget(session.id, props.active === true, onZoomTarget);
   const { styles, colors } = useShellStyles(createStyles);
   const runtime = useContext(RuntimeContext);
   const [pinned] = useState(() => session);
@@ -86,16 +95,17 @@ function PublishedNappletHost({ session, onHostEvent, ...props }: Props) {
   const receive = useCallback((event: NativeSyntheticEvent<NativeEvent>) => {
     const message = event.nativeEvent;
     if (message.sessionId !== session.id || !binding) return;
+    if (zoomReply(message)) return;
     if (message.type === 'capability') { binding.receive(message); return; }
     if (message.type === 'ready' && message.generation) {
-      try { binding.ready(message.generation); } catch { /* A stale mount cannot satisfy readiness. */ }
+      try { binding.ready(message.generation); zoomReady(message.generation); } catch { /* A stale mount cannot satisfy readiness. */ }
     }
-    if (message.type === 'error') { binding.revoke(); setError(true); }
+    if (message.type === 'error') { clearZoomTarget(); binding.revoke(); setError(true); }
     onHostEvent(event as NativeSyntheticEvent<HostEvent>);
-  }, [binding, onHostEvent, session.id]);
+  }, [binding, onHostEvent, session.id, zoomReady, clearZoomTarget, zoomReply]);
   if (NativeHost === null) return <Text>Napplet execution is available in the Android and iOS builds.</Text>;
   return <View style={[props.style, styles.container]}>
-    {binding && !error ? <NativeHost {...props} style={styles.fill} active={props.active} publishedArtifact={binding.publishedArtifact} onHostEvent={receive} /> :
+    {binding && !error ? <NativeHost {...props} {...zoomNativeProps} ref={zoomRef} style={styles.fill} active={props.active} publishedArtifact={binding.publishedArtifact} onHostEvent={receive} /> :
       <View style={styles.center}>{error || !runtime ? <><Text accessibilityRole="header" style={styles.heading}>Unable to open</Text><Text style={styles.detail}>The saved version could not be opened. You can try again or return to your napplets.</Text>
         <Pressable accessibilityRole="button" testID={`published-retry-${session.id}`} onPress={() => { setBinding(null); setError(false); setAttempt(value => value + 1); }} style={styles.action}><Text style={styles.actionText}>Try again</Text></Pressable></> :
         <><ActivityIndicator color={colors.accent} /><Text accessibilityLiveRegion="polite" style={styles.heading}>Opening napplet…</Text><Text style={styles.detail}>Checking the saved version and its access.</Text></>}</View>}

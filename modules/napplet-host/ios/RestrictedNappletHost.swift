@@ -24,6 +24,8 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
   private var deadline: DispatchWorkItem?
   private var live = false
   private var closeCheckId: String?
+  private var zoomResetSequence = 0
+  private var zoomResetInterruptedAt: TimeInterval = 0
   private var closeCheckDeadline: TimeInterval = 0
   private var pendingNativeReplies: [String: TimeInterval] = [:]
   private var closeUnsafeUntil: TimeInterval = 0
@@ -89,6 +91,22 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     view.evaluateJavaScript(script, completionHandler: nil)
   }
 
+  func setZoomReset(_ raw: String) {
+    guard let request = NativeZoomReset.accept(raw, sessionId: sessionId, generation: generation,
+      lastSequence: &zoomResetSequence, interruptedAt: zoomResetInterruptedAt) else { return }
+    let ok = resetZoom(request.sessionId, generation: request.generation)
+    onEvent?(["type": "zoom-reset", "sessionId": request.sessionId, "generation": request.generation,
+      "sequence": request.sequence, "ok": ok])
+  }
+
+  private func resetZoom(_ sessionId: String, generation: String) -> Bool {
+    guard let view = webView else { return false }
+    return NativeZoomReset.reset(view, sessionId: sessionId, generation: generation, context: .init(
+      sessionId: self.sessionId, generation: self.generation, expectedURL: expectedURL,
+      live: live, ready: ready, loaded: loaded, disposed: disposed, active: active,
+      foreground: UIApplication.shared.applicationState == .active))
+  }
+
   private func receiveCloseCheck(_ value: [String: Any]) {
     guard ready, UIApplication.shared.applicationState == .active,
       Set(value.keys) == ["type", "sessionId", "id", "state"],
@@ -105,14 +123,17 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
   func setActive(_ isActive: Bool) {
     guard active != isActive else { return }
     active = isActive
-    if !isActive {selectedFilePicker.cancel()}
+    if !isActive {zoomResetInterruptedAt = ProcessInfo.processInfo.systemUptime; selectedFilePicker.cancel()}
     if configuration != nil { ApprovalTransport.setFocused(generation, active: isActive); UploadTransport.focus(generation, active: isActive); LinkTransport.focus(generation, isActive); RoutingTransport.shared.focus(generation, isActive) }
     updateMediaPlayback()
     // Dismiss only this retained view's editor; keep its loaded document and position.
     if !isActive { webView?.endEditing(true) }
   }
 
-  @objc private func mediaBackground() { closeCheckId = nil; selectedFilePicker.background(); updateMediaPlayback(foreground: false) }
+  @objc private func mediaBackground() {
+    zoomResetInterruptedAt = ProcessInfo.processInfo.systemUptime
+    closeCheckId = nil; selectedFilePicker.background(); updateMediaPlayback(foreground: false)
+  }
   @objc private func mediaForeground() { updateMediaPlayback(foreground: true) }
   private func updateMediaPlayback(foreground: Bool? = nil) {
     guard let view = webView, !disposed else { return }

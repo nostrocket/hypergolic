@@ -9,6 +9,7 @@ import { cardTransform, clamp, overviewGeometry, resolveCardRect, type HandleSid
 import { adjacentNapplet, type NappletDescriptor, type Workspace } from './workspace';
 import { useShellStyles, type ShellPalette, type ShellFonts, HANDLE_GUTTER } from './theme';
 import { runtimeStatus } from './runtime-status';
+import type {ZoomResetRegistration} from './zoom-reset';
 
 interface LiveProps {
   session: NappletDescriptor;
@@ -23,9 +24,10 @@ interface LiveProps {
   swipeId: SharedValue<string | null>;
   active: boolean;
   raised: boolean;
+  onZoomTarget: ZoomResetRegistration;
   onHostEvent?: (event: HostEvent) => void;
 }
-const LiveSession = memo(function LiveSession({ session, closeCheck, index, size, rect, progress, position, scrollY, swipeY, swipeId, active, raised, onHostEvent }: LiveProps) {
+const LiveSession = memo(function LiveSession({ session, closeCheck, index, size, rect, progress, position, scrollY, swipeY, swipeId, active, raised, onZoomTarget, onHostEvent }: LiveProps) {
   const { styles } = useShellStyles(createStyles);
   // A keyed session starts when first focused and stays mounted until close or identity change.
   const [loaded, setLoaded] = useState(raised);
@@ -51,7 +53,7 @@ const LiveSession = memo(function LiveSession({ session, closeCheck, index, size
   return (
     <Animated.View collapsable={false} pointerEvents={active ? 'auto' : 'none'} importantForAccessibility={active ? 'auto' : 'no-hide-descendants'} accessibilityElementsHidden={!active}
       style={[styles.live, { width, height, zIndex: raised ? 2 : 1 }, movement]}>
-      {loaded ? <NappletHost closeCheck={closeCheck} active={active} session={session} onHostEvent={onNativeEvent} style={styles.host} />
+      {loaded ? <NappletHost onZoomTarget={onZoomTarget} closeCheck={closeCheck} active={active} session={session} onHostEvent={onNativeEvent} style={styles.host} />
         : <View style={styles.unloaded}><Text style={styles.reopen}>Open to load</Text></View>}
       <Text testID={`runtime-status-${session.id}`} importantForAccessibility={active ? 'auto' : 'no-hide-descendants'} accessibilityElementsHidden={!active} accessibilityLiveRegion={active ? 'polite' : 'none'} style={[styles.runtimeStatus, loaded && status === 'Runtime connected' && styles.connected]}>{loaded ? status : 'Not loaded'}</Text>
     </Animated.View>
@@ -59,6 +61,7 @@ const LiveSession = memo(function LiveSession({ session, closeCheck, index, size
 });
 
 interface StageProps {
+  onZoomTarget: ZoomResetRegistration;
   workspace: Workspace;
   closeCheck: CloseCheckRequest | null;
   progress: SharedValue<number>;
@@ -79,7 +82,7 @@ interface StageProps {
   onHandleEnd: (side: HandleSide, result: 'overview' | 'switch' | 'cancel') => void;
 }
 
-export const WorkspaceStage = forwardRef<OverviewHandle, StageProps>(function WorkspaceStage({ workspace, closeCheck, progress, position, scrollY, swipeY, swipeId, busy, blocked, interactive, pending, onHostEvent, onFocus, onClose, onOpen, onDragEnd, onHandleStart, onHandleEnd }, ref) {
+export const WorkspaceStage = forwardRef<OverviewHandle, StageProps>(function WorkspaceStage({ onZoomTarget, workspace, closeCheck, progress, position, scrollY, swipeY, swipeId, busy, blocked, interactive, pending, onHostEvent, onFocus, onClose, onOpen, onDragEnd, onHandleStart, onHandleEnd }, ref) {
   const { styles } = useShellStyles(createStyles);
   const [size, setSize] = useState<Size>({ width: 0, height: 0 });
   const [measured, setMeasured] = useState<Record<string, CardMeasurement>>({});
@@ -93,7 +96,7 @@ export const WorkspaceStage = forwardRef<OverviewHandle, StageProps>(function Wo
     setSize(previous => previous.width === width && previous.height === height ? previous : { width, height });
   }}>
     {size.width > 0 && size.height > 0 && <>
-      {workspace.sessions.map((session, index) => <LiveSession key={session.id} session={session} closeCheck={closeCheck?.sessionId === session.id ? JSON.stringify({id: closeCheck.id, generation: closeCheck.generation}) : ''} index={index} size={size} rect={resolveCardRect(geometry.cards[index], measured[session.id])}
+      {workspace.sessions.map((session, index) => <LiveSession key={session.id} onZoomTarget={onZoomTarget} session={session} closeCheck={closeCheck?.sessionId === session.id ? JSON.stringify({id: closeCheck.id, generation: closeCheck.generation}) : ''} index={index} size={size} rect={resolveCardRect(geometry.cards[index], measured[session.id])}
         progress={progress} position={position} scrollY={scrollY} swipeY={swipeY} swipeId={swipeId} active={interactive && !workspace.overview && !disabled && workspace.focusedId === session.id}
         raised={workspace.focusedId === session.id} onHostEvent={onHostEvent} />)}
       <Overview ref={ref} sessions={workspace.sessions} geometry={geometry} size={size} visible={workspace.overview} busy={disabled} focusedId={workspace.focusedId}

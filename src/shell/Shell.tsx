@@ -11,7 +11,7 @@ import { publishedSettingsActions } from './published-settings-actions';
 import { ShellBackdrop } from './ShellBackdrop';
 import {useCloseChecks} from './useCloseChecks';
 import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
-import { AccessibilityInfo, Keyboard, StyleSheet, Text, View, type ViewInstance } from 'react-native';
+import { AccessibilityInfo, AppState, Keyboard, StyleSheet, Text, View, type ViewInstance } from 'react-native';
 import { ShellModal as Modal } from './ShellModal';
 import { ShellPressable as Pressable } from './ShellPressable';
 import { cancelAnimation, Easing, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
@@ -22,6 +22,7 @@ import { ClosePrompt } from './ClosePrompt';
 import { type ShellIdentity } from './Header';
 import type { OverviewHandle } from './Overview';
 import { WorkspaceStage } from './WorkspaceStage';
+import {useZoomReset} from './useZoomReset';
 import { directionForHandle, type HandleSide } from './motion';
 import { adjacentNapplet, closeNapplet, focusNapplet, showOverview, type NappletDescriptor, type Workspace } from './workspace';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
@@ -195,6 +196,9 @@ export function Shell({ blocked = false, initialWorkspace, workspace: controlled
     blocked: navigationBlocked, dragging: handleDragging, settings, closing: closingId !== null, discovery: discovery.review !== null,
   });
   const obscured = settings || menuVisible || closingId !== null || discovery.review !== null;
+  const {resetZoom, registerZoomTarget, zoomResetAvailable} = useZoomReset({workspace, identity: identity?.npub, lifetime: runtime,
+    active: AppState.currentState === 'active', blocked: navigationBlocked, dragging: handleDragging, settings,
+    closing: closingId !== null, reviewing: discovery.review !== null}, clearMenu);
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'right', 'bottom', 'left']}>
       <ShellBackdrop mood={workspace.overview ? 'shelf' : 'running'} />
@@ -202,7 +206,7 @@ export function Shell({ blocked = false, initialWorkspace, workspace: controlled
       <View accessibilityElementsHidden={obscured} importantForAccessibility={obscured ? 'no-hide-descendants' : 'auto'} style={styles.content}>
         <WorkspaceHeader overview={workspace.overview} focused={focused} identity={identity} disabled={navigationBlocked || handleDragging}
           menuAnchor={menuAnchor} onSettings={openSettings} onOverview={openOverview} onMenu={openMenu} />
-        <WorkspaceStage closeCheck={closeCheck} workspace={workspace} progress={progress} position={position} scrollY={scrollY} swipeY={swipeY} swipeId={swipeId} busy={busy} blocked={navigationBlocked || obscured} interactive={!handleDragging}
+        <WorkspaceStage onZoomTarget={registerZoomTarget} closeCheck={closeCheck} workspace={workspace} progress={progress} position={position} scrollY={scrollY} swipeY={swipeY} swipeId={swipeId} busy={busy} blocked={navigationBlocked || obscured} interactive={!handleDragging}
           pending={pendingApprovals ?? noPending} ref={overview} onHostEvent={receiveHostEvent} onFocus={focusSession} onClose={requestClose} onOpen={openDiscovery}
           onDragEnd={(id, close) => { runAnimation(swipeY, 0, () => { swipeId.set(null); if (close) requestClose(id); }, 140); }}
           onHandleStart={() => { setHandleDragging(true); Keyboard.dismiss(); cancelAnimation(position); }}
@@ -211,6 +215,7 @@ export function Shell({ blocked = false, initialWorkspace, workspace: controlled
       {footer}
       <DiscoveryAccessReview review={discovery.review} decide={discovery.decide} />
       {menuSession && <WorkspaceMenu title={menuSession.title} disabled={navigationBlocked} onNappletSettings={openNappletSettings}
+        onResetZoom={() => resetZoom(menuSession)} zoomResetDisabled={!zoomResetAvailable}
         onDismiss={dismissMenu} onOverview={() => { clearMenu(); openOverview(); }}
         onSettings={() => { clearMenu(); openSettings(); }} onClose={() => { clearMenu(); requestClose(menuSession.id); }} />}
       <ClosePrompt title={workspace.sessions.find(session => session.id === closingId)?.title ?? null} onKeepOpen={keepOpen} onClose={confirmClose} onDismiss={() => overview.current?.focusCard(lastCloseId.current)} />
