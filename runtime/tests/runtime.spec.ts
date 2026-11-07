@@ -208,7 +208,7 @@ test('opaque frame has no native bridge, parent DOM or browser storage access', 
   expect(await page.locator('#napplet').getAttribute('sandbox')).toBe('allow-scripts');
 });
 
-test('CSP blocks direct fetch, socket, worker, image, script and top navigation', async ({ page }) => {
+test('CSP blocks direct fetch, socket, data worker, image, script and top navigation', async ({ page }) => {
   const frame = await open(page);
   const external: string[] = [];
   await page.route('https://example.invalid/**', route => { external.push(route.request().url()); return route.abort(); });
@@ -221,11 +221,9 @@ test('CSP blocks direct fetch, socket, worker, image, script and top navigation'
     denied.socket = await new Promise<boolean>(resolve => {
       try { const socket = new WebSocket('wss://example.invalid/socket'); socket.onopen = () => { socket.close(); resolve(false); }; socket.onerror = () => resolve(true); } catch { resolve(true); }
     });
-    const blob = URL.createObjectURL(new Blob(['postMessage(1)'], { type: 'text/javascript' }));
     denied.worker = await new Promise<boolean>(resolve => {
-      try { const worker = new Worker(blob); worker.onmessage = () => { worker.terminate(); resolve(false); }; worker.onerror = event => { event.preventDefault(); worker.terminate(); resolve(true); }; } catch { resolve(true); }
+      try { const worker = new Worker('data:text/javascript,postMessage(1)'); worker.onmessage = () => { worker.terminate(); resolve(false); }; worker.onerror = event => { event.preventDefault(); worker.terminate(); resolve(true); }; } catch { resolve(true); }
     });
-    URL.revokeObjectURL(blob);
     denied.image = await new Promise<boolean>(resolve => { const image = new Image(); image.onload = () => resolve(false); image.onerror = () => resolve(true); image.src = 'https://example.invalid/image'; });
     denied.script = await new Promise<boolean>(resolve => { const script = document.createElement('script'); script.onload = () => resolve(false); script.onerror = () => resolve(true); script.src = 'https://example.invalid/script.js'; document.head.append(script); });
     try { top!.location.href = 'https://example.invalid/top'; denied.top = false; } catch { denied.top = true; }

@@ -63,7 +63,7 @@ const bundle = await build({
 });
 const document = `<!doctype html>
 <html lang="en"><head>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; worker-src 'none'; child-src 'self'; frame-src 'self'; media-src blob:; object-src 'none'; manifest-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; worker-src blob:; child-src 'self'; frame-src 'self'; media-src blob:; object-src 'none'; manifest-src 'none'; base-uri 'none'; form-action 'none'">
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hypergolic runtime</title><script src="host.js" defer></script>
 </head><body><p role="status">Loading napplet…</p></body></html>\n`;

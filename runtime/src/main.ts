@@ -79,7 +79,7 @@ function fail(code: FailureCode): void {
 const csp = [
   "default-src 'none'", "script-src 'unsafe-inline' 'wasm-unsafe-eval'",
   "style-src 'unsafe-inline'", 'img-src data: blob:', 'font-src data:',
-  "connect-src 'none'", "worker-src 'none'", "child-src 'none'", "frame-src 'none'",
+  "connect-src 'none'", "worker-src blob:", "child-src 'none'", "frame-src 'none'",
   "media-src 'none'", "object-src 'none'", "manifest-src 'none'", "base-uri 'none'",
   "form-action 'none'",
 ].join('; ');
