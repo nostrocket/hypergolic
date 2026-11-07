@@ -1,3 +1,4 @@
+import { workspaceSessionActivity } from './workspace-activity';
 import type { CloseCheckRequest } from './close-check';
 import { forwardRef, memo, useCallback, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, useWindowDimensions, type NativeSyntheticEvent } from 'react-native';
@@ -23,11 +24,12 @@ interface LiveProps {
   swipeY: SharedValue<number>;
   swipeId: SharedValue<string | null>;
   active: boolean;
+  inputBlocked: boolean;
   raised: boolean;
   onZoomTarget: ZoomResetRegistration;
   onHostEvent?: (event: HostEvent) => void;
 }
-const LiveSession = memo(function LiveSession({ session, closeCheck, index, size, rect, progress, position, scrollY, swipeY, swipeId, active, raised, onZoomTarget, onHostEvent }: LiveProps) {
+const LiveSession = memo(function LiveSession({ session, closeCheck, index, size, rect, progress, position, scrollY, swipeY, swipeId, active, inputBlocked, raised, onZoomTarget, onHostEvent }: LiveProps) {
   const { styles } = useShellStyles(createStyles);
   // A keyed session starts when first focused and stays mounted until close or identity change.
   const [loaded, setLoaded] = useState(raised);
@@ -51,9 +53,9 @@ const LiveSession = memo(function LiveSession({ session, closeCheck, index, size
     onHostEvent?.(nativeEvent);
   }, [onHostEvent, session.id]);
   return (
-    <Animated.View collapsable={false} pointerEvents={active ? 'auto' : 'none'} importantForAccessibility={active ? 'auto' : 'no-hide-descendants'} accessibilityElementsHidden={!active}
+    <Animated.View collapsable={false} pointerEvents={active && !inputBlocked ? 'auto' : 'none'} importantForAccessibility={active && !inputBlocked ? 'auto' : 'no-hide-descendants'} accessibilityElementsHidden={!active || inputBlocked}
       style={[styles.live, { width, height, zIndex: raised ? 2 : 1 }, movement]}>
-      {loaded ? <NappletHost onZoomTarget={onZoomTarget} closeCheck={closeCheck} active={active} session={session} onHostEvent={onNativeEvent} style={styles.host} />
+      {loaded ? <NappletHost onZoomTarget={onZoomTarget} closeCheck={closeCheck} active={active} inputBlocked={inputBlocked} session={session} onHostEvent={onNativeEvent} style={styles.host} />
         : <View style={styles.unloaded}><Text style={styles.reopen}>Open to load</Text></View>}
       <Text testID={`runtime-status-${session.id}`} importantForAccessibility={active ? 'auto' : 'no-hide-descendants'} accessibilityElementsHidden={!active} accessibilityLiveRegion={active ? 'polite' : 'none'} style={[styles.runtimeStatus, loaded && status === 'Runtime connected' && styles.connected]}>{loaded ? status : 'Not loaded'}</Text>
     </Animated.View>
@@ -71,6 +73,7 @@ interface StageProps {
   swipeId: SharedValue<string | null>;
   busy: boolean;
   blocked: boolean;
+  hostActivityBlocked?: boolean;
   interactive: boolean;
   pending: ReadonlySet<string>;
   onHostEvent?: (event: HostEvent) => void;
@@ -82,7 +85,7 @@ interface StageProps {
   onHandleEnd: (side: HandleSide, result: 'overview' | 'switch' | 'cancel') => void;
 }
 
-export const WorkspaceStage = forwardRef<OverviewHandle, StageProps>(function WorkspaceStage({ onZoomTarget, workspace, closeCheck, progress, position, scrollY, swipeY, swipeId, busy, blocked, interactive, pending, onHostEvent, onFocus, onClose, onOpen, onDragEnd, onHandleStart, onHandleEnd }, ref) {
+export const WorkspaceStage = forwardRef<OverviewHandle, StageProps>(function WorkspaceStage({ onZoomTarget, workspace, closeCheck, progress, position, scrollY, swipeY, swipeId, busy, blocked, hostActivityBlocked = blocked, interactive, pending, onHostEvent, onFocus, onClose, onOpen, onDragEnd, onHandleStart, onHandleEnd }, ref) {
   const { styles } = useShellStyles(createStyles);
   const [size, setSize] = useState<Size>({ width: 0, height: 0 });
   const [measured, setMeasured] = useState<Record<string, CardMeasurement>>({});
@@ -97,7 +100,7 @@ export const WorkspaceStage = forwardRef<OverviewHandle, StageProps>(function Wo
   }}>
     {size.width > 0 && size.height > 0 && <>
       {workspace.sessions.map((session, index) => <LiveSession key={session.id} onZoomTarget={onZoomTarget} session={session} closeCheck={closeCheck?.sessionId === session.id ? JSON.stringify({id: closeCheck.id, generation: closeCheck.generation}) : ''} index={index} size={size} rect={resolveCardRect(geometry.cards[index], measured[session.id])}
-        progress={progress} position={position} scrollY={scrollY} swipeY={swipeY} swipeId={swipeId} active={interactive && !workspace.overview && !disabled && workspace.focusedId === session.id}
+        progress={progress} position={position} scrollY={scrollY} swipeY={swipeY} swipeId={swipeId} {...workspaceSessionActivity({focused: workspace.focusedId === session.id, overview: workspace.overview, busy, interactive, blocked, checkingClose: closeCheck !== null, hostActivityBlocked})}
         raised={workspace.focusedId === session.id} onHostEvent={onHostEvent} />)}
       <Overview ref={ref} sessions={workspace.sessions} geometry={geometry} size={size} visible={workspace.overview} busy={disabled} focusedId={workspace.focusedId}
         progress={progress} scrollY={scrollY} swipeId={swipeId} swipeY={swipeY} pending={pending} onFocus={onFocus} onClose={onClose} onOpen={onOpen}

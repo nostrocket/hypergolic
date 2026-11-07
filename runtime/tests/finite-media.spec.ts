@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Frame } from '@playwright/test';
 
 const generation = '4ba3bdc3-8130-4a46-b5b9-3d4087a214a6';
 const media = 'media-90c4a736-d407-472b-bf89-8b6de2abdd0d';
@@ -186,4 +186,102 @@ test('live Media projects the signed Funclet shape and publisher play cannot sub
   expect(await page.evaluate(()=>(window as any).__mediaProof.effects.transfers)).toBe(0);
   await page.evaluate(()=>(window as any).__mediaProof.nativePlay());
   expect(await page.evaluate(()=>(window as any).__mediaProof.effects.transfers)).toBe(1);
+});
+
+
+async function prepareReviewMedia(guest: Frame) {
+  await guest.evaluate(async media => {
+    const api = (window as any).napplet;
+    await api.media.createSession({owner:'shell',source:{url:'https://radio.example.org/stream'},live:true});
+    const canvas = document.createElement('canvas');canvas.tabIndex=0;canvas.dataset.testid='review-canvas';
+    const field = document.createElement('input');field.dataset.testid='review-editor';
+    const button = document.createElement('button');button.textContent='Guest action';
+    document.body.append(canvas,field,button);
+    (window as any).reviewProof={actions:0,clicks:0,metadataRequests:0,status:'paused',rawKeys:0,rawPointer:0};
+    button.onclick=()=>{(window as any).reviewProof.clicks++;};
+    window.addEventListener('keydown',()=>{(window as any).reviewProof.rawKeys++;});
+    window.addEventListener('message',event=>{
+      if(event.isTrusted&&event.source===parent&&event.data?.type==='hypergolic.private.media-active')
+        (window as any).inputBlockedSeen=event.data.inputBlocked;
+    });
+    for(const name of ['pointermove','mousemove'])window.addEventListener(name,()=>{(window as any).reviewProof.rawPointer++;});
+    await api.keys.registerAction({id:'review.skip',label:'Skip',defaultKey:'s'});
+    api.keys.onAction('review.skip',()=>{(window as any).reviewProof.actions++;});
+    api.media.onState(media,(row:{status:string})=>{
+      const proof=(window as any).reviewProof;
+      if(row.status==='playing'&&proof.status!=='playing')proof.metadataRequests++;
+      proof.status=row.status;
+    });
+  },media);
+}
+
+test('trusted review input occlusion preserves live media but blocks pointer, editor and Keys input', async ({page}) => {
+  const guest = await open(page, true, true, true);
+  await prepareReviewMedia(guest);
+  await page.evaluate(({media})=>{
+    (window as any).__hypergolicMediaActive(true);
+    (window as any).__mediaProof.nativePlay();
+    (window as any).__mediaProof.push({type:'media.state',sessionId:media,status:'playing'});
+  },{media});
+  await guest.getByTestId('review-canvas').focus();await page.keyboard.press('s');
+  await expect.poll(()=>guest.evaluate(()=>(window as any).reviewProof.actions)).toBe(1);
+  await guest.getByTestId('review-canvas').hover();
+  const keysBefore=await guest.evaluate(()=>(window as any).reviewProof.rawKeys);
+  const pointerBefore=await guest.evaluate(()=>(window as any).reviewProof.rawPointer);
+  expect(pointerBefore).toBeGreaterThan(0);
+  const box=await guest.getByTestId('review-canvas').boundingBox();expect(box).not.toBeNull();
+  await guest.evaluate(()=>{
+    const proof=(window as any).reviewProof;
+    proof.restore={prevent:Event.prototype.preventDefault,stop:Event.prototype.stopImmediatePropagation,blur:HTMLElement.prototype.blur,
+      source:Object.getOwnPropertyDescriptor(MessageEvent.prototype,'source'),data:Object.getOwnPropertyDescriptor(MessageEvent.prototype,'data'),
+      cancelable:Object.getOwnPropertyDescriptor(Event.prototype,'cancelable')};
+    Object.defineProperty(Event.prototype,'cancelable',{configurable:true,get:()=>false});
+    Event.prototype.preventDefault=()=>{};Event.prototype.stopImmediatePropagation=()=>{};HTMLElement.prototype.blur=()=>{};
+  });
+  await page.evaluate(()=>(window as any).__hypergolicInputActive(false));
+  await expect(page.locator('#napplet')).toHaveJSProperty('inert',true);
+  await guest.evaluate(async()=>{
+    Object.defineProperty(MessageEvent.prototype,'source',{configurable:true,get:()=>parent});
+    window.postMessage({type:'hypergolic.private.media-active',active:true,inputActive:true,inputBlocked:false},'*');
+    window.dispatchEvent(new MessageEvent('message',{source:parent,data:{type:'hypergolic.private.media-active',active:true,inputActive:true,inputBlocked:false}}));
+    await new Promise(resolve=>setTimeout(resolve,20));
+  });
+  await guest.getByTestId('review-editor').evaluate((input:HTMLInputElement)=>input.focus());
+  await page.keyboard.type('s');await page.keyboard.insertText('日本');
+  expect(await guest.getByTestId('review-editor').inputValue()).toBe('');
+  await guest.evaluate(()=>{
+    Object.defineProperty(MessageEvent.prototype,'source',(window as any).reviewProof.restore.source);
+    Object.defineProperty(MessageEvent.prototype,'data',{configurable:true,get:()=>({type:'hypergolic.private.media-active',active:true,inputActive:true,inputBlocked:false})});
+  });
+  await page.evaluate(()=>(window as any).__hypergolicInputActive(false));
+  await guest.getByTestId('review-editor').evaluate((input:HTMLInputElement)=>input.focus());
+  await page.keyboard.type('b');
+  expect(await guest.getByTestId('review-editor').inputValue()).toBe('');
+  await guest.getByTestId('review-canvas').evaluate((canvas:HTMLCanvasElement)=>canvas.focus());
+  await page.keyboard.press('s');
+  await page.mouse.move(box!.x+5,box!.y+5);await page.mouse.move(box!.x+25,box!.y+10);
+  await expect(guest.getByRole('button',{name:'Guest action'}).click({trial:true,timeout:400})).rejects.toThrow();
+  expect(await guest.evaluate(()=>{const {restore,...proof}=(window as any).reviewProof;return proof;})).toEqual({actions:1,clicks:0,metadataRequests:1,status:'playing',rawKeys:keysBefore,rawPointer:pointerBefore});
+  const requests=await page.evaluate(()=>(window as any).__mediaProof.requests);
+  expect(requests.some((row:{type:string})=>row.type==='media.session.destroy'||row.type==='media.command')).toBe(false);
+  await guest.evaluate(()=>{
+    const restore=(window as any).reviewProof.restore;
+    Event.prototype.preventDefault=restore.prevent;Event.prototype.stopImmediatePropagation=restore.stop;HTMLElement.prototype.blur=restore.blur;
+    Object.defineProperty(Event.prototype,'cancelable',restore.cancelable);
+    Object.defineProperty(MessageEvent.prototype,'source',restore.source);Object.defineProperty(MessageEvent.prototype,'data',restore.data);
+  });
+  // Cancel removes input occlusion only; no paused -> playing edge or second metadata request.
+  await page.evaluate(()=>(window as any).__hypergolicInputActive(true));
+  await expect(page.locator('#napplet')).toHaveJSProperty('inert',false);
+  await guest.getByTestId('review-canvas').focus();await page.keyboard.press('s');
+  await expect.poll(()=>guest.evaluate(()=>(window as any).reviewProof.actions)).toBe(2);
+  expect(await guest.evaluate(()=>(window as any).reviewProof.metadataRequests)).toBe(1);
+  await guest.getByRole('button',{name:'Guest action'}).click();
+  expect(await guest.evaluate(()=>(window as any).reviewProof.clicks)).toBe(1);
+  // An actual native source/background deactivation still wins over later input updates.
+  await page.evaluate(()=>{(window as any).__hypergolicMediaActive(false);(window as any).__hypergolicInputActive(true);});
+  await expect(page.locator('#napplet')).toHaveJSProperty('inert',true);
+  await expect.poll(()=>guest.evaluate(()=>(window as any).inputBlockedSeen)).toBe(true);
+  await page.keyboard.press('s');
+  expect(await guest.evaluate(()=>(window as any).reviewProof.actions)).toBe(2);
 });

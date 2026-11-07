@@ -36,7 +36,7 @@ export function ApprovalWorkspace({ service, uploads, cvm, reviewSlot, epoch, wo
   useApprovalLifecycle(service, epoch, reviewSlot, snapshot.pending);
   const title = workspace?.sessions.find(session => session.id === shown?.origin.sessionId)?.title ?? 'Napplet';
   return <ApprovalProvider value={service}><UploadProvider value={uploads ?? null}>
-    <Shell {...shell} blocked={Boolean(shell.blocked||cvmShown)} workspace={workspace} pendingApprovals={new Set([...snapshot.pendingSessionIds, ...uploadSnapshot.pendingSessionIds,...cvmSnapshot.pendingSessionIds])}
+    <Shell {...shell} blocked={Boolean(shell.blocked||cvmShown)} hostActivityBlocked={Boolean(shell.blocked)} workspace={workspace} pendingApprovals={new Set([...snapshot.pendingSessionIds, ...uploadSnapshot.pendingSessionIds,...cvmSnapshot.pendingSessionIds])}
       footer={<>{!shown && !uploadSnapshot.current && !shell.blocked && <>{footer}<ApprovalResume snapshot={snapshot} service={service} /></>}<UploadWorkspace service={uploads} snapshot={uploadSnapshot} workspace={workspace} blocked={Boolean(shown || shell.blocked)} mayReview={id => !reviewSlot || reviewSlot.owns('upload', id)} /></>}
       canCloseWithoutWarning={workspaceCloseGuard({service,presentation,showReceipt,uploads,cvmPending:cvmSnapshot.pendingSessionIds,workspace})}
       onBeforeClose={session => {service.close(session.id); uploads?.close(session.id); cvm?.close(session.id); reviewSlot?.close(session.id);}} />

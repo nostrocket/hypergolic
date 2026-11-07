@@ -71,3 +71,13 @@ Foreground/focus loss, interruption, close, identity replacement and generation 
 Finite-to-finite replacement retains its existing creation/preemption behavior. A transfer that was already stopping still settles before the next Play. Cross-mode switching uses a busy result: close the other video or radio player and retry. No queued handoff or hidden parallel transfer is introduced. A paused finite decoder remains reserved until its player is closed. Resource, Artifact, Upload and Relay limits are unchanged.
 
 The network-free and owned-loopback checks cover framing, HTTP response budgets, MP3 prefix/frame bounds, native profile renewal, cancellation and stale/drain ownership. Android presentation-clock and Apple queue-consumption observations establish progress, not acoustic output. Earlier isolated iOS launch attempts were inconclusive; host macOS AudioQueue results and iPhoneOS compilation do not substitute for ordinary iOS playback. Public station GET framing and sustained codec/PSS behavior still need source-reviewed native Play and final Android/iOS acceptance. HEAD metadata alone does not establish them.
+
+
+A trusted CVM review occludes input without changing the committed focused source.
+Already authorized native playback may continue while that review is shown; the
+same guest receives no pointer, editor, hardware-key or Keys input. The shell
+keeps navigation and other review presentation blocked. This matches the existing
+separation between a trusted approval sheet and the focused card, and grants no
+provider operation without its own review. Overview, settings, dragging, close,
+account/revocation and application background still deactivate the native host
+and pause or retire playback. Closing the review does not issue another Play.

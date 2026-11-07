@@ -38,6 +38,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
 #endif
   // A newly mounted hidden host cannot claim focus before the trusted active prop.
   private var active = false
+  private var inputBlocked = false
   private lazy var finiteVideo: NativeFiniteVideo = {
     let generation = self.generation
     return NativeFiniteVideo(host:self, generation:generation, permit:{ RoutingTransport.shared.mediaRevision(generation) }) { [weak self] in
@@ -130,6 +131,18 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     onEvent?(["type": "close-check", "sessionId": sessionId ?? "", "generation": generation, "id": id, "state": guarded])
   }
 
+  func setInputBlocked(_ blocked: Bool) {
+    guard inputBlocked != blocked else { return }
+    inputBlocked = blocked
+    if blocked { webView?.endEditing(true) }
+    updateInputActivity()
+  }
+  private func updateInputActivity(foreground: Bool? = nil) {
+    guard loaded, !disposed, let view = webView else { return }
+    let allowed = active && !inputBlocked && (foreground ?? (UIApplication.shared.applicationState == .active))
+    view.evaluateJavaScript("window.__hypergolicInputActive?.(\(allowed))", completionHandler: nil)
+  }
+
   func setActive(_ isActive: Bool) {
     guard active != isActive else { return }
     active = isActive
@@ -149,6 +162,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     guard let view = webView, !disposed else { return }
     let allowed = active && (foreground ?? (UIApplication.shared.applicationState == .active))
     finiteVideo.focusChanged(visible: allowed);liveRadio.focusChanged(visible: allowed)
+    updateInputActivity(foreground: foreground)
     if loaded { view.evaluateJavaScript("window.__hypergolicMediaActive?.(\(allowed))", completionHandler: nil) }
     if !allowed { view.setAllMediaPlaybackSuspended(true, completionHandler: nil) }
     else {

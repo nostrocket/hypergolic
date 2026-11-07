@@ -296,7 +296,7 @@ function createGuestEndpoint(artifact: RuntimeMetadata, hooks: ShellAdapter) {
   const frame = createGuestFrame(artifact.title);
   const source = frame.contentWindow;
   if (!source) { bridge.destroy(); throw new Error('Frame unavailable'); }
-  const media = bindResourceMedia(source);
+  const media = bindResourceMedia(source, frame);
   const policy = artifact.domains.includes('resource') ? csp.replace("media-src 'none'", 'media-src blob:') : csp;
   originRegistry.register(source, sessionId, identity);
   originRegistry.setEnvironment(source, environment);

@@ -1,20 +1,51 @@
 /** Trusted top-document control; native calls never enter the guest namespace. */
 let mediaActive = true;
 let inputActive = false;
+let inputAllowed = true;
+let surface: HTMLIFrameElement | null = null;
 export const isRuntimeInputActive = (): boolean => inputActive;
 let recipient: Window | null = null;
 const controlType = 'hypergolic.private.media-active';
-const publish = (): void => { recipient?.postMessage({type:controlType,active:mediaActive,inputActive}, '*'); };
+const publish = (): void => {
+  if (surface) surface.inert = !mediaActive || !inputAllowed;
+  recipient?.postMessage({type:controlType,active:mediaActive,inputActive,inputBlocked:!mediaActive || !inputAllowed}, '*');
+};
 Object.defineProperty(window, '__hypergolicMediaActive', {
-  value(active: boolean) { mediaActive = active === true; inputActive = mediaActive; publish(); }, writable: false, configurable: false,
+  value(active: boolean) { mediaActive = active === true; inputActive = mediaActive && inputAllowed; publish(); }, writable: false, configurable: false,
 });
-export function bindResourceMedia(source: Window): Readonly<{refresh: () => void; close: () => void}> {
-  recipient = source;
-  return {refresh:publish,close(){mediaActive=false;inputActive=false;publish();recipient=null;}};
+Object.defineProperty(window, '__hypergolicInputActive', {
+  value(active: boolean) { inputAllowed = active === true; inputActive = mediaActive && inputAllowed; publish(); }, writable: false, configurable: false,
+});
+export function bindResourceMedia(source: Window, frame: HTMLIFrameElement): Readonly<{refresh: () => void; close: () => void}> {
+  recipient = source; surface = frame;
+  return {refresh:publish,close(){mediaActive=false;inputActive=false;publish();recipient=null;surface=null;}};
 }
 /** Executes before publisher scripts in the opaque guest. Captures the parent and DOM methods. */
 function guestMediaGate(): void {
   const owner = window.parent;
+  const sourceOf = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(MessageEvent.prototype,'source')!.get!);
+  const dataOf = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(MessageEvent.prototype,'data')!.get!);
+  const targetOf = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(Event.prototype,'target')!.get!);
+  const activeElement = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(Document.prototype,'activeElement')!.get!);
+  const prevent = Function.prototype.call.bind(Event.prototype.preventDefault);
+  const stopEvent = Function.prototype.call.bind(Event.prototype.stopImmediatePropagation);
+  const blur = Function.prototype.call.bind(HTMLElement.prototype.blur);
+  let inputBlocked = true;
+  const blockInput = (event: Event): void => {
+    if (!inputBlocked || !event.isTrusted) return;
+    prevent(event);
+    stopEvent(event);
+    try { blur(targetOf(event)); } catch { /* Native blur performs the element brand check. */ }
+  };
+  for (const type of ['keydown','keypress','keyup','beforeinput','input','textInput',
+    'compositionstart','compositionupdate','compositionend','pointerdown','pointermove','pointerup',
+    'pointerover','pointerout','pointerenter','pointerleave','pointercancel',
+    'mousedown','mousemove','mouseup','mouseover','mouseout','mouseenter','mouseleave',
+    'touchstart','touchmove','touchend','touchcancel','click','auxclick','dblclick','contextmenu','wheel',
+    'dragstart','drag','dragend','dragenter','dragleave','dragover','drop',
+    'gesturestart','gesturechange','gestureend','focusin']) {
+    window.addEventListener(type,blockInput,{capture:true,passive:false});
+  }
   const prototype = HTMLMediaElement.prototype;
   const play = prototype.play, pause = prototype.pause;
   const query = Document.prototype.querySelectorAll.bind(document);
@@ -30,8 +61,11 @@ function guestMediaGate(): void {
     return play.call(this);
   }});
   window.addEventListener('message', event => {
-    if (!event.isTrusted || event.source !== owner || event.data?.type !== 'hypergolic.private.media-active' || typeof event.data.active !== 'boolean') return;
-    active = event.data.active;lastGesture = -Infinity;
+    if (!event.isTrusted || sourceOf(event) !== owner) return;
+    const data = dataOf(event);
+    if (data?.type !== 'hypergolic.private.media-active' || typeof data.active !== 'boolean') return;
+    active = data.active;inputBlocked = data.inputBlocked !== false;lastGesture = -Infinity;
+    if (inputBlocked) try { blur(activeElement(document)); } catch { /* Not an HTML focus target. */ }
     if (!active) stop();
   }, true);
   document.addEventListener('play', event => {

@@ -42,6 +42,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
   @Volatile private var ready = false
   @Volatile private var disposed = false
   @Volatile private var active = false
+  private var inputBlocked = false
   private var expectedUrl: String? = null
   private var closeCheckId: String? = null
   private var closeCheckDeadline = 0L
@@ -337,6 +338,24 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     onHostEvent(mapOf("type" to "close-check", "sessionId" to (sessionId ?: ""), "generation" to generation, "id" to id, "state" to guarded))
   }
 
+  fun setInputBlocked(blocked: Boolean) {
+    if (disposed || inputBlocked == blocked) return
+    inputBlocked = blocked
+    if (blocked) {
+      val token = webView.windowToken
+      webView.clearFocus()
+      (context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
+        ?.hideSoftInputFromWindow(token, 0)
+    }
+    updateInputActivity()
+  }
+  private fun updateInputActivity() {
+    if (!disposed && loaded) {
+      val allowed = active && !inputBlocked && mediaForeground
+      webView.evaluateJavascript("window.__hypergolicInputActive?.($allowed)", null)
+    }
+  }
+
   fun setActive(active: Boolean) {
     if (disposed || this.active == active) return
     this.active = active
@@ -359,6 +378,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
   private fun updateMediaPlayback() {
     if (disposed) return
     finiteVideo.focusChanged(); liveRadio.focusChanged()
+    updateInputActivity()
     val playingAllowed = active && mediaForeground
     if (loaded) webView.evaluateJavascript("window.__hypergolicMediaActive?.($playingAllowed)", null)
     // Loaded foreground views also render the live overview. Focus gates media and
