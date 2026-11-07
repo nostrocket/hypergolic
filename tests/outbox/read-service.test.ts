@@ -236,8 +236,8 @@ test('observed relay hints merge after deduplication and never include a failed 
   assert.equal(result.events.length,1);assert.deepEqual(result.events[0]?.sidecar?.relayHints,['wss://hint.nostr.net','wss://network.nostr.net']);assert.ok(Object.isFrozen(result.events[0]?.sidecar?.relayHints));
   assert.equal(result.incomplete,true);
 });
-test('authorless Network completion differs from a missing requested-author route', async () => {
-  const h=harness({async resolve(){return {list:null,source:'cache',incomplete:false};}});
+test('authorless Network completion differs from an unresolved requested-author route', async () => {
+  const h=harness({async resolve(){throw Error('unresolved metadata');}});
   assert.equal((await h.service.query({...request,filters:{kinds:[1]}},author,signal(),()=>{},token)).incomplete,false);
   const missing=await h.service.query(request,author,signal(),()=>{},token);
   assert.equal(missing.incomplete,true);assert.deepEqual(missing.plan.missingAuthors,[author]);
@@ -274,12 +274,12 @@ test('resolveRelays defaults to author writes for reads and requires fresh recip
   assert.deepEqual(purposes,['read','publication']);assert.equal(h.calls.length,0);
   await assert.rejects(h.service.resolveRelays({...input,target:{}},author,signal(),()=>{}),/no authors/);
 });
-test('unresolved or incomplete write diagnostic fails and read diagnostic reports explicit fallback missing author', async () => {
+test('write diagnostics remain blocked while complete known absence can use read fallback', async () => {
   for(const value of [{list:null,source:'cache' as const,incomplete:false},{list,source:'nip65' as const,incomplete:true}]) {
     const h=harness({async resolve(){return value;}}),input={type:'outbox.resolveRelays',id:'resolve-2',target:{pubkey:author,direction:'write'}};
     await assert.rejects(h.service.resolveRelays(input,author,signal(),()=>{}),/relay list unavailable/);assert.equal(h.calls.length,0);
     const read=await h.service.resolveRelays({...input,target:{pubkey:author,direction:'read'}},author,signal(),()=>{});
-    assert.equal(read.incomplete,true);
+    assert.equal(read.incomplete,value.list !== null);
     if(!value.list){assert.deepEqual(read.missingAuthors,[author]);assert.equal(read.source,'fallback');}
   }
 });

@@ -43,7 +43,9 @@ export async function resolveOutboxPlan(resolver: OutboxAuthorResolver, settings
     if (resolved.source === 'nip65') source = 'nip65';
     const relays = direction === 'read' ? resolved.list?.write : resolved.list?.read;
     if (!relays?.length || (direction === 'write' && resolved.incomplete)) {
-      missing.add(author); incomplete = true; continue;
+      missing.add(author);
+      incomplete ||= direction === 'write' || resolved.list !== null;
+      continue;
     }
     authorRoutes.set(author, relays.map(normalizeRelayUrl));
   }
@@ -58,13 +60,12 @@ export async function resolveOutboxPlan(resolver: OutboxAuthorResolver, settings
     for (const [author, relays] of authorRoutes) {
       const combined = new Set([...selected, ...relays]);
       if (combined.size <= OUTBOX_LIST_LIMITS.relays) selected = combined;
-      else missing.add(author);
+      else { missing.add(author); incomplete = true; }
     }
   }
   if (selected.size > OUTBOX_LIST_LIMITS.relays) throw new OutboxQueryError('policy denied');
   if (selected.size === 0) throw new OutboxQueryError('relay list unavailable');
   if (fallback || missing.size > 0) source = 'fallback';
-  incomplete ||= missing.size > 0;
   active(); return Object.freeze({relays:Object.freeze([...selected]),source,
     missingAuthors:Object.freeze(authors.filter(author => missing.has(author))),incomplete});
 }
