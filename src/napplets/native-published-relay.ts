@@ -53,7 +53,7 @@ function candidateEvents(frames: unknown, subscriptionId: string): unknown[] {
     let message;
     try { message = parsePublishedRelayMessage(descriptor.value, subscriptionId); } catch { return fail(); }
     if (message.type === 'event') {
-      eventBytes += encodedSize(message.event);
+      eventBytes += new TextEncoder().encode(encodedCandidate(message.event)).byteLength;
       if (events.length >= MAX_MANIFESTS_PER_QUERY || eventBytes > MAX_PUBLISHED_QUERY_BYTES) return fail();
       events.push(message.event);
     }
@@ -65,11 +65,11 @@ function candidateEvents(frames: unknown, subscriptionId: string): unknown[] {
   return events;
 }
 
-function encodedSize(event: unknown): number {
+function encodedCandidate(event: unknown): string {
   try {
     const encoded = JSON.stringify(event);
     if (typeof encoded !== 'string') return fail();
-    return new TextEncoder().encode(encoded).byteLength;
+    return encoded;
   } catch { return fail(); }
 }
 
@@ -138,6 +138,7 @@ export function createNativePublishedRelayLookup(
         const attempted = new Set<string>();
         const usedIds = new Set<string>();
         const events: unknown[] = [];
+        const candidatePayloads = new Set<string>();
         let totalBytes = 0;
         let closed = false;
         let timer: ReturnType<typeof setTimeout>;
@@ -180,10 +181,13 @@ export function createNativePublishedRelayLookup(
           try { relayEvents = candidateEvents(frames, request.subscriptionId); }
           catch { return false; }
           for (const event of relayEvents) {
-            const eventByteLength = encodedSize(event);
+            const payload = encodedCandidate(event);
+            if (candidatePayloads.has(payload)) continue;
+            const eventByteLength = new TextEncoder().encode(payload).byteLength;
             if (events.length >= MAX_MANIFESTS_PER_QUERY || totalBytes > MAX_PUBLISHED_QUERY_BYTES - eventByteLength) {
               finish(false); return false;
             }
+            candidatePayloads.add(payload);
             totalBytes += eventByteLength;
             events.push(event);
           }

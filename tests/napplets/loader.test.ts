@@ -116,6 +116,42 @@ test('discovery binds the latest eligible event across formats before fetching a
   assert.equal((await loadPublishedArtifact(link, options([old, current], html, undefined, [], old.id))).manifest.id, old.id);
 });
 
+test('Discover selects the newest signed revision when three healthy peers replicate eleven releases', async () => {
+  const events = Array.from({length: 11}, (_, index) => modern(1_700_000_001 + index));
+  const relays = ['wss://a.example.org', 'wss://b.example.org', 'wss://c.example.org'];
+  let nativeCalls = 0, blobReads = 0;
+  const lookup = createNativePublishedRelayLookup({
+    newInstanceId: randomUUID,
+    async queryPublishedRelay(_id, _relay, _wire, sub) {
+      nativeCalls++;
+      return [...events.map(event => JSON.stringify(['EVENT', sub, event])), JSON.stringify(['EOSE', sub])];
+    },
+    cancelPublishedRelay() {}, revokeAllPublishedRelay() {},
+  });
+  const input = {source: {query: lookup.query, async readHtml() {blobReads++; return html;}},
+    lookupRelays: relays, signal: new AbortController().signal, assertActive() {}};
+  assert.equal((await loadPublishedArtifact(link, {...input, expectedEventId: events.at(-1)!.id})).manifest.id, events.at(-1)!.id);
+  await assert.rejects(loadPublishedArtifact(link, {...input, expectedEventId: events[0]!.id}), {code: 'PUBLISHED_REVISION_CHANGED'});
+  assert.equal(nativeCalls, 6);
+  assert.equal(blobReads, 1);
+});
+
+test('an invalid replica with a matching ID cannot suppress a later valid signed manifest', async () => {
+  const valid = modern(1_700_000_001);
+  const invalid = {...valid, content: 'tampered without a new signature'};
+  const lookup = createNativePublishedRelayLookup({
+    newInstanceId: randomUUID,
+    async queryPublishedRelay(_id, relay, _wire, sub) {
+      return [JSON.stringify(['EVENT', sub, relay === lookupRelays[0] ? invalid : valid]), JSON.stringify(['EOSE', sub])];
+    },
+    cancelPublishedRelay() {}, revokeAllPublishedRelay() {},
+  });
+  const artifact = await loadPublishedArtifact(link, {source: {query: lookup.query, async readHtml() {return html;}},
+    lookupRelays: [...lookupRelays, 'wss://other.example.org'], expectedEventId: valid.id,
+    signal: new AbortController().signal, assertActive() {}});
+  assert.equal(artifact.manifest.id, valid.id);
+});
+
 test('only exact Discover requests use the normalized union of selected relay roles', async () => {
   const displayed = modern(1_700_000_001);
   const latest = modern(1_700_000_002);

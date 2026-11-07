@@ -362,6 +362,44 @@ test('enforces the shared 32 event and 2 MiB candidate budgets across relays', a
   await assert.rejects(createNativePublishedRelayLookup(tooLarge.port).query(coordinate, [relayA, relayB], null, new AbortController().signal), NativePublishedRelayError);
 });
 
+test('replicated candidate payloads do not consume the aggregate budget repeatedly', async () => {
+  const copies = Array.from({length: 16}, (_, n) => event(String(n).padStart(64, '0')));
+  const fixture = harness((_url, _request, sub) => [...copies.map(row => eventFrame(sub, row)), eose(sub)]);
+  const relays = [relayA, relayB, 'wss://relay-c.example.org'];
+  const rows = await createNativePublishedRelayLookup(fixture.port).query(coordinate, relays, null,
+    new AbortController().signal, true);
+  assert.deepEqual(rows, copies);
+  assert.equal(fixture.calls.length, 3);
+});
+
+test('candidate replication preserves every payload variant sharing an unverified ID', async () => {
+  const original = event('a'.repeat(64));
+  const variants = [original, {...original, content: 'different'}, {...original, sig: 'different'}];
+  const fixture = harness((_url, _request, sub) => [...variants.map(row => eventFrame(sub, row)), eose(sub)]);
+  const rows = await createNativePublishedRelayLookup(fixture.port).query(coordinate, [relayA, relayB], null,
+    new AbortController().signal, true);
+  assert.deepEqual(rows, variants);
+});
+
+test('replicated large payloads retain the unique byte charge and the per-relay raw gate', async () => {
+  const copies = Array.from({length: 16}, (_, n) => event(String(n).padStart(64, '0'), 'x'.repeat(65_600)));
+  const fixture = harness((_url, _request, sub) => [...copies.map(row => eventFrame(sub, row)), eose(sub)]);
+  const rows = await createNativePublishedRelayLookup(fixture.port).query(coordinate, [relayA, relayB], null,
+    new AbortController().signal, true);
+  assert.deepEqual(rows, copies);
+  assert.equal(fixture.calls.length, 2);
+});
+
+test('identical payloads still consume the original per-relay event and raw byte limits', async () => {
+  for (const [count, content] of [[33, 'small'], [32, 'x'.repeat(65_600)]] as const) {
+    const fixture = harness((_url, _request, sub) => [
+      ...Array.from({length: count}, () => eventFrame(sub, event('a'.repeat(64), content))), eose(sub),
+    ]);
+    await assert.rejects(createNativePublishedRelayLookup(fixture.port).query(coordinate, [relayA], null,
+      new AbortController().signal, true), NativePublishedRelayError);
+  }
+});
+
 test('matches native 64 text-message and 2 MiB raw-envelope limits before parsing', async () => {
   const tooManyMessages = harness((_url, _request, sub) => [
     ...Array.from({ length: 64 }, () => JSON.stringify(['NOTICE', 'busy'])), eose(sub),
