@@ -1,3 +1,4 @@
+import {classifyMapPbf} from './resource-map-pbf.ts';
 import { ResourceError, RESOURCE_LIMITS } from './resource-contract.ts';
 
 const jpegFrames = new Set([192,193,194,195,197,198,199,201,202,203,205,206,207]);
@@ -129,11 +130,15 @@ export function classifyResourceBytes(bytes: Uint8Array): string {
   if (ascii(bytes, 0, '%PDF-')) return 'application/pdf';
   if (ascii(bytes, 0, 'glTF')) return classifyGlb(bytes, view);
   if (bytes[0] === 0x1f && bytes[1] === 0x8b) return classifyGzip(bytes, view);
-  // A leading text/XML probe rejects active document bytes even with a lying server header.
-  let text: string;
-  try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { return bad(); }
+  // Valid binary framing can resemble whitespace followed by a text/XML prefix.
+  const pbf=classifyMapPbf(bytes);if(pbf)return pbf;
+  // Unrecognized HTML/XML remains denied even with a lying server header.
+  let text: string|undefined;
+  try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { /* Unknown non-text bytes are denied below. */ }
+  if (text?.trimStart().startsWith('<')) return bad();
+  if (text===undefined) return bad();
   const trimmed = text.trimStart();
-  if (trimmed.startsWith('<') || /^[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(trimmed) ||
+  if (/^[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(trimmed) ||
     /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(text)) return bad();
   if (/^[{[]/.test(trimmed)) { try { JSON.parse(text); return 'application/json'; } catch { return bad(); } }
   return 'text/plain';

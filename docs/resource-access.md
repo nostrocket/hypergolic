@@ -54,6 +54,39 @@ Native retrieval uses small metadata and app-only chunks. A separate host transf
 
 MIME comes from bytes. The profile admits bounded PNG/GIF/JPEG/WebP headers, WAV/MPEG audio, selected MP4/M4A brands, PDF, fatal UTF-8 text, valid JSON, [GLB v2](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#binary-gltf-layout) and [gzip](https://www.rfc-editor.org/rfc/rfc1952.html). GLB uses at most 16 chunks and a valid UTF-8 JSON asset declaration of at most 2 MiB. Gzip headers are bounded to 64 KiB. The runtime delivers both formats as opaque bytes. Guest code owns model decoding and decompression. Active HTML/XML/raw SVG and unknown/malformed bytes fail. Header parsing is not full codec validation. JPEG dimensions follow [T.81 frame headers](https://www.w3.org/Graphics/JPEG/itu-t81.pdf); WebP canvas dimensions follow [RFC 9649](https://www.rfc-editor.org/rfc/rfc9649.html). Codec support and malformed-media behavior require target-platform evidence. SVG needs bounded network-free rasterization and remains a recorded post-Phase-4 gap.
 
+## Map PBF resources
+
+The shared app/runtime byte classifier recognizes two specific core schemas,
+without trusting filenames or upstream MIME headers:
+
+- Fontnik Protocol 1 glyphs return `application/x-protobuf`, based on the immutable
+  [glyph schema blob](https://api.github.com/repos/mapbox/fontnik/git/blobs/6930b47a2b49aac58ddf98a02d4bd57185a6ee33).
+  Stacks need UTF-8 name/range and complete glyph metrics. A range covers 256
+  codepoints, aligned to 256, within Unicode. IDs are unique within each stack.
+  Nonempty SDF bitmap lengths match the metric size plus the schema's 3 px border;
+  dimensions are at most 4096. At most 16 stacks / 256 glyphs per stack are accepted.
+- [MVT 2.1 core schema](https://github.com/mapbox/vector-tile-spec/blob/21ff2cbd83c241d0ecdce0c782ecc08a565e713b/2.1/vector_tile.proto)
+  returns `application/vnd.mapbox-vector-tile`. Each layer has explicit version 2,
+  a unique UTF-8 name and positive extent. Known typed values, feature type,
+  required geometry presence, integer framing and attribute dictionary references
+  are checked. Both packed/unpacked repeated integers are accepted.
+
+Names are bounded to 1024 UTF-8 bytes, other strings to 64 KiB. There are at most 256
+layers, 65,536 parsed fields and 1,000,000 varints per classification (including the
+bounded second pass that validates dictionaries). Nested views share the CPU
+budget and original bytes; no geometry/bitmap buffer is expanded. Unknown fields,
+groups, extensions and unsupported versions fail specific format recognition.
+This is a selected core profile, not a general Protobuf MIME fallback.
+
+MVT commands, polygon topology, projection and rendering remain guest decoder
+responsibilities. These checks do not establish a valid rendered map or recover
+missing public assets. Existing active-document handling, fetch/hash checks,
+size/quota/rate/concurrency, cancellation and caller/cache binding are unchanged.
+The existing gzip classifier still returns opaque gzip bytes; this change does
+not add automatic decompression or trust Content-Encoding.
+
+Validated map PBF framing is recognized before the text-prefix probe: protobuf field and length bytes can decode as whitespace followed by `<`. Unrecognized HTML/XML/SVG still fails the active-document check; a text prefix alone cannot override a complete known binary structure.
+
 ## Cache and playback lifetime
 
 Cache and Object URLs live only while that napplet realm is loaded. Equivalent Blossom references share verified bytes by hash. Disabling Blossom blocks cached Blossom delivery too. Switching preserves its cache and place; cold launch refetches. Revocation clears the cache and private transfers. SDK URL helpers revoke on release, including revocation before asynchronous readiness; late completion cannot allocate a fresh URL.
