@@ -71,7 +71,7 @@ export function publishedHostInput(artifactInput: unknown, admissionInput: unkno
   if (domains.length !== expected.length || domains.some((domain, index) => domain !== expected[index])) return fail();
   const configuration = JSON.stringify({ sessionId: descriptor.id, epoch: authority.epoch,
     user: authority.user, publisher: verified.publisher, appId: verified.appId,
-    version: verified.version, instanceId: descriptor.id, fixture: 'published', domains,...(admission.supportProfile==='current'&&domains.includes('cvm')?{cvmProfile:'free-foreground-v1'}:{}),...(['current','before-cvm'].includes(admission.supportProfile)&&domains.includes('common')&&domains.includes('identity')&&domains.some(domain=>domain==='relay'||domain==='outbox')?{commonProfile:'social-v1'}:{}) });
+    version: verified.version, instanceId: descriptor.id, fixture: 'published', domains,...(admission.supportProfile==='current'&&domains.includes('media')?{mediaProfile:'finite-live-mp3-v1'}:{}),...(['current','before-live'].includes(admission.supportProfile)&&domains.includes('cvm')?{cvmProfile:'free-foreground-v1'}:{}),...(['current','before-live','before-cvm'].includes(admission.supportProfile)&&domains.includes('common')&&domains.includes('identity')&&domains.some(domain=>domain==='relay'||domain==='outbox')?{commonProfile:'social-v1'}:{}) });
   try { authority.assertActive(); } catch { return fail(); }
   admission.assertActive();
   return JSON.stringify({ sessionId: descriptor.id, publisher: verified.publisher, appId: verified.appId,

@@ -461,3 +461,48 @@ test('CVM requires fresh effective review; saved finite/social pins retain their
   assert.equal(config(saved).cvmProfile,undefined);
  });
 });
+
+for (const optionalMedia of [false,true]) test(`live Media renews equal-domain ${optionalMedia?'optional':'required'} finite access`,async t=>{
+  const {database}=await setup(t);const {owner,storage}=control(database);const signal=new AbortController().signal;
+  const required=optionalMedia?['common','theme']:['common','media','theme'];const optional=optionalMedia?['media']:[];
+  const candidate=await artifact(required,optional);const previous=publishedCapabilityCompatibility(required,optional,'before-live');
+  await storage.replaceAccessGrant(previous.domains,null,{},previous.review);const old=await storage.readAccessGrant();
+  const configuration=(admission:unknown)=>{
+    const descriptor=descriptorForPublishedArtifact(candidate,'58274370-ec8f-4058-a4cc-b63e7e75ca4b');
+    return JSON.parse(JSON.parse(publishedHostInput(candidate,admission,descriptor,{user,epoch:7,assertActive:owner.assertActive},'stage')).configuration);
+  };
+  const saved=await requestFirstOpenConsent(candidate,owner,storage,signal,owner.assertActive,async()=>assert.fail('saved pin must retain finite'),'saved-pin');
+  assert.equal(saved.supportProfile,'before-live');assert.equal(configuration(saved).mediaProfile,undefined);assert.ok(saved.domains.includes('common'));
+  let reviews=0;
+  await assert.rejects(requestFirstOpenConsent(candidate,owner,storage,signal,owner.assertActive,async()=>{reviews++;return false;}),FirstOpenConsentError);
+  assert.equal(reviews,1);assert.deepEqual(await storage.readAccessGrant(),old);
+  const approved=await requestFirstOpenConsent(candidate,owner,storage,signal,owner.assertActive,async()=>{reviews++;return true;});
+  assert.equal(reviews,2);assert.equal(approved.supportProfile,'current');assert.equal(configuration(approved).mediaProfile,'finite-live-mp3-v1');
+  assert.equal(configuration(saved).mediaProfile,undefined,'existing immutable admission never broadens');
+});
+
+test('no-Media review bytes remain exact and do not acquire a live discriminator',async t=>{
+  const {database}=await setup(t);const {owner,storage}=control(database);const required=['common','theme'];const optional=['gamepad'];
+  const before=publishedCapabilityCompatibility(required,optional,'before-live');
+  assert.equal(publishedCapabilityCompatibility(required,optional).review,before.review);
+  await storage.replaceAccessGrant(before.domains,null,{},before.review);
+  const candidate=await artifact(required,optional);
+  const admission=await requestFirstOpenConsent(candidate,owner,storage,new AbortController().signal,owner.assertActive,async()=>assert.fail('unchanged nonMedia grant'));
+  assert.deepEqual(admission.domains,['common','theme']);
+});
+
+test('live renewal preserves the deployed Common and CVM authority independently',async t=>{
+  const {database}=await setup(t),{owner,storage}=control(database),signal=new AbortController().signal;
+  const required=['common','cvm','identity','media','outbox'],candidate=await artifact(required);
+  const previous=publishedCapabilityCompatibility(required,[],'before-live');
+  await storage.replaceAccessGrant(previous.domains,null,{},previous.review);const old=await storage.readAccessGrant();
+  const descriptor=descriptorForPublishedArtifact(candidate,'58274370-ec8f-4058-a4cc-b63e7e75ca4b');
+  const config=(admission:unknown)=>JSON.parse(JSON.parse(publishedHostInput(candidate,admission,descriptor,{user,epoch:7,assertActive:owner.assertActive},'stage')).configuration);
+  const saved=await requestFirstOpenConsent(candidate,owner,storage,signal,owner.assertActive,async()=>assert.fail('saved CVM pin retains finite Media'),'saved-pin');
+  assert.equal(config(saved).cvmProfile,'free-foreground-v1');assert.equal(config(saved).commonProfile,'social-v1');assert.equal(config(saved).mediaProfile,undefined);
+  await assert.rejects(requestFirstOpenConsent(candidate,owner,storage,signal,owner.assertActive,async()=>false),FirstOpenConsentError);
+  assert.deepEqual(await storage.readAccessGrant(),old);
+  const approved=await requestFirstOpenConsent(candidate,owner,storage,signal,owner.assertActive,async()=>true);
+  assert.equal(config(approved).cvmProfile,'free-foreground-v1');assert.equal(config(approved).commonProfile,'social-v1');assert.equal(config(approved).mediaProfile,'finite-live-mp3-v1');
+  assert.equal(config(saved).mediaProfile,undefined);
+});

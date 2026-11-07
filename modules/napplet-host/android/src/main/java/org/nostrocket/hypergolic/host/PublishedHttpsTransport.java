@@ -38,7 +38,7 @@ public final class PublishedHttpsTransport {
   public static final int MAX_BODY_BYTES = 2 * 1024 * 1024;
   static final int MAX_ARTIFACT_BYTES = 20 * 1024 * 1024;
   enum ReadProfile {
-    AVATAR(MAX_BODY_BYTES, 0), RESOURCE(10 * 1024 * 1024, 2), ARTIFACT(MAX_ARTIFACT_BYTES, 3);
+    AVATAR(MAX_BODY_BYTES, 0), RESOURCE(10 * 1024 * 1024, 2), ARTIFACT(MAX_ARTIFACT_BYTES, 3), LIVE_MP3(0, 3);
     final int maxBytes, redirects;
     ReadProfile(int maxBytes, int redirects) { this.maxBytes = maxBytes; this.redirects = redirects; }
   }
@@ -46,7 +46,7 @@ public final class PublishedHttpsTransport {
   public static final int CONNECT_TIMEOUT_MS = 8_000;
   public static final int READ_TIMEOUT_MS = 12_000;
   public static final int TOTAL_TIMEOUT_MS = 30_000;
-  private static final ThreadPoolExecutor DNS = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
+  static final ThreadPoolExecutor DNS = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
       new ArrayBlockingQueue<>(4), task -> {
         Thread thread = new Thread(task, "napplet-https-dns");
         thread.setDaemon(true);
@@ -124,7 +124,7 @@ public final class PublishedHttpsTransport {
     T read(InputStream input, AbortMonitor abort) throws IOException;
   }
 
-  private static <T> T fetchWithTransport(String rawUrl, AddressPolicy policy, Cancellation cancellation,
+  static <T> T fetchWithTransport(String rawUrl, AddressPolicy policy, Cancellation cancellation,
       HostResolver resolver, ThreadPoolExecutor executor, SSLSocketFactory socketFactory,
       HostnameVerifier hostnameVerifier, ReadProfile wireProfile, Deadline deadline, int idleMs,
       TransferIdle idle, ResponseReader<T> reader) throws IOException {
@@ -278,11 +278,13 @@ public final class PublishedHttpsTransport {
     String host = url.getHost();
     int port = url.getPort();
     String hostHeader = port < 0 || port == 443 ? host : host + ":" + port;
-    String userAgent = profile == ReadProfile.RESOURCE
+    String userAgent = profile == ReadProfile.LIVE_MP3
+        ? "User-Agent: Hypergolic-LiveMP3/1.0 (https://github.com/nostrocket/hypergolic)\r\n" : profile == ReadProfile.RESOURCE
         ? "User-Agent: Hypergolic-Resource/1.0 (https://github.com/nostrocket/hypergolic)\r\n" : "";
     String request = "GET " + target + " HTTP/1.1\r\n" +
         "Host: " + hostHeader + "\r\n" +
         userAgent +
+        (profile == ReadProfile.LIVE_MP3 ? "Accept: audio/mpeg\r\nIcy-MetaData: 0\r\n" : "") +
         "Accept-Encoding: identity\r\n" +
         "Connection: close\r\n" +
         "\r\n";

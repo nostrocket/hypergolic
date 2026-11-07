@@ -8,7 +8,7 @@ test('published admission filters capabilities independently of catalogue status
   assert.deepEqual(capabilityCompatibility(['media', 'theme', 'fs', 'outbox']).unsupportedDomains, ['fs']);
   assert.equal(supportForDomain('fs').status, 'unavailable');
   assert.equal(supportForDomain('media').status, 'available');
-  assert.match(supportForDomain('media').detail, /Live streams, playlists and napplet-owned sessions are unavailable/);
+  assert.match(supportForDomain('media').detail, /Playlists and napplet-owned sessions are unavailable/);
   assert.equal(supportForDomain('resource').status, 'available');
   assert.equal(supportForDomain('shell').status, 'available');
   assert.equal(supportForDomain('storage').status, 'available');

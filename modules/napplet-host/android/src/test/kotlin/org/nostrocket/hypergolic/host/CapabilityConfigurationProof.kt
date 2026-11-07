@@ -133,6 +133,26 @@ object CapabilityConfigurationProof {
     denied(raw("ux-lab", listOf("identity", "theme")))
     denied(raw("published", listOf("theme"), extra = "untrusted"))
     denied("{" + " ".repeat(8200) + "}")
+    val finiteMedia = CapabilityConfiguration(raw("published", listOf("media")), "finite-generation", true)
+    checkProof(finiteMedia.mediaProfile == null)
+    val liveRaw = JSONObject(raw("published", listOf("media"))).put("mediaProfile", "finite-live-mp3-v1").toString()
+    val live = CapabilityConfiguration(liveRaw, "live-generation", true)
+    checkProof(live.mediaProfile == "finite-live-mp3-v1")
+    checkProof(JSONObject(live.snapshot).get("mediaProfile") == "finite-live-mp3-v1")
+    for (invalid in listOf(true, 1, "finite-video-v1", JSONObject.NULL, JSONArray())) {
+      denied(JSONObject(raw("published", listOf("media"))).put("mediaProfile", invalid).toString())
+    }
+    denied(JSONObject(raw("published", listOf("theme"))).put("mediaProfile", "finite-live-mp3-v1").toString())
+    denied(JSONObject(raw("ux-lab", listOf("theme"))).put("mediaProfile", "finite-live-mp3-v1").toString())
+    val combinedRaw = JSONObject(raw("published", listOf("common", "identity", "outbox", "cvm", "media")))
+      .put("commonProfile", "social-v1").put("cvmProfile", "free-foreground-v1").put("mediaProfile", "finite-live-mp3-v1")
+    val combined = CapabilityConfiguration(combinedRaw.toString(), "combined-generation", true)
+    checkProof(combined.commonProfile == "social-v1" && combined.cvmProfile == "free-foreground-v1" && combined.mediaProfile == "finite-live-mp3-v1")
+    val combinedSnapshot = JSONObject(combined.snapshot)
+    checkProof(listOf("commonProfile", "cvmProfile", "mediaProfile").all { combinedSnapshot.getString(it) == combinedRaw.getString(it) })
+    combinedRaw.remove("mediaProfile")
+    val oldCombined = CapabilityConfiguration(combinedRaw.toString(), "old-combined-generation", true)
+    checkProof(oldCombined.mediaProfile == null && oldCombined.commonProfile == "social-v1" && oldCombined.cvmProfile == "free-foreground-v1")
     println("{\"status\":\"passed\",\"assertions\":$assertions}")
   }
 }

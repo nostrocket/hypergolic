@@ -28,6 +28,7 @@ struct CapabilityConfiguration {
   let sessionId: String
   let fixture: String
   let domains: Set<String>
+  let mediaProfile:String?
   let commonProfile:String?
   let cvmProfile:String?
   let publishedOpen: Bool
@@ -38,7 +39,7 @@ struct CapabilityConfiguration {
     enum Invalid: Error { case configuration }
     guard raw.utf8.count <= 8192, let bytes = raw.data(using: .utf8),
       var value = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
-      Set(value.keys).subtracting(["publishedOpen","commonProfile","cvmProfile"]) == Set(["sessionId", "epoch", "user", "publisher", "appId", "version", "instanceId", "fixture", "domains"])
+      Set(value.keys).subtracting(["publishedOpen","commonProfile","cvmProfile","mediaProfile"]) == Set(["sessionId", "epoch", "user", "publisher", "appId", "version", "instanceId", "fixture", "domains"])
       else { throw Invalid.configuration }
     let open = value.removeValue(forKey: "publishedOpen")
     if let open {
@@ -80,6 +81,10 @@ struct CapabilityConfiguration {
     default: throw Invalid.configuration
     }
     if fixture != "published" && Set(domains) != expected { throw Invalid.configuration }
+    if let profile = value["mediaProfile"] {
+      guard profile as? String == "finite-live-mp3-v1", fixture == "published", expected.contains("media") else { throw Invalid.configuration }
+    }
+    self.mediaProfile = value["mediaProfile"] as? String
     value["generation"] = generation
     self.snapshot = String(decoding: try JSONSerialization.data(withJSONObject: value), as: UTF8.self)
     self.user = value["user"] as! String

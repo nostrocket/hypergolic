@@ -179,3 +179,13 @@ protocol PublishedHTTPFileSink: AnyObject {
   func finish() throws -> URL
   func discard()
 }
+
+/// Independent byte-stream receiver. The decoder receives payload bytes, never a URL.
+protocol PublishedHTTPStreamSink: AnyObject {
+  var idleSeconds: Int { get }
+  var maximumReadSize: Int { get }
+  func append(_ chunk: Data) throws
+  func finish() throws
+  func resetResponse() throws
+  func cancel()
+}

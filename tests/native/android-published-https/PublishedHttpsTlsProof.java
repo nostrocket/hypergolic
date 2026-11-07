@@ -296,10 +296,10 @@ public final class PublishedHttpsTlsProof {
     return "HTTP/1.1 200 OK\r\nContent-Length: " + body.length() + "\r\n\r\n" + body;
   }
 
-  private static final class LocalServer implements AutoCloseable {
+  static final class LocalServer implements AutoCloseable {
     private final SSLServerSocket listener;
     private final Thread thread;
-    private final String response;
+    private final byte[] response;
     private final boolean waitForRelease;
     final CountDownLatch requestArrived = new CountDownLatch(1);
     private final CountDownLatch releaseResponse = new CountDownLatch(1);
@@ -309,7 +309,10 @@ public final class PublishedHttpsTlsProof {
     volatile Exception failure;
 
     LocalServer(SSLContext context, String response, boolean waitForRelease) throws IOException {
-      this.response = response;
+      this(context, response.getBytes(StandardCharsets.US_ASCII), waitForRelease);
+    }
+    LocalServer(SSLContext context, byte[] response, boolean waitForRelease) throws IOException {
+      this.response = response.clone();
       this.waitForRelease = waitForRelease;
       listener = (SSLServerSocket) context.getServerSocketFactory().createServerSocket(0, 1, LOOPBACK);
       listener.setSoTimeout(3_000);
@@ -338,7 +341,7 @@ public final class PublishedHttpsTlsProof {
         requestArrived.countDown();
         if (waitForRelease && !releaseResponse.await(3, TimeUnit.SECONDS)) return;
         OutputStream output = client.getOutputStream();
-        output.write(response.getBytes(StandardCharsets.US_ASCII));
+        output.write(response);
         output.flush();
       } catch (SocketException expectedWhenClosed) {
         // Closing the listener or a cancelled client is expected in negative cases.

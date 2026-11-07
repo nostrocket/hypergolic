@@ -5,12 +5,13 @@ export type SupportAvailability = 'available' | 'unavailable' | 'unknown';
 const PROFILE_PREFIX = 'hypergolic-native-2026-11-06';
 const BASE_SUPPORT_PROFILE = `${PROFILE_PREFIX}-v1`;
 const INTENT_SUPPORT_PROFILE = 'hypergolic-native-2026-11-06-intent-v1';
-export const MEDIA_ACCESS_DETAIL = 'Media access lets this napplet offer a public HTTPS video. Play in the shell authorizes playback and a download of up to 256 MiB for the selected video. The source may redirect to another public HTTPS site.';
+export const MEDIA_ACCESS_DETAIL = 'Media access lets this napplet offer public HTTPS videos and MP3 radio. Play in the shell authorizes a video download up to 256 MiB or foreground radio up to 15 minutes and 32 MiB. Sources may redirect to other public HTTPS sites. Live radio needs a fresh Media review; old grants stay finite-only.';
 const MEDIA_SUPPORT_PROFILE = `${PROFILE_PREFIX}-media-file-v1`;
+const LIVE_MEDIA_SUPPORT_PROFILE = `${PROFILE_PREFIX}-media-live-mp3-v1`;
 const COMMON_SOCIAL_SUPPORT_PROFILE=`${PROFILE_PREFIX}-common-social-v1`;
 const CVM_SUPPORT_PROFILE=`${PROFILE_PREFIX}-cvm-free-foreground-v1`;
-export const REPORTED_SUPPORT_PROFILE = `${PROFILE_PREFIX}-outbox-keys-v1/${MEDIA_SUPPORT_PROFILE}/${PROFILE_PREFIX}-common-read-v1/${COMMON_SOCIAL_SUPPORT_PROFILE}/${CVM_SUPPORT_PROFILE}`;
-export type ReviewedSupportProfile = 'current' | 'before-cvm' | 'before-social' | 'before-common' | 'legacy';
+export const REPORTED_SUPPORT_PROFILE = `${PROFILE_PREFIX}-outbox-keys-v1/${MEDIA_SUPPORT_PROFILE}/${LIVE_MEDIA_SUPPORT_PROFILE}/${PROFILE_PREFIX}-common-read-v1/${COMMON_SOCIAL_SUPPORT_PROFILE}/${CVM_SUPPORT_PROFILE}`;
+export type ReviewedSupportProfile = 'current' | 'before-live' | 'before-cvm' | 'before-social' | 'before-common' | 'legacy';
 const beforeCommonDomains = Object.freeze(SUPPORTED_CAPABILITY_DOMAINS.filter(domain => domain !== 'common' && domain !== 'cvm'));
 const legacyDomains = Object.freeze(['identity', 'storage', 'theme', 'relay', 'resource', 'upload',
   'link', 'intent', 'inc', 'notify', 'config', 'outbox']);
@@ -30,7 +31,7 @@ const notes: Readonly<Record<string, string>> = Object.freeze({
   config: 'Selected bounded schemas and retained settings; unrestricted schema support is unavailable.',
   outbox: 'Outbox queries return up to 200 events. Bounded subscriptions and approved publication are available. Raw Relay operations require a separate grant.',
   keys: 'Hardware keyboard actions for the focused napplet. Ordinary suggested shortcuts can work outside text entry.',
-  media: 'Shell-owned foreground HTTPS MP4 playback after trusted Play. Live streams, playlists and napplet-owned sessions are unavailable.',
+  media: 'Shell-owned foreground HTTPS MP4 and bounded MP3 radio after native Play. Radio is limited to 15 minutes and 32 MiB, with a new Media review. Playlists and napplet-owned sessions are unavailable.',
   cvm: 'Encrypted free-only MCP requests after exact provider, arguments and foreground service review. Up to 2 minutes; no shell payments. Another card may be used while the source napplet stays open. Discovery and registry execution are unavailable.',
   common: 'Public NIP-19 helpers. Profile lookup needs a Relay or Outbox grant; follows needs Identity. Social writes need renewed Common access, Identity and Relay or Outbox, a selected signing method and exact event approval. Follow replacements are bounded by the existing 8 KiB publication frame.',
 });
@@ -48,11 +49,12 @@ function supportProfile(requested: readonly string[], policy: ReviewedSupportPro
   const added = ['outbox', 'keys'].filter(domain => requested.includes(domain));
   if (intent && added.length) added.push('intent');
   const profile = added.length ? `${PROFILE_PREFIX}-${added.join('-')}-v1` : previous;
-  const media = requested.includes('media') ? `${profile}/${MEDIA_SUPPORT_PROFILE}` : profile;
+  const finite = requested.includes('media') ? `${profile}/${MEDIA_SUPPORT_PROFILE}` : profile;
+  const media = policy==='current'&&requested.includes('media')?`${finite}/${LIVE_MEDIA_SUPPORT_PROFILE}`:finite;
   const read=policy!=='before-common'&&requested.includes('common')?`${media}/${PROFILE_PREFIX}-common-read-v1`:media;
   const social=granted.includes('common')&&granted.includes('identity')&&(granted.includes('relay')||granted.includes('outbox'));
-  const selected=(policy==='current'||policy==='before-cvm')&&social&&requested.includes('common')?`${read}/${COMMON_SOCIAL_SUPPORT_PROFILE}`:read;
-  return policy==='current'&&requested.includes('cvm')&&granted.includes('cvm')?`${selected}/${CVM_SUPPORT_PROFILE}`:selected;
+  const selected=(['current','before-live','before-cvm'].includes(policy))&&social&&requested.includes('common')?`${read}/${COMMON_SOCIAL_SUPPORT_PROFILE}`:read;
+  return (policy==='current'||policy==='before-live')&&requested.includes('cvm')&&granted.includes('cvm')?`${selected}/${CVM_SUPPORT_PROFILE}`:selected;
 }
 
 export function capabilityCompatibility(requested: readonly string[], available: readonly string[] = SUPPORTED_CAPABILITY_DOMAINS,
@@ -66,6 +68,6 @@ export function capabilityCompatibility(requested: readonly string[], available:
 }
 
 export function reviewedCapabilityCompatibility(requested: readonly string[], policy: ReviewedSupportProfile,combinedRequested:readonly string[]=requested) {
-  const available = policy === 'legacy' ? legacyDomains : policy === 'before-common' ? beforeCommonDomains : policy==='current'?SUPPORTED_CAPABILITY_DOMAINS:SUPPORTED_CAPABILITY_DOMAINS.filter(domain=>domain!=='cvm');
+  const available = policy === 'legacy' ? legacyDomains : policy === 'before-common' ? beforeCommonDomains : (policy==='current'||policy==='before-live')?SUPPORTED_CAPABILITY_DOMAINS:SUPPORTED_CAPABILITY_DOMAINS.filter(domain=>domain!=='cvm');
   return capabilityCompatibility(requested, available, policy,combinedRequested);
 }

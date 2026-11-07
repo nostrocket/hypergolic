@@ -18,7 +18,7 @@ export type MediaEvent = Readonly<{type:'media.session.create.result'; id:string
   | (Readonly<{type:'media.state'; sessionId:string}> & MediaState)
   | Readonly<{type:'media.capabilities'; sessionId:string; actions:readonly MediaAction[]}>
   | Readonly<{type:'media.session.ended'; sessionId:string; reason:Reason}>;
-export type MediaRequest = Readonly<{type:'media.session.create'; id:string; url:string}>
+export type MediaRequest = Readonly<{type:'media.session.create'; id:string; url:string; live?:true}>
   | Readonly<{type:'media.session.destroy'; sessionId:string}>
   | Readonly<{type:'media.command'; sessionId:string; action:MediaAction; value?:number}>;
 
@@ -39,15 +39,16 @@ export function projectMediaRequest(value: unknown): MediaRequest | null {
   if (!message) return null;
   if (message.type === 'media.session.create') {
     const id = mediaRequestId(message.id), source = record(message.source), metadata = record(message.metadata);
+    const live = message.live === true;
     if (!id || message.owner !== 'shell' || !source || !keys(source, fields.source) ||
-        (source.mimeType !== undefined && source.mimeType !== 'video/mp4') || typeof source.url !== 'string' ||
+        (source.mimeType !== undefined && source.mimeType !== (live ? 'audio/mpeg' : 'video/mp4')) || typeof source.url !== 'string' ||
         source.url.length > 8192 || new TextEncoder().encode(source.url).length > 8192 || /[\u0000-\u001f\u007f]/.test(source.url) ||
-        message.live !== undefined && message.live !== false ||
-        message.metadata !== undefined && (!metadata || metadata.mediaType !== undefined && metadata.mediaType !== 'video') ||
+        message.live !== undefined && typeof message.live !== 'boolean' ||
+        message.metadata !== undefined && (!metadata || metadata.mediaType !== undefined && metadata.mediaType !== (live ? 'audio' : 'video')) ||
         message.autoplay !== undefined && typeof message.autoplay !== 'boolean' ||
         message.queue !== undefined && (!Array.isArray(message.queue) || message.queue.length > 96) ||
         !keys(message, fields.create)) return null;
-    return {type:message.type, id, url:source.url};
+    return {type:message.type, id, url:source.url, ...(live ? {live:true as const} : {})};
   }
   if (!sessionId(message.sessionId)) return null;
   if (message.type === 'media.session.destroy' && keys(message, fields.session)) return {type:message.type, sessionId:message.sessionId};

@@ -3,20 +3,21 @@ import { expect, test, type Page } from '@playwright/test';
 
 const generation = '4ba3bdc3-8130-4a46-b5b9-3d4087a214a6';
 const media = 'media-90c4a736-d407-472b-bf89-8b6de2abdd0d';
-async function open(page: Page, grant = true, mixed = false) {
+async function open(page: Page, grant = true, mixed = false, liveProfile = false) {
   const html = '<!doctype html><html><head><title>Media proof</title></head><body><p>Media proof</p></body></html>';
   const digest = (value: string) => createHash('sha256').update(value).digest('hex');
   const hash = digest(html);
-  await page.addInitScript(({generation, media, html, hash, version, grant, mixed}) => {
+  await page.addInitScript(({generation, media, html, hash, version, grant, mixed, liveProfile}) => {
     if (window !== window.top) return;
     const listeners = new Set<(event:{data:string})=>void>();
     const send = (value:object) => { for (const listener of listeners) listener({data:JSON.stringify(value)}); };
     const push = (message:object, sessionId = generation) => send({type:'media.event',sessionId,message});
     const requests: object[] = [];
     let lastSequence = 0;
+    const effects = {transfers:0};
     const domains = mixed ? ['intent','keys','media','outbox'] : grant ? ['media','storage'] : ['storage'];
     const acceptedWire: string[] = [];
-    Object.defineProperty(window, '__mediaProof', {value:{requests,push,acceptedWire}});
+    Object.defineProperty(window, '__mediaProof', {value:{requests,push,acceptedWire,effects,nativePlay:()=>{if(liveProfile){effects.transfers++;push({type:'media.state',sessionId:media,status:'buffering'});}}}});
     Object.defineProperty(window, 'HypergolicHost', {value:{
       addEventListener: (_name:string, listener:(event:{data:string})=>void) => listeners.add(listener),
       removeEventListener: (_name:string, listener:(event:{data:string})=>void) => listeners.delete(listener),
@@ -46,13 +47,16 @@ async function open(page: Page, grant = true, mixed = false) {
         requests.push(row.message);
         acceptedWire.push(row.message.type);
         if (row.message.type === 'media.session.create') {
+          if (row.message.live === true && !liveProfile) {
+            push({type:'media.session.create.result',id:row.message.id,error:'Live radio needs renewed Media access.'});return;
+          }
           push({type:'media.session.create.result',id:row.message.id,sessionId:media,owner:'shell'});
           push({type:'media.state',sessionId:media,status:'paused',volume:1});
           push({type:'media.capabilities',sessionId:media,actions:['stop','volume']});
         }
       },
     }});
-  }, {generation,media,html,hash,version:digest(`${hash} /index.html\n`),grant,mixed});
+  }, {generation,media,html,hash,version:digest(`${hash} /index.html\n`),grant,mixed,liveProfile});
   await page.goto(`/assets/runtime/index.html?sessionId=${generation}&source=published`);
   await expect(page.frameLocator('#napplet').getByText('Media proof')).toBeVisible();
   const guest = await (await page.locator('#napplet').elementHandle())?.contentFrame();
@@ -105,8 +109,9 @@ test('Media grant and exact-frame checks reject raw synthetic requests and unsup
       api.createSession({owner:'shell',source:{url:'https://public.example.org/hls',mimeType:'application/vnd.apple.mpegurl'}}),
     ]);
   });
-  expect(errors).toEqual(Array(3).fill({error:'Unsupported media request.'}));
-  expect(await page.evaluate(() => (window as any).__mediaProof.requests)).toEqual([]);
+  expect(errors).toEqual([{error:'Unsupported media request.'},{error:'Live radio needs renewed Media access.'},{error:'Unsupported media request.'}]);
+  expect(await page.evaluate(() => (window as any).__mediaProof.requests)).toEqual([{type:'media.session.create',id:expect.any(String),url:'https://public.example.org/live',live:true}]);
+  expect(await page.evaluate(() => (window as any).__mediaProof.effects.transfers)).toBe(0);
 });
 
 test('a verified frame without Media cannot use a raw request to reach native', async ({page}) => {
@@ -169,4 +174,16 @@ test('one verified mixed grant keeps Media, Outbox, Keys and Intent live without
   await expect.poll(() => guest.evaluate(() => (window as any).keysActive)).toBe(false);
   await page.keyboard.press('s');
   expect(await guest.evaluate(() => (window as any).actions)).toBe(1);
+});
+
+
+test('live Media projects the signed Funclet shape and publisher play cannot substitute native source Play',async({page})=>{
+  const guest=await open(page,true,false,true);
+  const created=await guest.evaluate(()=> (window as any).napplet.media.createSession({owner:'shell',source:{url:'https://radio.example.org/stream'},metadata:{title:'Synthetic station',mediaType:'audio'},live:true,autoplay:false}));
+  expect(created).toEqual({sessionId:media,owner:'shell'});
+  expect(await page.evaluate(()=>(window as any).__mediaProof.requests)).toEqual([{type:'media.session.create',id:expect.any(String),url:'https://radio.example.org/stream',live:true}]);
+  await guest.evaluate(media=>(window as any).napplet.media.sendCommand(media,'play'),media);
+  expect(await page.evaluate(()=>(window as any).__mediaProof.effects.transfers)).toBe(0);
+  await page.evaluate(()=>(window as any).__mediaProof.nativePlay());
+  expect(await page.evaluate(()=>(window as any).__mediaProof.effects.transfers)).toBe(1);
 });

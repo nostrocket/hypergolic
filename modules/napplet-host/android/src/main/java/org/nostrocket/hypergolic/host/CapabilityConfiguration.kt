@@ -16,6 +16,7 @@ internal class CapabilityConfiguration(raw: String, generation: String, allowPub
   val appId: String
   val version: String
   val grantedDomains: List<String>
+  val mediaProfile: String?
   val commonProfile: String?
   val cvmProfile: String?
   init {
@@ -25,7 +26,8 @@ internal class CapabilityConfiguration(raw: String, generation: String, allowPub
     val open = value.has("publishedOpen")
     val common = value.has("commonProfile")
     val cvm = value.has("cvmProfile")
-    require(value.keys().asSequence().toSet() == names + (if(open)setOf("publishedOpen") else emptySet()) + (if(common)setOf("commonProfile") else emptySet()) + (if(cvm)setOf("cvmProfile") else emptySet()))
+    val media=value.has("mediaProfile")
+    require(value.keys().asSequence().toSet() == names + (if(open)setOf("publishedOpen") else emptySet()) + (if(common)setOf("commonProfile") else emptySet()) + (if(cvm)setOf("cvmProfile") else emptySet()) + (if(media)setOf("mediaProfile") else emptySet()))
     require(!open || value.remove("publishedOpen") == true)
     fun string(name: String): String = (value.get(name) as? String) ?: error("Invalid configuration")
     for (name in listOf("sessionId", "instanceId", "fixture")) require(string(name).matches(Regex("[A-Za-z0-9_-]{1,80}")))
@@ -61,6 +63,7 @@ internal class CapabilityConfiguration(raw: String, generation: String, allowPub
     allowsUpload = "upload" in granted
     allowsRelay = "relay" in granted
     grantedDomains = granted.sorted()
+    mediaProfile = if(media) string("mediaProfile").also { require(it=="finite-live-mp3-v1"&&fixture=="published"&&"media" in granted) } else null
     commonProfile = if(common) string("commonProfile").also { require(it=="social-v1"&&fixture=="published"&&granted.containsAll(listOf("common","identity"))&&granted.any { domain->domain=="relay"||domain=="outbox" }) } else null
     cvmProfile = if(cvm) string("cvmProfile").also { require(it=="free-foreground-v1"&&fixture=="published"&&"cvm" in granted) } else null
     require(("cvm" in granted) == (cvmProfile != null))

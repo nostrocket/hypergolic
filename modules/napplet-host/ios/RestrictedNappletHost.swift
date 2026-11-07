@@ -47,6 +47,16 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
         UIApplication.shared.applicationState == .active
     }
   }()
+  private lazy var liveRadio: NativeLiveRadio = {
+    let generation = self.generation
+    return NativeLiveRadio(host:self,generation:generation,profile:{ [weak self] in self?.configuration?.mediaProfile },scope:{ [weak self] in self?.configuration?.snapshot },
+      permit:{ RoutingTransport.shared.liveMediaRevision(generation) }) { [weak self] in
+      guard let self else { return false }
+      return self.live && self.ready && self.loaded && !self.disposed && self.active && self.publishedSource != nil &&
+        self.configuration?.domains.contains("media") == true && UIApplication.shared.applicationState == .active && self.webView?.url == self.expectedURL
+    }
+  }()
+
   private lazy var selectedFilePicker = SelectedFilePicker(live: { [weak self] in self?.maySelectFile() == true })
   private func maySelectFile() -> Bool {
     live && ready && loaded && !disposed && active && configuration?.domains.contains("upload") == true && UploadTransport.leases.isRegistered(generation)
@@ -67,7 +77,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
   override func layoutSubviews() {
     super.layoutSubviews()
     webView?.frame = bounds
-    finiteVideo.layout()
+    finiteVideo.layout();liveRadio.layout()
   }
 
   override func willMove(toSuperview newSuperview: UIView?) {
@@ -138,7 +148,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
   private func updateMediaPlayback(foreground: Bool? = nil) {
     guard let view = webView, !disposed else { return }
     let allowed = active && (foreground ?? (UIApplication.shared.applicationState == .active))
-    finiteVideo.focusChanged(visible: allowed)
+    finiteVideo.focusChanged(visible: allowed);liveRadio.focusChanged(visible: allowed)
     if loaded { view.evaluateJavaScript("window.__hypergolicMediaActive?.(\(allowed))", completionHandler: nil) }
     if !allowed { view.setAllMediaPlaybackSuspended(true, completionHandler: nil) }
     else {
@@ -587,7 +597,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
       CapabilityTransport.leases.consumeSequence(generation, sequence: sequence.uint64Value),
       UploadWire.boundedJSON(text, limit: 32 * 1024),
       let request = value["message"] as? [String: Any], let capturedView = webView, let capturedURL = expectedURL else { return }
-    finiteVideo.receive(request) { [weak self, weak capturedView] message in
+    let deliver: ([String:Any]) -> Void = { [weak self, weak capturedView] message in
       guard let self, let capturedView, self.live, !self.disposed, self.webView === capturedView,
         capturedView.url?.absoluteString == capturedURL.absoluteString,
         let data = try? JSONSerialization.data(withJSONObject: ["type":"media.event", "sessionId":self.generation, "message":message]) else { return }
@@ -596,6 +606,13 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
         if case .failure = result { self?.fail("renderer-stopped") }
       }
     }
+    let creating = request["type"] as? String == "media.session.create",radio = request["live"] as? Bool == true
+    if creating && ((radio && finiteVideo.hasSession) || (!radio && liveRadio.hasSession)) {
+      if let id=request["id"] as? String,id.range(of:"^[!-~]{1,128}$",options:.regularExpression) != nil {
+        deliver(["type":"media.session.create.result","id":id,"error":"Close this source's video or radio player before creating another."])
+      }
+    } else if radio || liveRadio.ownsSession(request["sessionId"] as? String) { liveRadio.receive(request,push:deliver) }
+    else { finiteVideo.receive(request,push:deliver) }
   }
 
   private func mayDeferCapability(_ message: String, configuration: CapabilityConfiguration) -> Bool {
@@ -738,7 +755,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
   func destroySession() {
     guard !disposed else { return }
     disposed = true
-    finiteVideo.retire()
+    finiteVideo.retire();liveRadio.dispose()
     closeCheckId = nil
     pendingNativeReplies.removeAll()
     selectedFilePicker.cancel()

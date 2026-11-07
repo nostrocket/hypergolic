@@ -27,7 +27,7 @@ final class RoutingTransportRegistry: @unchecked Sendable {
     if before.revision != endpoints.state().revision {
       if before.user != user || before.epoch != epoch || !available {
         let generations = Set(rows.keys)
-        Task { @MainActor in NativeFiniteVideo.revokeGenerations(generations) }
+        Task { @MainActor in NativeFiniteVideo.revokeGenerations(generations);NativeLiveRadio.revokeGenerations(generations) }
       }
       if before.user != user || before.epoch != epoch {
         for generation in Array(rows.keys) { rows[generation]?.credits.clear() }
@@ -76,6 +76,10 @@ final class RoutingTransportRegistry: @unchecked Sendable {
     guard let row = rows[generation], row.config.fixture == "published", row.config.domains.contains("media"),
       mayReview(generation, revision: revision) else { return nil }
     return "\(revision):\(endpoints.reviewRevision(generation))"
+  } }
+  func liveMediaRevision(_ generation: String) -> String? { lock.withLock {
+    guard rows[generation]?.config.mediaProfile == "finite-live-mp3-v1", let revision = mediaRevision(generation) else { return nil }
+    return "\(revision):finite-live-mp3-v1"
   } }
   func mayReview(_ generation: String, revision: UInt64) -> Bool { lock.withLock { endpoints.matchesRevision(revision) && endpoints.mayReview(generation) && CapabilityTransport.leases.sessionActive(generation) } }
   func reviewRevision(_ generation: String, revision: UInt64) -> Int64 { lock.withLock { endpoints.matchesRevision(revision) ? endpoints.reviewRevision(generation) : -1 } }

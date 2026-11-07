@@ -34,7 +34,7 @@ approve signing, upload, external links or sensitive identity reads.
 The [bundled support napplet](../napplets/nap-support/README.md) reports reviewed
 metadata using Available/Unavailable/Unknown. A tick describes the shell's
 configured published-napplet profile, not full conformance or the current guest's
-grant. Expanded details state concrete limits. Focused Keys and [foreground finite
+grant. Expanded details state concrete limits. Focused Keys and [foreground finite video and bounded MP3
 Media](media-playback.md) have bounded profiles. FS remains unavailable. Selected
 Outbox operations use the reviewed Outbox grant. Raw Relay uses its own grant.
 

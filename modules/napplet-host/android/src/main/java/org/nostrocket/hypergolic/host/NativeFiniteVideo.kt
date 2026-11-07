@@ -29,6 +29,10 @@ internal class NativeFiniteVideo(private val host: LinearLayout, private val gen
   private val permit: () -> String?, private val allowed: () -> Boolean) {
   private class Session(val id: String, val url: String, val hostName: String, val push: (JSONObject) -> Unit) {
     var consent: String? = null
+    var networkActive = false
+    var retired = false
+    var reserved = false
+    var releaseUncertain = false
     var started = false
     var volume = 1f
     var file: File? = null
@@ -57,6 +61,7 @@ internal class NativeFiniteVideo(private val host: LinearLayout, private val gen
   private val audio = host.context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
 
+  fun hasSession() = session != null
   fun receive(request: JSONObject, push: (JSONObject) -> Unit) {
     if (request.opt("type") == "media.session.create") { create(request, push); return }
     val row = session ?: return
@@ -138,6 +143,8 @@ internal class NativeFiniteVideo(private val host: LinearLayout, private val gen
     if (row.started) { row.consent = null; pause(row, "user"); return }
     if (row.fetching != null) return
     val receipt = permit() ?: return
+    if (!MediaPlaybackReservation.acquire(row)) { label?.text = MediaPlaybackReservation.hint(); return }
+    row.reserved = true
     row.consent = receipt
     row.file?.let { file ->
       if (row.prepared) resume(row)
@@ -146,7 +153,7 @@ internal class NativeFiniteVideo(private val host: LinearLayout, private val gen
     }
     if (downloading) { label?.text = "Previous video is stopping. Try Play again."; return }
     val fetch = Fetch()
-    row.fetching = fetch; downloading = true
+    row.fetching = fetch; downloading = true; row.networkActive = true
     val directory = File(host.context.cacheDir, "hypergolic-finite-media-file-v1")
     state(row, "buffering")
     label?.text = "${row.hostName} · Connecting"
@@ -154,7 +161,7 @@ internal class NativeFiniteVideo(private val host: LinearLayout, private val gen
     worker.execute {
       val cancelled = PublishedHttpsTransport.Cancellation { fetch.cancelled || permit() != receipt }
       val file = stage(row, fetch, directory, cancelled)
-      main.post { complete(row, fetch, file) }
+      main.post { row.networkActive = false; releaseReservation(row); complete(row, fetch, file) }
     }
   }
 
@@ -358,18 +365,26 @@ internal class NativeFiniteVideo(private val host: LinearLayout, private val gen
   private fun failed(row: Session) { state(row, "stopped", "error"); retire("error") }
   private fun releasePlayer(row: Session) {
     val player = row.player
-    row.player = null; row.prepared = false; row.decoderReady = false
-    player?.release()
-    abandonAudioFocus(row)
+    row.prepared = false; row.decoderReady = false
+    runCatching { player?.setVolume(0f, 0f) }
+    val released = runCatching { player?.release() }.isSuccess
+    if (released) row.player = null else row.releaseUncertain = true
+    if (runCatching { abandonAudioFocus(row) }.isFailure) row.releaseUncertain = true
+    if (row.releaseUncertain) MediaPlaybackReservation.uncertain(row)
   }
   fun retire(reason: String? = null) {
     val row = session ?: return
-    session = null; if (active === this) active = null
+    session = null; row.retired = true; MediaPlaybackReservation.draining(row); if (active === this) active = null
     row.fetching?.cancelled = true; row.fetching = null
     main.removeCallbacksAndMessages(row)
-    releasePlayer(row); row.file?.delete()
+    releasePlayer(row); releaseReservation(row); row.file?.delete()
     panel?.let(host::removeView); panel = null; label = null; playButton = null; stopButton = null
     if (reason != null) row.push(JSONObject().put("type", "media.session.ended").put("sessionId", row.id).put("reason", reason))
+  }
+  private fun releaseReservation(row: Session) {
+    if (row.reserved && row.retired && !row.networkActive && row.player == null && !row.releaseUncertain) {
+      row.reserved = false; MediaPlaybackReservation.release(row)
+    }
   }
   companion object {
     private val requestId = Regex("[!-~]{1,128}")

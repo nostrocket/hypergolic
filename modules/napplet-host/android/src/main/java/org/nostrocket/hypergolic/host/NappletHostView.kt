@@ -53,6 +53,11 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     live && ready && loaded && !disposed && active && mediaForeground &&
       published != null && configuration?.grantedDomains?.contains("media") == true && webView.url == expectedUrl
   }
+  private val liveRadio = NativeLiveRadio(this, generation, { configuration?.mediaProfile }, { configuration?.snapshot },
+    { RoutingTransport.liveMediaRevision(generation) }) {
+    live && ready && loaded && !disposed && active && mediaForeground &&
+      published != null && configuration?.grantedDomains?.contains("media") == true && webView.url == expectedUrl
+  }
   private val imeLocation = IntArray(2)
   private val assetLoader = WebViewAssetLoader.Builder()
     .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context)).build()
@@ -207,11 +212,19 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
             if ((sequence !is Int && sequence !is Long) || !CapabilityTransport.leases.consumeSequence(generation, (sequence as Number).toLong())) return@addWebMessageListener
             if (!UploadJsonBounds.accepts(text, 32 * 1024)) return@addWebMessageListener
             val request = data.optJSONObject("message") ?: return@addWebMessageListener
-            finiteVideo.receive(request) { event ->
+            val deliver: (JSONObject) -> Unit = { event ->
               if (live && !disposed && view === webView && view.url == expectedUrl) {
                 reply.postMessage(JSONObject().put("type", "media.event").put("sessionId", generation).put("message", event).toString())
               }
             }
+            val creating = request.opt("type") == "media.session.create"
+            val radio = request.opt("live") == true
+            if (creating && ((radio && finiteVideo.hasSession()) || (!radio && liveRadio.hasSession()))) {
+              (request.opt("id") as? String)?.takeIf { it.matches(Regex("[!-~]{1,128}")) }?.let { id ->
+                deliver(JSONObject().put("type", "media.session.create.result").put("id", id).put("error", "Close this source's video or radio player before creating another."))
+              }
+            } else if (radio || liveRadio.ownsSession(request.opt("sessionId") as? String)) liveRadio.receive(request, deliver)
+            else finiteVideo.receive(request, deliver)
             return@addWebMessageListener
           }
           if (data.optString("type") == "capability") {
@@ -257,7 +270,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
   override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
     super.onLayout(changed, left, top, right, bottom)
     if (changed) refreshImeViewport()
-    finiteVideo.layout()
+    finiteVideo.layout(); liveRadio.layout()
   }
 
   override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
@@ -345,7 +358,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
 
   private fun updateMediaPlayback() {
     if (disposed) return
-    finiteVideo.focusChanged()
+    finiteVideo.focusChanged(); liveRadio.focusChanged()
     val playingAllowed = active && mediaForeground
     if (loaded) webView.evaluateJavascript("window.__hypergolicMediaActive?.($playingAllowed)", null)
     // Loaded foreground views also render the live overview. Focus gates media and
@@ -646,7 +659,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
   fun destroySession() {
     if (disposed) return
     disposed = true
-    finiteVideo.retire()
+    finiteVideo.retire(); liveRadio.dispose()
     closeCheckId = null
     pendingNativeReplies.clear()
     live = false

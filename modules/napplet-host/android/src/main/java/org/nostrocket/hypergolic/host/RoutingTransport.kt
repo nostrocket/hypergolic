@@ -23,7 +23,7 @@ internal object RoutingTransport {
     if (before != endpoints.revision()) {
       if (replaced || !available) {
         val generations = rows.keys.toSet()
-        main.post { NativeFiniteVideo.revokeGenerations(generations) }
+        main.post { NativeFiniteVideo.revokeGenerations(generations); NativeLiveRadio.revokeGenerations(generations) }
       }
       if (replaced) rows.values.forEach { it.credits.clear() }
       else resumeIntents()
@@ -50,6 +50,10 @@ internal object RoutingTransport {
     val revision = endpoints.revision()
     if (config.fixture != "published" || "media" !in config.grantedDomains || !mayReview(generation, revision)) return null
     return "$revision:${endpoints.reviewRevision(generation)}"
+  }
+  @Synchronized fun liveMediaRevision(generation: String): String? {
+    if (rows[generation]?.config?.mediaProfile != "finite-live-mp3-v1") return null
+    return mediaRevision(generation)?.let { "$it:finite-live-mp3-v1" }
   }
   @Synchronized fun mayReview(generation: String, revision: Long): Boolean = endpoints.matchesRevision(revision) && endpoints.mayReview(generation) && CapabilityTransport.leases.sessionActive(generation)
   @Synchronized fun reviewRevision(generation: String, revision: Long): Long = if (endpoints.matchesRevision(revision)) endpoints.reviewRevision(generation) else -1

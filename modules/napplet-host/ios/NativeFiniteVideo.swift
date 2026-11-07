@@ -9,6 +9,7 @@ final class NativeFiniteVideo {
     let id = "media-" + UUID().uuidString.lowercased()
     let url: String, host: String
     let push: ([String: Any]) -> Void
+    var reserved = false,networkActive = false,retired = false
     var consent: String?
     var volume: Float = 1
     var fetch: Fetch?
@@ -65,6 +66,7 @@ final class NativeFiniteVideo {
     if let active, generations.contains(active.generation) { active.retire("policy") }
   }
 
+  var hasSession:Bool { session != nil }
   func receive(_ request: [String: Any], push: @escaping ([String: Any]) -> Void) {
     if request["type"] as? String == "media.session.create" { create(request, push: push); return }
     guard let row = session, request["sessionId"] as? String == row.id else { return }
@@ -140,10 +142,12 @@ final class NativeFiniteVideo {
     if let status = row.player?.timeControlStatus, status != .paused { row.consent = nil; pause(row, reason:"user"); return }
     if row.fetch != nil { return }
     guard let receipt = permit() else { return }
+    guard MediaPlaybackReservation.shared.acquire(row) else { heading?.text = MediaPlaybackReservation.shared.hint;return }
+    row.reserved = true
     row.consent = receipt
     if row.player != nil { if row.prepared { resume(row) }; return }
     guard Self.download == nil else { heading?.text = "Previous video is stopping. Try Play again."; return }
-    let job = Fetch(); row.fetch = job; Self.download = job
+    let job = Fetch(); row.fetch = job; Self.download = job;row.networkActive = true
     play?.isEnabled = false
     heading?.text = "\(row.host) · Connecting"
     stop?.setTitle("Cancel download", for:.normal)
@@ -161,9 +165,10 @@ final class NativeFiniteVideo {
         }
       }
       row.operation = try PublishedPinnedHTTPS.fetchMediaFile(row.url, sink: sink, deadline: job.deadline,
-        active: stillActive) { [weak self] result in
+        active: stillActive) { [weak self,row] result in
           let staged = try? result.get()
           Task { @MainActor in
+            row.networkActive = false;Self.releaseReservation(row)
             if Self.download === job { Self.download = nil }
             guard let self, let row = self.session, row.fetch === job, self.allowed(), self.authorized(row) else {
               if let staged { try? FileManager.default.removeItem(at: staged) }
@@ -173,7 +178,7 @@ final class NativeFiniteVideo {
           }
         }
     } catch {
-      Self.download = nil; row.fetch = nil; fail(row)
+      Self.download = nil; row.fetch = nil;row.networkActive = false; fail(row)
     }
   }
 
@@ -287,15 +292,21 @@ final class NativeFiniteVideo {
   private func fail(_ row: Session) { publishState(row, reason:"error"); retire("error") }
   func retire(_ reason: String? = nil) {
     guard let row = session else { return }
-    session = nil; if Self.active === self { Self.active = nil }
+    session = nil;row.retired = true;MediaPlaybackReservation.shared.draining(row); if Self.active === self { Self.active = nil }
     row.fetch?.cancel(); row.operation?.cancel(); row.prepareDeadline?.cancel()
     row.observation?.invalidate(); row.itemObservation?.invalidate(); row.sizeObservation?.invalidate(); row.durationObservation?.invalidate()
     if let ended = row.ended { NotificationCenter.default.removeObserver(ended) }
     if let interruption = row.interruption { NotificationCenter.default.removeObserver(interruption) }
     if let clock = row.clock { row.player?.removeTimeObserver(clock) }
-    row.player?.pause(); row.player?.replaceCurrentItem(with:nil); row.layer?.player = nil
+    row.player?.pause(); row.player?.replaceCurrentItem(with:nil); row.layer?.player = nil;row.player = nil;Self.releaseReservation(row)
     if let file = row.file { try? FileManager.default.removeItem(at:file) }
     panel?.removeFromSuperview(); panel = nil; picture = nil; heading = nil; play = nil; stop = nil
     if let reason { row.push(["type":"media.session.ended", "sessionId":row.id, "reason":reason]) }
   }
+  private static func releaseReservation(_ row: Session) {
+    if row.reserved && row.retired && !row.networkActive && row.player == nil {
+      row.reserved=false;MediaPlaybackReservation.shared.release(row)
+    }
+  }
+
 }
