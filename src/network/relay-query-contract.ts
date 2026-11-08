@@ -128,7 +128,9 @@ export function captureQueryEvent(input: unknown, filters: readonly QueryFilter[
   // The fixed header is ASCII. Its empty content and tags include their outer delimiters.
   const available = QUERY_LIMITS.eventBytes - JSON.stringify({ ...event, content: '' }).length;
   let remaining = consumeJsonText(event.content, available, true);
-  const tags = dense(value.tags, 256);
+  // Even an empty tag needs two brackets and a separator (except the first).
+  // Bound incoming rows by the unchanged serialized-byte budget, not a write policy.
+  const tags = dense(value.tags, Math.floor((remaining + 1) / 3));
   remaining -= Math.max(0, tags.length - 1);
   for (const item of tags) {
     const tag = dense(item, 64);

@@ -52,6 +52,20 @@ reconnect attempts with delays 1/2/4/8/16 seconds. Renderer acknowledgements use
 the shared native sequence and exact monotonic per-stream delivery number.
 Feed Lab retains 32 displayed rows and an editable draft. It renders text safely.
 
+Malformed, invalidly signed, mismatching or excessive input quarantines that
+connection for the current foreground interval. Other peers continue delivering
+verified events. If every peer is exhausted or quarantined, the logical stream
+closes. Transport failures retain the bounded retry policy; quarantine does not
+retry until a fresh foreground connection interval.
+
+All streams have a 15-second initial deadline (Outbox may select a shorter one).
+At that deadline, pending peers stop. Aggregate EOSE requires an actual EOSE from
+at least one peer; it indicates completion of available stored history, not full
+relay coverage. Without any peer EOSE the stream closes with a timeout, even if
+some verified events arrived. Background cancels the deadline and foreground
+starts a fresh one. Terminal CLOSED is distinct from EOSE; an SDK or guest must
+handle termination separately to clear its own loading state.
+
 ## Confirmed lifecycle
 
 Loaded feeds stay live across napplet focus changes. Native background/inactivity

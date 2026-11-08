@@ -252,3 +252,127 @@ test('optional AUTH announcements do not close or authenticate a public stream a
   assert.deepEqual(flood.messages, [{type:'relay.closed',subId:'caller',reason:'invalid or excessive relay stream'}]);
   assert.equal(flood.calls[0]!.stopped, 1);
 });
+
+test('signed contact-list history with about 900 tags reaches the stream and real EOSE', () => {
+  const h=harness();
+  const tags=Array.from({length:880},(_,index)=>['p',index.toString(16).padStart(64,'0')]);
+  const contact=signed('',3,tags);
+  h.session.subscribe({...request(),filters:[{kinds:[3],'#p':[tags[0]![1]!]}]},h.send);
+  h.event(0,contact);h.eose();
+  assert.deepEqual(h.messages,[{type:'relay.event',subId:'caller',result:{event:contact}},
+    {type:'relay.eose',subId:'caller'}]);
+  assert.equal(h.calls[0]!.stopped,0);h.session.revoke();
+});
+
+test('invalid or excessive peer input is quarantined without cancelling verified history from a healthy peer', () => {
+  for(const mode of ['signature','filter','foreign','malformed','bytes','event-bytes','rate','closed']) {
+    const h=harness(['wss://one.example.org','wss://two.example.org']);
+    h.session.subscribe(request(),h.send);
+    const history=signed('healthy history');h.event(1,history);
+    if(mode==='signature')h.event(0,{...signed(),sig:'0'.repeat(128)});
+    else if(mode==='filter')h.event(0,signed('wrong kind',2));
+    else if(mode==='foreign')h.calls[0]!.frame(JSON.stringify(['EVENT','foreign',signed()]));
+    else if(mode==='malformed')h.calls[0]!.frame('{');
+    else if(mode==='bytes')h.calls[0]!.frame('x'.repeat(66*1024+1));
+    else if(mode==='event-bytes')h.event(0,signed('x'.repeat(64*1024)));
+    else if(mode==='closed')h.calls[0]!.frame(JSON.stringify(['CLOSED',h.calls[0]!.sub,'denied']));
+    else for(let index=0;index<=64;index++)h.calls[0]!.frame(JSON.stringify(['NOTICE','bounded']));
+    assert.equal(h.calls[0]!.stopped,1,mode);assert.equal(h.calls[1]!.stopped,0,mode);
+    h.event(0,signed('stale quarantined callback'));h.eose(0);h.calls[0]!.failed();
+    assert.deepEqual(h.messages,[{type:'relay.event',subId:'caller',result:{event:history}}],mode);
+    h.eose(1);const live=signed('healthy live');h.event(1,live);
+    assert.deepEqual(h.messages.map(message=>message.type),['relay.event','relay.eose','relay.event'],mode);
+    assert.equal(h.calls.length,2,mode);h.session.revoke();
+  }
+});
+
+test('quarantine after the healthy peer EOSE preserves a single genuine aggregate EOSE', () => {
+  const h=harness(['wss://one.example.org','wss://two.example.org']);h.session.subscribe(request(),h.send);
+  h.eose(1);assert.equal(h.messages.length,0);
+  h.calls[0]!.frame('{');h.eose(1);h.event(1);
+  assert.deepEqual(h.messages.map(message=>message.type),['relay.eose','relay.event']);
+  h.session.revoke();
+});
+
+test('all quarantined peers close without synthetic EOSE and release subscription capacity', () => {
+  const h=harness(['wss://one.example.org','wss://two.example.org']);h.session.subscribe(request(),h.send);
+  h.calls[0]!.frame('{');assert.deepEqual(h.messages,[]);
+  h.calls[1]!.frame('{');h.eose(0);h.eose(1);
+  assert.deepEqual(h.messages,[{type:'relay.closed',subId:'caller',reason:'invalid or excessive relay stream'}]);
+  h.session.subscribe(request('replacement'),h.send);assert.equal(h.calls.length,4);
+  h.session.revoke();
+});
+
+test('quarantine does not consume a healthy peer transport retry budget or permit stale retry callbacks', t => {
+  t.mock.timers.enable({apis:['setTimeout']});
+  const h=harness(['wss://one.example.org','wss://two.example.org']);h.session.subscribe(request(),h.send);
+  h.calls[0]!.frame('{');
+  for(let attempt=0;attempt<=SUBSCRIPTION_LIMITS.retries;attempt++) {
+    h.calls[attempt+1]!.failed();
+    if(attempt<SUBSCRIPTION_LIMITS.retries)t.mock.timers.tick(1);
+  }
+  assert.equal(h.calls.length,7);
+  assert.deepEqual(h.messages,[{type:'relay.closed',subId:'caller',reason:'relay connection failed'}]);
+  h.calls[0]!.failed();t.mock.timers.tick(30_000);h.eose(6);
+  assert.equal(h.calls.length,7);assert.equal(h.messages.length,1);h.session.revoke();
+});
+
+test('synchronous malformed peer input cancels its returned handle while the other peer can complete', () => {
+  let sequence=0;
+  const stopped:number[]=[],frames:{sub:string;frame:(text:string)=>void}[]=[];
+  const port:NativeRelayStreamPort={
+    newInstanceId:()=>`00000000-0000-4000-8000-${String(++sequence).padStart(12,'0')}`,
+    open(_id,_url,_wire,sub,frame){const index=frames.length;frames.push({sub,frame});
+      if(index===0)frame('{');return()=>{stopped.push(index);};},
+  };
+  const manager=createRelaySubscriptions(port,()=>['wss://one.example.org','wss://two.example.org']);
+  const session=manager.session({registration:registration(),assertActive(){}}),messages:RelaySubscriptionMessage[]=[];
+  session.subscribe(request(),message=>{messages.push(message);return true;});
+  assert.deepEqual(stopped,[0]);assert.equal(frames.length,2);
+  frames[1]!.frame(JSON.stringify(['EOSE',frames[1]!.sub]));
+  assert.deepEqual(messages,[{type:'relay.eose',subId:'caller'}]);
+  session.revoke();assert.deepEqual(stopped,[0,1]);
+});
+
+test('ordinary raw initial deadline keeps genuine EOSE with a silent peer and closes all-silent or bad-plus-silent reads', t => {
+  t.mock.timers.enable({apis:['setTimeout']});
+  for(const mode of ['eose','silent','events','bad']) {
+    const h=harness(['wss://one.example.org','wss://two.example.org']);h.session.subscribe(request(),h.send);
+    if(mode==='eose'){h.event(0);h.eose(0);}else if(mode==='bad')h.calls[0]!.frame('{');else if(mode==='events')h.event(0);
+    const before=h.messages.length;t.mock.timers.tick(14_999);assert.equal(h.messages.length,before);
+    t.mock.timers.tick(1);
+    assert.deepEqual(h.messages.map(message=>message.type),mode==='eose'?['relay.event','relay.eose']:
+      mode==='events'?['relay.event','relay.closed']:['relay.closed']);
+    if(mode!=='eose')assert.equal((h.messages.at(-1) as {reason:string}).reason,'relay timeout');
+    assert.equal(h.calls[1]!.stopped,1);h.event(1,signed('after deadline'));h.eose(1);
+    assert.equal(h.messages.length,before+1);
+    if(mode==='eose'){h.event(0,signed('still live'));assert.equal(h.messages.at(-1)!.type,'relay.event');}
+    h.session.revoke();
+  }
+});
+
+test('ordinary raw deadline is suspended in background and refreshed on resume with stale replies rejected', t => {
+  t.mock.timers.enable({apis:['setTimeout']});
+  const h=harness(['wss://one.example.org','wss://two.example.org']);h.session.subscribe(request(),h.send);
+  t.mock.timers.tick(14_000);h.manager.setForeground(false);t.mock.timers.tick(60_000);
+  h.event();h.eose();assert.equal(h.messages.length,0);assert.equal(h.calls.length,2);
+  h.manager.setForeground(true);assert.equal(h.calls.length,4);
+  h.event(0,signed('old document'));h.eose(1);h.calls[0]!.failed();
+  h.event(2,signed('fresh history'));h.eose(2);
+  t.mock.timers.tick(14_999);assert.deepEqual(h.messages.map(message=>message.type),['relay.event']);
+  t.mock.timers.tick(1);assert.deepEqual(h.messages.map(message=>message.type),['relay.event','relay.eose']);
+  h.session.revoke();t.mock.timers.tick(30_000);h.event(2,signed('revoked'));
+  assert.equal(h.messages.length,2);assert.equal(h.calls.length,4);
+});
+
+test('owner revocation or explicit close invalidates ordinary raw deadline without stale lifecycle delivery', t => {
+  t.mock.timers.enable({apis:['setTimeout']});
+  for(const mode of ['identity','close','revoke']) {
+    const h=harness();h.session.subscribe(request(),h.send);
+    if(mode==='identity')h.setActive(false);else if(mode==='close')h.session.close(close());else h.session.revoke();
+    t.mock.timers.tick(15_000);h.event();h.eose();h.calls[0]!.failed();
+    h.manager.setForeground(false);h.manager.setForeground(true);
+    assert.deepEqual(h.messages,[],mode);assert.equal(h.calls.length,1,mode);assert.equal(h.calls[0]!.stopped,1,mode);
+    h.session.revoke();
+  }
+});

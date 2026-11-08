@@ -27,6 +27,13 @@ validation failure is never represented as an empty successful result.
 | Selection | Filter conditions AND; filters OR; newest timestamp first, then ascending id; per-filter limits |
 | Validation | Fresh NIP-01 fields, independent event hash and signature, filter match; no verification-cache trust |
 
+Incoming tag rows are bounded by the remaining serialized-event byte budget:
+each row needs at least two brackets and a separator, except the first separator.
+The validator still limits each tag to 64 string fields and accounts for JSON
+escaping and UTF-8 bytes. Signed contact lists with more than 256 tags can fit
+this read profile. Signing, trusted event review and Mesh retain their separate
+bounds and authority requirements.
+
 Unknown extensions, empty lists, partial hex prefixes, invalid timestamps and
 caller-selected relay/identity fields are denied. The selected bounded profile
 can therefore reject requests that a broader implementation accepts. Result

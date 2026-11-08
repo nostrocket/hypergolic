@@ -79,6 +79,12 @@ function createSession(owner:RelaySubscriptionOwner,registration:NativeRegistrat
           subscription.eose=true;if(subscription.initialTimer!==null)clearTimeout(subscription.initialTimer);subscription.initialTimer=null;emit(subscription,Object.freeze({type:'relay.eose',subId:subscription.request.subId}));
         }
       }
+      function quarantine(subscription:Subscription,connection:Connection) {
+        try{active();}catch{finish(subscription);return;}
+        stopConnection(connection);connection.state='failed';connection.attempts=SUBSCRIPTION_LIMITS.retries;
+        if(subscription.connections.every(c=>c.state==='failed'&&c.attempts>=SUBSCRIPTION_LIMITS.retries))finish(subscription,'invalid or excessive relay stream');
+        else eose(subscription);
+      }
       function connect(subscription:Subscription,connection:Connection) {
         if(subscription.ended||!process.foreground)return;
         try{active();if(legacy&&(!subscription.authorityToken||!legacy.isTokenActive(subscription.authorityToken)))throw new RelaySubscriptionError('legacy native token revoked');}catch{finish(subscription);return;}
@@ -101,13 +107,13 @@ function createSession(owner:RelaySubscriptionOwner,registration:NativeRegistrat
             if(!live())return;
             try {
               receiveFrame(process,{active,emit,eose},subscription,connection,text);
-            }catch{finish(subscription,'invalid or excessive relay stream');}
+            }catch{quarantine(subscription,connection);}
           },fail,subscription.authorityToken);
           if(live())connection.stop=handle;else try{handle();}catch{/* Synchronous callbacks may already revoke. */}
         }catch{fail();}
       }
       function deadline(subscription:Subscription) {
-        if((!subscription.planned&&!subscription.legacy)||subscription.eose||subscription.ended)return;
+        if(subscription.eose||subscription.ended)return;
         if(subscription.initialTimer!==null)clearTimeout(subscription.initialTimer);
         subscription.initialTimer=setTimeout(()=> {
           subscription.initialTimer=null;

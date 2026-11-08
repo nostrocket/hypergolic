@@ -68,6 +68,20 @@ test('runtime independently verifies and delivers a signed event with long tags'
   await expect.poll(() => frame.evaluate(() => (window as any).events)).toEqual([event.id]);
 });
 
+test('runtime independently accepts a signed history event with about 900 contact tags under 64 KiB', async ({page}) => {
+  const {frame,envelope,subId}=await open(page);
+  const secret=new Uint8Array(32);secret[31]=1;
+  const candidate=finalizeEvent({kind:1,created_at:100,content:'neutral contact-tag fixture',
+    tags:Array.from({length:880},(_,index)=>['p',index.toString(16).padStart(64,'0')])},secret);
+  expect(Buffer.byteLength(JSON.stringify(candidate))).toBeLessThan(65_536);
+  await page.evaluate(({envelope,subId,candidate})=>(window as any).streamTest.push(envelope,{
+    type:'relay.event',subId,result:{event:candidate},
+  }),{envelope,subId,candidate});
+  await page.evaluate(({envelope,subId})=>(window as any).streamTest.push(envelope,{type:'relay.eose',subId}),{envelope,subId});
+  await expect.poll(()=>frame.evaluate(()=>(window as any).events)).toEqual([candidate.id]);
+  await expect.poll(()=>frame.evaluate(()=>(window as any).eose)).toBe(1);
+});
+
 test('trusted peer-live delivery works before aggregate EOSE and keeps private metadata out of the guest', async ({page}) => {
   const {frame, envelope, subId} = await open(page, 0);
   const response = {type: 'relay.event', subId, live: true, result: {event}};

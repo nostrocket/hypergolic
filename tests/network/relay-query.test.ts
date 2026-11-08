@@ -83,12 +83,39 @@ test('large incoming tags retain shape, surrogate, hash, and signature checks', 
     {...large, tags:[['alt', 42]]},
     {...large, tags:[new Array(2)]},
     clean(signed('', 100, [['alt', '\ud800']])),
-    clean(signed('', 100, Array.from({length:257}, () => ['t','many']))),
+    {...large, tags: new Array(QUERY_LIMITS.eventBytes)},
     clean(signed('', 100, [Array(65).fill('t')])),
     {...large, tags:[['proofmode','q'.repeat(11_000)]]},
     {...large, sig:'0'.repeat(128)},
   ]) assert.throws(() => verifyQueryEvent(candidate, filters));
   assert.equal(getterCalled,false);
+});
+
+test('incoming contact lists use the existing byte budget rather than the former 256-row cap', () => {
+  const tags = Array.from({length:880}, (_, index) => ['p', index.toString(16).padStart(64, '0')]);
+  const contact = clean(finalizeEvent({kind:3,created_at:100,content:'',tags},secret));
+  const filters = parseQueryFilters([{kinds:[3], '#p':[tags[0]![1]!]}]);
+  assert.ok(Buffer.byteLength(JSON.stringify(contact)) < QUERY_LIMITS.eventBytes);
+  assert.deepEqual(verifyQueryEvent(contact, filters), contact);
+  assert.ok(Object.isFrozen(verifyQueryEvent(contact, filters).tags[879]));
+  assert.throws(() => verifyQueryEvent({...contact, sig:'0'.repeat(128)}, filters));
+  assert.throws(() => verifyQueryEvent({...contact, tags:[...tags, ['p','f'.repeat(64)]]}, filters));
+  const over = clean(finalizeEvent({kind:3,created_at:100,content:'',
+    tags:Array.from({length:900}, (_, index) => ['p', index.toString(16).padStart(64, '0')])},secret));
+  assert.ok(Buffer.byteLength(JSON.stringify(over)) > QUERY_LIMITS.eventBytes);
+  assert.throws(() => verifyQueryEvent(over, filters));
+});
+
+test('byte-derived row bound handles many short tags and rejects excess rows before reading them', () => {
+  const tags = Array.from({length:10_000}, () => ['t']);
+  const valid = clean(signed('',100,tags));
+  const filters = parseQueryFilters([{kinds:[1]}]);
+  assert.deepEqual(verifyQueryEvent(valid,filters), valid);
+  const excess = new Array(Math.floor(QUERY_LIMITS.eventBytes / 3) + 1);
+  let read = false;
+  Object.defineProperty(excess,0,{get(){read=true;throw new Error('row getter executed');}});
+  assert.throws(() => verifyQueryEvent({...valid,tags:excess},filters));
+  assert.equal(read,false);
 });
 
 test('exact ids, tag first values, inclusive timestamps, OR and newest-first per-filter limits', () => {
