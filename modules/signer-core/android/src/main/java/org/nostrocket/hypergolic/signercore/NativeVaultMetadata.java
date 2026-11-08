@@ -13,7 +13,7 @@ final class NativeVaultMetadata {
     try {
       JSONArray records = new JSONArray();
       for (Record record:value.records) records.put(new JSONObject().put("pubkey",record.pubkey).put("addedAt",record.addedAt)
-        .put("origin",record.origin==0?"generated":record.origin==1?"imported":"connected").put("status","active"));
+        .put("origin",record.origin==0?"generated":record.origin==1?"imported":record.origin==2?"connected":"public").put("status","active"));
       return new JSONObject().put("vaultId",value.id).put("revision",value.revision).put("selectedPubkey",value.selected)
         .put("identities",records).put("pendingDeletion",JSONObject.NULL).toString();
     } catch (Exception failure) { throw new Error("CORRUPT_METADATA"); }

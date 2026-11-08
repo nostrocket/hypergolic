@@ -10,11 +10,12 @@ import {IdentityListSettings} from './IdentityListSettings';
 import { UploadSettings } from './UploadSettings';
 import { ResourceSettings } from './ResourceSettings';
 import { useCallback, useEffect, useEffectEvent, useState, useSyncExternalStore } from 'react';
-import { ActivityIndicator, AppState, ScrollView, StyleSheet, Text, View, type AppStateStatus } from 'react-native';
+import { ActivityIndicator, AppState, ScrollView, StyleSheet, Text, TextInput, View, type AppStateStatus } from 'react-native';
 import { ShellPressable as Pressable } from './ShellPressable';
 import type { SettingsActions } from './Shell';
 import type { IdentityChange, IdentitySession, IdentityTransition } from '../security/identity-transition';
 import type { IdentitySettingsActions } from '../security/native-identity-actions';
+import { parsePublicIdentity } from '../security/public-identity';
 import { VaultError } from '../security/identity-vault-model';
 import { isSignerFailureCode, signerFailureMessage } from '../security/signing-methods';
 import { useIdentityOwner } from './IdentityOwnerContext';
@@ -56,6 +57,31 @@ function ImportIdentity({ transition, onClose }: { transition: IdentityTransitio
     {error !== '' && <Text testID="identity-import-error" accessibilityLiveRegion="polite" style={styles.detail}>{error}</Text>}
     {busy ? <ActivityIndicator color={colors.accent} /> : <Action title="Enter secret key" testID="identity-import-review" onPress={review} />}
     <Action title="Cancel" testID="identity-import-cancel" onPress={() => { transition.cancelImportPreparation(); onClose(); }} subdued />
+  </View>;
+}
+function PublicIdentity({ transition, onClose }: { transition: IdentityTransition; onClose(): void }) {
+  const { styles } = useShellStyles(createStyles);
+  const [input, setInput] = useState('');
+  const [error, setError] = useState('');
+  const review = () => {
+    let pubkey: string;
+    try { pubkey = parsePublicIdentity(input); }
+    catch { setError('Enter a valid npub or 64-character public key.'); return; }
+    if (transition.getSnapshot().session.vault.identities.some(identity => identity.pubkey === pubkey)) {
+      setError('This identity is already saved. Choose it from Saved identities.'); return;
+    }
+    try { transition.preparePublicIdentity(pubkey); onClose(); }
+    catch { setError('This public profile could not be opened. Try again.'); }
+  };
+  return <View style={styles.group}>
+    <Text accessibilityRole="header" style={styles.title}>Read-only public profile</Text>
+    <Text style={styles.detail}>Enter an npub or public key to read public data as that account. This adds no private key or signing method. Signing and publishing are unavailable.</Text>
+    <TextInput accessibilityLabel="Public key or npub" testID="identity-public-key" style={styles.input}
+      value={input} onChangeText={setInput} autoCapitalize="none" autoCorrect={false} maxLength={128}
+      placeholder="npub or public key" />
+    {error !== '' && <Text testID="identity-public-error" accessibilityLiveRegion="polite" style={styles.detail}>{error}</Text>}
+    <Action title="Review public profile" testID="identity-public-review" onPress={review} />
+    <Action title="Cancel" testID="identity-public-cancel" onPress={onClose} subdued />
   </View>;
 }
 function ConfirmIdentity({ pending, transition, npub }: { pending: IdentityChange; transition: IdentityTransition; npub: string }) {
@@ -130,8 +156,8 @@ function SavedIdentities({session, transition, format, canDelete, onDelete}: {
       </View>)}
   </>;
 }
-function SettingsHome({session, onBackup, onCloseBackup, onDelete, onImport, onSignedLab, openDiscovery, openBundledTest, openStateLab, openPublished, publishedSessions, checkPublishedUpdate}: Omit<SettingsActions, 'closeSettings'> & {
-  session: IdentitySession; onBackup(): void; onCloseBackup(): void; onDelete(pubkey: string): void; onImport(): void; onSignedLab(): void;
+function SettingsHome({session, onBackup, onCloseBackup, onDelete, onImport, onPublic, onSignedLab, openDiscovery, openBundledTest, openStateLab, openPublished, publishedSessions, checkPublishedUpdate}: Omit<SettingsActions, 'closeSettings'> & {
+  session: IdentitySession; onBackup(): void; onCloseBackup(): void; onDelete(pubkey: string): void; onImport(): void; onPublic(): void; onSignedLab(): void;
 }) {
   const { styles } = useShellStyles(createStyles);
   const {transition, formatNpub, runtime, actions, relaySettings, resourceSettings, uploadSettings, listAccess, routing, notificationSettings, fixturePublisher} = useIdentityOwner();
@@ -152,6 +178,7 @@ function SettingsHome({session, onBackup, onCloseBackup, onDelete, onImport, onS
         onBackup={onBackup} onCloseBackup={onCloseBackup} />
       <SavedIdentities session={session} transition={transition} format={formatNpub} canDelete={Boolean(actions)}
         onDelete={onDelete} />
+      <Action title="Read-only public profile" testID="settings-public-identity" onPress={onPublic} />
       <Action title="Import identity" testID="settings-import-identity" onPress={onImport} />
       </SettingsSection>
       <SettingsSection title="Connections" detail="Relays, downloads and file uploads" id="connections">
@@ -194,6 +221,7 @@ export function IdentitySettings({ openDiscovery, openBundledTest, openStateLab,
   const { transition, formatNpub, actions } = useIdentityOwner();
   const state = useSyncExternalStore(transition.subscribe, transition.getSnapshot);
   const [importing, setImporting] = useState(false);
+  const [publicEntry, setPublicEntry] = useState(false);
   const [deletion, setDeletion] = useState<DeletionReview | null>(null);
   const [backupReview, setBackupReview] = useState(false);
   const [signedLab, setSignedLab] = useState(false);
@@ -241,9 +269,9 @@ export function IdentitySettings({ openDiscovery, openBundledTest, openStateLab,
   </ScrollView>;
   return <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
     {state.failure && <Text testID="identity-change-error" accessibilityLiveRegion="polite" style={styles.detail}>{failureMessage(state.failure)}</Text>}
-    {importing ? <ImportIdentity transition={transition} onClose={closeImport} /> : <>
+    {publicEntry ? <PublicIdentity transition={transition} onClose={() => setPublicEntry(false)} /> : importing ? <ImportIdentity transition={transition} onClose={closeImport} /> : <>
       <SettingsHome session={state.session} onBackup={() => setBackupReview(true)} onCloseBackup={() => setBackupReview(false)}
-        onDelete={pubkey => setDeletion(Object.freeze({pubkey, session: state.session}))} onImport={() => setImporting(true)} onSignedLab={() => setSignedLab(true)}
+        onDelete={pubkey => setDeletion(Object.freeze({pubkey, session: state.session}))} onImport={() => setImporting(true)} onPublic={() => setPublicEntry(true)} onSignedLab={() => setSignedLab(true)}
         openDiscovery={openDiscovery} openBundledTest={openBundledTest} openStateLab={openStateLab} openPublished={openPublished} publishedSessions={publishedSessions} checkPublishedUpdate={checkPublishedUpdate} />
     </>}
 

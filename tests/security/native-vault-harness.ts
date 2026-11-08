@@ -27,6 +27,12 @@ export function harness() {
         identities: [...saved.identities, { pubkey: second, addedAt: 2, origin: 'imported', status: 'active' }] };
       return JSON.stringify(saved);
     },
+    addNativePublicIdentityAsync: async selected => {
+      calls.push('public');
+      saved = { ...saved, revision: saved.revision + 1, selectedPubkey: selected,
+        identities: [...saved.identities, { pubkey: selected, addedAt: 2, origin: 'public', status: 'active' }] };
+      return JSON.stringify(saved);
+    },
     selectNativeIdentityAsync: async selected => {
       calls.push('select'); saved = { ...saved, revision: saved.revision + 1, selectedPubkey: selected };
       return JSON.stringify(saved);

@@ -106,6 +106,19 @@ actor NativeVaultCore {
     guard committed.revision == record.revision, committed.selectedPubkey == pubkey else { throw NativeVaultFailure.readback }
     return try committed.publicSnapshot()
   }
+  func addPublicIdentity(pubkey: String, vaultID: String, revision: UInt64, authority: any NativeSignerStorageAuthority,
+    current: @Sendable () -> Bool, revokePending: @Sendable () -> Void = {}) async throws -> String {
+    try begin(); defer { busy = false }
+    let store = try store(); var (record, digest) = try await readRecord(store); defer { record.clear() }
+    try record.assertExpected(vaultID: vaultID, revision: revision)
+    guard current(), NativeVaultRecord.isPoint(pubkey), !record.identities.contains(where: { $0.pubkey == pubkey }) else { throw NativeVaultFailure.denied }
+    guard record.identities.count < 16 else { throw NativeVaultFailure.limitReached }
+    let now = Date().timeIntervalSince1970 * 1000
+    guard now >= 0, now <= Double(NativeVaultRecord.maximumRevision) else { throw NativeVaultFailure.storage }
+    record.identities.append(.init(pubkey: pubkey, addedAt: UInt64(now), origin: .public, secret: nil, selectedMethod: nil))
+    record.selectedPubkey = pubkey; try record.advance()
+    return try await finishMethodMutation(record, digest: digest, store: store, authority: authority, current: current, revokePending: revokePending)
+  }
   func select(pubkey: String, vaultID: String, revision: UInt64, authority: any NativeSignerStorageAuthority, current: @Sendable () -> Bool, revokePending: @Sendable () -> Void = {}) async throws -> String {
     try begin(); defer { busy = false }
     let store = try store(); var (record, digest) = try await readRecord(store); defer { record.clear() }

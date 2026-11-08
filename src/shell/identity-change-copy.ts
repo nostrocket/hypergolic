@@ -4,6 +4,7 @@ import { signingMethodAction } from '../security/signing-methods.ts';
 export function identityChangeCopy(change: IdentityChange, selectedPubkey: string) {
   const restart = 'Your identity and saved data stay the same. Open napplets will restart and pending requests will be cancelled.';
   switch (change.kind) {
+    case 'public': return { title: 'Use read-only public profile?', detail: 'Open napplets will restart as this public account. No private key or signing method is added. Signing and publishing are unavailable. Your current identity remains saved.', approve: 'Use public profile' };
     case 'select-method': return { title: 'Switch signing method?', detail: restart, approve: signingMethodAction(change.method) };
     case 'disconnect-method': return { title: change.method === 'nip55' ? 'Disconnect signer app?' : 'Disconnect remote signer?',
       detail: 'This removes the connection from this device. If it is selected, signing stays unavailable until you choose a method. Your identity and saved data stay here.', approve: 'Disconnect signer' };

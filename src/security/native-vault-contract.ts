@@ -18,6 +18,7 @@ export interface NativeVaultModule {
   prepareNativeImportAsync(vaultId: string, revision: number): Promise<string | null>;
   cancelNativeImport(handle: string): void;
   commitNativeImportAsync(handle: string, vaultId: string, revision: number): Promise<string>;
+  addNativePublicIdentityAsync(pubkey: string, vaultId: string, revision: number): Promise<string>;
   selectNativeIdentityAsync(pubkey: string, vaultId: string, revision: number): Promise<string>;
   isNativeVaultAuthenticationAvailableAsync(): Promise<boolean>;
   showNativeBackupAsync(pubkey: string, vaultId: string, revision: number): Promise<void>;

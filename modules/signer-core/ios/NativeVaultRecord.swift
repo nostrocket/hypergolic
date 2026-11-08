@@ -22,7 +22,7 @@ struct NativeVaultRemoteMethod: Sendable {
 
 struct NativeVaultRecord: Sendable {
   struct Identity: Sendable {
-    enum Origin: String, Sendable { case generated, imported, connected }
+    enum Origin: String, Sendable { case generated, imported, connected, `public` }
     let pubkey: String
     let addedAt: UInt64
     let origin: Origin
@@ -126,7 +126,7 @@ struct NativeVaultRecord: Sendable {
     guard (1...16).contains(Int(count)) else { throw NativeVaultFailure.corrupt }
     for _ in 0..<count {
       let pubkey = try text(64), addedAt = try integer(), originByte = try byte(), origin: Identity.Origin
-      switch originByte { case 0: origin = .generated; case 1: origin = .imported; case 2 where version == 2: origin = .connected; default: throw NativeVaultFailure.corrupt }
+      switch originByte { case 0: origin = .generated; case 1: origin = .imported; case 2 where version == 2: origin = .connected; case 3 where version == 2: origin = .public; default: throw NativeVaultFailure.corrupt }
       if version == 1 {
         let scalar = try secret(); allocated.append(scalar)
         identities.append(.init(pubkey: pubkey, addedAt: addedAt, origin: origin, secret: scalar)); continue
@@ -161,7 +161,7 @@ struct NativeVaultRecord: Sendable {
     integer(revision); output.append(contentsOf: selectedPubkey.utf8); output.append(UInt8(identities.count))
     for identity in identities {
       output.append(contentsOf: identity.pubkey.utf8); integer(identity.addedAt)
-      output.append(identity.origin == .generated ? 0 : identity.origin == .imported ? 1 : 2)
+      output.append(identity.origin == .generated ? 0 : identity.origin == .imported ? 1 : identity.origin == .connected ? 2 : 3)
       output.append(identity.selectedMethod == .local ? 1 : identity.selectedMethod == .nip46 ? 2 : 0)
       output.append(identity.secret == nil ? 0 : 1); if let secret = identity.secret { output.append(secret.data) }
       output.append(identity.remote == nil ? 0 : 1)

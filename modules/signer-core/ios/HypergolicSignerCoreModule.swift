@@ -139,6 +139,12 @@ public final class HypergolicSignerCoreModule: Module {
         return try await nativeVault.lease().session().commitImport(handle: handle, vaultID: vaultID, revision: revision)
       }
     }
+    AsyncFunction("addNativePublicIdentityAsync") { (pubkey: String, vaultID: String, revision: Double) async throws -> String in
+      try await nativeVaultResult {
+        let revision = try nativeVaultRevision(revision); try nativeVaultID(vaultID); try nativeVaultPubkey(pubkey)
+        return try await nativeVault.lease().session().addPublicIdentity(pubkey: pubkey, vaultID: vaultID, revision: revision)
+      }
+    }
     AsyncFunction("selectNativeIdentityAsync") { (pubkey: String, vaultID: String, revision: Double) async throws -> String in
       try await nativeVaultResult {
         let revision = try nativeVaultRevision(revision); try nativeVaultID(vaultID); try nativeVaultPubkey(pubkey)

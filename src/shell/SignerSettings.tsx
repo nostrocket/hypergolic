@@ -82,7 +82,7 @@ function Methods({ transition, session, actions, format, onBackup, onCloseBackup
   const hasLocal = methods.methods.some(method => method.kind === 'local');
   return <View style={styles.group}>
     <Text accessibilityRole="header" style={styles.title}>Signing method</Text>
-    {methods.selectedMethod === null && <Text testID="signer-no-selection" style={styles.detail}>No signing method is selected. Choose a saved method or connect a signer to sign requests.</Text>}
+    {methods.selectedMethod === null && <Text testID="signer-no-selection" style={styles.detail}>Read-only profile. Signing and publication are unavailable until you explicitly select or connect a signing method.</Text>}
     {methods.methods.map(method => <SavedMethod key={method.kind} method={method} selected={method.kind === methods.selectedMethod} transition={transition} format={format} refresh={() => prepare('refresh')} />)}
     {hasLocal && methods.selectedMethod !== 'local' && <Text testID="signer-local-copy" style={styles.detail}>A local key copy is still stored on this device. Selecting another signer does not delete it.</Text>}
     {hasLocal && actions && <>

@@ -145,6 +145,19 @@ final class NativeVault implements AutoCloseable {
     current.records.add(next.record); current.selected=next.record.pubkey; current.revision++;
     persist(current,false); return snapshot(current);
   }
+  synchronized String addPublicIdentity(Object context, String pubkey, String vault, long revision) {
+    try {
+      State current = expected(context, vault, revision);
+      if (hasCandidate() || !NativeSigningKey.validPublicKey(pubkey) ||
+          current.records.stream().anyMatch(value -> value.pubkey.equals(pubkey))) throw new Error("AUTHORIZATION_DENIED");
+      if (current.records.size() >= MAX_IDENTITIES) throw new Error("LIMIT_REACHED");
+      advance(current);
+      current.records.add(new Record(pubkey, null, null, timestamp(), 3, NO_METHOD));
+      current.selected = pubkey;
+      persist(current, false);
+      return snapshot(current);
+    } finally { releaseState(); }
+  }
   private String selectInternal(Object context,String pubkey,String vault,long revision) {
     State current=expected(context,vault,revision);
     if (hasCandidate()) throw new Error("NOT_READY");

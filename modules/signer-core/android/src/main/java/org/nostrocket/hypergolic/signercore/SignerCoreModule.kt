@@ -378,6 +378,28 @@ class SignerCoreModule : Module() {
       }
     } }
 
+    AsyncFunction("addNativePublicIdentityAsync") Coroutine { pubkey: String, vaultId: String, value: Double -> vaultAction {
+      val records = synchronized(session.lock) { vaultOwned() }
+      mutationAction(records) {
+        withContext(Dispatchers.Main.immediate) { exclusiveAction { current ->
+          val expected = revision(value)
+          synchronized(session.lock) { records.assertRevision(appContext, vaultId, expected) }
+          if (!NativeSigningKey.validPublicKey(pubkey)) throw NativeVault.Error("AUTHORIZATION_DENIED")
+          val activity = appContext.currentActivity ?: throw NativeVault.Error("AUTHORIZATION_DENIED")
+          val accepted = confirmation.confirm(activity, "Use public identity?",
+            "Public key:\n$pubkey\n\nRead public data as this account. No private key or signing method is added. Open napplets restart and pending requests are cancelled.", "Use public identity") {
+            active() && session.activated && session.epoch == current
+          }
+          if (!accepted) throw NativeVault.Error("AUTHORIZATION_DENIED")
+          actions?.cancel()
+          synchronized(session.lock) {
+            session.require(current, ::active)
+            vaultOwned().addPublicIdentity(appContext, pubkey, vaultId, expected)
+          }
+        } }
+      }
+    } }
+
     AsyncFunction("selectNativeIdentityAsync") Coroutine { pubkey: String, vaultId: String, value: Double -> vaultAction {
       val records = synchronized(session.lock) { vaultOwned() }
       mutationAction(records) {
