@@ -1,5 +1,6 @@
 import {createMeshNative, type NativeMeshContext} from './mesh-native.ts';
 import {createCvmNative} from './cvm-native';
+import {createResourceAdmission} from './native-resource-admission';
 import {mediaEvent, type MediaEvent, type MediaRequest} from './media-wire';
 import {canDeferCapability, parseCapabilityRequest} from '../../src/runtime/capability-protocol';
 import {parseOutboxSubscribe,parseOutboxClose} from '../../src/outbox/subscription-contract';
@@ -82,7 +83,7 @@ function receiveControl(envelope:ControlEnvelope,generation:string,streams:Map<n
 /** Internal native revocation: settle transport bookkeeping without a guest receipt. */
 export class NativeRequestRevoked extends Error {}
 type PendingRequest={type:string;id:string;timer:number;resolve:(message:NappletMessage)=>void;reject:(reason?: Error)=>void};
-function receiveOrdinary(envelope:{sequence:number;response:unknown},pending:Map<number,PendingRequest>):void {
+function receiveOrdinary(envelope:{sequence:number;response:unknown},pending:Map<number,PendingRequest>,released:()=>void):void {
   const request = pending.get(envelope.sequence);
   if (!request) return;
   try {
@@ -92,11 +93,11 @@ function receiveOrdinary(envelope:{sequence:number;response:unknown},pending:Map
     if (!response || (response.type !== request.type + '.result' && !((request.type.startsWith('resource.') || request.type.startsWith('legacy.image.')) && response.type === request.type + '.error')) || response.id !== request.id) throw new Error('Native response mismatch');
     request.resolve(response);
   } catch (error) { request.reject(error instanceof NativeRequestRevoked ? error : undefined); }
-  finally { pending.delete(envelope.sequence); window.clearTimeout(request.timer); }
+  finally { pending.delete(envelope.sequence); window.clearTimeout(request.timer); released(); }
 }
 type UploadState = {uploadId: string; delivery: number; bytesSent: number; onStatus(message: NappletMessage): void};
 interface NativeReceiveState {generation: string; pending: Map<number, PendingRequest>; streams: Map<number, StreamState>; uploads: Map<number, UploadState>;
-  stopStream(counter: number, notify: boolean): void; acknowledge(envelope: StreamEnvelope): void; released():void; routing(raw: unknown): boolean; media: NativeClientOptions['onMedia']}
+  stopStream(counter: number, notify: boolean): void; acknowledge(envelope: StreamEnvelope): void; released():void; requestReleased():void; routing(raw: unknown): boolean; media: NativeClientOptions['onMedia']}
 function receiveNative(raw: unknown, state: NativeReceiveState): void {
   const {generation, pending, streams, uploads, stopStream, acknowledge, released} = state;
     if (typeof raw !== 'string' || new TextEncoder().encode(raw).length > maxBytes) return;
@@ -127,7 +128,7 @@ function receiveNative(raw: unknown, state: NativeReceiveState): void {
         receiveStream(envelope,streams,stopStream,acknowledge,released);
         return;
       }
-      receiveOrdinary(envelope,pending);
+      receiveOrdinary(envelope,pending,state.requestReleased);
     } catch { /* An invalid native response has no destination or authority. */ }
 }
 
@@ -152,20 +153,37 @@ function createRoutingReceiver(generation: string, deliver: NativeClientOptions[
 }
 
 type NativeUploadRequest = Readonly<{uploadId: string; onStatus(message: NappletMessage): void}>;
-function enqueueRequest(native: NativeHost, pending: Map<number, PendingRequest>, uploads: Map<number, UploadState>,
+function enqueueRequest(native: NativeHost, pending: Map<number, PendingRequest>, uploads: Map<number, UploadState>, released: () => void,
   request: Readonly<{counter: number; encoded: string; id: string; type: string; timeoutMs: number; upload?: NativeUploadRequest}>): Promise<NappletMessage> {
   const {counter, encoded, id, type, timeoutMs, upload} = request;
       return new Promise((resolve, rejectPromise) => {
         const reject = (reason?: Error): void => { uploads.delete(counter); rejectPromise(reason ?? new Error('Native capability unavailable')); };
         if (upload) uploads.set(counter, {uploadId: upload.uploadId, delivery: 0, bytesSent: 0, onStatus: upload.onStatus});
-        const timer = window.setTimeout(() => { pending.delete(counter); reject(); }, timeoutMs);
+        const timer = window.setTimeout(() => { pending.delete(counter); reject(); released(); }, timeoutMs);
         pending.set(counter, { type, id, timer, resolve: response => {
           if (upload && !('result' in response)) uploads.delete(counter);
           resolve(response);
         }, reject });
         try { native.postMessage(encoded); }
-        catch { pending.delete(counter); window.clearTimeout(timer); reject(); }
+        catch { pending.delete(counter); window.clearTimeout(timer); reject(); released(); }
       });
+}
+
+function createCapabilityRequester(native: NativeHost, generation: string, pending: Map<number, PendingRequest>, uploads: Map<number, UploadState>,
+  state: {active(): boolean; next(): number; reserve(): void; released(): void; timeouts: NativeClientOptions['requestTimeoutsMs']}) {
+  return (message: NappletMessage, upload?: NativeUploadRequest, timeoutMs?: number): Promise<NappletMessage> => {
+    const deferred = deferredRequest(message);
+    if (!state.active() || pending.size >= (deferred ? 12 : 4) || !('id' in message) || typeof message.id !== 'string') return Promise.reject(new Error('Native capability unavailable'));
+    if (upload && (message.type !== 'upload.__seal' || uploads.size >= 2 || typeof upload.uploadId !== 'string' ||
+      upload.uploadId.length === 0 || upload.uploadId.length > 128)) return Promise.reject(new Error('Native upload unavailable'));
+    const counter = state.next(), id = message.id;
+    const encoded = JSON.stringify({type: 'capability', sessionId: generation, sequence: counter,
+      message: JSON.stringify(message), ...(deferred ? {deferred: true} : {})});
+    if (new TextEncoder().encode(encoded).length > maxBytes) return Promise.reject(new Error('Native request too large'));
+    state.reserve();
+    return enqueueRequest(native, pending, uploads, state.released, {counter, encoded, id, type: message.type,
+      timeoutMs: timeoutMs ?? state.timeouts?.[message.type] ?? ordinaryTimeoutMs, ...(upload ? {upload} : {})});
+  };
 }
 
 function createPresentationRequests(request: (message: NappletMessage) => Promise<NappletMessage>) {
@@ -304,26 +322,22 @@ export function createNativeClient(native: NativeHost, generation: string, optio
   };
   const startStream=createStreamStarter(native,generation,streams,()=>{if(disposed||sequence>=Number.MAX_SAFE_INTEGER)throw new Error('Native subscription unavailable');return ++sequence;},stopStream);
   const admission = createStreamAdmission(streams, () => !disposed && sequence < Number.MAX_SAFE_INTEGER, startStream);
-  function request(message: NappletMessage, upload?: Readonly<{uploadId: string; onStatus(message: NappletMessage): void}>, timeoutMs?: number): Promise<NappletMessage> {
-      const deferred = deferredRequest(message);
-      if (disposed || pending.size >= (deferred ? 12 : 4) || sequence >= Number.MAX_SAFE_INTEGER || !('id' in message) || typeof message.id !== 'string') {
-        return Promise.reject(new Error('Native capability unavailable'));
-      }
-      if (upload && (message.type !== 'upload.__seal' || uploads.size >= 2 || typeof upload.uploadId !== 'string' ||
-        upload.uploadId.length === 0 || upload.uploadId.length > 128)) return Promise.reject(new Error('Native upload unavailable'));
-      const id = message.id;
-      const counter = sequence + 1;
-      const encoded = JSON.stringify({ type: 'capability', sessionId: generation, sequence: counter,
-        message: JSON.stringify(message), ...(deferred ? {deferred: true} : {}) });
-      if (new TextEncoder().encode(encoded).length > maxBytes) return Promise.reject(new Error('Native request too large'));
-      sequence = counter;
-      return enqueueRequest(native, pending, uploads, {counter, encoded, id, type: message.type, timeoutMs: timeoutMs ?? options.requestTimeoutsMs?.[message.type] ?? ordinaryTimeoutMs, ...(upload ? {upload} : {})});
-   }
+  const postRequest = createCapabilityRequester(native, generation, pending, uploads, {active: () => !disposed && sequence < Number.MAX_SAFE_INTEGER,
+    next: () => sequence + 1, reserve: () => { sequence++; }, released: () => resources.released(), timeouts: options.requestTimeoutsMs});
+  const resources = createResourceAdmission(() => !disposed && pending.size < 4 && sequence < Number.MAX_SAFE_INTEGER,
+    (message, remaining) => postRequest(message, undefined, remaining));
+  const resourceRequest = (message: NappletMessage, owner: string, assertActive?: () => void, timeoutMs = options.requestTimeoutsMs?.[message.type] ?? ordinaryTimeoutMs): Promise<NappletMessage> => {
+    if (message.type === 'resource.cancel' && resources.cancel(owner)) return Promise.resolve({type: 'resource.cancel.result', id: owner} as NappletMessage);
+    return resources.request(message, owner, timeoutMs, assertActive);
+  };
+  const request = (message: NappletMessage, upload?: NativeUploadRequest, timeoutMs?: number): Promise<NappletMessage> =>
+    !upload && ['resource.bytes', 'resource.bytesMany', 'resource.info', 'resource.__chunk', 'resource.cancel'].includes(message.type) && 'id' in message && typeof message.id === 'string'
+      ? resourceRequest(message, message.id, undefined, timeoutMs) : postRequest(message, upload, timeoutMs);
   const routing = createRoutingReceiver(generation, options.onRouting, delivery => {
     if (sequence >= Number.MAX_SAFE_INTEGER) throw new Error('Native sequence exhausted');
     native.postMessage(JSON.stringify({type: 'routing-ack', sessionId: generation, sequence: ++sequence, delivery}));
   });
-  const receiving: NativeReceiveState = {generation, pending, streams, uploads, stopStream, acknowledge, released:admission.released, routing, media:options.onMedia};
+  const receiving: NativeReceiveState = {generation, pending, streams, uploads, stopStream, acknowledge, released:admission.released, requestReleased: resources.released, routing, media:options.onMedia};
   const receive = (raw: unknown): void => {if (!disposed) receiveNative(raw, receiving);};
   const android = (event: { data: unknown }): void => receive(event.data);
   const ios = (event: MessageEvent): void => {
@@ -342,10 +356,11 @@ export function createNativeClient(native: NativeHost, generation: string, optio
       for(const [counter,stream] of streams)if(stream.subId===request.subId&&stream.domain===(outbox?'outbox':'relay')){stopStream(counter,false,request.id);return;}
     },
     sendMedia: createMediaSender(native, generation, () => !disposed && sequence < Number.MAX_SAFE_INTEGER, () => sequence + 1, () => {sequence++;}),
-    request, mesh,
+    request, resourceRequest, mesh,
     ...createPresentationRequests(request),
     destroy(): void {
       disposed = true;
+      resources.destroy();
       mesh.destroy();
       cvm.destroy();
       native.removeEventListener?.('message', android);

@@ -2,14 +2,17 @@ import { mapResourceItems } from '../../src/resources/bounded-map.ts';
 import type { NappletMessage, HostOperationContext } from '@kehto/runtime';
 import { parseResourceRequest, resourceFailure, RESOURCE_ERRORS, RESOURCE_LIMITS, ResourceError } from '../../src/resources/resource-contract.ts';
 import { classifyResourceBytes } from '../../src/resources/resource-mime.ts';
-type NativeResourceClient = { request(message: NappletMessage): Promise<NappletMessage> };
+type NativeResourceClient = { request(message: NappletMessage): Promise<NappletMessage>;
+  resourceRequest?(message: NappletMessage, owner: string, assertActive?: () => void): Promise<NappletMessage> };
+const requestResource = (native: NativeResourceClient, message: NappletMessage, owner: string, assertActive?: () => void) =>
+  native.resourceRequest ? native.resourceRequest(message, owner, assertActive) : native.request(message);
 
 type Sender = HostOperationContext['send'];
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ResourceError('decode-failed');
   return value as Record<string, unknown>;
 }
-async function readBlob(native: NativeResourceClient, descriptor: unknown, active: () => void): Promise<Blob> {
+async function readBlob(native: NativeResourceClient, descriptor: unknown, active: () => void, owner: string): Promise<Blob> {
   const transfer = object(descriptor);
   if (Object.keys(transfer).length !== 3 || typeof transfer.handle !== 'string' ||
     !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(transfer.handle) ||
@@ -19,7 +22,7 @@ async function readBlob(native: NativeResourceClient, descriptor: unknown, activ
   const bytes = new Uint8Array(transfer.length as number);
   for (let offset = 0; offset < bytes.length;) {
     active();
-    const response = object(await native.request({ type: 'resource.__chunk', id: crypto.randomUUID(), handle: transfer.handle, offset } as NappletMessage));
+    const response = object(await requestResource(native, { type: 'resource.__chunk', id: crypto.randomUUID(), handle: transfer.handle, offset } as NappletMessage, owner, active));
     active();
     const raw = response.base64;
     if (Object.keys(response).length !== 3 || typeof raw !== 'string' || raw.length > Math.ceil(RESOURCE_LIMITS.chunkBytes / 3) * 4 ||
@@ -42,7 +45,7 @@ async function project(native: NativeResourceClient, request: ReturnType<typeof 
   }
   if (request.type === 'resource.bytes') {
     if (Object.keys(result).length !== 3) throw new ResourceError('decode-failed');
-    const blob = await readBlob(native, result.transfer, active);
+    const blob = await readBlob(native, result.transfer, active, request.id);
     return { type: result.type, id: request.id, blob, mime: blob.type };
   }
   if (request.type === 'resource.bytesMany') {
@@ -60,7 +63,7 @@ async function project(native: NativeResourceClient, request: ReturnType<typeof 
     const items = await mapResourceItems(descriptors, async item => {
       active();
       if (item.ok === false) return {url:item.url,ok:false,error:item.error};
-      const blob = await readBlob(native,item.transfer,active);
+      const blob = await readBlob(native,item.transfer,active,request.id);
       return {url:item.url,ok:true,blob,mime:blob.type};
     });
     return { type: result.type, id: request.id, items };
@@ -70,7 +73,7 @@ async function project(native: NativeResourceClient, request: ReturnType<typeof 
 /** Runs only in the trusted top document. Private descriptors and chunk verbs never reach the guest. */
 export function createResourceAdapter(native: NativeResourceClient, captureRecipient: () => () => boolean) {
   const pending = new Map<string, { cancelled: boolean }>();
-  const cancelNative = (id: string): void => { void native.request({ type: 'resource.cancel', id } as NappletMessage).catch(() => {}); };
+  const cancelNative = (id: string): void => { void requestResource(native, { type: 'resource.cancel', id } as NappletMessage, id).catch(() => {}); };
   return async ({ message, send }: { message: NappletMessage | (Record<string, unknown> & {type: string}); send: Sender }): Promise<void> => {
     const live = captureRecipient();
     let request: ReturnType<typeof parseResourceRequest>;
@@ -87,10 +90,10 @@ export function createResourceAdapter(native: NativeResourceClient, captureRecip
     const work = { cancelled: false }; pending.set(request.id, work);
     const active = (): void => { if (work.cancelled || !live()) throw new ResourceError('timeout'); };
     try {
-      active(); const response = await project(native, request, await native.request(message as NappletMessage), active);
+      active(); const response = await project(native, request, await requestResource(native, message as NappletMessage, request.id, active), active);
       active(); send(response);
     } catch (error) {
-      cancelNative(request.id);
+      if (!work.cancelled) cancelNative(request.id);
       if (!work.cancelled && live()) send(resourceFailure(request, error instanceof ResourceError ? error.code : 'network-error')!);
     } finally { if (pending.get(request.id) === work) pending.delete(request.id); }
   };
