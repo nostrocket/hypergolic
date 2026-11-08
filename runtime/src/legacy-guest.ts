@@ -118,3 +118,10 @@ export function injectLegacyReadOnly(html: string, session: string): string {
   if (cspEnd < 0 || !html.includes('<meta http-equiv="Content-Security-Policy"')) throw new Error('Legacy prelude requires host CSP');
   return html.slice(0, cspEnd + 1) + prelude + html.slice(cspEnd + 1);
 }
+
+/** The exact reviewed Longform hero sits outside its responsive Markdown image selector. */
+export function injectLegacyLongformLayout(html: string): string {
+  const head = /<meta http-equiv="Content-Security-Policy" content="[^"]*">/;
+  if (!head.test(html)) throw new Error('Legacy layout requires host CSP');
+  return html.replace(head, value => value + '<style id="legacy-longform-layout">article.card > img.md-img{max-width:100%;height:auto}</style>');
+}

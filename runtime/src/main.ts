@@ -7,7 +7,7 @@ import {parseRelayClose} from '../../src/network/relay-subscription-contract';
 import {createLegacyDocumentGuard} from './legacy-lifecycle';
 import type {LegacyReadOnlyContext} from '../../src/napplets/legacy-read-only.ts';
 import {createLegacyMount} from './legacy-mount';
-import {injectLegacyReadOnly} from './legacy-guest';
+import {injectLegacyReadOnly, injectLegacyLongformLayout} from './legacy-guest';
 import {injectLegacyRecipeModules} from './legacy-modules';
 import {createMeshGuestReceiver, isNativeMeshContext, type NativeMeshContext} from './mesh-native.ts';
 import {injectMeshFacade} from './mesh-guest.ts';
@@ -342,7 +342,8 @@ function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
     ? publishedCspParts(rawHtml, policy) : ['', injectCsp(rawHtml, policy)] as const;
   if (legacyNonce) {
     const modules = artifact.appId === 'recipe-cards' ? injectLegacyRecipeModules(withCsp) : withCsp;
-    frame.srcdoc = prefix + injectLegacyReadOnly(injectLegacyImages(injectAndroidGuestHelpers(injectResourceMediaGate(modules)), legacyNonce), legacyNonce);
+    const layout = artifact.appId === 'longform' ? injectLegacyLongformLayout(modules) : modules;
+    frame.srcdoc = prefix + injectLegacyReadOnly(injectLegacyImages(injectAndroidGuestHelpers(injectResourceMediaGate(layout)), legacyNonce), legacyNonce);
     return;
   }
   const html = discoveryToken ? injectDiscoveryOpen(withCsp, discoveryToken, artifact.domains.includes('relay')) : withCsp;

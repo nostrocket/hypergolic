@@ -52,7 +52,10 @@ pending delivery and release Blob URLs. Completions paused during the one-second
 document challenge retain at most 10 MiB of Blob bytes in a separate aggregate
 budget; the document guard queues only bounded IDs/actions. Overflow reports an
 image quota failure, and cancellation or document teardown releases the bytes. This does not enable arbitrary fetch,
-CSS background images, video, remote executable code or HTTP fallback.
+CSS background images, video, remote executable code or HTTP fallback. The exact
+reviewed Longform profile also bounds its direct article hero to the card width
+with automatic height; its original hero sits outside the publisher’s responsive
+Markdown image selector. The host preserves the image element and other styling.
 
 The compact host address control expands from its labelled disclosure. It accepts
 bounded `naddr` or `nostr:naddr` article

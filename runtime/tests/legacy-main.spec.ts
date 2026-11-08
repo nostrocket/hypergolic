@@ -23,7 +23,7 @@ test.beforeAll(async () => {
   const builder=readFileSync('tools/build.mjs','utf8');
   document=/const document = `([\s\S]+?)`;/.exec(builder)![1]!;
 });
-type Mode='legacy'|'ordinary'|'bad-consent'|'wrong-pin'|'changed-context'|'synthetic-domain'|'restricted-relays'|'address-entry'|'image-hold';
+type Mode='legacy'|'ordinary'|'bad-consent'|'wrong-pin'|'changed-context'|'synthetic-domain'|'restricted-relays'|'address-entry'|'image-hold'|'image-wide';
 async function open(page:Page,appId:keyof typeof pins,mode:Mode='legacy',event=article) {
   const bytes=readFileSync(`.test-fixtures/legacy/${appId}.html`);const pin=pins[appId];
   expect(createHash('sha256').update(bytes).digest('hex')).toBe(pin.htmlHash);
@@ -49,7 +49,8 @@ async function open(page:Page,appId:keyof typeof pins,mode:Mode='legacy',event=a
         const request=JSON.parse(message.message);
         if(request.type==='legacy.image.bytes'){
           const handle='00000000-0000-4000-8000-'+String(++transferSequence).padStart(12,'0');
-          const base64='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4ZkAAAAASUVORK5CYII=';
+          const canvas=document.createElement('canvas');canvas.width=1200;canvas.height=600;
+          const base64=mode==='image-wide'?canvas.toDataURL('image/png').split(',')[1]!:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4ZkAAAAASUVORK5CYII=';
           transfers.set(handle,base64);
           const reply=()=>state.reply({type:'capability.result',sessionId:generation,sequence:message.sequence,response:JSON.stringify({type:request.type+'.result',id:request.id,transfer:{handle,mime:'image/png',length:atob(base64).length}})});
           if(mode==='image-hold')state.imageReplies.push(reply);else queueMicrotask(reply);
@@ -79,6 +80,7 @@ for(const appId of ['recipe-cards','longform'] as const)test(`actual main reads 
   await expect.poll(()=>page.evaluate(()=>(window as any).__legacyMain.diagnostics.some((m:any)=>m.type==='ready'))).toBe(true);
   if(appId==='longform'){await page.locator('#legacy-article-toggle').click();await page.getByLabel('Open by address',{exact:true}).fill(naddrEncode({kind:30023,pubkey:article.pubkey,identifier:'main-read'}));await page.getByRole('button',{name:'Open',exact:true}).click();}
   await expect(frame.getByText('Main runtime article',{exact:true}).first()).toBeVisible({timeout:10000});
+  await expect(frame.locator('#legacy-longform-layout')).toHaveCount(appId==='longform'?1:0);
   await expect(frame.locator('img').first()).toHaveJSProperty('naturalWidth',1);
   expect(await frame.locator('img').first().getAttribute('src')).toMatch(/^blob:/);expect(remotes).toEqual([]);
   await expect(page.locator('body > [role=status]')).toContainText('Read-only compatibility');
@@ -240,4 +242,29 @@ test('canonical percent expansion settles rejected Unicode sources before a late
   await expect(frame.locator('#after-expanded-images')).toHaveJSProperty('naturalWidth',1);
   const urls=await page.evaluate(()=>(window as any).__legacyMain.wire.filter((message:any)=>message.type==='capability'&&JSON.parse(message.message).type==='legacy.image.bytes').map((message:any)=>JSON.parse(message.message).url));
   expect([...new Set(urls)]).toEqual(['https://assets.example.com/recipe.png','https://assets.example.com/after-expanded.png']);
+});
+
+test('exact legacy Longform hero fits a mobile card while preserving a wide image aspect ratio',async({page})=>{
+  await page.setViewportSize({width:360,height:800});
+  const frame=await open(page,'longform','image-wide');
+  await page.locator('#legacy-article-toggle').click();
+  await page.getByLabel('Open by address',{exact:true}).fill(naddrEncode({kind:30023,pubkey:article.pubkey,identifier:'main-read'}));
+  await page.getByRole('button',{name:'Open',exact:true}).click();
+  const hero=frame.locator('article.card > img.md-img');
+  await expect(hero).toHaveJSProperty('naturalWidth',1200);await expect(hero).toHaveJSProperty('naturalHeight',600);
+  for(const width of [360,320]){
+    await page.setViewportSize({width,height:800});
+    const size=await hero.evaluate(image=>{
+      const rect=image.getBoundingClientRect(),card=image.parentElement!.getBoundingClientRect();
+      return {width:rect.width,height:rect.height,left:rect.left,right:rect.right,cardLeft:card.left,cardRight:card.right,className:image.className};
+    });
+    expect(size.width).toBeGreaterThan(0);expect(size.width).toBeLessThan(width);
+    expect(size.left).toBeGreaterThanOrEqual(size.cardLeft);expect(size.right).toBeLessThanOrEqual(size.cardRight);
+    expect(size.height/size.width).toBeCloseTo(.5,2);expect(size.className).toBe('md-img');
+  }
+  const ordinaryPage=await page.context().newPage();
+  try {
+    const ordinary=await open(ordinaryPage,'longform','ordinary');
+    await expect(ordinary.locator('body')).toBeVisible();await expect(ordinary.locator('#legacy-longform-layout')).toHaveCount(0);
+  } finally {await ordinaryPage.close();}
 });
