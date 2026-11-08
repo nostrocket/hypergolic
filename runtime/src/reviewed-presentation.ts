@@ -2,6 +2,7 @@ type PresentationMetadata = Readonly<{published: boolean; appId: string; aggrega
 const emojiVersion = '24b16ab3eb550d50eff01a3c42c6e56c3a81da4cf6914b11dc766d8575767381';
 const signalsVersion = 'a3320b9d78a3506bca07cb3ffcc09c2db3f36e5493574834c3cb14fc96ebac58';
 const mappletsVersion = '3a5eeb98b3251a48a3ff1e32cb92ce76b7488b721dd492ae1659e90eeffe76f5';
+const feedVersion = 'a45d5c2ad7316386e9604f0502c7b053be7d2a0b2f1ca8a941e74a1dd72c7754';
 const emojiCss = `@media(max-width:720px){
 html body main.svelte-1n46o8q{grid-template-columns:minmax(0,1fr)}
 html body .topbar.svelte-1n46o8q,html body .toolbar.svelte-1n46o8q{flex-wrap:wrap;min-inline-size:0}
@@ -25,13 +26,30 @@ html body .topbar .actions button,html body .topbar .actions select{min-block-si
 html body .topbar .actions select{block-size:44px}
 html body .topbar .actions button{min-inline-size:44px}
 }`;
+const feedCss = `@media(max-width:720px){
+html body main.svelte-1n46o8q{grid-template-columns:minmax(0,1fr);height:auto;min-block-size:100vh}
+html body .rail.svelte-1n46o8q{border-inline-end:0;border-block-end:1px solid var(--hg-border-muted,#242424)}
+html body .saved-list.svelte-1n46o8q{max-block-size:160px;flex:auto}
+html body .editor.svelte-1n46o8q,html body .field.svelte-1n46o8q,html body .name-field.svelte-1n46o8q{min-inline-size:0}
+html body .body.svelte-1n46o8q{flex:none;overflow-y:visible;min-inline-size:0}
+html body .seg.svelte-1n46o8q,html body .actions.svelte-1n46o8q{flex-wrap:wrap;max-inline-size:100%}
+html body main.svelte-1n46o8q button{min-block-size:44px;min-inline-size:44px}
+html body .editor.svelte-1n46o8q input,html body .editor.svelte-1n46o8q textarea{min-inline-size:0;max-inline-size:100%;min-block-size:44px}
+html body .status.svelte-1n46o8q{flex:1 1 100%;white-space:normal;overflow-wrap:anywhere}
+html body .saved-item.svelte-1n46o8q{display:grid;grid-template-columns:minmax(0,1fr) 44px 44px}
+html body .saved-item.svelte-1n46o8q button{box-sizing:border-box}
+html body .saved-open-feed.svelte-1n46o8q,html body .saved-del.svelte-1n46o8q{position:static}
+html body .saved-main.svelte-1n46o8q{padding-inline-end:0;min-inline-size:0}
+html body .saved-name.svelte-1n46o8q{min-inline-size:0}
+}`;
 
 /** Host presentation only, after original artifact verification. Future versions receive no override. */
 export function injectReviewedPresentation(html: string, metadata: PresentationMetadata): string {
   if (!metadata.published) return html;
   const css = metadata.appId === 'emoji-browser' && metadata.aggregateHash === emojiVersion ? emojiCss
     : metadata.appId === 'creator-signals' && metadata.aggregateHash === signalsVersion ? signalsCss
-    : metadata.appId === 'mapplets' && metadata.aggregateHash === mappletsVersion ? mappletsCss : null;
+    : metadata.appId === 'mapplets' && metadata.aggregateHash === mappletsVersion ? mappletsCss
+    : metadata.appId === 'feed-builder' && metadata.aggregateHash === feedVersion ? feedCss : null;
   if (css === null) return html;
   const csp = /<meta http-equiv="Content-Security-Policy" content="[^"]*">/;
   if (!csp.test(html)) throw new Error('Reviewed presentation requires host CSP');

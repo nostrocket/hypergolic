@@ -12,6 +12,9 @@ const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCA
 const ownKey=new Uint8Array(32);ownKey[31]=11;
 const packKey=new Uint8Array(32);packKey[31]=12;
 const note=finalizeEvent({kind:1,created_at:Math.floor(Date.now()/1000),content:'Neutral creator note',tags:[]},ownKey);
+const feedContent='nfilter1qgqswq3rwsxkuet4w3exzmpdw3hhq6tr6f2w34';
+const savedFeed=finalizeEvent({kind:39823,created_at:Math.floor(Date.now()/1000),content:feedContent,
+  tags:[['d','neutral-saved'],['title','neutral-saved'],['t','nfilter']]},ownKey);
 const pack=finalizeEvent({kind:30030,created_at:Math.floor(Date.now()/1000),content:'',tags:[['d','neutral-pack'],['title','Neutral pack'],
   ...Array.from({length:6},(_,index)=>['emoji','sample_'+index,`https://assets.example.com/${index}.png`])]},packKey);
 let host='',document='';
@@ -31,7 +34,7 @@ async function open(page:Page,appId:string,variant='exact') {
   await page.clock.install();
   await page.route('**/assets/runtime/index.html?*',route=>route.fulfill({contentType:'text/html',body:document}));
   await page.route('**/assets/runtime/host.js',route=>route.fulfill({contentType:'text/javascript',body:host}));
-  await page.addInitScript(({generation,appId,pin,variant,html,htmlHash,aggregateHash,note,pack,png})=>{
+  await page.addInitScript(({generation,appId,pin,variant,html,htmlHash,aggregateHash,note,pack,png,savedFeed})=>{
     if(window!==window.top)return;
     const bytes=Uint8Array.from(atob(html),character=>character.charCodeAt(0));
     const listeners=new Set<(event:{data:string})=>void>(),held=new Map<string,any>();
@@ -42,7 +45,7 @@ async function open(page:Page,appId:string,variant='exact') {
     const matches=(event:any,filters:any[])=>filters.some(filter=>(!filter.kinds||filter.kinds.includes(event.kind))&&
       (!filter.authors||filter.authors.includes(event.pubkey))&&(!filter['#p']||event.tags.some((t:string[])=>t[0]==='p'&&filter['#p'].includes(t[1])))&&
       (!filter['#P']||event.tags.some((t:string[])=>t[0]==='P'&&filter['#P'].includes(t[1]))));
-    const events=(filters:any[])=>[note,pack].filter(event=>matches(event,filters));
+    const events=(filters:any[])=>[note,pack,savedFeed].filter(event=>matches(event,filters));
     Object.defineProperty(window,'HypergolicHost',{value:{
       addEventListener:(_:string,listener:any)=>listeners.add(listener),removeEventListener:(_:string,listener:any)=>listeners.delete(listener),
       postMessage(raw:string){
@@ -53,7 +56,7 @@ async function open(page:Page,appId:string,variant='exact') {
           emit({type:'artifact.chunk',sessionId:generation,sequence:envelope.sequence,publisher:'1'.repeat(64),
             appId:variant==='other-app'?'unreviewed-reader':appId,eventId:pin.eventId,version:aggregateHash,htmlHash,
             domains:appId==='emoji-browser'?['common','identity','inc','outbox','relay','resource','storage','theme']:
-              appId==='mapplets'?['inc','intent','outbox','resource']:['identity','inc','relay','storage','theme'],
+              appId==='mapplets'?['inc','intent','outbox','resource']:appId==='feed-builder'?['identity','intent','outbox','relay','storage']:['identity','inc','relay','storage','theme'],
             base64:btoa(String.fromCharCode(...payload)),byteLength:payload.length,totalBytes:bytes.length,done:(envelope.sequence+1)*49152>=bytes.length});return;
         }
         if(envelope.type==='relay-stream'){
@@ -71,6 +74,7 @@ async function open(page:Page,appId:string,variant='exact') {
         else if(request.type==='identity.getRelays')response.relays={'wss://relay.example.org':{read:true,write:false}};
         else if(request.type==='storage.get')response.value=null;
         else if(request.type==='relay.query'||request.type==='outbox.query')response.events=events(request.filters).map(event=>({event}));
+        else if(request.type==='outbox.publish'){response.ok=false;response.error='review cancelled';}
         else if(request.type==='common.getProfile')response={...response,ok:false,profile:null};
         else if(request.type==='resource.bytesMany'){
           state.batches++;
@@ -85,7 +89,7 @@ async function open(page:Page,appId:string,variant='exact') {
         reply(envelope,response);
       },
     }});
-  },{generation,appId,pin,variant,html:bytes.toString('base64'),htmlHash,aggregateHash,note,pack,png});
+  },{generation,appId,pin,variant,html:bytes.toString('base64'),htmlHash,aggregateHash,note,pack,png,savedFeed});
   await page.goto(`/assets/runtime/index.html?sessionId=${generation}&source=published`);
   const frame=page.frameLocator('#napplet');
   await expect(frame.locator('#hypergolic-reviewed-presentation')).toHaveCount(variant==='exact'?1:0);
@@ -161,7 +165,58 @@ for(const width of [320,360])test(`exact Mapplets toolbar controls fit and click
   expect(map.width).toBeGreaterThanOrEqual(width-40);expect(map.height).toBeGreaterThanOrEqual(300);
   await fits(frame.locator('.map-frame'));
 });
-for(const appId of ['emoji-browser','creator-signals','mapplets'])for(const variant of ['other-app','new-version']){
+for(const width of [320,360])test(`exact Feed Manager fields and Save work through reachable mobile controls at ${width}px`,async({page})=>{
+  await page.setViewportSize({width,height:740});const frame=await open(page,'feed-builder');
+  await expect(frame.locator('.saved-item')).toHaveCount(1);
+  for(const control of await frame.locator('.rail button').all()){
+    await control.scrollIntoViewIfNeeded();await fits(control);
+    const box=(await control.boundingBox())!;expect(box.width).toBeGreaterThanOrEqual(44);expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(await control.evaluate(element=>{const box=element.getBoundingClientRect(),hit=document.elementFromPoint(box.x+box.width/2,box.y+box.height/2);return hit===element||element.contains(hit);})).toBe(true);
+  }
+  await frame.getByRole('button',{name:'＋ New',exact:true}).click();
+  for(const tab of await frame.getByRole('tablist',{name:'View',exact:true}).getByRole('tab').all()){
+    await fits(tab);expect((await tab.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  }
+  await frame.getByRole('tab',{name:'JSON',exact:true}).click();
+  const name=frame.getByPlaceholder('morning-reads'),json=frame.locator('textarea'),relays=frame.getByPlaceholder('wss://relay.example…');
+  await name.fill('neutral-filter');await json.fill('[{"kinds":[1],"#t":["neutral-topic"]}]');
+  await expect(frame.locator('.type-indicator')).toHaveText('will save as nfilter');await expect(relays).toHaveValue('');
+  const save=frame.getByRole('button',{name:'Save',exact:true});await expect(save).toBeEnabled();
+  for(const control of [name,json,relays]){
+    await control.scrollIntoViewIfNeeded();await fits(control);
+    expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  }
+  await page.mouse.move(width-8,300);await page.mouse.wheel(0,-2000);
+  await expect.poll(()=>frame.locator('body').evaluate(()=>document.scrollingElement!.scrollTop)).toBe(0);
+  const scroll=await frame.locator('body').evaluate(()=>({height:document.scrollingElement!.scrollHeight,viewport:innerHeight,
+    overflow:getComputedStyle(document.documentElement).overflowY}));
+  expect(scroll.height).toBeGreaterThan(scroll.viewport);expect(['hidden','clip']).not.toContain(scroll.overflow);
+  await page.mouse.wheel(0,1200);
+  await expect.poll(()=>frame.locator('body').evaluate(()=>document.scrollingElement!.scrollTop)).toBeGreaterThan(0);
+  await fits(save);expect((await save.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  expect(await save.evaluate(element=>{const box=element.getBoundingClientRect(),hit=document.elementFromPoint(box.x+box.width/2,box.y+box.height/2);return hit===element||element.contains(hit);})).toBe(true);
+  expect(await frame.locator('body').evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await save.click();await expect(frame.locator('.status')).toContainText('review cancelled');
+  const requests=await page.evaluate(()=>(window as any).__presentation.requests.filter((row:any)=>row.type==='capability').map((row:any)=>JSON.parse(row.message)));
+  expect(requests.filter((row:any)=>row.type==='outbox.publish')).toEqual([{type:'outbox.publish',id:expect.any(String),event:{kind:39823,
+    tags:[['d','neutral-filter'],['title','neutral-filter'],['t','nfilter']],content:feedContent,created_at:expect.any(Number)}}]);
+  expect(requests.some((row:any)=>row.type==='relay.publish'||row.type.startsWith('upload.'))).toBe(false);
+});
+test('exact Feed Manager desktop retains its original sidebar and viewport layout',async({page})=>{
+  await page.setViewportSize({width:1024,height:740});const frame=await open(page,'feed-builder');
+  const rail=(await frame.locator('.rail').boundingBox())!,editor=(await frame.locator('.editor').boundingBox())!;
+  expect(rail.width).toBe(240);expect(editor.x).toBe(240);expect((await frame.locator('main').boundingBox())!.height).toBe(740);
+});
+test('unchanged Feed Manager preserves sequential JSON typing and the textarea caret',async({page})=>{
+  const frame=await open(page,'feed-builder');await frame.getByRole('button',{name:'＋ New',exact:true}).click();
+  await frame.getByRole('tab',{name:'JSON',exact:true}).click();
+  const json=frame.locator('textarea'),text='[{"kinds":[1],"#t":["neutral-topic"]}]';
+  await json.focus();await json.press('ControlOrMeta+A');await json.pressSequentially(text,{delay:5});
+  await expect(json).toHaveValue(text);
+  expect(await json.evaluate((element:HTMLTextAreaElement)=>[element.selectionStart,element.selectionEnd])).toEqual([text.length,text.length]);
+  await expect(frame.locator('.type-indicator')).toHaveText('will save as nfilter');
+});
+for(const appId of ['emoji-browser','creator-signals','mapplets','feed-builder'])for(const variant of ['other-app','new-version']){
   test(`ordinary ${appId} ${variant} receives no presentation override`,async({page})=>{await open(page,appId,variant);});
 }
 test('unpublished, wrong-app and future-version metadata retain byte-identical documents and CSP',()=>{
