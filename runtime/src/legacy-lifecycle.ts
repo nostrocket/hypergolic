@@ -62,7 +62,13 @@ export function createLegacyDocumentGuard(frame: HTMLIFrameElement, source: Wind
     try {size = new TextEncoder().encode(JSON.stringify(value)).length;} catch {fail(); return;}
     run(() => dispatch(event), size);
   }
-  return Object.freeze({receive, run, destroy, isActive: () => state === 'active', loaded() {
+  return Object.freeze({receive, run, destroy, isActive: () => state === 'active', navigate(hash: string) {
+    if (state !== 'active' || frame.contentWindow !== source || !port || !/^#\/post\/naddr1[0-9a-z]{1,1800}$/.test(hash)) throw new Error('Article reader is not active');
+    port.postMessage({type: 'navigate', hash});
+  }, refreshRecipeFeed() {
+    if (state !== 'active' || frame.contentWindow !== source || !port) throw new Error('Recipe reader is not active');
+    port.postMessage({type: 'recipe-feed'});
+  }, loaded() {
     if (state === 'closed') return;
     if (!loaded) {loaded = true; if (state === 'active') active(); return;}
     if (state === 'starting') {probeAfterStart = true; return;}

@@ -73,6 +73,15 @@ test('three native reads remain bounded, limits are disclosed and CLOSE releases
   await expect.poll(() => page.evaluate(() => (window as any).__legacy.requests.length)).toBe(4);
   expect(await page.evaluate(() => (window as any).__legacy.closes.length)).toBe(1);
 });
+test('an unconfigured peer closes explicitly before any native read admission', async ({page}) => {
+  const html = '<!doctype html><html><head></head><body><script>window.opened=false;window.reason=null;const socket=new WebSocket("wss://relay.snort.social");socket.onopen=()=>{window.opened=true;socket.send(JSON.stringify(["REQ","read",{kinds:[30023],limit:1}]))};socket.onclose=event=>{window.reason=event.reason;window.closedState=socket.readyState};</script></body></html>';
+  const frame = await setup(page, html);
+  await expect.poll(() => frame.locator('body').evaluate(() => (window as any).reason)).toContain('not in Hypergolic’s Network relays');
+  expect(await frame.locator('body').evaluate(() => ({opened: (window as any).opened, state: (window as any).closedState}))).toEqual({opened: false, state: 3});
+  await frame.locator('body').evaluate(() => parent.postMessage({type:'legacy.readonly',session:'12345678-1234-4234-8234-123456789abc',operation:'send',socket:'socket-1',data:JSON.stringify(['REQ','forged-read',{kinds:[30023],limit:1}])},'*'));
+  expect(await page.evaluate(() => (window as any).__legacy.requests)).toEqual([]);
+  expect(await page.evaluate(() => (window as any).__legacy.status.some((message: string) => message.includes('not in Hypergolic’s Network relays')))).toBe(true);
+});
 test('native read lane preserves signature checks, exact generation, sequential delivery and legacy CLOSE', async ({page}) => {
   await setup(page, demo);
   await page.evaluate(() => {const s=(window as any).__legacy; s.openNative(); s.native.legacySubscribe({type:'relay.subscribe',id:'request',subId:'bounded',relay:'wss://relay.damus.io/',filters:[{kinds:[30023],limit:1}]},(message:unknown)=>s.nativeDeliveries.push(message));});

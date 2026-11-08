@@ -61,3 +61,12 @@ test('a lost original-document port cannot be replaced by window forgeries and t
   await expect.poll(()=>page.evaluate(()=>(window as any).__legacy.revoked)).toBe(1);
   expect(await page.evaluate(()=>(window as any).__legacy.queueRuns)).toBe(0);
 });
+test('private navigation admits only the local article route and denies a stale document',async({page})=>{
+  const frame=await open(page,empty);
+  const invalid=await page.evaluate(()=>{const guard=(window as any).__legacy.guard;let rejected=0;for(const target of ['https://reader.example/article','#/compose','#/post/javascript:alert(1)'])try{guard.navigate(target);}catch{rejected++;}return rejected;});
+  expect(invalid).toBe(3);
+  expect(await frame.locator('body').evaluate(()=>location.hash)).toBe('');
+  await page.evaluate(()=>(window as any).__legacy.destroy());
+  expect(await page.evaluate(()=>{try{(window as any).__legacy.guard.navigate('#/post/naddr1qqqq');return false;}catch{return true;}})).toBe(true);
+  expect(await frame.locator('body').evaluate(()=>location.hash)).toBe('');
+});

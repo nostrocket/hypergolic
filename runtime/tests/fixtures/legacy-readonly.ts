@@ -13,7 +13,9 @@ function mount(html: string, recipe = false, guarded = false): void {
   const frame = document.createElement('iframe'); frame.id = 'legacy'; frame.sandbox.add('allow-scripts'); document.body.append(frame);
   const source = frame.contentWindow!;
   let guard: ReturnType<typeof createLegacyDocumentGuard> | null = null;
-  const receiver = createLegacyReadOnlyReceiver({frame, source, session, live: () => state.live && (!guard || guard.isActive()),
+  const receiver = createLegacyReadOnlyReceiver({frame, source, session,
+    relays: ['wss://relay.damus.io', 'wss://nos.lol', 'wss://relay.nostr.band', 'wss://relay.primal.net'],
+    live: () => state.live && (!guard || guard.isActive()),
     subscribe(request, deliver) {
       state.requests.push(request); state.deliveries.push(deliver);
       if (state.auto) setTimeout(() => {

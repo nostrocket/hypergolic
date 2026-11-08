@@ -7,6 +7,7 @@ function createLegacyDocumentPort(session: string, closed: () => boolean) {
   const portsGetter = Object.getOwnPropertyDescriptor(MessageEvent.prototype, 'ports')?.get;
   const portPost = MessagePort.prototype.postMessage, portStart = MessagePort.prototype.start, portClose = MessagePort.prototype.close;
   const portListen = EventTarget.prototype.addEventListener;
+  const query = Document.prototype.querySelector, click = HTMLElement.prototype.click;
   let documentPort: MessagePort | null = null;
   window.addEventListener('message', event => {
     if (!event.isTrusted || !sourceGetter || !dataGetter || apply(sourceGetter, event, []) !== parentWindow) return;
@@ -24,6 +25,12 @@ function createLegacyDocumentPort(session: string, closed: () => boolean) {
       const value = apply(dataGetter, event, []);
       if (value?.type === 'ping' && typeof value.challenge === 'string' && value.challenge.length <= 128 && Object.keys(value).length === 2)
         if (documentPort) apply(portPost, documentPort, [{type: 'pong', challenge: value.challenge}]);
+      if (value?.type === 'navigate' && typeof value.hash === 'string' && /^#\/post\/naddr1[0-9a-z]{1,1800}$/.test(value.hash) && Object.keys(value).length === 2)
+        location.hash = value.hash;
+      if (value?.type === 'recipe-feed' && Object.keys(value).length === 1) {
+        const feed = apply(query, document, ['button[data-view="feed"]']);
+        if (feed instanceof HTMLElement) apply(click, feed, []);
+      }
     }]);
     apply(portStart, documentPort, []); apply(portPost, documentPort, [{type: 'ready', challenge: value.challenge}]);
   }, true);

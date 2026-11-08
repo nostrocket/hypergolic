@@ -16,7 +16,8 @@ messages cannot create the context or request generic Relay/Identity authority.
 
 The guest remains in an opaque `allow-scripts` iframe. A compatibility WebSocket
 facade accepts bounded NIP-01 REQ/CLOSE messages through the native owner and
-configured public WSS relays. Direct network access, remote executable imports,
+configured public WSS relays. Peers outside the captured Network list are rejected
+immediately with a configuration message. Direct network access, remote executable imports,
 workers and nested frames remain blocked. EVENT, AUTH, signing, uploads and
 private-key access are unavailable; `window.nostr` is not installed. A host
 status line identifies the mode and limited reads.
@@ -38,6 +39,17 @@ module blobs while explicitly forbidding workers and connections. Dependencies,
 original licenses and the Zod constrained-collection backport are recorded in
 [the vendor record](../runtime/vendor/legacy-recipe/README.md). The runtime build
 verifies the graph, patch and security regressions and includes their notices.
+
+The trusted address control accepts bounded `naddr` or `nostr:naddr` article
+addresses (kind 30023). It drops relay hints and uses only the captured Network
+list. Longform opens its existing same-document reader route through the private
+port. Recipe Cards has no address route: an explicit address selection narrows
+only its reviewed broad article-feed request to that author and identifier with
+limit 1, then refreshes the original Feed control. The guest renders the real
+returned recipe card; the user opens it. Clear selection restores its normal
+feed query. This is host projection, not a change to signed guest bytes.
+Malformed addresses, other event kinds, external URLs and stale controls cannot
+start reads or navigate a replacement document. No signer is introduced.
 
 ## Scope and checks
 

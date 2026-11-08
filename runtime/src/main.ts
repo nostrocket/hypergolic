@@ -261,7 +261,7 @@ function mount(artifact: RuntimeMetadata) {
   const { bridge, frame, source, media, environment, policy } = createGuestEndpoint(artifact, hooks);
   const hasMedia = artifact.published && artifact.domains.includes('media');
   let ready = false;
-  const legacyMount = createLegacyMount(artifact.legacyReadOnly !== undefined, frame, source, native, live,
+  const legacyMount = createLegacyMount(artifact.legacyReadOnly, artifact.appId, frame, source, native, live,
     () => fail('frame-navigation'), () => {
       if (!ready) {ready = true; window.clearTimeout(deadline); diagnostic({type: 'ready', sessionId});}
     });
