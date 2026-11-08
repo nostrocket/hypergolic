@@ -1,4 +1,5 @@
 import type {JsonValue} from '../routing/routing-contract.ts';
+const stringify = JSON.stringify.bind(JSON);
 
 /** Exact JSON serialization semantics, copied/frozen before any asynchronous admission. */
 export function captureCvmJson(value:unknown):JsonValue{
@@ -6,14 +7,14 @@ export function captureCvmJson(value:unknown):JsonValue{
   const ancestors=new Set<object>();
   const bad=():never=>{throw new Error('Invalid CVM JSON');};
   const count=(amount:number)=>{bytes+=amount;if(bytes>32*1024)bad();};
-  const string=(text:string)=>{if(text.length>32*1024)bad();count(new TextEncoder().encode(JSON.stringify(text)).length);};
+  const string=(text:string)=>{if(text.length>32*1024)bad();count(new TextEncoder().encode(stringify(text)).length);};
   const own=(object:object,key:PropertyKey)=>Object.prototype.hasOwnProperty.call(object,key);
   function clone(input:unknown,depth:number):JsonValue{
     if(++nodes>2048||depth>32)return bad();
     if(input===null){count(4);return null;}
     if(typeof input==='boolean'){count(input?4:5);return input;}
     if(typeof input==='number'){
-      if(!Number.isFinite(input))return bad();count(JSON.stringify(input).length);return Object.is(input,-0)?0:input;
+      if(!Number.isFinite(input))return bad();count(stringify(input).length);return Object.is(input,-0)?0:input;
     }
     if(typeof input==='string'){string(input);return input;}
     if(typeof input!=='object'||ancestors.has(input))return bad();
@@ -37,6 +38,6 @@ export function captureCvmJson(value:unknown):JsonValue{
     ancestors.delete(input);return result;
   }
   const captured=clone(value,0);
-  if(bytes!==new TextEncoder().encode(JSON.stringify(captured)).length)return bad();
+  if(bytes!==new TextEncoder().encode(stringify(captured)).length)return bad();
   return captured;
 }

@@ -5,6 +5,15 @@ import {captureCvmJson} from '../../src/cvm/cvm-json.ts';
 const server={pubkey:'1'.repeat(64),relays:['wss://relay.example.com']};
 const request=(message:unknown,options?:unknown)=>({type:'cvm.request',id:'envelope',server,message,...(options===undefined?{}:{options})});
 const fail=(run:()=>unknown,code:string)=>assert.throws(run,error=>error instanceof CvmError&&error.code===code);
+test('later JSON.stringify mutation cannot bypass the captured CVM serialized byte bound',()=>{
+  const original=JSON.stringify;let rejected=false,valid:unknown;
+  try {
+    JSON.stringify=()=> '0';
+    valid=captureCvmJson({text:'owned'});
+    try {captureCvmJson('\\'.repeat(CVM_LIMITS.messageBytes/2));} catch {rejected=true;}
+  } finally {JSON.stringify=original;}
+  assert.deepEqual(valid,{text:'owned'});assert.equal(rejected,true);
+});
 
 test('all MCP forms preserve payload, typed IDs and immutable capture',()=>{
   const input={jsonrpc:'2.0',id:7,method:'tools/call',params:{name:'chat.complete',arguments:{messages:['owned fixture']}}};
