@@ -1,0 +1,16 @@
+# Native Mesh Store API checkpoint
+
+Unexposed native component. No bridge, grant, pairing, transport, or advertised Mesh surface is installed.
+
+Both `NativeMeshStore` implementations expose the same conceptual native API:
+
+- `Owner`: immutable account and original absolute deadline; native current, monotonic and wall-clock checks; `withCurrentMutation(action)` serializes revocation against a disk commit. This is a non-consuming revocation gate, separate from signing/emission permits. Per-handle and file-lock waits recheck the original deadline. Every operation captures this owner/deadline once, checks between scan/chunk/verification/commit steps, and runs off UI threads.
+- `open(root, owner, verifier, initialize, limits)`: account directory under a native-only app-private/no-backup root. `initialize` allows only a fresh directory, never resets an existing malformed store. Reopen validates version/account and the complete forwarding ledger. IO locks coordinate handles; deadlines bound lock waits/scans. Android barriers use existing `android.system.Os`; host proofs substitute checked real filesystem barriers, not an in-memory store. Swift uses POSIX barriers directly.
+- `captureVerified(owner, id, author, createdAt, kind, content, tags, signature)`: private-branded immutable `Event`; strict native fields/frame/canonical SHA256 plus trusted native BIP340 verifier delegate. The delegate is a composition boundary; fixture acceptance is not real signer acceptance.
+- `keep(owner, event)`: durable non-ephemeral event before success, duplicate, or ephemeral live-only disposition. No ephemeral body/signature/tags reach disk.
+- `claimForward(owner, event)`: durable ID-only claim before any enqueue; false if previously claimed. Separate64MiB ledger,64B records =1,048,576 decisions. No eviction/re-forward when full. A compact bounded memory index is rebuilt from checked ledger records; partial/corrupt ledger fails closed.
+- `backlog(owner, filters)`: native NIP01 intersections with inclusive since/until, exact author/ID sets, OR values/AND tag clauses, per-filter newest-first limit and union dedup; no ephemeral/expired rows. Limit0 is empty stored backlog but does not disable live matching. Original deadline bounds scans. Coordinator registers live before snapshot and owns delivery/EOSE ordering.
+- `DeliveryCursor(filters, maximumSeen)`: independent bounded per-subscription event-ID dedup for local/live/remote backlog. Global forwarding history must never suppress a requested subscription's backlog. The coordinator supplies current-source checks around actual delivery.
+- `shareBlob(owner, hash, bytes)`, `unshareBlob`, `presence(owner, hashes)`: explicit native sharing only. SHA256 verified bytes plus durable shared index; missing/corrupt indexed bytes produce unavailable, never invented zero. Presence is local0/1; authenticated member aggregation belongs to the coordinator.
+
+Default persistent events64MiB/20,000, shared blobs64MiB and forward ledger64MiB. Unknown mutation outcomes remain failures and never authorize transport replay. Disk records and buffers are native-only; public event contents are opaque strings. This owner does not derive account/circle authority from stored data.
