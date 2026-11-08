@@ -1,3 +1,4 @@
+import {createMeshNative, type NativeMeshContext} from './mesh-native.ts';
 import {createCvmNative} from './cvm-native';
 import {mediaEvent, type MediaEvent, type MediaRequest} from './media-wire';
 import {canDeferCapability, parseCapabilityRequest} from '../../src/runtime/capability-protocol';
@@ -29,7 +30,7 @@ type StreamState={domain:'relay'|'outbox';subId:string; filters:readonly QueryFi
 type StreamRequest = ReturnType<typeof parseRelaySubscribe> | ReturnType<typeof parseOutboxSubscribe>;
 type WaitingStream = Readonly<{request:StreamRequest;deliver:StreamState['deliver'];expiresAt:number;timer:number}>;
 type StreamEnvelope={sequence:number;delivery:number;response:unknown};
-type NativeClientOptions = Readonly<{ requestTimeoutsMs?: Readonly<Record<string, number>>; onRouting?: (message: NappletMessage, acknowledge: () => void) => void; onMedia?: (message: MediaEvent) => void; onCvm?: (message:unknown)=>void }>;
+type NativeClientOptions = Readonly<{ requestTimeoutsMs?: Readonly<Record<string, number>>; onRouting?: (message: NappletMessage, acknowledge: () => void) => void; onMedia?: (message: MediaEvent) => void; onCvm?: (message:unknown)=>void; mesh?: NativeMeshContext }>;
 function receiveStream(envelope:StreamEnvelope,streams:Map<number,StreamState>,stopStream:(counter:number,notify:boolean)=>void,acknowledge:(envelope:StreamEnvelope)=>void, released:()=>void):void {
   const stream=streams.get(envelope.sequence);if(!stream)return;
   try {
@@ -260,6 +261,7 @@ export function createNativeClient(native: NativeHost, generation: string, optio
   const streams = new Map<number, StreamState>();
   const uploads = new Map<number, UploadState>();
   const cvm=createCvmNative(native,generation,()=>{if(disposed||sequence>=Number.MAX_SAFE_INTEGER)throw new Error('Native session closed');return ++sequence;},value=>options.onCvm?.(value));
+  const mesh = createMeshNative(native, generation, options.mesh, () => {if (sequence >= Number.MAX_SAFE_INTEGER) throw new Error('Native sequence exhausted'); return ++sequence;}, () => !disposed);
   const closeNative = (subId:string,domain:'relay'|'outbox',id?:string):void => {
     if(disposed || sequence >= Number.MAX_SAFE_INTEGER)return;
     const counter=++sequence;
@@ -321,10 +323,11 @@ export function createNativeClient(native: NativeHost, generation: string, optio
       try { native.postMessage(encoded); return true; }
       catch { return false; }
     },
-    request,
+    request, mesh,
     ...createPresentationRequests(request),
     destroy(): void {
       disposed = true;
+      mesh.destroy();
       cvm.destroy();
       native.removeEventListener?.('message', android);
       window.removeEventListener('message', ios);

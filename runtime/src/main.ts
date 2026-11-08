@@ -1,3 +1,5 @@
+import {createMeshGuestReceiver, isNativeMeshContext, type NativeMeshContext} from './mesh-native.ts';
+import {injectMeshFacade} from './mesh-guest.ts';
 import type {AppDataPolicy} from '../../src/app-data/app-data-context';
 import {createCvmGuestReceiver} from './cvm-native';
 import {injectCvmFacade} from './cvm-guest';
@@ -51,7 +53,7 @@ const fixtureName = parameters.get('fixture') ?? 'ux-lab';
 const fixture = source === null && Object.prototype.hasOwnProperty.call(__BUNDLED_FIXTURES__, fixtureName) ? __BUNDLED_FIXTURES__[fixtureName] : undefined;
 type RuntimeMetadata = Readonly<{
   aggregateHash: string; appId: string; title: string;
-  domains: readonly string[]; appData?:AppDataPolicy; publishTimeoutMs?: number; published: boolean; discoveryOpen: boolean;
+  domains: readonly string[]; appData?:AppDataPolicy; mesh?:NativeMeshContext; publishTimeoutMs?: number; published: boolean; discoveryOpen: boolean;
 }>;
 let stopped = false;
 let cleanup: (() => void) | undefined;
@@ -102,7 +104,7 @@ async function digest(value: string): Promise<string> {
 function makeHooks(native: ReturnType<typeof createNativeClient>, captureRecipient: () => () => boolean,
   artifact: RuntimeMetadata, theme: ThemeService, registerRouting: (context: ServiceRuntimeContext | null) => void): ShellAdapter {
   const unavailable = (): never => { throw new Error('Capability unavailable'); };
-  const supported = new Set(artifact.domains);
+  const supported = new Set(artifact.domains.filter(domain => domain !== 'mesh' || artifact.published && isNativeMeshContext(artifact.mesh, sessionId)));
   const routing = createRoutingAdapter(native, captureRecipient);
   const notify = createNotifyAdapter(native, captureRecipient);
   const config = createConfigAdapter(native, captureRecipient);
@@ -179,7 +181,7 @@ function makeHooks(native: ReturnType<typeof createNativeClient>, captureRecipie
     } } : {}),
     capabilities: {
       ...(artifact.appData?{appData:artifact.appData}:{}),
-      disabledDomains: ['link', 'upload', 'resource', 'relay', 'identity', 'storage', 'intent', 'inc', 'keys', 'media', 'notify', 'config', 'outbox', 'common', 'cvm'].filter(domain => !supported.has(domain)),
+      disabledDomains: ['link', 'upload', 'resource', 'relay', 'identity', 'storage', 'intent', 'inc', 'keys', 'media', 'notify', 'config', 'outbox', 'common', 'cvm', 'mesh'].filter(domain => !supported.has(domain)),
       resolveEnvironment: () => ({ domains: [...supported], services: ['theme', ...(supported.has('identity') ? ['identity'] : [])] }),
     },
   };
@@ -294,7 +296,11 @@ function createGuestEndpoint(artifact: RuntimeMetadata, hooks: ShellAdapter) {
   const bridge = createShellBridge(hooks);
   const identity = Object.freeze({ dTag: artifact.appId, aggregateHash: artifact.aggregateHash });
   const resolved = resolveShellEnvironment(hooks, identity);
-  const environment = {...resolved, services: [...resolved.services, CLOSE_CHECK_SERVICE]};
+  // Mesh uses the private native lane, outside the SDK's fixed domain catalogue.
+  const nativeMesh = artifact.published && artifact.domains.includes('mesh') && isNativeMeshContext(artifact.mesh, sessionId);
+  const environment = {...resolved, capabilities: {...resolved.capabilities,
+    domains: Object.freeze([...resolved.capabilities.domains, ...(nativeMesh ? ['mesh'] : [])])},
+    services: [...resolved.services, CLOSE_CHECK_SERVICE]};
   const frame = createGuestFrame(artifact.title);
   const source = frame.contentWindow;
   if (!source) { bridge.destroy(); throw new Error('Frame unavailable'); }
@@ -310,7 +316,7 @@ function mount(artifact: RuntimeMetadata) {
   const routing = createGuestRouting(artifact.domains, sessionId, live,
     () => { void native.routing({type: 'routing.__register'}).catch(() => {}); }, () => fail('runtime-bootstrap'));
   const native = createNativeClient(hostWindow.HypergolicHost!, sessionId,
-    {requestTimeoutsMs: approvalTimeouts(artifact), onRouting: routing.deliver, onMedia: message => {
+    {requestTimeoutsMs: approvalTimeouts(artifact), ...(artifact.published && artifact.mesh ? {mesh: artifact.mesh} : {}), onRouting: routing.deliver, onMedia: message => {
       if (hasMedia && live()) source.postMessage(message, '*');
     },onCvm:message=>{if(artifact.domains.includes('cvm')&&live())source.postMessage(message,'*');}});
   const shellTheme = createShellTheme(theme => bridge.publishTheme(theme));
@@ -321,6 +327,8 @@ function mount(artifact: RuntimeMetadata) {
   const { bridge, frame, source, media, environment, policy } = createGuestEndpoint(artifact, hooks);
   const hasMedia = artifact.published && artifact.domains.includes('media');
   let ready = false;
+  const mesh = artifact.published && isNativeMeshContext(artifact.mesh, sessionId) && artifact.domains.includes('mesh')
+    ? createMeshGuestReceiver(frame, source, native.mesh, live) : null;
   const keys = artifact.domains.includes('keys') ? createKeysSession(source, () =>
     live() && isRuntimeInputActive() && document.hasFocus() && document.activeElement === frame) : null;
   let frameLoaded = false;
@@ -337,6 +345,7 @@ function mount(artifact: RuntimeMetadata) {
     cvm:artifact.domains.includes('cvm')?createCvmGuestReceiver(source,native.cvm,live):null,
     closed: () => stopped, live,
     dispatch(event) {
+      if (mesh?.receive(event)) return;
       if (!validEnvelope(event.data)) {
         if (ready && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId)) rejectEnvelope(event, source, artifact.domains);
         return;
@@ -365,6 +374,7 @@ function mount(artifact: RuntimeMetadata) {
     shellTheme.close();
     closeCheck();
     routing.close();
+    mesh?.close();
     keys?.close();
     media.close();
     window.clearTimeout(deadline);
@@ -394,7 +404,8 @@ function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
     requestTimeoutsMs: approvalTimeouts(artifact),
   });
   const withMedia=artifact.published && artifact.domains.includes('media') ? injectMediaFacade(injected) : injected;
-  frame.srcdoc = prefix + (artifact.published && artifact.domains.includes('cvm') ? injectCvmFacade(withMedia) : withMedia);
+  const withCvm = artifact.published && artifact.domains.includes('cvm') ? injectCvmFacade(withMedia) : withMedia;
+  frame.srcdoc = prefix + (artifact.published && isNativeMeshContext(artifact.mesh, sessionId) && artifact.domains.includes('mesh') ? injectMeshFacade(withCvm) : withCvm);
 }
 
 async function start(): Promise<void> {
@@ -407,8 +418,8 @@ async function start(): Promise<void> {
     if (source === 'published') {
       if (Array.from(parameters).length !== 2 || parameters.get('fixture') !== null) { fail('artifact-integrity'); return; }
       const {html, metadata} = await readPublishedArtifact(hostWindow.HypergolicHost!, sessionId);
-      const {appId, version: aggregateHash, domains, publishedOpen, appData} = metadata;
-      if (!stopped) renderGuest({aggregateHash, appId, title: appId, domains,...(appData?{appData:appData.policy}:{}),
+      const {appId, version: aggregateHash, domains, publishedOpen, appData, mesh} = metadata;
+      if (!stopped) renderGuest({aggregateHash, appId, title: appId, domains,...(appData?{appData:appData.policy}:{}), ...(mesh ? {mesh} : {}),
         published: true, discoveryOpen: publishedOpen === true}, html);
       return;
     }
