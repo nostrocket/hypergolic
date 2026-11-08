@@ -37,7 +37,7 @@ with tempfile.TemporaryDirectory(prefix="published-capability-parser-") as temp:
                     str(HOST / "PublishedCapabilityBinding.java"), str(HOST / "CapabilityLeaseRegistry.java")], check=True)
     subprocess.run(["java", "-cp", COMPILER_CP, "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler",
                     "-no-stdlib", "-no-reflect", "-classpath", f"{classes}:{STDLIB}:{JSON}",
-                    "-d", str(classes), str(HOST / "NativeCanonicalJSON.kt"), str(HOST / "NativeAppDataPolicy.kt"), str(HOST / "CapabilityConfiguration.kt"),
+                    "-d", str(classes), str(HOST / "NativeCanonicalJSON.kt"), str(HOST / "NativeAppDataPolicy.kt"), str(HOST / "CapabilityConfiguration.kt"), str(HOST / "LegacyReadOnlyContext.kt"),
                     str(HOST / "OutboxQueryCapability.kt"), str(TEST)], check=True)
     subprocess.run(["java", "-cp", f"{classes}:{STDLIB}:{JSON}",
                     "org.nostrocket.hypergolic.host.CapabilityConfigurationProof"], check=True)

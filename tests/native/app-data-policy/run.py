@@ -151,10 +151,10 @@ def main():
     try:
         run("android-java", ["javac", "-d", classes, *sources[:2]])
         run("android-compile", ["java", "-cp", ":".join(map(str,compiler)), "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler", "-no-stdlib", "-no-reflect",
-            "-classpath", f"{classes}:{stdlib}:{jsonjar}", "-d", classes, *sources[2:5], work/"Projection.kt", HERE/"PolicyProof.kt"])
+            "-classpath", f"{classes}:{stdlib}:{jsonjar}", "-d", classes, *sources[2:5], android/"LegacyReadOnlyContext.kt", work/"Projection.kt", HERE/"PolicyProof.kt"])
         run("android-test", ["java", "-cp", f"{classes}:{stdlib}:{jsonjar}", "org.nostrocket.hypergolic.host.PolicyProof", work/"cases.json"])
         run("swift-compile", ["xcrun", "swiftc", "-swift-version", "6", "-warnings-as-errors", "-parse-as-library", "-module-cache-path", work/"swift-cache",
-            *sources[5:], work/"Configuration.swift", HERE/"PolicyProof.swift", "-o", work/"swift-proof"])
+            *sources[5:], ios/"LegacyReadOnlyContext.swift", work/"Configuration.swift", HERE/"PolicyProof.swift", "-o", work/"swift-proof"])
         run("swift-test", [work/"swift-proof", work/"cases.json"])
     finally:
         receipt = {"scope":"Host-executed production native policy/config and extracted projection checks; no WebView/device/effects", "casesPerPlatform":len(rows),

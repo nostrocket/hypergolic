@@ -1,3 +1,4 @@
+import {captureLegacyReadOnly, LEGACY_READ_ONLY_PROFILE} from './legacy-read-only.ts';
 import {appDataContextForArtifact} from '../app-data/app-data-source.ts';
 import type { NappletDescriptor } from '../shell/workspace.ts';
 import { assertVerifiedNappletAdmission, publishedCapabilityCompatibility, type VerifiedNappletAdmission } from './first-open-consent.ts';
@@ -71,9 +72,13 @@ export function publishedHostInput(artifactInput: unknown, admissionInput: unkno
     artifact.manifest.optionalDomains, admission.supportProfile).domains;
   if (domains.length !== expected.length || domains.some((domain, index) => domain !== expected[index])) return fail();
   const appData=appDataContextForArtifact(artifact,domains,networkRelays);
+  if (descriptor.legacyReadOnly && descriptor.legacyReadOnlyUser !== authority.user) return fail();
+  const legacyReadOnly = descriptor.legacyReadOnly === true ? captureLegacyReadOnly({
+    profile: LEGACY_READ_ONLY_PROFILE, consent: true, eventId: verified.eventId, htmlHash: verified.htmlHash, relays: networkRelays,
+  }, verified, domains) : undefined;
   const configuration = JSON.stringify({ sessionId: descriptor.id, epoch: authority.epoch,
     user: authority.user, publisher: verified.publisher, appId: verified.appId,
-    version: verified.version, instanceId: descriptor.id, fixture: 'published', domains,...(appData?{appData}:{}),...(admission.supportProfile==='current'&&domains.includes('media')?{mediaProfile:'finite-live-mp3-v1'}:{}),...(['current','before-live'].includes(admission.supportProfile)&&domains.includes('cvm')?{cvmProfile:'free-foreground-v1'}:{}),...(['current','before-live','before-cvm'].includes(admission.supportProfile)&&domains.includes('common')&&domains.includes('identity')&&domains.some(domain=>domain==='relay'||domain==='outbox')?{commonProfile:'social-v1'}:{}) });
+    version: verified.version, instanceId: descriptor.id, fixture: 'published', domains,...(legacyReadOnly?{legacyReadOnly}:{}),...(appData?{appData}:{}),...(admission.supportProfile==='current'&&domains.includes('media')?{mediaProfile:'finite-live-mp3-v1'}:{}),...(['current','before-live'].includes(admission.supportProfile)&&domains.includes('cvm')?{cvmProfile:'free-foreground-v1'}:{}),...(['current','before-live','before-cvm'].includes(admission.supportProfile)&&domains.includes('common')&&domains.includes('identity')&&domains.some(domain=>domain==='relay'||domain==='outbox')?{commonProfile:'social-v1'}:{}) });
   try { authority.assertActive(); } catch { return fail(); }
   admission.assertActive();
   return JSON.stringify({ sessionId: descriptor.id, publisher: verified.publisher, appId: verified.appId,

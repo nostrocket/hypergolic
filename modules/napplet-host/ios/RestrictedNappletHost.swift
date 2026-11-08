@@ -244,7 +244,8 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
       guard let parsed = try? CapabilityConfiguration(rawConfiguration, generation: generation),
         parsed.matchesPublishedClaims(sessionId: input.claims.sessionId,
           publisher: input.claims.publisher, appId: input.claims.identifier,
-          version: input.claims.aggregateHash) else {
+          version: input.claims.aggregateHash),
+        parsed.legacyReadOnly?.matches(event: input.claims.eventId, hash: input.claims.htmlHash) != false else {
         fail("invalid-published-configuration"); return
       }
       publishedConfiguration = parsed
@@ -259,7 +260,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     }
     configuration = publishedConfiguration
     configurationSource = input.configuration
-    publishedReader = PublishedArtifactReadOwner(claimed: claimed, domains: publishedConfiguration?.domains ?? ["theme"], publishedOpen: publishedConfiguration?.publishedOpen == true, appData: publishedConfiguration?.appData)
+    publishedReader = PublishedArtifactReadOwner(claimed: claimed, domains: publishedConfiguration?.domains ?? ["theme"], publishedOpen: publishedConfiguration?.publishedOpen == true, appData: publishedConfiguration?.appData, legacyReadOnly: publishedConfiguration?.legacyReadOnly?.metadata)
     publishedSource = raw
     // Loaded verified read views survive suspension. Native stream/approval/transfer
     // owners independently stop network work and sensitive authority on inactivity.
@@ -559,7 +560,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
       let message = value["message"] as? String, message.utf8.count <= 16 * 1024,
       let request = try? JSONSerialization.jsonObject(with: Data(message.utf8)) as? [String: Any],
       let type = request["type"] as? String,
-      (type == "relay.subscribe" || type == "outbox.subscribe"), configuration.allowsRelayOperation(type), let subId = request["subId"] as? String,
+      ((type == "legacy.subscribe" && publishedSource != nil && configuration.legacyReadOnly?.allowsSubscribe(request) == true) || ((type == "relay.subscribe" || type == "outbox.subscribe") && configuration.allowsRelayOperation(type))), let subId = request["subId"] as? String,
       (1...128).contains(subId.utf8.count), !subId.utf8.contains(where: { $0 < 32 || $0 == 127 }),
       let id = request["id"] as? String, (1...128).contains(id.utf8.count),
       let snapshot = try? configuration.request(message), let capturedView = webView, let capturedURL = expectedURL else { return }
@@ -573,7 +574,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
           if case .failure = result { self?.fail("renderer-stopped") }
         }
       }) else { return }
-    onEvent?(["type": "capability", "lane": type == "outbox.subscribe" ? "outbox-subscription" : "subscription", "sessionId": configuration.sessionId,
+    onEvent?(["type": "capability", "lane": type == "legacy.subscribe" ? "legacy-subscription" : type == "outbox.subscribe" ? "outbox-subscription" : "subscription", "sessionId": configuration.sessionId,
       "generation": generation, "token": token])
   }
 
@@ -674,6 +675,15 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
       guard let bytes = try? JSONSerialization.data(withJSONObject: result) else { reply(nil, "Capability rejected"); return }
       reply(String(decoding: bytes, as: UTF8.self), nil)
     }
+    if let request = try? UploadWire.object(message, limit: 16 * 1024), let type = request["type"] as? String, type.hasPrefix("legacy.") {
+      guard !deferred, publishedSource != nil, configuration.legacyReadOnly?.allowsClose(request) == true,
+        let token = CapabilityTransport.admit(generation, sequence: counter, snapshot: snapshot, reply: respond) else {
+        _ = CapabilityTransport.leases.consumeSequence(generation, sequence: counter); respond(nil); return
+      }
+      onEvent?(["type": "capability", "lane": "legacy", "sessionId": configuration.sessionId, "generation": generation, "token": token])
+      return
+    }
+    if configuration.legacyReadOnly != nil { _ = CapabilityTransport.leases.consumeSequence(generation, sequence: counter); respond(nil); return }
     if deferred {
       guard mayDeferCapability(message, configuration: configuration) else {
         _ = CapabilityTransport.leases.consumeSequence(generation, sequence: counter)

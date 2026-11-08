@@ -127,13 +127,13 @@ function restoreWorkspace(ports: Ports, launch: Launch, attempt: Attempt) {
 
 function reviewLaunch(ports: Ports, launch: Launch, target: Extract<RoutingReviewRequest, {kind: 'published-open'}>['target'],
   attempt: Attempt, active: () => void) {
-  return async (changesAccess: boolean) => {
+  return async (changesAccess: boolean, legacyReadOnlyAvailable = false) => {
     active();
     const decision = await ports.reviews.ask(Object.freeze({ kind: 'published-open', origin: launch.captured.origin,
-      source: launch.source, changesAccess, target }), active, () => true);
+      source: launch.source, changesAccess, target, ...(legacyReadOnlyAvailable ? {legacyReadOnlyAvailable: true as const} : {}) }), active, () => true);
     active();
     attempt.declined = !decision.allow;
-    return decision.allow;
+    return decision.allow && decision.legacyReadOnly ? 'legacy-read-only-v1' as const : decision.allow;
   };
 }
 
@@ -193,7 +193,8 @@ async function openExact(ports: Ports, launch: Launch, attempt: Attempt, active:
   if (!exact(next) || next.source !== 'published' || next.publisher !== publisher || next.appId !== appId) throw new Error('Prepared launch mismatch');
   attempt.created = !existing;
   attempt.target = next;
-  workspace.change(openNapplet(current, next));
+  const opened = openNapplet(current, next);
+  workspace.change(existing && !loaded ? {...opened, sessions: opened.sessions.map(session => session.id === next.id ? next : session)} : opened);
   await workspace.flush();
   return waitForMount(ports, launch, next, active, signal);
 }

@@ -68,6 +68,7 @@ public final class RelaySubscriptionRegistry {
     prune(); Stream stream = streams.get(token);
     return stream != null && stream.claimed && stream.accepted;
   }
+  public synchronized String capturedSnapshot(String token) { prune(); Stream stream = streams.get(token); return stream != null && stream.claimed && stream.accepted ? stream.snapshot : null; }
   public synchronized int connectionLimit(String token) {
     prune(); Stream stream = streams.get(token);
     return stream != null && stream.claimed && stream.accepted ? (stream.outbox ? 16 : 2) : 0;

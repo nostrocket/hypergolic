@@ -1,0 +1,28 @@
+--- a/node_modules/zod/lib/index.mjs
++++ b/node_modules/zod/lib/index.mjs
+@@ -2187,6 +2187,7 @@
+                     exact: true,
+                     message: def.exactLength.message,
+                 });
++                if (tooBig) return INVALID;
+                 status.dirty();
+             }
+         }
+@@ -2213,7 +2214,7 @@
+                     exact: false,
+                     message: def.maxLength.message,
+                 });
+-                status.dirty();
++                return INVALID;
+             }
+         }
+         if (ctx.common.async) {
+@@ -3235,7 +3236,7 @@
+                     exact: false,
+                     message: def.maxSize.message,
+                 });
+-                status.dirty();
++                return INVALID;
+             }
+         }
+         const valueType = this._def.valueType;

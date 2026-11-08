@@ -56,6 +56,9 @@ final class RelaySubscriptionRegistry: @unchecked Sendable {
   func isActive(_ token: String) -> Bool {
     lock.withLock { prune(); return streams[token]?.claimed == true && streams[token]?.accepted == true }
   }
+  func capturedSnapshot(_ token: String) -> String? {
+    lock.withLock { prune(); guard let stream = streams[token], stream.claimed, stream.accepted else { return nil }; return stream.snapshot }
+  }
   func connectionLimit(_ token: String) -> Int {
     lock.withLock { prune(); guard let stream = streams[token], stream.claimed, stream.accepted else { return 0 }; return stream.outbox ? 16 : 2 }
   }

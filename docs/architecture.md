@@ -24,10 +24,16 @@ generation, request and lifetime. Account changes, teardown and relevant lifecyc
 events revoke authority. Async completion must recheck that binding before
 delivering a result or performing a subsequent effect.
 
+A separately selected [legacy read-only profile](legacy-read-only.md) supplies
+bounded public relay reads and reviewed local compatibility libraries to two
+immutable legacy publications. It retains an opaque sandbox and their original
+empty NAP grant set. Ordinary napplet execution is unchanged.
+
 ## Accounts and signing
 
 An account is identified by its Nostr public key. Its selected signing method is
 explicit: local native key, NIP-46 remote signer, or Android NIP-55 signer app.
+A public-only profile can omit a signing method and cannot sign or publish.
 There is no automatic fallback. Method changes preserve account-scoped napplet
 data while revoking old signing authority and restarting sessions.
 

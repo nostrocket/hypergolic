@@ -5,6 +5,7 @@ import { build } from 'vite';
 import assert from 'node:assert/strict';
 import { BUNDLED_FIXTURES } from '../../src/runtime/bundled-catalog.ts';
 
+await import('./legacy-dependencies.mjs');
 const root = new URL('../', import.meta.url);
 const bytes = await readFile(new URL('fixtures/ux-lab.html', root));
 const html = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
@@ -63,7 +64,7 @@ const bundle = await build({
 });
 const document = `<!doctype html>
 <html lang="en"><head>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; worker-src blob:; child-src 'self'; frame-src 'self'; media-src blob:; object-src 'none'; manifest-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; worker-src blob:; child-src 'self'; frame-src 'self'; media-src blob:; object-src 'none'; manifest-src 'none'; base-uri 'none'; form-action 'none'">
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hypergolic runtime</title><script src="host.js" defer></script>
 </head><body><p role="status">Loading napplet…</p></body></html>\n`;
@@ -106,8 +107,9 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.`;
 const bundledPackages = [...packages.values()].sort((a, b) => a.name.localeCompare(b.name));
-const notices = bundledPackages.map(pkg => `${pkg.name}@${pkg.version} — ${pkg.license}\n\n${pkg.licenseText ?? (pkg.license === 'MIT' ? 'The published package declares MIT and includes no separate copyright notice.\n\n' + mit : 'The published package includes no license file.')}`).join('\n\n-----\n\n');
-await writeFile(new URL('THIRD_PARTY_NOTICES.txt', root), notices + '\n');
+const packageNotices = bundledPackages.map(pkg => `${pkg.name}@${pkg.version} — ${pkg.license}\n\n${pkg.licenseText ?? (pkg.license === 'MIT' ? 'The published package declares MIT and includes no separate copyright notice.\n\n' + mit : 'The published package includes no license file.')}`).join('\n\n-----\n\n');
+const notices = packageNotices + '\n\n-----\n\n' + await readFile(new URL('vendor/legacy-recipe/LICENSES.txt', root), 'utf8');
+await writeFile(new URL('THIRD_PARTY_NOTICES.txt', root), notices.trimEnd() + '\n');
 const hostPath = new URL('dist/host.js', root);
 await writeFile(hostPath, await readFile(hostPath, 'utf8') + '\n/*!\n' + notices.replaceAll('*/', '* /') + '\n*/\n');
 assert(!/Math\.random\s*\(/.test(await readFile(hostPath, 'utf8')), 'Weak random fallback returned to the trusted runtime bundle');

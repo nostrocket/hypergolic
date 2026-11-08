@@ -44,17 +44,19 @@ final class PublishedArtifactReadOwner {
   private let domains: [String]
   private let publishedOpen: Bool
   private let appData: String?
+  private let legacyReadOnly: String?
   private var bytes: Data?
   private var offset = 0
   private var nextSequence = 0
 
-  init(claimed: PublishedArtifactRegistry.ClaimedArtifact, domains: Set<String>, publishedOpen: Bool = false, appData: String? = nil) {
+  init(claimed: PublishedArtifactRegistry.ClaimedArtifact, domains: Set<String>, publishedOpen: Bool = false, appData: String? = nil, legacyReadOnly: String? = nil) {
     claims = claimed.claims
     generation = claimed.viewGeneration
     totalBytes = claimed.htmlBytes.count
     self.domains = domains.sorted()
     self.publishedOpen = publishedOpen
     self.appData = appData
+    self.legacyReadOnly = legacyReadOnly
     bytes = claimed.htmlBytes
   }
 
@@ -72,6 +74,7 @@ final class PublishedArtifactReadOwner {
       "version": claims.aggregateHash, "htmlHash": claims.htmlHash, "done": done,
       "domains": domains
     ]
+    if let legacyReadOnly, let data = legacyReadOnly.data(using: .utf8), let value = try? JSONSerialization.jsonObject(with: data) { response["legacyReadOnly"] = value }
     if let appData, let data = appData.data(using: .utf8), let value = try? JSONSerialization.jsonObject(with:data) { response["appData"] = value }
     if publishedOpen { response["publishedOpen"] = true }
     guard let encoded = try? JSONSerialization.data(withJSONObject: response) else { clear(); return nil }

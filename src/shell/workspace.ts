@@ -1,3 +1,5 @@
+import {supportsLegacyReadOnly} from '../napplets/legacy-read-only.ts';
+
 /** Durable descriptors contain no WebView state or signing requests. */
 export interface NappletDescriptor {
   readonly id: string;
@@ -8,6 +10,9 @@ export interface NappletDescriptor {
   readonly source: 'bundled' | 'published';
   /** Exact signed kind-35129 event selected for this published version. */
   readonly eventId?: string;
+  /** Explicit consent for this immutable pin, scoped by the identity workspace. */
+  readonly legacyReadOnly?: true;
+  readonly legacyReadOnlyUser?: string;
 }
 export function samePublishedPin(left: NappletDescriptor, right: NappletDescriptor): boolean {
   return left.source === 'published' && right.source === 'published' && left.id === right.id &&
@@ -78,9 +83,12 @@ export function restoreWorkspace(value: unknown): Workspace {
         !bounded(item.version, 128) || (item.source !== 'bundled' && item.source !== 'published')) throw new Error('Invalid napplet');
     if (item.source === 'published' && (typeof item.eventId !== 'string' || !/^[0-9a-f]{64}$/.test(item.eventId))) throw new Error('Invalid published event pin');
     if (item.source === 'bundled' && item.eventId !== undefined) throw new Error('Invalid bundled event pin');
+    if (item.legacyReadOnly !== undefined && (item.legacyReadOnly !== true || typeof item.legacyReadOnlyUser !== 'string' || !/^[0-9a-f]{64}$/.test(item.legacyReadOnlyUser) || item.source !== 'published' ||
+        !supportsLegacyReadOnly({publisher: item.publisher, appId: item.appId, eventId: item.eventId as string, version: item.version}))) throw new Error('Invalid legacy read-only pin');
+    if (item.legacyReadOnlyUser !== undefined && item.legacyReadOnly !== true) throw new Error('Unbound legacy user');
     ids.add(item.id);
     return Object.freeze({ id: item.id, title: item.title, publisher: item.publisher, appId: item.appId, version: item.version, source: item.source,
-      ...(item.source === 'published' ? { eventId: item.eventId as string } : {}) });
+      ...(item.source === 'published' ? { eventId: item.eventId as string } : {}), ...(item.legacyReadOnly === true ? {legacyReadOnly: true as const, legacyReadOnlyUser: item.legacyReadOnlyUser as string} : {}) });
   });
   if (snapshot.lastActiveId !== null && (typeof snapshot.lastActiveId !== 'string' || !ids.has(snapshot.lastActiveId))) throw new Error('Invalid focus');
   return { sessions, focusedId: snapshot.lastActiveId as string | null, overview: sessions.length === 0 || snapshot.lastActiveId === null };

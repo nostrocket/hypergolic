@@ -32,6 +32,7 @@ struct CapabilityConfiguration {
   let mediaProfile:String?
   let commonProfile:String?
   let cvmProfile:String?
+  let legacyReadOnly:LegacyReadOnlyContext?
   let publishedOpen: Bool
   let publisher: String
   let appId: String
@@ -40,7 +41,7 @@ struct CapabilityConfiguration {
     enum Invalid: Error { case configuration }
     guard raw.utf8.count <= 8192, let bytes = raw.data(using: .utf8),
       var value = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
-      Set(value.keys).subtracting(["publishedOpen","commonProfile","cvmProfile","mediaProfile","appData"]) == Set(["sessionId", "epoch", "user", "publisher", "appId", "version", "instanceId", "fixture", "domains"])
+      Set(value.keys).subtracting(["publishedOpen","commonProfile","cvmProfile","mediaProfile","appData","legacyReadOnly"]) == Set(["sessionId", "epoch", "user", "publisher", "appId", "version", "instanceId", "fixture", "domains"])
       else { throw Invalid.configuration }
     let open = value.removeValue(forKey: "publishedOpen")
     if let open {
@@ -100,6 +101,10 @@ struct CapabilityConfiguration {
       guard profile as? String == "free-foreground-v1", fixture == "published", expected.contains("cvm") else { throw Invalid.configuration }
       self.cvmProfile = "free-foreground-v1"
     } else { self.cvmProfile = nil }
+    if let profile = value["legacyReadOnly"] {
+      guard let fields = profile as? [String: Any] else { throw Invalid.configuration }
+      self.legacyReadOnly = try LegacyReadOnlyContext(fields, publisher: publisher, appId: appId, version: version, fixture: fixture, domains: expected)
+    } else { self.legacyReadOnly = nil }
     self.domains = expected
     self.publishedOpen = (fixture == "napplet-discovery" && appId == "napplet-discovery") || open != nil
     self.publisher = publisher

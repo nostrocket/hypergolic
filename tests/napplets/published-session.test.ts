@@ -131,7 +131,7 @@ test('restored exact pins retain prior game access and require approval before s
   accepted.revoke();
 });
 
-test('unsupported requested capabilities warn and launch without native grants; denial prevents launch', async t => {
+test('unsupported requested capabilities warn without granting unsupported domains; denial prevents launch', async t => {
   const { database, sqlite } = await setup(t);
   const html = getEmbeddedTestHtmlBytes();
   const appId = 'unsupported-capabilities';
@@ -146,14 +146,14 @@ test('unsupported requested capabilities warn and launch without native grants; 
   });
   const link = naddrEncode({ kind: 35129, pubkey: event.pubkey, identifier: appId });
   await assert.rejects(service.openLink(link, new AbortController().signal, async review => {
-    assert.deepEqual(review.unsupportedDomains, ['cvm', 'webrtc']); return false;
+    assert.deepEqual(review.unsupportedDomains, ['webrtc']); return false;
   }));
   assert.deepEqual(calls, []);
   const opened = await service.openLink(link, new AbortController().signal, async review => {
     assert.deepEqual(review.domains, ['cvm', 'webrtc']);
-    assert.deepEqual(review.unsupportedDomains, ['cvm', 'webrtc']); return true;
+    assert.deepEqual(review.unsupportedDomains, ['webrtc']); return true;
   });
-  assert.deepEqual(JSON.parse(JSON.parse(opened.hostInput).configuration).domains, []);
+  assert.deepEqual(JSON.parse(JSON.parse(opened.hostInput).configuration).domains, ['cvm']);
   assert(calls.includes('finish'));
   opened.revoke();
   const reopened = await service.reopenPinned(opened.descriptor, new AbortController().signal, async () => {

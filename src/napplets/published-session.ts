@@ -1,3 +1,4 @@
+import {supportsLegacyReadOnly, isLegacyReadOnlySelection, LEGACY_READ_ONLY_PROFILE} from './legacy-read-only.ts';
 import { ReviewBusyError } from '../shell/review-slot.ts';
 import { naddrEncode } from 'nostr-tools/nip19';
 import type { IdentityTransition } from '../security/identity-transition.ts';
@@ -51,7 +52,7 @@ function identifier(artifact: VerifiedNappletArtifact): string {
 type PrepareRequest = Readonly<{ link?: string; pinned?: NappletDescriptor;
   candidate?: VerifiedNappletArtifact; updateOf?: NappletDescriptor; exactOpen?: ExactOpenPreparation }>;
 type ExactOpenPreparation = Readonly<{ existing?: NappletDescriptor; assertActive: () => void;
-  reviewLaunch: (changesAccess: boolean) => Promise<boolean> }>;
+  reviewLaunch: (changesAccess: boolean, legacyReadOnlyAvailable?: boolean) => Promise<boolean | typeof LEGACY_READ_ONLY_PROFILE> }>;
 type ConsentReview = (request: NappletConsentReview) => Promise<boolean>;
 type SessionAuthority = ReturnType<PublishedSessionDependencies['identity']['sessionAuthority']>;
 
@@ -113,7 +114,18 @@ async function preparePublishedSession(ports: PublishedSessionDependencies, requ
     const artifact = await loadSessionArtifact(ports, request, link, authority, controller.signal, active);
     const id = selected?.id ?? exact?.existing?.id ?? ports.newInstanceId();
     if (!SESSION.test(id)) fail();
-    const descriptor = descriptorForPublishedArtifact(artifact, id);
+    let descriptor = descriptorForPublishedArtifact(artifact, id);
+    const legacyAvailable = artifact.manifest.requiredDomains.length === 0 && artifact.manifest.optionalDomains.length === 0 &&
+      supportsLegacyReadOnly({...descriptor, eventId: descriptor.eventId!, htmlHash: artifact.htmlHash});
+    let legacyReadOnly = selected !== undefined && isLegacyReadOnlySelection(selected, authority.user);
+    if (legacyReadOnly && !legacyAvailable) fail();
+    const chooseExact = async (changesAccess: boolean): Promise<boolean> => {
+      const decision = await exact!.reviewLaunch(changesAccess, legacyAvailable);
+      active();
+      if (decision === LEGACY_READ_ONLY_PROFILE && !legacyAvailable) fail();
+      legacyReadOnly = decision === LEGACY_READ_ONLY_PROFILE;
+      return decision === true || legacyReadOnly;
+    };
     const expected = selected ?? exact?.existing;
     if (expected && !samePublishedPin(expected, descriptor)) fail();
     if (updateOf && (updateOf.source !== 'published' || !HEX64.test(updateOf.version) ||
@@ -127,11 +139,12 @@ async function preparePublishedSession(ports: PublishedSessionDependencies, requ
     try {
       admission = await requestFirstOpenConsent(artifact, owner, grant.port, controller.signal, active, exact ? async () => {
         reviewed = true;
-        return exact.reviewLaunch(true);
+        return chooseExact(true);
       } : review, reopensPin ? 'saved-pin' : 'review');
     } finally { grant.revoke(); }
     active();
-    if (exact && !reviewed && await exact.reviewLaunch(false) !== true) fail();
+    if (exact && !reviewed && !await chooseExact(false)) fail();
+    if (legacyReadOnly) descriptor = Object.freeze({...descriptor, legacyReadOnly: true, legacyReadOnlyUser: authority.user});
     active();
     const cache = await openPublishedArtifactCache(ports.sqlite, {
       owner, epoch: authority.epoch, currentEpoch: () => ports.identity.getSnapshot().session.epoch,

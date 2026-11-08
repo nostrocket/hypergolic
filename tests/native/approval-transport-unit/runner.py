@@ -15,6 +15,7 @@ SOURCES = [
     "modules/napplet-host/ios/PublishedRelayWebSocketClientFrames.swift",
     "modules/napplet-host/ios/CapabilityLeaseRegistry.swift",
     "modules/napplet-host/ios/CapabilityTransport.swift",
+    "modules/napplet-host/ios/LegacyReadOnlyContext.swift",
     "modules/napplet-host/ios/ApprovalTransport.swift",
 ]
 

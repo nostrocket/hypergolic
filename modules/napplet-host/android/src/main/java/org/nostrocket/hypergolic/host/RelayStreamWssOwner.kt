@@ -14,7 +14,7 @@ internal object RelayStreamWssOwner {
   private val rows = mutableMapOf<String, Row>()
   private val consumed = mutableSetOf<String>()
   @Volatile private var foreground = false
-  private class Row(val id: String, val token: String, val emit: (Map<String, Any>) -> Unit) : PublishedRelayWssQuery.StreamControl {
+  private class Row(val id: String, val token: String, val legacy: Boolean, val emit: (Map<String, Any>) -> Unit) : PublishedRelayWssQuery.StreamControl {
     @Volatile var cancelled = false
     @Volatile var socket: Socket? = null
     var sequence = 0L
@@ -22,7 +22,9 @@ internal object RelayStreamWssOwner {
     private val monitor = Object()
     override fun isCancelled() = cancelled || !foreground || !RelaySubscriptionTransport.registry.isActive(token)
     override fun attach(value: Socket) { socket = value; if (isCancelled()) { value.close(); throw IOException("Relay stream revoked") } }
+    private val history = if(legacy) LegacyReadOnlyContext.HistoryBudget() else null
     override fun text(text: String) {
+      if(history?.receive(text) == false) throw IOException("Legacy relay history limit exceeded")
       val deadline = System.nanoTime() + 25_000_000_000L
       while (!isCancelled() && (waiting != 0L || !RelaySubscriptionTransport.hasCapacity(token))) {
         if (System.nanoTime() >= deadline) throw IOException("Relay stream acknowledgement expired")
@@ -39,9 +41,11 @@ internal object RelayStreamWssOwner {
     emit: (Map<String, Any>) -> Unit): Boolean {
     if (!foreground || !PublishedRelayWssRequestOwner.isCanonicalUuid(id) || consumed.size >= 65_536 ||
       consumed.contains(id) || rows.size >= 16 || rows.values.count { it.token == token } >= RelaySubscriptionTransport.registry.connectionLimit(token) || !RelaySubscriptionTransport.registry.isActive(token)) return false
+    if (!LegacyReadOnlyContext.permitsWire(RelaySubscriptionTransport.registry.capturedSnapshot(token), url, request, subId)) return false
     try { PublishedRelayResponseClassifier.validateRequest(request, subId); PublishedRelayWssQuery.parseUrl(url) } catch (_: Exception) { return false }
     consumed.add(id)
-    val row = Row(id, token, emit); rows[id] = row
+    val legacy = org.json.JSONObject(RelaySubscriptionTransport.registry.capturedSnapshot(token) ?: return false).getJSONObject("registration").has("legacyReadOnly")
+    val row = Row(id, token, legacy, emit); rows[id] = row
     try { pool.execute {
       try { PublishedRelayWssQuery.stream(url, request, subId, PublishedHttpsRequestOwner.addressPolicy(), row) }
       catch (_: Exception) {

@@ -26,7 +26,7 @@ function deferredRequest(message: NappletMessage): boolean {
   if (!canDeferCapability(message.type)) return false;
   try {parseCapabilityRequest(message); return true;} catch {return false;}
 }
-type StreamState={domain:'relay'|'outbox';subId:string; filters:readonly QueryFilter[]; timer:number; delivery:number; eose:boolean; controlRevision:number; deliver:(message:NappletMessage)=>void};
+type StreamState={legacy?:true;domain:'relay'|'outbox';subId:string; filters:readonly QueryFilter[]; timer:number; delivery:number; eose:boolean; controlRevision:number; deliver:(message:NappletMessage)=>void};
 type StreamRequest = ReturnType<typeof parseRelaySubscribe> | ReturnType<typeof parseOutboxSubscribe>;
 type WaitingStream = Readonly<{request:StreamRequest;deliver:StreamState['deliver'];expiresAt:number;timer:number}>;
 type StreamEnvelope={sequence:number;delivery:number;response:unknown};
@@ -245,16 +245,41 @@ function createStreamAdmission(streams: Map<number,StreamState>, canStart: () =>
 
 /** Trusted top document only. A response never selects its destination window. */
 function createStreamStarter(native:NativeHost,generation:string,streams:Map<number,StreamState>,reserve:()=>number,stopStream:(counter:number,notify:boolean)=>void){
-  return (request:StreamRequest,deliver:StreamState['deliver']):void=>{
+  return (request:StreamRequest,deliver:StreamState['deliver'],legacy=false):void=>{
     const counter=reserve();
     const timer=window.setTimeout(()=>stopStream(counter,true),ordinaryTimeoutMs);
-    streams.set(counter,{domain:request.type==='outbox.subscribe'?'outbox':'relay',subId:request.subId,
+    streams.set(counter,{...(legacy?{legacy:true as const}:{}),domain:request.type==='outbox.subscribe'?'outbox':'relay',subId:request.subId,
       filters:request.filters,timer,delivery:0,eose:false,controlRevision:-1,deliver});
-    try {native.postMessage(JSON.stringify({type:'relay-stream',sessionId:generation,sequence:counter,message:JSON.stringify(request)}));}
+    try {native.postMessage(JSON.stringify({type:'relay-stream',sessionId:generation,sequence:counter,message:JSON.stringify(legacy?{...request,type:'legacy.subscribe'}:request)}));}
     catch{stopStream(counter,true);}
   };
 }
 
+function createLegacyReads(streams: Map<number, StreamState>, active: () => boolean,
+  startStream: ReturnType<typeof createStreamStarter>, stopStream: (counter: number, notify: boolean, id?: string) => void) {
+  const legacyIds = new Set<string>();
+  return {
+    legacySubscribe(message: ReturnType<typeof parseRelaySubscribe>, deliver: (message: import('../../src/network/relay-subscription-contract').RelaySubscriptionMessage) => void): void {
+      const request = parseRelaySubscribe(message);
+      if (!active() || !request.relay || streams.size >= SUBSCRIPTION_LIMITS.rawSession || legacyIds.has(request.subId) || legacyIds.size >= 4096) throw new Error('Legacy native read unavailable');
+      legacyIds.add(request.subId);
+      startStream(request, message => deliver(message as import('../../src/network/relay-subscription-contract').RelaySubscriptionMessage), true);
+    },
+    legacyClose(message: ReturnType<typeof parseRelayClose>): void {
+      const request = parseRelayClose(message);
+      for (const [counter, stream] of streams) if (stream.legacy && stream.subId === request.subId) {stopStream(counter, false, request.id); return;}
+    },
+  };
+}
+function createMediaSender(native: NativeHost, generation: string, active: () => boolean, next: () => number, reserve: () => void) {
+  return (message: MediaRequest): boolean => {
+    if (!active()) return false;
+    const encoded = JSON.stringify({type:'media', sessionId:generation, sequence:next(), message});
+    if (new TextEncoder().encode(encoded).length > 32 * 1024) return false;
+    reserve();
+    try {native.postMessage(encoded); return true;} catch {return false;}
+  };
+}
 export function createNativeClient(native: NativeHost, generation: string, options: NativeClientOptions = {}) {
   let sequence = 0, disposed = false;
   const pending = new Map<number, PendingRequest>();
@@ -262,7 +287,7 @@ export function createNativeClient(native: NativeHost, generation: string, optio
   const uploads = new Map<number, UploadState>();
   const cvm=createCvmNative(native,generation,()=>{if(disposed||sequence>=Number.MAX_SAFE_INTEGER)throw new Error('Native session closed');return ++sequence;},value=>options.onCvm?.(value));
   const mesh = createMeshNative(native, generation, options.mesh, () => {if (sequence >= Number.MAX_SAFE_INTEGER) throw new Error('Native sequence exhausted'); return ++sequence;}, () => !disposed);
-  const closeNative = (subId:string,domain:'relay'|'outbox',id?:string):void => {
+  const closeNative = (subId:string,domain:'relay'|'outbox'|'legacy',id?:string):void => {
     if(disposed || sequence >= Number.MAX_SAFE_INTEGER)return;
     const counter=++sequence;
     try { native.postMessage(JSON.stringify({type:'capability',sessionId:generation,sequence:counter,
@@ -270,7 +295,7 @@ export function createNativeClient(native: NativeHost, generation: string, optio
   };
   const stopStream = (counter:number,notify:boolean,id?:string):void => {
     const stream=streams.get(counter);if(!stream)return;
-    streams.delete(counter);window.clearTimeout(stream.timer);closeNative(stream.subId,stream.domain,id);
+    streams.delete(counter);window.clearTimeout(stream.timer);closeNative(stream.subId,stream.legacy?'legacy':stream.domain,id);
     if(notify)stream.deliver({type:stream.domain+'.closed',subId:stream.subId,reason:'relay subscription unavailable'} as NappletMessage);
   };
   const acknowledge=(envelope:StreamEnvelope):void => {
@@ -308,6 +333,7 @@ export function createNativeClient(native: NativeHost, generation: string, optio
   native.addEventListener?.('message', android);
   window.addEventListener('message', ios);
   return Object.freeze({
+    ...createLegacyReads(streams, () => !disposed, startStream, stopStream),
     cvm:cvm.request,
     subscribe: admission.subscribe,
     close(message:NappletMessage):void {
@@ -315,14 +341,7 @@ export function createNativeClient(native: NativeHost, generation: string, optio
       if(!outbox&&admission.removeWaiting(request.subId))return;
       for(const [counter,stream] of streams)if(stream.subId===request.subId&&stream.domain===(outbox?'outbox':'relay')){stopStream(counter,false,request.id);return;}
     },
-    sendMedia(message: MediaRequest): boolean {
-      if (disposed || sequence >= Number.MAX_SAFE_INTEGER) return false;
-      const encoded = JSON.stringify({type:'media', sessionId:generation, sequence:sequence + 1, message});
-      if (new TextEncoder().encode(encoded).length > 32 * 1024) return false;
-      sequence++;
-      try { native.postMessage(encoded); return true; }
-      catch { return false; }
-    },
+    sendMedia: createMediaSender(native, generation, () => !disposed && sequence < Number.MAX_SAFE_INTEGER, () => sequence + 1, () => {sequence++;}),
     request, mesh,
     ...createPresentationRequests(request),
     destroy(): void {

@@ -8,11 +8,11 @@ export type RoutingReviewRequest = Readonly<{ kind: 'intent'; origin: NativeRegi
   | Readonly<{ kind: 'topic'; origin: NativeRegistration; topic: string }>
   | Readonly<{ kind: 'channel'; origin: NativeRegistration; peer: NativeRegistration }>
   | Readonly<{ kind: 'permissions'; origin: NativeRegistration; consent: NappletConsentReview }>
-  | Readonly<{ kind: 'published-open'; origin: NativeRegistration; source: NappletDescriptor; changesAccess: boolean;
+  | Readonly<{ kind: 'published-open'; origin: NativeRegistration; source: NappletDescriptor; changesAccess: boolean; legacyReadOnlyAvailable?: true;
       target: Readonly<{ publisher: string; appId: string; eventId: string; version: string;
         requiredDomains: readonly string[]; optionalDomains: readonly string[];
         unsupportedDomains: readonly string[]; unsupportedOptionalDomains: readonly string[] }> }>;
-export type RoutingDecision = Readonly<{ allow: boolean; selected?: CatalogHandler; remember?: boolean }>;
+export type RoutingDecision = Readonly<{ allow: boolean; selected?: CatalogHandler; remember?: boolean; legacyReadOnly?: true }>;
 export type RoutingReviewItem = Readonly<{ id: string; request: RoutingReviewRequest }>;
 type Pending = RoutingReviewItem & { active(): void; mayReview(): boolean; resolve(value: RoutingDecision): void; reject(error: ReviewBusyError): void };
 const denied: RoutingDecision = Object.freeze({ allow: false });
@@ -71,7 +71,11 @@ export class RoutingReviewService {
         const selected = decision.selected ?? entry.request.selected;
         if (!selected || !entry.request.candidates.includes(selected) || (entry.request.selected !== null && entry.request.selected !== selected)) throw new Error('Handler unavailable');
         this.end(entry, Object.freeze({ allow: true, selected, remember: decision.remember === true }));
-      } else this.end(entry, Object.freeze({ allow: decision.allow === true }));
+      } else {
+        if (decision.legacyReadOnly && (entry.request.kind !== 'published-open' || entry.request.legacyReadOnlyAvailable !== true)) throw new Error('Legacy mode unavailable');
+        this.end(entry, Object.freeze({allow: decision.allow === true,
+          ...(decision.allow && decision.legacyReadOnly === true ? {legacyReadOnly: true as const} : {})}));
+      }
     } catch { this.end(entry, denied); }
     this.publish();
   }

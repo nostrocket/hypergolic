@@ -20,6 +20,7 @@ internal class CapabilityConfiguration(raw: String, generation: String, allowPub
   val mediaProfile: String?
   val commonProfile: String?
   val cvmProfile: String?
+  val legacyReadOnly: LegacyReadOnlyContext?
   init {
     require(raw.toByteArray(Charsets.UTF_8).size <= 8192)
     val value = JSONObject(raw)
@@ -29,7 +30,8 @@ internal class CapabilityConfiguration(raw: String, generation: String, allowPub
     val cvm = value.has("cvmProfile")
     val media=value.has("mediaProfile")
     val data=value.has("appData")
-    require(value.keys().asSequence().toSet() == names + (if(open)setOf("publishedOpen") else emptySet()) + (if(common)setOf("commonProfile") else emptySet()) + (if(cvm)setOf("cvmProfile") else emptySet()) + (if(media)setOf("mediaProfile") else emptySet()) + (if(data)setOf("appData") else emptySet()))
+    val legacy=value.has("legacyReadOnly")
+    require(value.keys().asSequence().toSet() == names + (if(legacy)setOf("legacyReadOnly") else emptySet()) + (if(open)setOf("publishedOpen") else emptySet()) + (if(common)setOf("commonProfile") else emptySet()) + (if(cvm)setOf("cvmProfile") else emptySet()) + (if(media)setOf("mediaProfile") else emptySet()) + (if(data)setOf("appData") else emptySet()))
     require(!open || value.remove("publishedOpen") == true)
     fun string(name: String): String = (value.get(name) as? String) ?: error("Invalid configuration")
     for (name in listOf("sessionId", "instanceId", "fixture")) require(string(name).matches(Regex("[A-Za-z0-9_-]{1,80}")))
@@ -75,6 +77,7 @@ internal class CapabilityConfiguration(raw: String, generation: String, allowPub
     require(!open || (allowPublished && fixture == "published"))
     publishedOpen = (fixture == "napplet-discovery" && appId == "napplet-discovery") || open
     version = string("version")
+    legacyReadOnly = if(legacy) LegacyReadOnlyContext(value.getJSONObject("legacyReadOnly"), publisher, appId, version, fixture, grantedDomains) else null
     appData = if(data) NativeAppDataPolicy.capture(value.get("appData"),publisher,appId,fixture,grantedDomains) else null
     value.put("generation", generation)
     snapshot = value.toString()

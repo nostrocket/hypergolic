@@ -1,10 +1,18 @@
+import {validEnvelope, rejectEnvelope} from './guest-envelope';
+import {commonFailure} from '../../src/common/common-contract';
+import {parseOutboxClose} from '../../src/outbox/subscription-contract';
+import {parseRelayClose} from '../../src/network/relay-subscription-contract';
+import {createLegacyDocumentGuard} from './legacy-lifecycle';
+import type {LegacyReadOnlyContext} from '../../src/napplets/legacy-read-only.ts';
+import {createLegacyMount} from './legacy-mount';
+import {injectLegacyReadOnly} from './legacy-guest';
+import {injectLegacyRecipeModules} from './legacy-modules';
 import {createMeshGuestReceiver, isNativeMeshContext, type NativeMeshContext} from './mesh-native.ts';
 import {injectMeshFacade} from './mesh-guest.ts';
 import type {AppDataPolicy} from '../../src/app-data/app-data-context';
 import {createCvmGuestReceiver} from './cvm-native';
 import {injectCvmFacade} from './cvm-guest';
 import './legacy-webview';
-import {COMMON_OPERATIONS,parseCommonRequest,commonFailure} from '../../src/common/common-contract';
 import { injectMediaFacade } from './media-guest';
 import { guestMessageReceiver } from './guest-message-receiver';
 import { injectAndroidGuestHelpers } from './android-guest-helpers';
@@ -12,23 +20,15 @@ import { createDiscoveryOpenReceiver, injectDiscoveryOpen } from './discovery-op
 import { createCatalogPageReceiver } from './discovery-catalog';
 import { installCloseCheck, CLOSE_CHECK_SERVICE } from './close-check';
 import { injectSupportReport } from './support-report';
-import {parseOutboxSubscribe,parseOutboxClose} from '../../src/outbox/subscription-contract';
 import {createConfigAdapter} from './config-adapter';
-import {parseConfigMessage} from '../../src/presentation/config-contract';
 import {createNotifyAdapter} from './notify-adapter';
-import {captureNotifyRejection, parseNotifyMessage} from '../../src/presentation/notify-contract';
 import { createRoutingAdapter } from './routing-adapter';
 import { createGuestRouting } from './intent-delivery';
-import { parseRoutingMessage } from '../../src/routing/routing-contract';
 import { createLinkAdapter } from './link-adapter';
-import { linkRequestId } from '../../src/links/link-contract';
 import { createUploadAdapter } from './upload-adapter';
-import { parseUploadRequest, UploadError, UPLOAD_LIMITS } from '../../src/uploads/upload-contract';
-import { text } from '../../src/storage/codec';
 import { bindResourceMedia, injectResourceMediaGate, isRuntimeInputActive } from './resource-media';
 import { createKeysSession } from './keys-adapter';
 import { createResourceAdapter } from './resource-adapter';
-import { parseRelaySubscribe, parseRelayClose } from '../../src/network/relay-subscription-contract';
 import {
   createShellBridge, injectNappletNamespacePrelude, originRegistry,
   resolveShellEnvironment, type ShellAdapter,
@@ -53,7 +53,7 @@ const fixtureName = parameters.get('fixture') ?? 'ux-lab';
 const fixture = source === null && Object.prototype.hasOwnProperty.call(__BUNDLED_FIXTURES__, fixtureName) ? __BUNDLED_FIXTURES__[fixtureName] : undefined;
 type RuntimeMetadata = Readonly<{
   aggregateHash: string; appId: string; title: string;
-  domains: readonly string[]; appData?:AppDataPolicy; mesh?:NativeMeshContext; publishTimeoutMs?: number; published: boolean; discoveryOpen: boolean;
+  domains: readonly string[]; appData?:AppDataPolicy; mesh?:NativeMeshContext; legacyReadOnly?:LegacyReadOnlyContext; publishTimeoutMs?: number; published: boolean; discoveryOpen: boolean;
 }>;
 let stopped = false;
 let cleanup: (() => void) | undefined;
@@ -187,50 +187,6 @@ function makeHooks(native: ReturnType<typeof createNativeClient>, captureRecipie
   };
 }
 
-const privilegedRequests = new Set([...COMMON_OPERATIONS,'identity.getPublicKey', 'identity.getRelays', 'identity.getProfile',
-  'identity.getFollows', 'identity.getMutes', 'identity.getBlocked', 'identity.getList',
-  'identity.getZaps', 'identity.getBadges', 'storage.get', 'storage.set', 'storage.remove', 'storage.keys', 'relay.query', 'outbox.query', 'outbox.getEvent', 'outbox.resolveRelays', 'outbox.publish', 'resource.info', 'resource.bytes', 'resource.bytesMany', 'resource.cancel']);
-function validEnvelope(value: unknown): boolean {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const message = value as Record<string, unknown>;
-  const keys = Object.keys(message);
-  if (typeof message.type === 'string' && message.type.startsWith('common.')) {try {parseCommonRequest(value); return true;} catch {return false;}}
-  if (typeof message.type === 'string' && message.type.startsWith('config.')) {try {parseConfigMessage(value); return true;} catch {return false;}}
-  if (typeof message.type === 'string' && message.type.startsWith('notify.')) {try {parseNotifyMessage(value); return true;} catch {return false;}}
-  if (typeof message.type === 'string' && (message.type.startsWith('intent.') || message.type.startsWith('inc.'))) { try { parseRoutingMessage(value); return true; } catch { return false; } }
-  if (message.type === 'link.open') return linkRequestId(value) !== null;
-  if (typeof message.type === 'string' && message.type.startsWith('upload.')) {
-    try { parseUploadRequest(value); return true; } catch { return false; }
-  }
-  if(message.type==='outbox.subscribe'||message.type==='outbox.close'){try{if(message.type==='outbox.subscribe')parseOutboxSubscribe(value);else parseOutboxClose(value);return true;}catch{return false;}}
-  if(message.type==='relay.subscribe'||message.type==='relay.close') {
-    try {if(message.type==='relay.subscribe')parseRelaySubscribe(value);else parseRelayClose(value);return true;}catch{return false;}
-  }
-  if (message.type === 'shell.ready') return keys.length === 1;
-  if (typeof message.type === 'string' && privilegedRequests.has(message.type)) {
-    try { return typeof message.id === 'string' && message.id.length > 0 && message.id.length <= 128
-      && new TextEncoder().encode(JSON.stringify(value)).length <= 2 * 1024 * 1024; }
-    catch { return false; }
-  }
-  if (message.type === 'relay.publish') {
-    if (keys.length !== 3 || !keys.includes('id') || !keys.includes('event') ||
-        typeof message.id !== 'string' || message.id.length === 0 || message.id.length > 128) return false;
-    const event = message.event;
-    if (!event || typeof event !== 'object' || Array.isArray(event)) return false;
-    const eventKeys = Object.keys(event);
-    if (eventKeys.length !== 4 || !['kind', 'content', 'tags', 'created_at'].every(key => eventKeys.includes(key))) return false;
-    const template = event as Record<string, unknown>;
-    if (typeof template.kind !== 'number' || !Number.isSafeInteger(template.kind) || template.kind < 0 || template.kind > 65535 ||
-        typeof template.created_at !== 'number' || !Number.isSafeInteger(template.created_at) || template.created_at < 0 ||
-        typeof template.content !== 'string' || !Array.isArray(template.tags)) return false;
-    try { return new TextEncoder().encode(JSON.stringify(value)).length <= 2 * 1024 * 1024; }
-    catch { return false; }
-  }
-  return message.type === 'theme.get' && keys.length === 2
-    && typeof message.id === 'string' && message.id.length > 0 && message.id.length <= 128
-    && keys.every(key => key === 'type' || key === 'id');
-}
-
 function createGuestFrame(title: string): HTMLIFrameElement {
   const frame = document.createElement('iframe');
   frame.id = 'napplet';
@@ -254,44 +210,6 @@ function approvalTimeouts(artifact: RuntimeMetadata): Readonly<Record<string, nu
   });
 }
 
-function rejectEnvelope(event: MessageEvent, source: Window, domains: readonly string[]): void {
-      if (domains.includes('common')) {
-        const reply = commonFailure(event.data);
-        if (reply) {source.postMessage(reply,'*');return;}
-      }
-      if (domains.includes('relay') && event.data?.type === 'relay.publish') {
-        const id = event.data.id;
-        if (typeof id === 'string' && id.length > 0 && id.length <= 128 &&
-          new TextEncoder().encode(id).length <= 128) {
-          source.postMessage({type: 'relay.publish.result', id, ok: false, error: 'Invalid event template.'}, '*');
-        }
-        return;
-      }
-      const type = event.data?.type;
-      if (domains.includes('upload') && (type === 'upload.info' || type === 'upload.upload' || type === 'upload.status')) {
-        let id: string;
-        try { id = text(event.data.id, UPLOAD_LIMITS.idBytes); } catch { return; }
-        try { parseUploadRequest(event.data); } catch (error) {
-          source.postMessage({type: type + '.result', id, error: error instanceof UploadError ? error.code : 'invalid request'}, '*');
-        }
-        return;
-      }
-      if (domains.includes('notify')) {
-        const rejection = captureNotifyRejection(event.data);
-        if (rejection !== null) source.postMessage({...rejection}, '*');
-      }
-      // A denied subscribe acquires no Kehto/native authority. Reply only to the captured
-      // registered frame with an independently validated caller correlation identifier.
-      if ((event.data?.type === 'relay.subscribe' && domains.includes('relay')) ||
-          (event.data?.type === 'outbox.subscribe' && domains.includes('outbox'))) {
-        try {
-          const outbox=event.data.type==='outbox.subscribe';
-          const denied = outbox?parseOutboxClose({type:'outbox.close',id:event.data.id,subId:event.data.subId}):parseRelayClose({type:'relay.close',id:event.data.id,subId:event.data.subId});
-          source.postMessage({type:outbox?'outbox.closed':'relay.closed',subId:denied.subId,reason:'invalid or unsupported relay subscription'}, '*');
-        } catch { /* An invalid correlation identifier has no SDK recipient. */ }
-      }
-}
-
 function createGuestEndpoint(artifact: RuntimeMetadata, hooks: ShellAdapter) {
   const bridge = createShellBridge(hooks);
   const identity = Object.freeze({ dTag: artifact.appId, aggregateHash: artifact.aggregateHash });
@@ -305,14 +223,30 @@ function createGuestEndpoint(artifact: RuntimeMetadata, hooks: ShellAdapter) {
   const source = frame.contentWindow;
   if (!source) { bridge.destroy(); throw new Error('Frame unavailable'); }
   const media = bindResourceMedia(source, frame);
-  const policy = artifact.domains.includes('resource') ? csp.replace("media-src 'none'", 'media-src blob:') : csp;
+  const policy = artifact.legacyReadOnly ? csp.replace("script-src 'unsafe-inline' 'wasm-unsafe-eval'", "script-src 'unsafe-inline' blob:").replace('worker-src blob:', "worker-src 'none'")
+    : artifact.domains.includes('resource') ? csp.replace("media-src 'none'", 'media-src blob:') : csp;
   originRegistry.register(source, sessionId, identity);
   originRegistry.setEnvironment(source, environment);
   return { bridge, frame, source, media, environment, policy };
 }
 
+function createLoadHandler(frame: HTMLIFrameElement, source: Window,
+  media: ReturnType<typeof bindResourceMedia>, legacyGuard: ReturnType<typeof createLegacyDocumentGuard> | undefined,
+  failed: () => void): () => void {
+  let frameLoaded = false;
+  return (): void => {
+    // A same-document legacy load must prove ownership of the original private port.
+    if (legacyGuard) {legacyGuard.loaded(); media.refresh(); return;}
+    if (frameLoaded) {failed(); return;}
+    frameLoaded = true;
+    media.refresh();
+    if (frame.contentWindow !== source) failed();
+  };
+}
+
 function mount(artifact: RuntimeMetadata) {
-  const live = () => !stopped && ready && frame.contentWindow === source && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) !== undefined;
+  let legacyGuard: ReturnType<typeof createLegacyDocumentGuard> | undefined;
+  const live = () => !stopped && frame.contentWindow === source && (artifact.legacyReadOnly !== undefined ? legacyGuard?.isActive() === true : ready && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) !== undefined);
   const routing = createGuestRouting(artifact.domains, sessionId, live,
     () => { void native.routing({type: 'routing.__register'}).catch(() => {}); }, () => fail('runtime-bootstrap'));
   const native = createNativeClient(hostWindow.HypergolicHost!, sessionId,
@@ -327,11 +261,17 @@ function mount(artifact: RuntimeMetadata) {
   const { bridge, frame, source, media, environment, policy } = createGuestEndpoint(artifact, hooks);
   const hasMedia = artifact.published && artifact.domains.includes('media');
   let ready = false;
+  const legacyMount = createLegacyMount(artifact.legacyReadOnly !== undefined, frame, source, native, live,
+    () => fail('frame-navigation'), () => {
+      if (!ready) {ready = true; window.clearTimeout(deadline); diagnostic({type: 'ready', sessionId});}
+    });
+  legacyGuard = legacyMount?.guard;
+  const legacyNonce = legacyMount?.nonce ?? null;
+  const legacy = legacyMount?.receiver;
   const mesh = artifact.published && isNativeMeshContext(artifact.mesh, sessionId) && artifact.domains.includes('mesh')
     ? createMeshGuestReceiver(frame, source, native.mesh, live) : null;
   const keys = artifact.domains.includes('keys') ? createKeysSession(source, () =>
     live() && isRuntimeInputActive() && document.hasFocus() && document.activeElement === frame) : null;
-  let frameLoaded = false;
   const closeCheck = installCloseCheck(source, live,
     (id, state) => hostWindow.HypergolicHost?.postMessage(JSON.stringify({type: 'close-check.result', sessionId, id, state})));
   const discoveryToken = artifact.discoveryOpen ? crypto.randomUUID() : null;
@@ -340,11 +280,13 @@ function mount(artifact: RuntimeMetadata) {
     ? createCatalogPageReceiver(source, native, discoveryToken, live) : null;
   const deadline = window.setTimeout(() => fail('runtime-timeout'), 10_000);
 
-  const receive = guestMessageReceiver(frame, source, {
+  const receiveGuest = guestMessageReceiver(frame, source, {
     routing, discoveryOpen, catalogPage, keys, sendMedia: hasMedia ? native.sendMedia : null,
     cvm:artifact.domains.includes('cvm')?createCvmGuestReceiver(source,native.cvm,live):null,
     closed: () => stopped, live,
     dispatch(event) {
+      if (legacy?.receive(event)) return;
+      if (artifact.legacyReadOnly) return;
       if (mesh?.receive(event)) return;
       if (!validEnvelope(event.data)) {
         if (ready && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId)) rejectEnvelope(event, source, artifact.domains);
@@ -362,19 +304,13 @@ function mount(artifact: RuntimeMetadata) {
       }
     },
   });
-  const loaded = (): void => {
-    // Registered WindowProxy references can survive self-navigation. End the
-    // generation on any subsequent document load; never bless new source bytes.
-    if (frameLoaded) { fail('frame-navigation'); return; }
-    frameLoaded = true;
-    media.refresh();
-    if (frame.contentWindow !== source) fail('frame-navigation');
-  };
+  const loaded = createLoadHandler(frame, source, media, legacyGuard, () => fail('frame-navigation'));
   cleanup = (): void => {
     shellTheme.close();
     closeCheck();
     routing.close();
     mesh?.close();
+    legacyMount?.close();
     keys?.close();
     media.close();
     window.clearTimeout(deadline);
@@ -387,16 +323,22 @@ function mount(artifact: RuntimeMetadata) {
     frame.remove();
     frame.removeAttribute('srcdoc');
   };
+  const receive = (event: MessageEvent): void => {if (legacyGuard) legacyGuard.receive(event, receiveGuest); else receiveGuest(event);};
   window.addEventListener('message', receive);
   frame.addEventListener('load', loaded);
-  return {frame, environment, policy, discoveryToken};
+  return {frame, environment, policy, discoveryToken, legacyNonce};
 }
 
 // Mount listeners receive metadata only, so they cannot retain the original HTML.
 function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
-  const {frame, environment, policy, discoveryToken} = mount(artifact);
+  const {frame, environment, policy, discoveryToken, legacyNonce} = mount(artifact);
   const [prefix, withCsp] = artifact.published
     ? publishedCspParts(rawHtml, policy) : ['', injectCsp(rawHtml, policy)] as const;
+  if (legacyNonce) {
+    const modules = artifact.appId === 'recipe-cards' ? injectLegacyRecipeModules(withCsp) : withCsp;
+    frame.srcdoc = prefix + injectLegacyReadOnly(injectAndroidGuestHelpers(injectResourceMediaGate(modules)), legacyNonce);
+    return;
+  }
   const html = discoveryToken ? injectDiscoveryOpen(withCsp, discoveryToken, artifact.domains.includes('relay')) : withCsp;
   const guest = injectAndroidGuestHelpers(injectResourceMediaGate(html));
   const injected = injectNappletNamespacePrelude(injectSupportReport(guest), {
@@ -418,8 +360,8 @@ async function start(): Promise<void> {
     if (source === 'published') {
       if (Array.from(parameters).length !== 2 || parameters.get('fixture') !== null) { fail('artifact-integrity'); return; }
       const {html, metadata} = await readPublishedArtifact(hostWindow.HypergolicHost!, sessionId);
-      const {appId, version: aggregateHash, domains, publishedOpen, appData, mesh} = metadata;
-      if (!stopped) renderGuest({aggregateHash, appId, title: appId, domains,...(appData?{appData:appData.policy}:{}), ...(mesh ? {mesh} : {}),
+      const {appId, version: aggregateHash, domains, publishedOpen, appData, mesh, legacyReadOnly} = metadata;
+      if (!stopped) renderGuest({aggregateHash, appId, title: appId, domains,...(appData?{appData:appData.policy}:{}), ...(mesh ? {mesh} : {}), ...(legacyReadOnly ? {legacyReadOnly} : {}),
         published: true, discoveryOpen: publishedOpen === true}, html);
       return;
     }

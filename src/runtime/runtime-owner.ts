@@ -1,3 +1,4 @@
+import {createLegacySubscriptionBroker} from './legacy-subscription-broker.ts';
 import type {CvmService} from '../cvm/cvm-service';
 import {createOutboxSubscriptionBroker} from '../outbox/subscription-broker.ts';
 import type {createOutboxSubscriptions} from '../outbox/subscriptions.ts';
@@ -27,7 +28,7 @@ import type { DiscoveryOpenBroker } from '../napplets/discovery-open-broker.ts';
 import type { VerifiedNappletArtifact } from '../napplets/verified-artifact.ts';
 import type { NativeRegistration } from './capability-protocol.ts';
 
-export interface NativeCapabilityEvent { type: 'capability'; sessionId: string; generation: string; token: string; lane?: 'approval' | 'outbox-subscription' | 'subscription' | 'upload' | 'routing' | 'presentation' | 'configuration' | 'published-open' | 'cvm' }
+export interface NativeCapabilityEvent { type: 'capability'; sessionId: string; generation: string; token: string; lane?: 'approval' | 'outbox-subscription' | 'subscription' | 'upload' | 'routing' | 'presentation' | 'configuration' | 'published-open' | 'cvm' | 'legacy-subscription' | 'legacy' }
 export interface RuntimeBinding { readonly configuration: string; receive(event: NativeCapabilityEvent): void; revoke(): void }
 type PublishedCapabilities = Readonly<{requiredDomains: readonly string[]; optionalDomains: readonly string[]}>;
 export interface PublishedRuntimeBinding { readonly publishedArtifact: string; readonly requestedDomains: PublishedCapabilities;
@@ -37,7 +38,7 @@ export interface RuntimeOwner {
   publishedCapabilities(session: NappletDescriptor): PublishedCapabilities | null;
   resolveDiscovered(link: string, expectedEventId: string, signal: AbortSignal, active: () => void): Promise<VerifiedNappletArtifact>;
   prepareDiscovered(artifact: VerifiedNappletArtifact, signal: AbortSignal, assertActive: () => void,
-    reviewLaunch: (changesAccess: boolean) => Promise<boolean>, existing?: NappletDescriptor): Promise<NappletDescriptor>;
+    reviewLaunch: (changesAccess: boolean, legacyReadOnlyAvailable?: boolean) => Promise<boolean | 'legacy-read-only-v1'>, existing?: NappletDescriptor): Promise<NappletDescriptor>;
   publishedReadyGeneration(session: NappletDescriptor): string | null;
   open(session: NappletDescriptor): RuntimeBinding;
   descriptor(variant: Exclude<BundledVariant, 'ux-lab'>, number: number): NappletDescriptor;
@@ -68,9 +69,10 @@ function capabilityReceiver(database: ShellDatabase, native: RuntimeNativePort,
   let generation: string | null = null;
   let broker: ReturnType<typeof createCapabilityBroker> | null = null;
   let streams:ReturnType<typeof createRelaySubscriptionBroker>|null=null;
+  let legacyStreams:ReturnType<typeof createLegacySubscriptionBroker>|null=null;
   let outboxSubscriptions:ReturnType<typeof createOutboxSubscriptionBroker>|null=null;
   return Object.freeze({
-    revoke: () => { broker?.revoke(); streams?.revoke(); outboxSubscriptions?.revoke(); if (generation) {routing?.close(generation); notify?.close(generation); config?.close(generation);} },
+    revoke: () => { broker?.revoke(); streams?.revoke(); legacyStreams?.revoke(); outboxSubscriptions?.revoke(); if (generation) {routing?.close(generation); notify?.close(generation); config?.close(generation);} },
     assertGeneration: (candidate: string) => { if (generation === null || generation !== candidate) throw new ShellStorageError('REVOKED'); },
     receive(event: NativeCapabilityEvent): void {
       try {
@@ -80,12 +82,15 @@ function capabilityReceiver(database: ShellDatabase, native: RuntimeNativePort,
         if (generation === null) {
           generation = event.generation;
           const owner={registration:{...configuration,generation},assertActive};
+          if(configuration.legacyReadOnly && configuration.domains.length === 0 && native.subscriptions && subscriptions) legacyStreams=createLegacySubscriptionBroker(native.subscriptions,native,subscriptions,owner);
           if(configuration.domains.includes('relay')&&native.subscriptions&&subscriptions)streams=createRelaySubscriptionBroker(native.subscriptions,subscriptions,owner);
           if(configuration.domains.includes('outbox')&&native.subscriptions&&outboxStreams)outboxSubscriptions=createOutboxSubscriptionBroker(native.subscriptions,outboxStreams,owner);
           broker = createCapabilityBroker(database, native, owner, queries, request=>streams?.close(request), resources, identityData, outbox,request=>outboxSubscriptions?.close(request), discovery !== undefined);
         }
         if (event.generation !== generation) return;
-        if(event.lane==='cvm'){
+        if(event.lane==='legacy-subscription')legacyStreams?.dispatch(event.token);
+        else if(event.lane==='legacy')legacyStreams?.dispatchClose(event.token);
+        else if(event.lane==='cvm'){
           if(configuration.cvmProfile==='free-foreground-v1'&&configuration.domains.includes('cvm'))void cvm?.receive(event.token);
         } else if (event.lane === 'published-open') {
           void discovery?.broker.dispatch(event.token, {registration: {...configuration, generation}, assertActive}, discovery.source);
@@ -191,7 +196,7 @@ export function createRuntimeOwner(database: ShellDatabase,
       return coordinator.resolveExact(link, expectedEventId, signal, active);
     },
     async prepareDiscovered(artifact: VerifiedNappletArtifact, signal: AbortSignal, assertActive: () => void,
-      reviewLaunch: (changesAccess: boolean) => Promise<boolean>, existing?: NappletDescriptor) {
+      reviewLaunch: (changesAccess: boolean, legacyReadOnlyAvailable?: boolean) => Promise<boolean | 'legacy-read-only-v1'>, existing?: NappletDescriptor) {
       if (!coordinator) throw new ShellStorageError('REVOKED');
       const ready = await coordinator.prepareExact(artifact, { assertActive, reviewLaunch, ...(existing ? { existing } : {}) }, signal);
       const id = ready.descriptor.id;

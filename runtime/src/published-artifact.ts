@@ -1,3 +1,4 @@
+import {captureLegacyReadOnly, type LegacyReadOnlyContext} from '../../src/napplets/legacy-read-only.ts';
 import {captureNativeMeshContext, type NativeMeshContext} from './mesh-native.ts';
 import {captureAppDataContext,type AppDataContext} from '../../src/app-data/app-data-context';
 import { publishedHtmlHead } from '../../src/napplets/html-envelope';
@@ -10,7 +11,7 @@ const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 
 export type PublishedMetadata = Readonly<{
   publisher: string; appId: string; eventId: string; version: string; htmlHash: string;
-  domains: readonly string[]; publishedOpen?: true; appData?: AppDataContext; mesh?: NativeMeshContext;
+  domains: readonly string[]; publishedOpen?: true; appData?: AppDataContext; mesh?: NativeMeshContext; legacyReadOnly?: LegacyReadOnlyContext;
 }>;
 export type PublishedDocument = Readonly<{ metadata: PublishedMetadata; html: string }>;
 
@@ -39,8 +40,9 @@ function metadata(value: Record<string, unknown>, generation: string): Published
       domains.some(domain => typeof domain !== 'string' || !(ARTIFACT_DOMAINS.has(domain) || domain === 'mesh' && mesh !== undefined)) ||
       domains.some((domain, index) => index > 0 && domains[index - 1] >= domain)) throw new Error('Invalid artifact metadata');
   if (mesh && !domains.includes('mesh')) throw new Error('Mesh context without actual grant');
+  const legacyReadOnly=value.legacyReadOnly === undefined ? undefined : captureLegacyReadOnly(value.legacyReadOnly, {publisher,appId,eventId,version,htmlHash}, domains as string[]);
   const appData=value.appData===undefined?null:captureAppDataContext(value.appData,{publisher,appId,fixture:'published',domains});
-  return Object.freeze({ ...(mesh ? {mesh} : {}), ...(appData?{appData}:{}),publisher, appId, eventId, version, htmlHash, domains: Object.freeze([...domains]), ...(publishedOpen === true ? { publishedOpen } : {}) });
+  return Object.freeze({ ...(legacyReadOnly ? {legacyReadOnly} : {}), ...(mesh ? {mesh} : {}), ...(appData?{appData}:{}),publisher, appId, eventId, version, htmlHash, domains: Object.freeze([...domains]), ...(publishedOpen === true ? { publishedOpen } : {}) });
 }
 async function sha256(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
   const hash = await crypto.subtle.digest('SHA-256', bytes);
@@ -90,7 +92,7 @@ export async function readPublishedArtifact(native: NativeHost, generation: stri
       const remainingTime = 15_000 - (performance.now() - started);
       if (remainingTime <= 0) throw new Error('Artifact read timed out');
       const value = await receiveChunk(native, generation, sequence, Math.min(2500, remainingTime));
-      if (Object.keys(value).length !== (13 + (value.publishedOpen === true ? 1 : 0) + (value.appData === undefined ? 0 : 1) + (value.mesh === undefined ? 0 : 1)) || typeof value.totalBytes !== 'number' || !Number.isSafeInteger(value.totalBytes) ||
+      if (Object.keys(value).length !== (13 + (value.publishedOpen === true ? 1 : 0) + (value.appData === undefined ? 0 : 1) + (value.mesh === undefined ? 0 : 1) + (value.legacyReadOnly === undefined ? 0 : 1)) || typeof value.totalBytes !== 'number' || !Number.isSafeInteger(value.totalBytes) ||
           value.totalBytes < 1 || value.totalBytes > MAX_HTML_BYTES ||
           typeof value.byteLength !== 'number' || typeof value.done !== 'boolean') throw new Error('Invalid artifact reply');
       const nextClaims = metadata(value, generation);

@@ -111,8 +111,9 @@ function RoutingReviewSheet({service, item}: {service: RoutingReviewService; ite
   const landscape = width > height;
   const [selected, setSelected] = useState<CatalogHandler | null>(request.kind === 'intent' ? request.selected : null);
   const [remember, setRemember] = useState(false);
+  const [legacyReadOnly, setLegacyReadOnly] = useState(false);
   const cancel = () => service.decide(item.id, {allow: false});
-  const accept = () => service.decide(item.id, {allow: true, ...(selected ? {selected} : {}), remember});
+  const accept = () => service.decide(item.id, {allow: true, ...(selected ? {selected} : {}), remember, ...(legacyReadOnly ? {legacyReadOnly: true as const} : {})});
   const disabled = request.kind === 'intent' && selected === null;
   return <Modal visible transparent animationType="none" onRequestClose={cancel}>
     <View style={[styles.backdrop, {paddingLeft: insets.left, paddingRight: insets.right}]}><View accessibilityViewIsModal testID="routing-review" style={[styles.sheet, {paddingBottom: Math.max(16, insets.bottom)}]}>
@@ -125,7 +126,14 @@ function RoutingReviewSheet({service, item}: {service: RoutingReviewService; ite
           : <NappletIdentity {...request.origin}/>}
         <ReviewDetails request={request} selected={selected} onSelect={setSelected} remember={remember} onRemember={() => setRemember(value => !value)}/>
       </ScrollView>
-      <View style={[styles.actions, landscape && styles.actionsLandscape]}><Pressable accessibilityRole="button" testID="routing-approve" disabled={disabled} accessibilityState={{disabled}} style={[styles.button, landscape && styles.actionLandscape]} onPress={accept}><Text style={styles.action}>{request.kind === 'published-open' && request.changesAccess ? 'Allow and open' : reviewActions[request.kind]}</Text></Pressable>
+      {request.kind === 'published-open' && request.legacyReadOnlyAvailable && <View style={styles.group}>
+        <Pressable testID="routing-legacy-read-only" accessibilityRole="checkbox" accessibilityState={{checked: legacyReadOnly}}
+          accessibilityLabel="Use legacy read-only mode" onPress={() => setLegacyReadOnly(value => !value)} style={styles.button}>
+          <Text style={styles.action}>{legacyReadOnly ? '✓ ' : '□ '}Use legacy read-only mode</Text>
+        </Pressable>
+        <Text style={styles.detail}>Hypergolic supplies compatibility libraries and reads public content through your configured relays. Results may be limited. Signing, publishing and uploads are unavailable in this mode.</Text>
+      </View>}
+      <View style={[styles.actions, landscape && styles.actionsLandscape]}><Pressable accessibilityRole="button" testID="routing-approve" disabled={disabled} accessibilityState={{disabled}} style={[styles.button, landscape && styles.actionLandscape]} onPress={accept}><Text style={styles.action}>{legacyReadOnly ? 'Open read-only' : request.kind === 'published-open' && request.changesAccess ? 'Allow and open' : reviewActions[request.kind]}</Text></Pressable>
         <Pressable accessibilityRole="button" testID="routing-cancel" style={[styles.button, landscape && styles.actionLandscape]} onPress={cancel}><Text style={styles.action}>Cancel</Text></Pressable></View>
     </View></View>
   </Modal>;

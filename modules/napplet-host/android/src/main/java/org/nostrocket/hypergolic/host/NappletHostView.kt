@@ -166,6 +166,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
               .put("eventId", claims.eventId).put("version", claims.version)
               .put("htmlHash", claims.htmlHash).put("domains", JSONArray(configuration?.grantedDomains ?: listOf("theme")))
               .put("done", chunk.done)
+            configuration?.legacyReadOnly?.let { result.put("legacyReadOnly", JSONObject(it.metadata)) }
             configuration?.appData?.let { result.put("appData", JSONObject(it)) }
             if (configuration?.publishedOpen == true) result.put("publishedOpen", true)
             reply.postMessage(result.toString())
@@ -479,7 +480,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
   }
 
   private fun parsePublishedClaims(raw: String): PublishedClaims? {
-    if (raw.toByteArray(Charsets.UTF_8).size > 2048) return null
+    if (raw.toByteArray(Charsets.UTF_8).size > 12 * 1024) return null
     return try {
       val data = JSONObject(raw)
       val required = setOf("sessionId", "publisher", "appId", "eventId", "version", "htmlHash", "handle")
@@ -496,6 +497,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
         val parsed = CapabilityConfiguration(rawConfig, generation, allowPublished = true)
         if (!PublishedCapabilityBinding.matches(parsed.fixture, parsed.sessionId,
             parsed.publisher, parsed.appId, parsed.version, session, values[1], values[2], values[4])) return null
+        if (parsed.legacyReadOnly?.matches(values[3], values[5]) == false) return null
         parsed
       } else null
       PublishedClaims(session, values[1], values[2], values[3], values[4], values[5], values[6], config)
@@ -534,11 +536,12 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     val id = request.opt("id") as? String ?: return
     val type = request.optString("type")
     val outbox = type == "outbox.subscribe"
-    if ((!outbox && type != "relay.subscribe") || !config.allowsRelayOperation(type) ||
+    val legacy = type == "legacy.subscribe" && published != null && config.legacyReadOnly?.allowsSubscribe(request) == true
+    if ((!legacy && ((!outbox && type != "relay.subscribe") || !config.allowsRelayOperation(type))) ||
       subId.isEmpty() || subId.toByteArray(Charsets.UTF_8).size > 128 || subId.any { it.code < 32 || it.code == 127 } ||
       id.isEmpty() || id.toByteArray(Charsets.UTF_8).size > 128 || message.toByteArray(Charsets.UTF_8).size > 16 * 1024) return
     val token = RelaySubscriptionTransport.admit(generation, sequence, config.request(message), subId, push, outbox) ?: return
-    onHostEvent(mapOf("type" to "capability", "lane" to (if (outbox) "outbox-subscription" else "subscription"), "sessionId" to config.sessionId, "generation" to generation, "token" to token))
+    onHostEvent(mapOf("type" to "capability", "lane" to (if (legacy) "legacy-subscription" else if (outbox) "outbox-subscription" else "subscription"), "sessionId" to config.sessionId, "generation" to generation, "token" to token))
   }
 
   private fun mayDeferCapability(request: JSONObject?, config: CapabilityConfiguration): Boolean {
@@ -577,6 +580,13 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     else closeUnsafeUntil = now + 660000
     val reply: (String?) -> Unit = { response -> pendingNativeReplies.remove(operation); replyRaw(response) }
     val request = runCatching { UploadWire.objectValue(message, CapabilityLeaseRegistry.MAX_BYTES, maximumDepth = 40) }.getOrNull()
+    if (request?.optString("type")?.startsWith("legacy.") == true) {
+      if (deferred || published == null || config.legacyReadOnly?.allowsClose(request) != true) { CapabilityTransport.leases.consumeSequence(generation, sequence); reply(null); return }
+      val token = CapabilityTransport.admit(generation, sequence, config.request(message), reply) ?: run { reply(null); return }
+      onHostEvent(mapOf("type" to "capability", "lane" to "legacy", "sessionId" to config.sessionId, "generation" to generation, "token" to token))
+      return
+    }
+    if (config.legacyReadOnly != null) { CapabilityTransport.leases.consumeSequence(generation, sequence); reply(null); return }
     if (deferred) {
       if (!mayDeferCapability(request, config) || !UploadJsonBounds.accepts(message, CapabilityLeaseRegistry.MAX_BYTES)) {
         CapabilityTransport.leases.consumeSequence(generation, sequence)
