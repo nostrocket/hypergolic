@@ -52,7 +52,8 @@ async function open(page:Page,appId:string,variant='exact') {
           const payload=bytes.slice(envelope.sequence*49152,(envelope.sequence+1)*49152);
           emit({type:'artifact.chunk',sessionId:generation,sequence:envelope.sequence,publisher:'1'.repeat(64),
             appId:variant==='other-app'?'unreviewed-reader':appId,eventId:pin.eventId,version:aggregateHash,htmlHash,
-            domains:appId==='emoji-browser'?['common','identity','inc','outbox','relay','resource','storage','theme']:['identity','inc','relay','storage','theme'],
+            domains:appId==='emoji-browser'?['common','identity','inc','outbox','relay','resource','storage','theme']:
+              appId==='mapplets'?['inc','intent','outbox','resource']:['identity','inc','relay','storage','theme'],
             base64:btoa(String.fromCharCode(...payload)),byteLength:payload.length,totalBytes:bytes.length,done:(envelope.sequence+1)*49152>=bytes.length});return;
         }
         if(envelope.type==='relay-stream'){
@@ -137,7 +138,30 @@ for(const width of [320,360])for(const colorScheme of ['light','dark'] as const)
     expect(await frame.locator('body').evaluate(()=>typeof(window as any).nostr)).toBe('undefined');
   });
 }
-for(const appId of ['emoji-browser','creator-signals'])for(const variant of ['other-app','new-version']){
+for(const width of [320,360])test(`exact Mapplets toolbar controls fit and click at ${width}px with a usable map region`,async({page})=>{
+  await page.setViewportSize({width,height:740});
+  const frame=await open(page,'mapplets');
+  const queries=()=>page.evaluate(()=>(window as any).__presentation.requests.filter((envelope:any)=>envelope.type==='capability'&&JSON.parse(envelope.message).type==='outbox.query').length);
+  await expect.poll(queries).toBeGreaterThan(0);
+  // Selected-state presentation fixture only; native mouse selection and editor routing are separate evidence.
+  await frame.locator('#editButton').evaluate((button:HTMLButtonElement)=>{button.hidden=false;});
+  await frame.locator('#transitControls').evaluate((group:HTMLElement)=>{group.hidden=false;});
+  const controls=frame.locator('.topbar button:not([hidden]),.topbar select');
+  await fits(controls);
+  for(const control of await controls.all()){
+    const box=(await control.boundingBox())!;expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(await control.evaluate(element=>{const box=element.getBoundingClientRect(),hit=document.elementFromPoint(box.x+box.width/2,box.y+box.height/2);return hit===element||element.contains(hit);})).toBe(true);
+  }
+  await frame.getByRole('button',{name:'Edit',exact:true}).click();
+  await frame.getByRole('button',{name:'Route',exact:true}).click();
+  await expect(frame.getByRole('button',{name:'Route',exact:true})).toHaveAttribute('aria-pressed','true');
+  const before=await queries();await frame.getByRole('button',{name:'Reload map',exact:true}).click();
+  await expect.poll(queries).toBeGreaterThan(before);
+  const map=(await frame.locator('.map-frame').boundingBox())!;
+  expect(map.width).toBeGreaterThanOrEqual(width-40);expect(map.height).toBeGreaterThanOrEqual(300);
+  await fits(frame.locator('.map-frame'));
+});
+for(const appId of ['emoji-browser','creator-signals','mapplets'])for(const variant of ['other-app','new-version']){
   test(`ordinary ${appId} ${variant} receives no presentation override`,async({page})=>{await open(page,appId,variant);});
 }
 test('unpublished, wrong-app and future-version metadata retain byte-identical documents and CSP',()=>{
