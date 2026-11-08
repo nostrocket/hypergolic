@@ -676,11 +676,12 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
       reply(String(decoding: bytes, as: UTF8.self), nil)
     }
     if let request = try? UploadWire.object(message, limit: 16 * 1024), let type = request["type"] as? String, type.hasPrefix("legacy.") {
-      guard !deferred, publishedSource != nil, configuration.legacyReadOnly?.allowsClose(request) == true,
+      let image = configuration.legacyReadOnly?.allowsImage(request) == true
+      guard !deferred, publishedSource != nil, (image || configuration.legacyReadOnly?.allowsClose(request) == true),
         let token = CapabilityTransport.admit(generation, sequence: counter, snapshot: snapshot, reply: respond) else {
         _ = CapabilityTransport.leases.consumeSequence(generation, sequence: counter); respond(nil); return
       }
-      onEvent?(["type": "capability", "lane": "legacy", "sessionId": configuration.sessionId, "generation": generation, "token": token])
+      onEvent?(["type": "capability", "lane": image ? "legacy-image" : "legacy", "sessionId": configuration.sessionId, "generation": generation, "token": token])
       return
     }
     if configuration.legacyReadOnly != nil { _ = CapabilityTransport.leases.consumeSequence(generation, sequence: counter); respond(nil); return }

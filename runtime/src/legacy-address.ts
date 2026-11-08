@@ -11,6 +11,11 @@ export function captureLegacyArticle(input: string): LegacyArticle {
   return Object.freeze({kind: 30023, pubkey, identifier, address: naddrEncode({kind: 30023, pubkey, identifier})});
 }
 export function createLegacyAddressControl(labelText: string, open: (article: LegacyArticle) => string | void, clear?: () => void) {
+  const details = document.createElement('details'), summary = document.createElement('summary');
+  summary.id = 'legacy-article-toggle'; summary.textContent = labelText;
+  details.style.cssText = 'flex:none;background:#17202a;color:white;font:12px system-ui';
+  summary.style.cssText = 'padding:10px 12px;min-height:24px;cursor:pointer';
+  details.append(summary);
   const form = document.createElement('form'), label = document.createElement('label');
   const input = document.createElement('input'), button = document.createElement('button'), feedback = document.createElement('p');
   label.textContent = labelText; input.id = 'legacy-article-address'; label.htmlFor = input.id;
@@ -32,5 +37,6 @@ export function createLegacyAddressControl(labelText: string, open: (article: Le
     catch (error) {feedback.textContent = error instanceof Error ? error.message : 'Article address denied';}
   };
   form.addEventListener('submit', submit);
-  return {element: form, close() {form.removeEventListener('submit', submit); form.remove();}};
+  details.append(form);
+  return {element: details, delivered() {feedback.textContent = '';}, close() {form.removeEventListener('submit', submit); details.remove();}};
 }

@@ -12,7 +12,7 @@ const pins = {
   longform: {eventId:'5fff2ec459ffb1a2d2966fc9815bc8ba45db96a669dfe4924d6c63e65b08a24e',htmlHash:'d5558df7e1f3823c0ad5c64273d57802fe304c1e2266bab8e5151fbf05ad51f4',version:'3ba5049444dd249abbe671f818d555b4e3c90b7cab88a70187bc3a012f9afd67'},
 };
 const key=new Uint8Array(32);key[31]=11;
-const article=finalizeEvent({kind:30023,created_at:1700000000,content:'Real main runtime public content.',tags:[['d','main-read'],['title','Main runtime article'],['t','recipe'],['ingredient','1','cup','Rice'],['step','1','Cook rice']]},key);
+const article=finalizeEvent({kind:30023,created_at:1700000000,content:'Real main runtime public content.',tags:[['d','main-read'],['title','Main runtime article'],['t','recipe'],['image','https://assets.example.com/recipe.png'],['ingredient','1','cup','Rice'],['step','1','Cook rice']]},key);
 const addressIdentifier='https://recipes.example/item#recipe';
 const addressArticle=finalizeEvent({kind:30023,created_at:1700000000,content:'Neutral public recipe text.',tags:[['d',addressIdentifier],['title','Selected public recipe'],['t','recipe']]},key);
 let host = '', document = '';
@@ -23,7 +23,7 @@ test.beforeAll(async () => {
   const builder=readFileSync('tools/build.mjs','utf8');
   document=/const document = `([\s\S]+?)`;/.exec(builder)![1]!;
 });
-type Mode='legacy'|'ordinary'|'bad-consent'|'wrong-pin'|'changed-context'|'synthetic-domain'|'restricted-relays'|'address-entry';
+type Mode='legacy'|'ordinary'|'bad-consent'|'wrong-pin'|'changed-context'|'synthetic-domain'|'restricted-relays'|'address-entry'|'image-hold';
 async function open(page:Page,appId:keyof typeof pins,mode:Mode='legacy',event=article) {
   const bytes=readFileSync(`.test-fixtures/legacy/${appId}.html`);const pin=pins[appId];
   expect(createHash('sha256').update(bytes).digest('hex')).toBe(pin.htmlHash);
@@ -32,7 +32,8 @@ async function open(page:Page,appId:keyof typeof pins,mode:Mode='legacy',event=a
   await page.addInitScript(({generation,html,appId,pin,publisher,mode,event})=>{
     if(window!==window.top)return;
     const bytes=Uint8Array.from(atob(html),c=>c.charCodeAt(0)),listeners=new Set<(event:{data:string})=>void>();
-    const state:any={wire:[],diagnostics:[],chunks:[],reply:(envelope:unknown)=>{for(const listener of listeners)listener({data:JSON.stringify(envelope)});}};
+    const transfers=new Map<string,string>();let transferSequence=0;
+    const state:any={wire:[],diagnostics:[],chunks:[],imageReplies:[],reply:(envelope:unknown)=>{for(const listener of listeners)listener({data:JSON.stringify(envelope)});}};
     (window as any).__legacyMain=state;
     Object.defineProperty(window,'HypergolicHost',{value:{addEventListener:(_:string,listener:(event:{data:string})=>void)=>listeners.add(listener),removeEventListener:(_:string,listener:(event:{data:string})=>void)=>listeners.delete(listener),postMessage:(raw:string)=>{
       const message=JSON.parse(raw);state.wire.push(message);
@@ -43,6 +44,19 @@ async function open(page:Page,appId:keyof typeof pins,mode:Mode='legacy',event=a
         if(mode==='restricted-relays')context.relays=['wss://nos.lol'];
         if(mode==='changed-context'&&message.sequence>0)context.relays=['wss://relay.damus.io'];
         state.reply({type:'artifact.chunk',sessionId:generation,sequence:message.sequence,base64:btoa(String.fromCharCode(...chunk)),byteLength:chunk.length,totalBytes:bytes.length,publisher,appId,eventId:mode==='wrong-pin'?'f'.repeat(64):pin.eventId,version:pin.version,htmlHash:pin.htmlHash,domains:mode==='synthetic-domain'?['relay']:[],done:offset+chunk.length===bytes.length,...(mode==='ordinary'?{}:{legacyReadOnly:context})});return;
+      }
+      if(message.type==='capability'){
+        const request=JSON.parse(message.message);
+        if(request.type==='legacy.image.bytes'){
+          const handle='00000000-0000-4000-8000-'+String(++transferSequence).padStart(12,'0');
+          const base64='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4ZkAAAAASUVORK5CYII=';
+          transfers.set(handle,base64);
+          const reply=()=>state.reply({type:'capability.result',sessionId:generation,sequence:message.sequence,response:JSON.stringify({type:request.type+'.result',id:request.id,transfer:{handle,mime:'image/png',length:atob(base64).length}})});
+          if(mode==='image-hold')state.imageReplies.push(reply);else queueMicrotask(reply);
+        }else if(request.type==='legacy.image.__chunk'){
+          const base64=transfers.get(request.handle);transfers.delete(request.handle);
+          queueMicrotask(()=>state.reply({type:'capability.result',sessionId:generation,sequence:message.sequence,response:JSON.stringify({type:request.type+'.result',id:request.id,base64})}));
+        }else if(request.type==='legacy.image.cancel')state.reply({type:'capability.result',sessionId:generation,sequence:message.sequence,response:null});
       }
       if(message.type==='relay-stream'){
         const request=JSON.parse(message.message);if(request.type!=='legacy.subscribe')return;
@@ -60,16 +74,19 @@ async function open(page:Page,appId:keyof typeof pins,mode:Mode='legacy',event=a
   return page.locator('#napplet').contentFrame();
 }
 for(const appId of ['recipe-cards','longform'] as const)test(`actual main reads unchanged ${appId} through native artifact chunks and dedicated read wire`,async({page})=>{
+  const remotes:string[]=[];page.on('request',request=>{if(request.url().startsWith('https://assets.example.com/'))remotes.push(request.url());});
   const frame=await open(page,appId);
   await expect.poll(()=>page.evaluate(()=>(window as any).__legacyMain.diagnostics.some((m:any)=>m.type==='ready'))).toBe(true);
-  if(appId==='longform'){await page.getByLabel('Open by address',{exact:true}).fill(naddrEncode({kind:30023,pubkey:article.pubkey,identifier:'main-read'}));await page.getByRole('button',{name:'Open',exact:true}).click();}
+  if(appId==='longform'){await page.locator('#legacy-article-toggle').click();await page.getByLabel('Open by address',{exact:true}).fill(naddrEncode({kind:30023,pubkey:article.pubkey,identifier:'main-read'}));await page.getByRole('button',{name:'Open',exact:true}).click();}
   await expect(frame.getByText('Main runtime article',{exact:true}).first()).toBeVisible({timeout:10000});
+  await expect(frame.locator('img').first()).toHaveJSProperty('naturalWidth',1);
+  expect(await frame.locator('img').first().getAttribute('src')).toMatch(/^blob:/);expect(remotes).toEqual([]);
   await expect(page.locator('body > [role=status]')).toContainText('Read-only compatibility');
   expect(await frame.locator('body').evaluate(()=>({nostr:typeof(window as any).nostr,napplet:typeof(window as any).napplet}))).toEqual({nostr:'undefined',napplet:'undefined'});
   const state=await page.evaluate(()=>({wire:(window as any).__legacyMain.wire,chunks:(window as any).__legacyMain.chunks}));
   expect(state.chunks.length).toBeGreaterThan(1);expect(state.wire.filter((m:any)=>m.type==='relay-stream').length).toBeGreaterThan(0);
   expect(state.wire.filter((m:any)=>m.type==='relay-stream').every((m:any)=>JSON.parse(m.message).type==='legacy.subscribe')).toBe(true);
-  expect(state.wire.filter((m:any)=>m.type==='capability').every((m:any)=>JSON.parse(m.message).type==='legacy.close')).toBe(true);
+  expect(state.wire.filter((m:any)=>m.type==='capability').every((m:any)=>['legacy.close','legacy.image.bytes','legacy.image.__chunk','legacy.image.cancel'].includes(JSON.parse(m.message).type))).toBe(true);
 });
 test('actual main ordinary pin receives no legacy adapter, import projection or native legacy dispatch',async({page})=>{
   const frame=await open(page,'recipe-cards','ordinary');
@@ -91,6 +108,10 @@ for(const appId of ['recipe-cards','longform'] as const)test(`trusted address co
   await expect.poll(()=>page.evaluate(()=>(window as any).__legacyMain.diagnostics.some((message:any)=>message.type==='ready'))).toBe(true);
   await expect(frame.getByText('Selected public recipe',{exact:true})).toHaveCount(0);
   const label=appId==='recipe-cards'?'Open recipe by address':'Open by address';
+  expect(await page.locator('details').getAttribute('open')).toBeNull();
+  const initialHeight=await page.locator('#napplet').evaluate(frame=>frame.getBoundingClientRect().height);
+  await page.locator('#legacy-article-toggle').click();
+  expect(await page.locator('#napplet').evaluate(frame=>frame.getBoundingClientRect().height)).toBeLessThan(initialHeight);
   expect(await page.getByLabel(label,{exact:true}).getAttribute('autocapitalize')).toBe('none');
   expect(await page.getByLabel(label,{exact:true}).getAttribute('spellcheck')).toBe('false');
   expect(await page.locator('#legacy-article-open').evaluate(button=>button.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
@@ -114,6 +135,7 @@ for(const appId of ['recipe-cards','longform'] as const)test(`trusted address co
 });
 test('trusted address control denies malformed, external and wrong-kind inputs without native I/O',async({page})=>{
   await open(page,'longform','address-entry');
+  await page.locator('#legacy-article-toggle').click();
   await expect.poll(()=>page.evaluate(()=>(window as any).__legacyMain.diagnostics.some((message:any)=>message.type==='ready'))).toBe(true);
   for(const input of ['not-an-address','https://reader.example/post',naddrEncode({kind:35129,pubkey:article.pubkey,identifier:'wrong-kind'})]){
     await page.getByLabel('Open by address',{exact:true}).fill(input);await page.getByRole('button',{name:'Open',exact:true}).click();
@@ -131,6 +153,7 @@ for(const mode of ['bad-consent','wrong-pin','changed-context','synthetic-domain
 test('actual main revokes genuine replacement documents and rejects stale native deliveries',async({page})=>{
   await open(page,'recipe-cards');
   await expect.poll(()=>page.evaluate(()=>(window as any).__legacyMain.wire.some((m:any)=>m.type==='relay-stream'))).toBe(true);
+  await page.locator('#legacy-article-toggle').click();
   const staleControl=await page.locator('form').elementHandle();
   if(!staleControl)throw new Error('Missing trusted address control');
   await page.getByLabel('Open recipe by address',{exact:true}).fill(naddrEncode({kind:30023,pubkey:article.pubkey,identifier:'main-read'}));
@@ -144,4 +167,77 @@ test('actual main revokes genuine replacement documents and rejects stale native
   await staleControl.evaluate(form=>form.dispatchEvent(new SubmitEvent('submit',{bubbles:true,cancelable:true})));
   expect(await page.evaluate(()=>(window as any).__legacyMain.wire.filter((message:any)=>message.type==='relay-stream').length)).toBe(reads);
   await expect(page.locator('form')).toHaveCount(0);
+});
+
+test('image failure from a replaced source never triggers the original guest fallback',async({page})=>{
+  const frame=await open(page,'recipe-cards');
+  const image=frame.locator('img').first();await expect(image).toHaveJSProperty('naturalWidth',1);
+  const oldURL=await image.getAttribute('src');
+  await image.evaluate(element=>{const img=element as HTMLImageElement;(window as any).originalImage=img;img.src='http://assets.example.com/denied';img.src='https://assets.example.com/replacement.png';});
+  await expect(image).toHaveJSProperty('naturalWidth',1);
+  await expect.poll(()=>frame.locator('body').evaluate(()=>(window as any).originalImage.isConnected)).toBe(true);
+  await expect.poll(()=>page.evaluate(()=>(window as any).__legacyMain.wire.some((message:any)=>message.type==='capability'&&JSON.parse(message.message).url==='https://assets.example.com/replacement.png'))).toBe(true);
+  await expect.poll(()=>image.getAttribute('src')).not.toBe(oldURL);
+  expect(await image.getAttribute('src')).toMatch(/^blob:/);
+});
+test('removed image cancels native work and drops late byte handles without attachment',async({page})=>{
+  const frame=await open(page,'recipe-cards','image-hold');
+  await expect.poll(()=>page.evaluate(()=>(window as any).__legacyMain.imageReplies.length)).toBe(1);
+  await frame.locator('img').first().evaluate(image=>{(window as any).removedImage=image;image.remove();});
+  await expect.poll(()=>page.evaluate(()=>(window as any).__legacyMain.wire.some((message:any)=>message.type==='capability'&&JSON.parse(message.message).type==='legacy.image.cancel'))).toBe(true);
+  await page.evaluate(()=>(window as any).__legacyMain.imageReplies[0]());
+  await expect.poll(()=>frame.locator('body').evaluate(()=>(window as any).removedImage.getAttribute('src'))).toBeNull();
+  expect(await page.evaluate(()=>(window as any).__legacyMain.wire.some((message:any)=>message.type==='capability'&&JSON.parse(message.message).type==='legacy.image.__chunk'))).toBe(false);
+});
+test('replaced image source cancels old work and only consumes the current byte handle',async({page})=>{
+  const frame=await open(page,'recipe-cards','image-hold');
+  await expect.poll(()=>page.evaluate(()=>(window as any).__legacyMain.imageReplies.length)).toBe(1);
+  await frame.locator('img').first().evaluate(image=>{(image as HTMLImageElement).src='https://assets.example.com/new.png';});
+  await expect.poll(()=>page.evaluate(()=>(window as any).__legacyMain.imageReplies.length)).toBe(2);
+  await page.evaluate(()=>{const state=(window as any).__legacyMain;state.imageReplies[0]();state.imageReplies[1]();});
+  await expect(frame.locator('img').first()).toHaveJSProperty('naturalWidth',1);
+  expect(await page.evaluate(()=>(window as any).__legacyMain.wire.filter((message:any)=>message.type==='capability'&&JSON.parse(message.message).type==='legacy.image.__chunk').length)).toBe(1);
+});
+test('removing a rendered image releases its Blob URL',async({page})=>{
+  await page.addInitScript(()=>{const revoke=URL.revokeObjectURL.bind(URL);(window as any).releasedImageURLs=[];URL.revokeObjectURL=(url:string)=>{(window as any).releasedImageURLs.push(url);revoke(url);};});
+  const frame=await open(page,'recipe-cards');
+  const image=frame.locator('img').first();await expect(image).toHaveJSProperty('naturalWidth',1);
+  const url=await image.getAttribute('src');await image.evaluate(element=>element.remove());
+  await expect.poll(()=>frame.locator('body').evaluate(()=>(window as any).releasedImageURLs)).toContain(url);
+});
+
+test('unchanged Longform renders its original hero and Markdown image paths as native Blob images',async({page})=>{
+  const event=finalizeEvent({kind:30023,created_at:1700000000,content:'An inline image: ![Inline proof](https://assets.example.com/inline.png)',
+    tags:[['d','image-read'],['title','Longform image paths'],['image','https://assets.example.com/hero.png']]},key);
+  const frame=await open(page,'longform','legacy',event);
+  await page.locator('#legacy-article-toggle').click();
+  await page.getByLabel('Open by address',{exact:true}).fill(naddrEncode({kind:30023,pubkey:event.pubkey,identifier:'image-read'}));
+  await page.getByRole('button',{name:'Open',exact:true}).click();
+  await expect(frame.getByText('Longform image paths',{exact:true})).toBeVisible();
+  const images=frame.locator('img.md-img');await expect(images).toHaveCount(2);
+  for(const image of await images.all()){await expect(image).toHaveJSProperty('naturalWidth',1);expect(await image.getAttribute('src')).toMatch(/^blob:/);}
+  expect(await page.evaluate(()=>(window as any).__legacyMain.wire.filter((message:any)=>message.type==='capability'&&JSON.parse(message.message).type==='legacy.image.bytes').map((message:any)=>JSON.parse(message.message).url))).toEqual(['https://assets.example.com/hero.png','https://assets.example.com/inline.png']);
+  // Exercise the generic DOM attribute API in the same unchanged guest document.
+  const oldURL=await images.first().getAttribute('src');
+  await images.first().evaluate(image=>image.setAttribute('src','https://assets.example.com/attribute.png'));
+  await expect.poll(()=>images.first().getAttribute('src')).not.toBe(oldURL);
+  await expect(images.first()).toHaveJSProperty('naturalWidth',1);
+  expect(await images.first().getAttribute('src')).toMatch(/^blob:/);
+});
+test('canonical percent expansion settles rejected Unicode sources before a later image needs a slot',async({page})=>{
+  const frame=await open(page,'recipe-cards');
+  await expect(frame.locator('img').first()).toHaveJSProperty('naturalWidth',1);
+  await frame.locator('body').evaluate(()=>{
+    const state=window as any;state.expandedImageErrors=0;
+    const first=document.createElement('img'),second=document.createElement('img'),valid=document.createElement('img');
+    first.onerror=second.onerror=()=>state.expandedImageErrors++;
+    first.src='https://assets.example.com/'+ '飯'.repeat(1000);
+    second.setAttribute('src','https://assets.example.com/'+ '餐'.repeat(1000));
+    valid.id='after-expanded-images';valid.setAttribute('src','https://assets.example.com/after-expanded.png');
+    document.body.append(first,second,valid);
+  });
+  await expect.poll(()=>frame.locator('body').evaluate(()=>(window as any).expandedImageErrors)).toBe(2);
+  await expect(frame.locator('#after-expanded-images')).toHaveJSProperty('naturalWidth',1);
+  const urls=await page.evaluate(()=>(window as any).__legacyMain.wire.filter((message:any)=>message.type==='capability'&&JSON.parse(message.message).type==='legacy.image.bytes').map((message:any)=>JSON.parse(message.message).url));
+  expect([...new Set(urls)]).toEqual(['https://assets.example.com/recipe.png','https://assets.example.com/after-expanded.png']);
 });

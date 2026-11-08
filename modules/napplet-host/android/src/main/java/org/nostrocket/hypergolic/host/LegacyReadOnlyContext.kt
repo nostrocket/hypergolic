@@ -32,6 +32,26 @@ internal class LegacyReadOnlyContext(value: JSONObject, publisher: String, appId
   fun matches(event: String, hash: String) = event == eventId && hash == htmlHash
   fun allowsClose(request: JSONObject): Boolean = request.keys().asSequence().toSet() == setOf("type", "id", "subId") &&
     request.opt("type") == "legacy.close" && identifier(request.opt("id")) && identifier(request.opt("subId"))
+  /** Private host image transport, not an ordinary Resource grant. URL/DNS/TLS checks stay in the resource transport. */
+  fun allowsImage(request: JSONObject): Boolean = runCatching {
+    require(identifier(request.opt("id")))
+    val fields = request.keys().asSequence().toSet()
+    when(request.opt("type")) {
+      "legacy.image.bytes" -> {
+        require(fields == setOf("type", "id", "url"))
+        val url = request.getString("url")
+        require(url.toByteArray(Charsets.UTF_8).size <= 8192 && url.startsWith("https://") && url.none { it.code <= 32 || it.code == 127 })
+      }
+      "legacy.image.cancel" -> require(fields == setOf("type", "id"))
+      "legacy.image.__chunk" -> {
+        require(fields == setOf("type", "id", "handle", "offset"))
+        require(request.getString("handle").matches(Regex("[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")))
+        require(integer(request.opt("offset"))?.let { it <= 10 * 1024 * 1024 } == true)
+      }
+      else -> return false
+    }
+    true
+  }.getOrDefault(false)
   fun allowsSubscribe(request: JSONObject): Boolean = runCatching {
     require(request.keys().asSequence().toSet() == setOf("type", "id", "subId", "filters", "relay"))
     require(request.opt("type") == "legacy.subscribe" && identifier(request.opt("id")) && identifier(request.opt("subId")))
@@ -91,6 +111,16 @@ internal class LegacyReadOnlyContext(value: JSONObject, publisher: String, appId
         if(filter.has("since") && filter.has("until")) require(integer(filter.get("since"))!! <= integer(filter.get("until"))!!)
       }
     }
+    /** Reconstruct native profile authority and bind the initial HTTPS effect to its exact image request. */
+    fun permitsImage(snapshot: String?, url: String): Boolean = runCatching {
+      val row = JSONObject(snapshot ?: return false)
+      val registration = row.getJSONObject("registration")
+      val domains = registration.getJSONArray("domains")
+      require(domains.length() == 0)
+      val context = LegacyReadOnlyContext(registration.getJSONObject("legacyReadOnly"), registration.getString("publisher"), registration.getString("appId"), registration.getString("version"), registration.getString("fixture"), emptyList())
+      val request = JSONObject(row.getString("request"))
+      context.allowsImage(request) && request.opt("type") == "legacy.image.bytes" && request.opt("url") == url
+    }.getOrDefault(false)
     /** Native effect boundary: destinations and the complete REQ filter payload remain captured. */
     fun permitsWire(snapshot: String?, url: String, wire: String, subId: String): Boolean = runCatching {
       val row = JSONObject(snapshot ?: return false)

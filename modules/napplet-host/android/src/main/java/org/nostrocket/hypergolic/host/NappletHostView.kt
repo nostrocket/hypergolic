@@ -581,9 +581,10 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     val reply: (String?) -> Unit = { response -> pendingNativeReplies.remove(operation); replyRaw(response) }
     val request = runCatching { UploadWire.objectValue(message, CapabilityLeaseRegistry.MAX_BYTES, maximumDepth = 40) }.getOrNull()
     if (request?.optString("type")?.startsWith("legacy.") == true) {
-      if (deferred || published == null || config.legacyReadOnly?.allowsClose(request) != true) { CapabilityTransport.leases.consumeSequence(generation, sequence); reply(null); return }
+      val image = config.legacyReadOnly?.allowsImage(request) == true
+      if (deferred || published == null || (!image && config.legacyReadOnly?.allowsClose(request) != true)) { CapabilityTransport.leases.consumeSequence(generation, sequence); reply(null); return }
       val token = CapabilityTransport.admit(generation, sequence, config.request(message), reply) ?: run { reply(null); return }
-      onHostEvent(mapOf("type" to "capability", "lane" to "legacy", "sessionId" to config.sessionId, "generation" to generation, "token" to token))
+      onHostEvent(mapOf("type" to "capability", "lane" to if(image) "legacy-image" else "legacy", "sessionId" to config.sessionId, "generation" to generation, "token" to token))
       return
     }
     if (config.legacyReadOnly != null) { CapabilityTransport.leases.consumeSequence(generation, sequence); reply(null); return }

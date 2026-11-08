@@ -131,7 +131,7 @@ function RoutingReviewSheet({service, item}: {service: RoutingReviewService; ite
           accessibilityLabel="Use legacy read-only mode" onPress={() => setLegacyReadOnly(value => !value)} style={styles.button}>
           <Text style={styles.action}>{legacyReadOnly ? '✓ ' : '□ '}Use legacy read-only mode</Text>
         </Pressable>
-        <Text style={styles.detail}>Hypergolic supplies compatibility libraries and reads public content through your configured relays. Results may be limited. Signing, publishing and uploads are unavailable in this mode.</Text>
+        <Text style={styles.detail}>Hypergolic supplies compatibility libraries and reads public content through your configured relays. Public HTTPS images use bounded native downloads. Results may be limited. Signing, publishing and uploads are unavailable in this mode.</Text>
       </View>}
       <View style={[styles.actions, landscape && styles.actionsLandscape]}><Pressable accessibilityRole="button" testID="routing-approve" disabled={disabled} accessibilityState={{disabled}} style={[styles.button, landscape && styles.actionLandscape]} onPress={accept}><Text style={styles.action}>{legacyReadOnly ? 'Open read-only' : request.kind === 'published-open' && request.changesAccess ? 'Allow and open' : reviewActions[request.kind]}</Text></Pressable>
         <Pressable accessibilityRole="button" testID="routing-cancel" style={[styles.button, landscape && styles.actionLandscape]} onPress={cancel}><Text style={styles.action}>Cancel</Text></Pressable></View>

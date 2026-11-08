@@ -17,7 +17,7 @@ messages cannot create the context or request generic Relay/Identity authority.
 The guest remains in an opaque `allow-scripts` iframe. A compatibility WebSocket
 facade accepts bounded NIP-01 REQ/CLOSE messages through the native owner and
 configured public WSS relays. Peers outside the captured Network list are rejected
-immediately with a configuration message. Direct network access, remote executable imports,
+immediately with a configuration message. Direct guest network access, remote executable imports,
 workers and nested frames remain blocked. EVENT, AUTH, signing, uploads and
 private-key access are unavailable; `window.nostr` is not installed. A host
 status line identifies the mode and limited reads.
@@ -40,7 +40,22 @@ original licenses and the Zod constrained-collection backport are recorded in
 [the vendor record](../runtime/vendor/legacy-recipe/README.md). The runtime build
 verifies the graph, patch and security regressions and includes their notices.
 
-The trusted address control accepts bounded `naddr` or `nostr:naddr` article
+Public HTTPS images assigned through the reviewed guests' `img.src` render path
+use a private native image lane. The signed originals are verified before the
+host inserts that projection. It does not add a Resource or Media domain grant.
+The existing native HTTPS destination, DNS/TLS, public redirect, deadline, byte,
+quota and cancellation checks still apply. Only classified PNG/GIF/JPEG/WebP
+bytes reach Blob previews; HTML, SVG and other MIME types are denied. Image
+requests and attachment remain bound to the exact source, account, generation
+and original document challenge. Source changes, removal and teardown cancel
+pending delivery and release Blob URLs. Completions paused during the one-second
+document challenge retain at most 10 MiB of Blob bytes in a separate aggregate
+budget; the document guard queues only bounded IDs/actions. Overflow reports an
+image quota failure, and cancellation or document teardown releases the bytes. This does not enable arbitrary fetch,
+CSS background images, video, remote executable code or HTTP fallback.
+
+The compact host address control expands from its labelled disclosure. It accepts
+bounded `naddr` or `nostr:naddr` article
 addresses (kind 30023). It drops relay hints and uses only the captured Network
 list. Longform opens its existing same-document reader route through the private
 port. Recipe Cards has no address route: an explicit address selection narrows

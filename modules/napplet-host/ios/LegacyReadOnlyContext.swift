@@ -31,6 +31,22 @@ struct LegacyReadOnlyContext {
   func allowsClose(_ request: [String: Any]) -> Bool {
     Set(request.keys) == ["type", "id", "subId"] && request["type"] as? String == "legacy.close" && Self.identifier(request["id"]) && Self.identifier(request["subId"])
   }
+  /// Private host image transport. The Resource transport still owns public URL, DNS and TLS policy.
+  func allowsImage(_ request: [String: Any]) -> Bool {
+    guard Self.identifier(request["id"]), let type = request["type"] as? String else { return false }
+    switch type {
+    case "legacy.image.bytes":
+      guard Set(request.keys) == ["type", "id", "url"], let url = request["url"] as? String else { return false }
+      return url.utf8.count <= 8192 && url.hasPrefix("https://") && !url.utf8.contains { $0 <= 32 || $0 == 127 }
+    case "legacy.image.cancel": return Set(request.keys) == ["type", "id"]
+    case "legacy.image.__chunk":
+      guard Set(request.keys) == ["type", "id", "handle", "offset"], let handle = request["handle"] as? String,
+        handle.range(of: "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", options: .regularExpression) != nil,
+        let offset = Self.integer(request["offset"]), offset <= 10 * 1024 * 1024 else { return false }
+      return true
+    default: return false
+    }
+  }
   func allowsSubscribe(_ request: [String: Any]) -> Bool {
     guard Set(request.keys) == ["type", "id", "subId", "filters", "relay"], request["type"] as? String == "legacy.subscribe",
       Self.identifier(request["id"]), Self.identifier(request["subId"]), let relay = request["relay"] as? String,
@@ -90,6 +106,17 @@ struct LegacyReadOnlyContext {
       if type == "EOSE" { ended = true }
       return true
     }
+  }
+  /// Reconstruct the native profile and bind the initial HTTPS effect to the captured image URL.
+  static func permitsImage(_ snapshot: String?, url: String) -> Bool {
+    guard let snapshot, let row = try? JSONSerialization.jsonObject(with: Data(snapshot.utf8)) as? [String: Any],
+      let registration = row["registration"] as? [String: Any], let value = registration["legacyReadOnly"] as? [String: Any],
+      let publisher = registration["publisher"] as? String, let app = registration["appId"] as? String,
+      let version = registration["version"] as? String, let fixture = registration["fixture"] as? String,
+      let domains = registration["domains"] as? [String], domains.isEmpty,
+      let context = try? LegacyReadOnlyContext(value, publisher: publisher, appId: app, version: version, fixture: fixture, domains: Set(domains)),
+      let raw = row["request"] as? String, let request = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any] else { return false }
+    return context.allowsImage(request) && request["type"] as? String == "legacy.image.bytes" && request["url"] as? String == url
   }
   /// Called again immediately before native WSS effects, after token/generation validation.
   static func permitsWire(_ snapshot: String?, url: String, wire: String, subId: String) -> Bool {

@@ -1,3 +1,5 @@
+import {createLegacyImageMount} from './legacy-image-mount';
+import {injectLegacyImages} from './legacy-image-guest';
 import {validEnvelope, rejectEnvelope} from './guest-envelope';
 import {commonFailure} from '../../src/common/common-contract';
 import {parseOutboxClose} from '../../src/outbox/subscription-contract';
@@ -267,6 +269,8 @@ function mount(artifact: RuntimeMetadata) {
     });
   legacyGuard = legacyMount?.guard;
   const legacyNonce = legacyMount?.nonce ?? null;
+  const legacyImages = legacyMount ? createLegacyImageMount(frame, source, legacyMount.nonce, native, legacyMount.guard,
+    () => !stopped && frame.contentWindow === source) : null;
   const legacy = legacyMount?.receiver;
   const mesh = artifact.published && isNativeMeshContext(artifact.mesh, sessionId) && artifact.domains.includes('mesh')
     ? createMeshGuestReceiver(frame, source, native.mesh, live) : null;
@@ -285,6 +289,7 @@ function mount(artifact: RuntimeMetadata) {
     cvm:artifact.domains.includes('cvm')?createCvmGuestReceiver(source,native.cvm,live):null,
     closed: () => stopped, live,
     dispatch(event) {
+      if (legacyImages?.receive(event)) return;
       if (legacy?.receive(event)) return;
       if (artifact.legacyReadOnly) return;
       if (mesh?.receive(event)) return;
@@ -310,6 +315,7 @@ function mount(artifact: RuntimeMetadata) {
     closeCheck();
     routing.close();
     mesh?.close();
+    legacyImages?.close();
     legacyMount?.close();
     keys?.close();
     media.close();
@@ -336,7 +342,7 @@ function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
     ? publishedCspParts(rawHtml, policy) : ['', injectCsp(rawHtml, policy)] as const;
   if (legacyNonce) {
     const modules = artifact.appId === 'recipe-cards' ? injectLegacyRecipeModules(withCsp) : withCsp;
-    frame.srcdoc = prefix + injectLegacyReadOnly(injectAndroidGuestHelpers(injectResourceMediaGate(modules)), legacyNonce);
+    frame.srcdoc = prefix + injectLegacyReadOnly(injectLegacyImages(injectAndroidGuestHelpers(injectResourceMediaGate(modules)), legacyNonce), legacyNonce);
     return;
   }
   const html = discoveryToken ? injectDiscoveryOpen(withCsp, discoveryToken, artifact.domains.includes('relay')) : withCsp;

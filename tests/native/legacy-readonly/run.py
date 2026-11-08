@@ -26,7 +26,20 @@ def main():
  wires=[]
  for name,url,wire,ok in [('captured','wss://relay.damus.io',['REQ','native-sub',*request['filters']],True),('destination substitution','wss://nos.lol',['REQ','native-sub',*request['filters']],False),('payload substitution','wss://relay.damus.io',['REQ','native-sub',dict(kinds=[1],limit=32)],False),('publish','wss://relay.damus.io',['EVENT',dict(content='no')],False),('AUTH','wss://relay.damus.io',['AUTH',dict(content='no')],False),('substitution id','wss://relay.damus.io',['REQ','other',*request['filters']],False)]:
   wires.append(dict(name=name,url=url,wire=json.dumps(wire),ok=ok))
- fixture=out/'cases.json';fixture.write_text(json.dumps(dict(base=base,configs=configs,requests=requests,wires=wires,request=request)))
+ image=dict(type='legacy.image.bytes',id='image',url='https://cdn.primal.net/image.jpg')
+ chunk=dict(type='legacy.image.__chunk',id='chunk',handle='12345678-1234-4234-8234-123456789abc',offset=0)
+ images=[dict(name='HTTPS image',value=image,ok=True),dict(name='cancel',value=dict(type='legacy.image.cancel',id='image'),ok=True),dict(name='chunk',value=chunk,ok=True)]
+ for key,value in [('url','http://cdn.primal.net/image.jpg'),('url','data:image/png;base64,AA=='),('url','https://cdn.primal.net/a\n'),('url','https://cdn.primal.net/'+'x'*8192),('type','resource.bytes'),('id',''),('servers',[])]:
+  b=copy.deepcopy(image);b[key]=value;images.append(dict(name='image invalid '+key+repr(value),value=b,ok=False))
+ for key,value in [('offset',-1),('offset',True),('offset',10485761),('handle','12345678-1234-1234-8234-123456789abc'),('extra',True)]:
+  b=copy.deepcopy(chunk);b[key]=value;images.append(dict(name='chunk invalid '+key+repr(value),value=b,ok=False))
+ effects=[dict(name='captured image',registration=base,request=image,url=image['url'],ok=True),dict(name='substituted URL',registration=base,request=image,url='https://cdn.primal.net/other.jpg',ok=False)]
+ for row in configs:
+  effects.append(dict(name='effect '+row['name'],registration=row['value'],request=image,url=image['url'],ok=row['ok']))
+ for row in images:
+  effects.append(dict(name='effect '+row['name'],registration=base,request=row['value'],url=image['url'],ok=row['ok'] and row['value']['type']=='legacy.image.bytes'))
+ missing=copy.deepcopy(base);del missing['legacyReadOnly'];effects.append(dict(name='missing context',registration=missing,request=image,url=image['url'],ok=False))
+ fixture=out/'cases.json';fixture.write_text(json.dumps(dict(base=base,configs=configs,requests=requests,wires=wires,request=request,images=images,effects=effects,image=image)))
  cache=ROOT/'.tools/gradle-home/caches/modules-2/files-2.1'
  def artifact(group,name,version):
   matches=list((cache/group/name/version).glob('*/*.jar'));assert len(matches)==1,(group,name);return matches[0]
@@ -36,11 +49,14 @@ def main():
   with (out/(name+'.log')).open('w') as log:
    result=subprocess.run(list(map(str,command)),cwd=ROOT,stdout=log,stderr=subprocess.STDOUT,timeout=180,env={**os.environ,'CLANG_MODULE_CACHE_PATH':str(out/'clang-cache')})
   runs.append(dict(name=name,exitCode=result.returncode));assert result.returncode==0,str(out/(name+'.log'))
- run('java-compile',['javac','-d',classes,*[ANDROID/n for n in ['PublishedCapabilityBinding.java','RelaySubscriptionRegistry.java']]])
- run('android-compile',['java','-cp',':'.join(map(str,compiler)),'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler','-no-stdlib','-no-reflect','-classpath',f'{classes}:{stdlib}:{jsonjar}','-d',classes,*[ANDROID/n for n in ['CapabilityConfiguration.kt','LegacyReadOnlyContext.kt','NativeAppDataPolicy.kt','NativeCanonicalJSON.kt']],HERE/'Proof.kt'])
+ run('java-compile',['javac','-d',classes,*[ANDROID/n for n in ['PublishedCapabilityBinding.java','RelaySubscriptionRegistry.java','CapabilityLeaseRegistry.java']]])
+ stub=out/'CapabilityTransport.kt';stub.write_text('package org.nostrocket.hypergolic.host\ninternal object CapabilityTransport {var now=0L;val leases=CapabilityLeaseRegistry{now}}\n')
+ run('android-compile',['java','-cp',':'.join(map(str,compiler)),'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler','-no-stdlib','-no-reflect','-classpath',f'{classes}:{stdlib}:{jsonjar}','-d',classes,*[ANDROID/n for n in ['CapabilityConfiguration.kt','LegacyReadOnlyContext.kt','NativeAppDataPolicy.kt','NativeCanonicalJSON.kt','ResourceCapability.kt']],stub,HERE/'Proof.kt'])
  run('android-proof',['java','-cp',f'{classes}:{stdlib}:{jsonjar}','org.nostrocket.hypergolic.host.Proof',fixture])
  production=(IOS/'CapabilityTransport.swift').read_text();config=out/'Configuration.swift';config.write_text('import Foundation\nimport CoreFoundation\n'+production[production.index('struct CapabilityConfiguration {'):production.index('/// Lease queries are synchronous')])
- run('swift-compile',['xcrun','swiftc','-swift-version','6','-warnings-as-errors','-parse-as-library','-module-cache-path',out/'swift-cache',*[IOS/n for n in ['LegacyReadOnlyContext.swift','NativeAppDataPolicy.swift','NativeCanonicalJSON.swift','RelaySubscriptionRegistry.swift']],config,HERE/'Proof.swift','-o',out/'swift-proof'])
+ resource=(IOS/'ResourceHTTPSBridgeOwner.swift').read_text();method=resource[resource.index('  static func admission('):resource.index('  func fetch(')]
+ admission=out/'ResourceAdmission.swift';admission.write_text('import Foundation\nfinal class ResourceHTTPSBridgeOwner {enum Failure:Error {case policy}\n'+method+'}\nenum CapabilityTransport {static let clock=ClockBox();static let leases=CapabilityLeaseRegistry(now:{clock.instant})}\n')
+ run('swift-compile',['xcrun','swiftc','-swift-version','6','-warnings-as-errors','-parse-as-library','-module-cache-path',out/'swift-cache',*[IOS/n for n in ['LegacyReadOnlyContext.swift','NativeAppDataPolicy.swift','NativeCanonicalJSON.swift','RelaySubscriptionRegistry.swift','CapabilityLeaseRegistry.swift']],config,admission,HERE/'Proof.swift','-o',out/'swift-proof'])
  run('swift-proof',[out/'swift-proof',fixture])
  receipt=dict(scope=__doc__,runs=runs,passed=True);(out/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n');print(json.dumps(receipt))
 if __name__=='__main__':main()

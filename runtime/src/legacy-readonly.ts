@@ -10,6 +10,7 @@ export type LegacyReadOnlyOptions = Readonly<{
   subscribe(request: RelaySubscribeRequest, deliver: (message: RelaySubscriptionMessage) => void): void;
   close(request: RelayCloseRequest): void;
   status(message: string): void;
+  article?(): void;
   recipeSelection?(): LegacyArticle | null;
 }>;
 function projectRecipeFilters(filters: unknown[], selection: LegacyArticle | null | undefined): unknown[] {
@@ -60,7 +61,10 @@ export function createLegacyReadOnlyReceiver(options: LegacyReadOnlyOptions) {
   }
   function deliver(id: string, socket: Socket, row: Subscription, message: RelaySubscriptionMessage): void {
     if (!live() || sockets.get(id) !== socket || row.closed || socket.subscriptions.get(row.callerId) !== row || message.subId !== row.nativeId) return;
-    if (message.type === 'relay.event') send(id, {event: 'message', data: JSON.stringify(['EVENT', row.callerId, message.result.event])});
+    if (message.type === 'relay.event') {
+      if (message.result.event.kind === 30023) options.article?.();
+      send(id, {event: 'message', data: JSON.stringify(['EVENT', row.callerId, message.result.event])});
+    }
     else if (message.type === 'relay.eose') send(id, {event: 'message', data: JSON.stringify(['EOSE', row.callerId])});
     else if (message.type === 'relay.closed') {
       row.closed = true; socket.subscriptions.delete(row.callerId);

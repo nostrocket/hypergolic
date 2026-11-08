@@ -139,7 +139,7 @@ class NappletHostModule : Module() {
       catch (error: kotlinx.coroutines.CancellationException) { UploadTransport.cancel(token); throw error }
     }
     AsyncFunction("fetchResourceHttps") Coroutine { token: String, operationId: String, url: String ->
-      val generation = ResourceCapability.admission(token)
+      val generation = ResourceCapability.admission(token, url)
       val job = currentCoroutineContext()[Job]
       withContext(Dispatchers.IO) {
         val result = org.json.JSONObject()

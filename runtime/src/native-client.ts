@@ -89,7 +89,7 @@ function receiveOrdinary(envelope:{sequence:number;response:unknown},pending:Map
     if ((request.type === 'link.open' || request.type === 'routing.call') && envelope.response === null) throw new NativeRequestRevoked('Native request revoked');
     if (typeof envelope.response !== 'string') throw new Error('Native request denied');
     const response = JSON.parse(envelope.response);
-    if (!response || (response.type !== request.type + '.result' && !(request.type.startsWith('resource.') && response.type === request.type + '.error')) || response.id !== request.id) throw new Error('Native response mismatch');
+    if (!response || (response.type !== request.type + '.result' && !((request.type.startsWith('resource.') || request.type.startsWith('legacy.image.')) && response.type === request.type + '.error')) || response.id !== request.id) throw new Error('Native response mismatch');
     request.resolve(response);
   } catch (error) { request.reject(error instanceof NativeRequestRevoked ? error : undefined); }
   finally { pending.delete(envelope.sequence); window.clearTimeout(request.timer); }

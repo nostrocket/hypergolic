@@ -11,8 +11,8 @@ export function createLegacyMount(context: LegacyReadOnlyContext | undefined, ap
   const nonce = crypto.randomUUID();
   const status = document.createElement('p');
   status.setAttribute('role', 'status');
-  status.textContent = 'Read-only compatibility · public relay reads only';
-  status.style.cssText = 'margin:0;padding:8px 12px;font:12px system-ui;background:#17202a;color:#fff;flex:none';
+  status.textContent = 'Read-only compatibility · public content and images';
+  status.style.cssText = 'margin:0;padding:8px 12px;font:12px system-ui;background:#17202a;color:#fff;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
   document.body.style.cssText = 'display:flex;flex-direction:column';
   frame.style.cssText = 'flex:1;min-height:0;height:auto';
   document.body.prepend(status);
@@ -31,6 +31,7 @@ export function createLegacyMount(context: LegacyReadOnlyContext | undefined, ap
   const receiver = createLegacyReadOnlyReceiver({frame, source, session: nonce, live, relays: context.relays,
     subscribe: (request, deliver) => native.legacySubscribe(request, message => guard.run(() => deliver(message), new TextEncoder().encode(JSON.stringify(message)).length)),
     close: request => native.legacyClose(request),
+    article: () => address.delivered(),
     status: message => {status.textContent = 'Read-only compatibility · ' + message.slice(0,256);},
     ...(recipe ? {recipeSelection: () => selection} : {}),
   });
