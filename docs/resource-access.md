@@ -89,6 +89,14 @@ Validated map PBF framing is recognized before the text-prefix probe: protobuf f
 
 ## Cache and playback lifetime
 
+Queued targets recheck their session cache after admission and authority/settings
+validation. A successful fetch is validated and cached before its concurrency
+slot is released, allowing waiting duplicate URLs to reuse complete bytes.
+Each read retains its own cancellation and native authority, receives a separate
+byte copy, and consumes the existing rate and delivered-byte budgets. In-flight
+requests do not share authority or cancellation; failed or aborted fetches cannot
+populate this cache.
+
 Cache and Object URLs live only while that napplet realm is loaded. Equivalent Blossom references share verified bytes by hash. Disabling Blossom blocks cached Blossom delivery too. Switching preserves its cache and place; cold launch refetches. Revocation clears the cache and private transfers. SDK URL helpers revoke on release, including revocation before asynchronous readiness; late completion cannot allocate a fresh URL.
 
 Audio/video uses complete grant-scoped Blob bytes. Trusted native focus/background handling pauses playback; the guest prelude rejects inactive/autoplay attempts and requires a fresh trusted gesture to Play. Returning retains position while loaded and waits for manual Play. iOS enables inline playback and disables AirPlay/Picture in Picture. Closing/replacement destroys the player. No background player, direct network media, stream or OS attachment-save workflow is claimed.
