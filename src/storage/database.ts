@@ -234,7 +234,10 @@ async function applyUpdate(io: Access, plan: UpdateTarget): Promise<UpdateReceip
     const sessions = workspace.snapshot.sessions.map(item => {
       if (item.publisher !== publisher || item.appId !== appId || item.source !== 'published') return item;
       if (item.version !== from) return fail('CONFLICT');
-      changed = true; return { ...item, version: target, eventId: targetEventId };
+      const next = { ...item, version: target, eventId: targetEventId };
+      delete next.legacyReadOnly;
+      delete next.legacyReadOnlyUser;
+      changed = true; return next;
     });
     if (changed) workspaceRevision = (await writeWorkspace(io, user, encodeSnapshot({ ...workspace.snapshot, sessions }), workspace.revision)).revision;
   }
