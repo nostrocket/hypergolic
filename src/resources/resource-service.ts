@@ -114,6 +114,33 @@ async function resolve(resolvers: ResourceResolvers, active: Active, target: Res
   }
   throw new ResourceError(failure);
 }
+async function readReservedResource(signal: AbortSignal, authority: ResourceAuthority, active: Active, release: () => void,
+  read: (signal: AbortSignal) => Promise<Uint8Array<ArrayBuffer>>, publish: (body: Uint8Array<ArrayBuffer>) => ResourceBytes): Promise<ResourceBytes> {
+  const scoped = new AbortController();
+  const cancelURL = () => scoped.abort();
+  signal.addEventListener('abort', cancelURL, { once: true });
+  if (signal.aborted) cancelURL();
+  const timeout = setTimeout(cancelURL, RESOURCE_LIMITS.urlMs);
+  const work = read(scoped.signal);
+  const settled = work.then(body => {
+    active(signal, authority); active(scoped.signal, authority);
+    return publish(body);
+  }).finally(release);
+  // An uncooperative resolver retains its reservation until actual settlement.
+  let abort!: () => void;
+  const cancelled = new Promise<never>((_, reject) => { abort = () => reject(new ResourceError('timeout')); });
+  scoped.signal.addEventListener('abort', abort, { once: true });
+  try {
+    if (scoped.signal.aborted) abort();
+    const result = await Promise.race([settled, cancelled]);
+    active(signal, authority); active(scoped.signal, authority);
+    return result;
+  } finally {
+    clearTimeout(timeout);
+    signal.removeEventListener('abort', cancelURL);
+    scoped.signal.removeEventListener('abort', abort);
+  }
+}
 function bindResourceSession(resolvers: ResourceResolvers, process: ResourceProcess, registration: NativeRegistration, assertOwner: () => void) {
   const { sessions, now } = process;
       const captured = Object.freeze({ ...registration, domains: Object.freeze([...registration.domains]) });
@@ -178,14 +205,8 @@ function bindResourceSession(resolvers: ResourceResolvers, process: ResourceProc
             const value = charge(admittedHit.value); release(); return value;
           }
         } catch (error) { release(); throw error; }
-        const scoped = new AbortController();
-        const cancelURL = () => scoped.abort();
-        signal.addEventListener('abort', cancelURL, { once: true });
-        if (signal.aborted) cancelURL();
-        const timeout = setTimeout(cancelURL, RESOURCE_LIMITS.urlMs);
-        const work = resolve(resolvers, active, target, {configured, hints: request.servers}, scoped.signal, authority);
-        const settled = work.then(body => {
-          active(signal, authority); active(scoped.signal, authority);
+        return readReservedResource(signal, authority, active, release,
+          scoped => resolve(resolvers, active, target, {configured, hints: request.servers}, scoped, authority), body => {
           if (!(body instanceof Uint8Array) || body.byteLength > RESOURCE_LIMITS.fileBytes) throw new ResourceError('too-large');
           const value = Object.freeze({ bytes: new Uint8Array(body), mime: classifyResourceBytes(body) });
           const result = charge(value);
@@ -194,16 +215,7 @@ function bindResourceSession(resolvers: ResourceResolvers, process: ResourceProc
           cache.set(key, { value, used: ++process.revision }); cacheBytes += body.byteLength; process.cacheBytes += body.byteLength;
           while (cacheBytes > RESOURCE_LIMITS.sessionCacheBytes || cache.size > RESOURCE_LIMITS.cacheEntries) process.cacheBytes -= evict();
           evictProcess(process); return result;
-        }).finally(release);
-        // Timeout drops delivery; an uncooperative resolver retains its reservation until it really settles.
-        let abort!: () => void;
-        const cancelled = new Promise<never>((_, reject) => { abort = () => reject(new ResourceError('timeout')); });
-        scoped.signal.addEventListener('abort', abort, { once: true });
-        try {
-          if (scoped.signal.aborted) abort();
-          const result = await Promise.race([settled, cancelled]); active(signal, authority); active(scoped.signal, authority);
-          return result;
-        } finally { clearTimeout(timeout); signal.removeEventListener('abort', cancelURL); scoped.signal.removeEventListener('abort', abort); }
+        });
       }
       return Object.freeze({ registration: captured, revoke: lifetime.destroy,
         execute: (request: ResourceRequest, authority: ResourceAuthority) => executeResource(request, authority, active, pending, seen, () => resourceInfo(resolvers.servers().length > 0, Boolean(resolvers.query)), now, bytes) });
