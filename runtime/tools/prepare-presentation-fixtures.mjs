@@ -21,12 +21,12 @@ async function download(pin) {
 export async function preparePresentationFixtures() {
   const cache=new URL('.test-fixtures/presentation/',root);await mkdir(cache,{recursive:true});
   for(const pin of pins) {
-    assert(['emoji-browser','creator-signals','mapplets','feed-builder'].includes(pin.appId));
+    assert(['emoji-browser','creator-signals','mapplets','feed-builder','emoji-pack-creator'].includes(pin.appId));
     assert(/^[a-f0-9]{64}$/.test(pin.eventId)&&/^[a-f0-9]{64}$/.test(pin.sha256));
     assert(Number.isSafeInteger(pin.bytes)&&pin.bytes>0&&pin.bytes<=1024*1024);
     const url=new URL(pin.url);
     assert.equal(url.protocol,'https:');
-    const hosts={'emoji-browser':'cdn.hzrd149.com','creator-signals':'blssm.us','mapplets':'r2a.primal.net','feed-builder':'cdn.hzrd149.com'};
+    const hosts={'emoji-browser':'cdn.hzrd149.com','creator-signals':'blssm.us','mapplets':'r2a.primal.net','feed-builder':'cdn.hzrd149.com','emoji-pack-creator':'blssm.us'};
     assert.equal(url.hostname,hosts[pin.appId]);
     assert.equal(url.port+url.username+url.password+url.search+url.hash,'');
     assert.equal(url.pathname,'/'+pin.sha256);

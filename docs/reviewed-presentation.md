@@ -1,6 +1,6 @@
 # Reviewed publication presentation
 
-Four exact ordinary publications receive fixed host CSS after artifact verification.
+Five exact ordinary publications receive fixed host CSS after artifact verification.
 Their original signed HTML, script behavior, capability grants and CSP are unchanged.
 The override requires `published: true` and the exact app ID and aggregate hash:
 
@@ -10,6 +10,7 @@ The override requires `published: true` and the exact app ID and aggregate hash:
 | Creator Signals (`creator-signals`) | `a3320b9d78a3506bca07cb3ffcc09c2db3f36e5493574834c3cb14fc96ebac58` | Use the existing theme surface/text tokens for inputs and buttons. |
 | Mapplets (`mapplets`) | `3a5eeb98b3251a48a3ff1e32cb92ce76b7488b721dd492ae1659e90eeffe76f5` | Below 721px, wrap the action bar and nested groups while preserving the flexible map row. |
 | Feed Manager (`feed-builder`) | `a45d5c2ad7316386e9604f0502c7b053be7d2a0b2f1ca8a941e74a1dd72c7754` | Below 721px, stack the saved list and editor, preserve vertical scrolling, wrap tabs/actions and provide distinct 44px controls. |
+| Emoji Pack Creator (`emoji-pack-creator`) | `1533e892517b313b316b6137759580cbae0a82ca1c9d1de23f6b2f0f2dea6dea` | Below 721px, stack title and identifier fields, wrap the full identifier and upload row, and keep staged items and Publish reachable by vertical scrolling. |
 
 Other apps, unpublished fixtures and future versions receive no override. This is
 presentation supplied by Hypergolic, separate from the legacy read-only adapter.
@@ -42,3 +43,7 @@ selection implementation uses mouse events; this CSS does not add touch support.
 Feed Manager tests use its unchanged New/JSON/name/relay fields and Save handler.
 They capture and reject the native publication request through a test double;
 no event is signed or published. Desktop retains the original two-column layout.
+
+Emoji Pack Creator cases stage a neutral PNG through a mocked upload result and
+reject the first publication request. They prove original control/layout behavior,
+not native file preparation, upload or publication. Desktop styles remain unchanged.

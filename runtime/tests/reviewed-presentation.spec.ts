@@ -9,6 +9,12 @@ const pins=JSON.parse(readFileSync('fixtures/reviewed-presentation-manifest.json
 const generation='12345678-1234-4234-8234-123456789abc';
 const hash=(value:Uint8Array|string)=>createHash('sha256').update(value).digest('hex');
 const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=';
+const pngHash=hash(Buffer.from(png,'base64'));
+const fixtureDomains:Record<string,string[]>={
+  'emoji-browser':['common','identity','inc','outbox','relay','resource','storage','theme'],
+  'mapplets':['inc','intent','outbox','resource'],'feed-builder':['identity','intent','outbox','relay','storage'],
+  'emoji-pack-creator':['common','identity','inc','outbox','relay','resource','storage','theme','upload'],
+};
 const ownKey=new Uint8Array(32);ownKey[31]=11;
 const packKey=new Uint8Array(32);packKey[31]=12;
 const note=finalizeEvent({kind:1,created_at:Math.floor(Date.now()/1000),content:'Neutral creator note',tags:[]},ownKey);
@@ -27,6 +33,7 @@ test.beforeAll(async()=>{
 });
 async function open(page:Page,appId:string,variant='exact') {
   const pin=pins.find((value:any)=>value.appId===appId);
+  const domains=fixtureDomains[appId]??['identity','inc','relay','storage','theme'];
   const original=readFileSync(`.test-fixtures/presentation/${appId}.html`);
   expect(hash(original)).toBe(pin.sha256);expect(original.length).toBe(pin.bytes);
   const bytes=variant==='new-version'?Buffer.concat([original,Buffer.from('\n<!-- hypothetical updated fixture -->')]):original;
@@ -34,7 +41,7 @@ async function open(page:Page,appId:string,variant='exact') {
   await page.clock.install();
   await page.route('**/assets/runtime/index.html?*',route=>route.fulfill({contentType:'text/html',body:document}));
   await page.route('**/assets/runtime/host.js',route=>route.fulfill({contentType:'text/javascript',body:host}));
-  await page.addInitScript(({generation,appId,pin,variant,html,htmlHash,aggregateHash,note,pack,png,savedFeed})=>{
+  await page.addInitScript(({generation,appId,pin,variant,html,htmlHash,aggregateHash,note,pack,png,savedFeed,domains,pngHash})=>{
     if(window!==window.top)return;
     const bytes=Uint8Array.from(atob(html),character=>character.charCodeAt(0));
     const listeners=new Set<(event:{data:string})=>void>(),held=new Map<string,any>();
@@ -55,8 +62,7 @@ async function open(page:Page,appId:string,variant='exact') {
           const payload=bytes.slice(envelope.sequence*49152,(envelope.sequence+1)*49152);
           emit({type:'artifact.chunk',sessionId:generation,sequence:envelope.sequence,publisher:'1'.repeat(64),
             appId:variant==='other-app'?'unreviewed-reader':appId,eventId:pin.eventId,version:aggregateHash,htmlHash,
-            domains:appId==='emoji-browser'?['common','identity','inc','outbox','relay','resource','storage','theme']:
-              appId==='mapplets'?['inc','intent','outbox','resource']:appId==='feed-builder'?['identity','intent','outbox','relay','storage']:['identity','inc','relay','storage','theme'],
+            domains,
             base64:btoa(String.fromCharCode(...payload)),byteLength:payload.length,totalBytes:bytes.length,done:(envelope.sequence+1)*49152>=bytes.length});return;
         }
         if(envelope.type==='relay-stream'){
@@ -75,6 +81,11 @@ async function open(page:Page,appId:string,variant='exact') {
         else if(request.type==='storage.get')response.value=null;
         else if(request.type==='relay.query'||request.type==='outbox.query')response.events=events(request.filters).map(event=>({event}));
         else if(request.type==='outbox.publish'){response.ok=false;response.error='review cancelled';}
+        else if(request.type==='relay.publish'){response.ok=false;response.error='review cancelled';}
+        else if(request.type==='upload.__begin'){response.token='00000000-0000-4000-8000-000000000001';response.uploadId='presentation-upload';}
+        else if(request.type==='upload.__append')response.cursor=request.offset+atob(request.base64).length;
+        else if(request.type==='upload.__seal')response.result={ok:true,uploadId:'presentation-upload',status:'complete',rail:'blossom',
+          url:`https://files.example.org/${pngHash}.png`,sha256:pngHash,size:atob(png).length,mimeType:'image/png'};
         else if(request.type==='common.getProfile')response={...response,ok:false,profile:null};
         else if(request.type==='resource.bytesMany'){
           state.batches++;
@@ -89,10 +100,11 @@ async function open(page:Page,appId:string,variant='exact') {
         reply(envelope,response);
       },
     }});
-  },{generation,appId,pin,variant,html:bytes.toString('base64'),htmlHash,aggregateHash,note,pack,png,savedFeed});
+  },{generation,appId,pin,variant,html:bytes.toString('base64'),htmlHash,aggregateHash,note,pack,png,savedFeed,domains,pngHash});
   await page.goto(`/assets/runtime/index.html?sessionId=${generation}&source=published`);
   const frame=page.frameLocator('#napplet');
   await expect(frame.locator('#hypergolic-reviewed-presentation')).toHaveCount(variant==='exact'?1:0);
+  await expect(frame.locator('body')).not.toHaveText('');
   return frame;
 }
 async function fits(locator:ReturnType<FrameLocator['locator']>) {
@@ -216,7 +228,44 @@ test('unchanged Feed Manager preserves sequential JSON typing and the textarea c
   expect(await json.evaluate((element:HTMLTextAreaElement)=>[element.selectionStart,element.selectionEnd])).toEqual([text.length,text.length]);
   await expect(frame.locator('.type-indicator')).toHaveText('will save as nfilter');
 });
-for(const appId of ['emoji-browser','creator-signals','mapplets','feed-builder'])for(const variant of ['other-app','new-version']){
+for(const width of [320,360])test(`exact Emoji Pack Creator fields, staging and Publish remain usable at ${width}px`,async({page},info)=>{
+  await page.setViewportSize({width,height:600});const frame=await open(page,'emoji-pack-creator');
+  const title=frame.getByRole('textbox',{name:'Pack title',exact:true}),identifier=frame.locator('[aria-label="Pack identifier"]');
+  await title.fill('Neutral reaction pack title');await fits(title);expect((await title.boundingBox())!.width).toBeGreaterThanOrEqual(width-70);
+  const regenerate=frame.getByRole('button',{name:'Regenerate pack id'}),before=await identifier.textContent();await regenerate.click();
+  await expect(identifier).not.toHaveText(before!);await expect(title).toHaveValue('Neutral reaction pack title');await fits(identifier);
+  expect(await identifier.evaluate(element=>element.scrollWidth<=element.clientWidth&&getComputedStyle(element).whiteSpace==='normal'&&getComputedStyle(element).overflow==='visible')).toBe(true);
+  const shortcode=frame.getByRole('textbox',{name:'Emoji shortcode'}),upload=frame.getByRole('button',{name:'Upload emoji image'});
+  await shortcode.fill('neutral_code');await fits(shortcode);await fits(upload);
+  for(const control of [title,shortcode,upload,regenerate]){
+    const box=(await control.boundingBox())!;expect(box.height).toBeGreaterThanOrEqual(44);expect(box.width).toBeGreaterThanOrEqual(44);
+  }
+  const chooser=page.waitForEvent('filechooser');await upload.click();await (await chooser).setFiles({name:'neutral.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')});
+  await expect(frame.locator('[data-staged-emoji]')).toHaveCount(1);await expect(frame.getByRole('status')).toContainText('Uploaded :neutral_code:');
+  const publish=frame.getByRole('button',{name:'Publish pack',exact:true});await expect(publish).toBeEnabled();
+  await page.mouse.move(width-5,250);await page.mouse.wheel(0,-2000);
+  await expect.poll(()=>frame.locator('body').evaluate(()=>document.scrollingElement!.scrollTop)).toBe(0);
+  await page.mouse.wheel(0,1200);
+  await expect.poll(()=>frame.locator('body').evaluate(()=>document.scrollingElement!.scrollTop)).toBeGreaterThan(0);
+  await fits(publish);expect((await publish.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  expect(await publish.evaluate(element=>{const box=element.getBoundingClientRect(),hit=document.elementFromPoint(box.x+box.width/2,box.y+box.height/2);return hit===element||element.contains(hit);})).toBe(true);
+  expect(await frame.locator('body').evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await info.attach('creator-layout.json',{contentType:'application/json',body:JSON.stringify(await frame.locator('main').evaluate(element=>({
+    viewport:{width:innerWidth,height:innerHeight},documentHeight:document.scrollingElement!.scrollHeight,
+    titleWidth:element.querySelector('[aria-label="Pack title"]')!.getBoundingClientRect().width,
+    identifier:{width:element.querySelector('.dtag')!.getBoundingClientRect().width,height:element.querySelector('.dtag')!.getBoundingClientRect().height},
+    stagedHeight:element.querySelector('.staged')!.getBoundingClientRect().height,scrollTop:document.scrollingElement!.scrollTop})))});
+  await page.screenshot({path:info.outputPath('creator-mobile.png')});
+  await publish.click();await expect(frame.getByRole('alert')).toContainText('review cancelled');
+  const calls=await page.evaluate(()=>(window as any).__presentation.requests.filter((row:any)=>row.type==='capability').map((row:any)=>JSON.parse(row.message)));
+  expect(calls.filter((row:any)=>row.type==='relay.publish').map((row:any)=>row.event.kind)).toEqual([30030]);
+});
+test('exact Emoji Pack Creator desktop retains its original two-column metadata layout',async({page})=>{
+  await page.setViewportSize({width:1024,height:740});const frame=await open(page,'emoji-pack-creator');
+  const columns=await frame.locator('.meta').evaluate(element=>getComputedStyle(element).gridTemplateColumns.split(' '));
+  expect(columns).toHaveLength(2);expect((await frame.locator('main').boundingBox())!.height).toBe(740);
+});
+for(const appId of ['emoji-browser','creator-signals','mapplets','feed-builder','emoji-pack-creator'])for(const variant of ['other-app','new-version']){
   test(`ordinary ${appId} ${variant} receives no presentation override`,async({page})=>{await open(page,appId,variant);});
 }
 test('unpublished, wrong-app and future-version metadata retain byte-identical documents and CSP',()=>{
