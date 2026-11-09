@@ -14,7 +14,8 @@ A kind 5129 snapshot has an opaque routing ID based on its exact signed event.
 Keep this ID byte-for-byte in Intent and INC, including its leading space.
 Snapshots advertise their own signed conventions and need their own approved
 Intent grant for modern delivery. An INC grant alone supplies only the existing
-INC operations. Public kind 31129 preference events do not change local defaults.
+INC operations. Public kind 31129 preferences affect local defaults only after
+the explicit Settings import described below.
 
 An explicit user default chooses its exact publisher and app. Unsupported action/convention fails without silently replacing it. Without a default, selection considers compatible role/action/convention candidates: the sole compatible handler is proposed, or the user chooses. Modern handlers advertise matching signed `z` roles and `i` conventions. A convention matches its role and action exactly. Trailing `i` fields advertise parameter names. Incomplete or conflicting advertisements add no route. Catalog IDs distinguish publishers. Legacy roles and conventions can differ, and a specific legacy dTag shared by publishers is rejected. A channel target shared by multiple live views is also rejected.
 
@@ -25,6 +26,37 @@ Routing and Discover Open share a native review slot with Upload and signing. A 
 A matching loaded handler is reused unless `newWindow: true` or `reuse: false` requests another view. Review states that another view will open. `focus: false` preserves the caller's focus. A closed handler follows the ordinary exact pinned manifest and admission path. A modern `focus: false` dispatch requires an already-ready instance of the exact pin. A cold target returns `handler requires focus` without opening a view.
 
 Modern handlers receive `intent.deliver` under their approved Intent grant. The native-bound source supplies the publisher-scoped sender ID, and the runtime targets the exact approved, ready generation. Native acceptance reserves one of four routing slots on the target generation. With every slot held, dispatch returns `handler delivery unavailable`. A private frame-bound receipt releases each Intent slot only after the binding calls an `onDelivery` subscriber. The binding retains deliveries until registration and allows up to 32 subscriptions per frame. Accepted Intent payloads waiting for native forwarding stay parked across a foreground pause and resume only for the same authorized generation. Owner replacement or generation teardown ends delivery. Legacy handlers still require an approved INC grant and exact-topic subscription.
+
+## Importing published app choices
+
+Settings offers **Review published app choices** for the selected account. It
+reads at most the newest 32 kind 31129 records from the configured Network
+relays, verifies signatures and author, and selects each newest `d` category by
+timestamp, then lowest event ID. Every selected relay must complete the lookup.
+This is a configured-relay observation, not a claim of global latest state.
+Invalid or incomplete results cannot change defaults. Review is read-only and
+shares the native presentation slot with other approvals.
+
+The first category-wide `a` or `e` reference is offered as one local default.
+Named references match the registered publisher and identifier; snapshots match
+the exact event ID. The target must already have a verified modern Intent role
+for that category. An unavailable first choice is never replaced by a later one.
+The review shows the selected account, signed preference event, current default,
+proposed publisher and exact manifest, plus later references and action-specific
+`i` entries labelled as not applied. Empty or action-only records leave the local
+default unchanged. Root kind 15129 references remain unsupported. Signed content
+and relay hints are not authority and are not used to resolve new destinations.
+This is an explicit first-choice import, not automatic following, ordered fallback
+routing or action-specific defaults.
+
+Acceptance changes one category in a transaction only if its current default
+and exact target pin still match the review. Account, native foreground revision,
+configured relay list, review ownership and cancellation are checked again.
+Reviews expire after five minutes and remain dismissible. Closing Settings,
+Cancel, Back or backgrounding cancels the review. A committed change remains
+reported as saved even if its subsequent notification or list refresh fails.
+Importing installs nothing, creates no capability grant and sends no public
+write. Normal dispatch review and recipient permission checks still apply.
 
 ## Topics and channels
 

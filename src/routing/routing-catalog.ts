@@ -16,10 +16,18 @@ export type HandlerRole = Readonly<{ archetype: string; conventions: readonly st
 export type CatalogHandler = Readonly<{ publisher: string; appId: string; eventId: string; version: string; title: string; roles: readonly HandlerRole[]; manifest: VerifiedNappletManifest }>;
 export type HandlerPreference = Readonly<{ archetype: string; publisher: string; appId: string }>;
 export type CatalogSnapshot = Readonly<{ handlers: readonly CatalogHandler[]; defaults: readonly HandlerPreference[] }>;
+type HandlerKey = Readonly<{ publisher: string; appId: string }>;
+export type ReviewedDefaultImport = Readonly<{
+  archetype: string;
+  current: HandlerKey | null;
+  target: Readonly<HandlerKey & { eventId: string; version: string }> | null;
+}>;
 export interface RoutingCatalog {
   remember(owner: TrustedUser, artifact: VerifiedNappletArtifact, options?: RequestOptions): Promise<void>;
   list(owner: TrustedUser, options?: RequestOptions): Promise<CatalogSnapshot>;
+  inspect(owner: TrustedUser, options?: RequestOptions): Promise<CatalogSnapshot>;
   prefer(owner: TrustedUser, archetype: string, handler: Readonly<{ publisher: string; appId: string }> | null, options?: RequestOptions): Promise<void>;
+  importDefault(owner: TrustedUser, reviewed: ReviewedDefaultImport, options?: RequestOptions): Promise<void>;
   remove(owner: TrustedUser, handler: Readonly<{ publisher: string; appId: string }>, options?: RequestOptions): Promise<void>;
   close(): Promise<void>;
 }
@@ -98,6 +106,22 @@ function identity(owner: TrustedUser): Readonly<{ user: string; active(): void }
 function key(value: Readonly<{ publisher: string; appId: string }>) {
   return { publisher: publicKey(value.publisher), appId: routingText(value.appId, 255) };
 }
+async function readDefault(io: Access, user: string, archetype: string): Promise<HandlerKey | null> {
+  // The left join returns a row even for an unset default. An omitted read cannot pass as absence.
+  const rows = await io.all<{ publisher: string | null; app_id: string | null }>(
+    'SELECT publisher, app_id FROM (SELECT 1) LEFT JOIN routing_defaults ON user = ? AND archetype = ?', user, archetype);
+  const row = rows[0];
+  if (rows.length !== 1 || !row) return fail('STORAGE_FAILURE');
+  if (row.publisher === null && row.app_id === null) return null;
+  if (typeof row.publisher !== 'string' || typeof row.app_id !== 'string') return fail('CORRUPT_STORAGE');
+  return {publisher: row.publisher, appId: row.app_id};
+}
+
+async function writeDefault(io: Access, user: string, archetype: string, selected: HandlerKey): Promise<void> {
+  if (await io.run('INSERT INTO routing_defaults (user, archetype, publisher, app_id) VALUES (?, ?, ?, ?) ON CONFLICT(user, archetype) DO UPDATE SET publisher = excluded.publisher, app_id = excluded.app_id', user, archetype, selected.publisher, selected.appId) !== 1) return fail('STORAGE_FAILURE');
+  const saved = await readDefault(io, user, archetype);
+  if (saved?.publisher !== selected.publisher || saved.appId !== selected.appId) return fail('STORAGE_FAILURE');
+}
 /** Await every outstanding statement before a transaction can commit or roll back. */
 async function completed<T>(requests: readonly Promise<T>[]): Promise<T[]> {
   const settled = await Promise.allSettled(requests);
@@ -116,14 +140,33 @@ async function verifiedRow(row: Row, check: () => void): Promise<CatalogHandler 
     return handlerFrom(manifest);
   } catch {check(); return null;}
 }
-async function read(io: Access, user: string, check: () => void): Promise<CatalogSnapshot> {
+async function applyReviewedDefault(io: Access, user: string, check: () => void,
+  {archetype, current, target}: ReviewedDefaultImport): Promise<void> {
+  const saved = await readDefault(io, user, archetype);
+  if (saved?.publisher !== current?.publisher || saved?.appId !== current?.appId) return fail('REVOKED');
+  if (target === null) {
+    if (saved === null) return;
+    if (await io.run('DELETE FROM routing_defaults WHERE user = ? AND archetype = ?', user, archetype) !== 1 ||
+        await readDefault(io, user, archetype) !== null) return fail('STORAGE_FAILURE');
+    return;
+  }
+  const rows = await io.all<Row>('SELECT publisher, app_id, event_id, signed_event FROM routing_catalog WHERE user = ? AND publisher = ? AND app_id = ?', user, target.publisher, target.appId);
+  if (rows.length !== 1 || rows[0]!.event_id !== target.eventId) return fail('INVALID_INPUT');
+  const handler = await verifiedRow(rows[0]!, check);
+  if (handler?.publisher !== target.publisher || handler.appId !== target.appId || handler.version !== target.version ||
+      handler.manifest.format !== 'nip-5d' || !handler.roles.some(role => role.archetype === archetype)) return fail('INVALID_INPUT');
+  await writeDefault(io, user, archetype, target);
+}
+async function read(io: Access, user: string, check: () => void, repair = true): Promise<CatalogSnapshot> {
   const rows = await io.all<Row>('SELECT publisher, app_id, event_id, signed_event FROM routing_catalog WHERE user = ? ORDER BY publisher, app_id', user);
   if (rows.length > CATALOG_LIMITS.perIdentity) return fail('CORRUPT_STORAGE');
   const verified = await completed(rows.map(row => verifiedRow(row, check))); check();
   const handlers: CatalogHandler[] = [], damaged: Row[] = [];
   for (let index = 0; index < rows.length; index++) {const handler = verified[index]; if (handler) handlers.push(handler); else damaged.push(rows[index]!);}
-  const removed = await completed(damaged.map(row => io.run('DELETE FROM routing_catalog WHERE user = ? AND publisher = ? AND app_id = ?', user, row.publisher, row.app_id)));
-  if (removed.some(changes => changes !== 1)) return fail('STORAGE_FAILURE');
+  if (repair) {
+    const removed = await completed(damaged.map(row => io.run('DELETE FROM routing_catalog WHERE user = ? AND publisher = ? AND app_id = ?', user, row.publisher, row.app_id)));
+    if (removed.some(changes => changes !== 1)) return fail('STORAGE_FAILURE');
+  }
   const rowsDefaults = await io.all<DefaultRow>('SELECT archetype, publisher, app_id FROM routing_defaults WHERE user = ? ORDER BY archetype', user);
   if (rowsDefaults.length > CATALOG_LIMITS.perIdentity * 16) return fail('CORRUPT_STORAGE');
   const defaults: HandlerPreference[] = [], invalid: string[] = [];
@@ -132,7 +175,7 @@ async function read(io: Access, user: string, check: () => void): Promise<Catalo
     if (!handler?.roles.some(role => role.archetype === row.archetype)) invalid.push(row.archetype);
     else defaults.push(Object.freeze({archetype: row.archetype, publisher: row.publisher, appId: row.app_id}));
   }
-  await completed(invalid.map(archetype => io.run('DELETE FROM routing_defaults WHERE user = ? AND archetype = ?', user, archetype)));
+  if (repair) await completed(invalid.map(archetype => io.run('DELETE FROM routing_defaults WHERE user = ? AND archetype = ?', user, archetype)));
   return Object.freeze({handlers: Object.freeze(handlers), defaults: Object.freeze(defaults)});
 }
 
@@ -218,16 +261,24 @@ export async function openRoutingCatalog(sqlite: SQLiteModule, platform: 'androi
       });
     },
     list: (owner: TrustedUser, options?: RequestOptions) => request(owner, options, (io, user, check) => read(io, user, check)),
+    inspect: (owner: TrustedUser, options?: RequestOptions) => request(owner, options, (io, user, check) => read(io, user, check, false)),
     prefer: (owner: TrustedUser, archetypeInput: string, selected: Readonly<{ publisher: string; appId: string }> | null, options?: RequestOptions) => {
       const archetype = routingRole(archetypeInput), selectedKey = selected === null ? null : key(selected);
       return request(owner, options, async (io, user, check) => {
         if (selectedKey === null) { await io.run('DELETE FROM routing_defaults WHERE user = ? AND archetype = ?', user, archetype); return; }
         const snapshot = await read(io, user, check);
         if (!snapshot.handlers.some(handler => handler.publisher === selectedKey.publisher && handler.appId === selectedKey.appId && handler.roles.some(role => role.archetype === archetype))) return fail('INVALID_INPUT');
-        if (await io.run('INSERT INTO routing_defaults (user, archetype, publisher, app_id) VALUES (?, ?, ?, ?) ON CONFLICT(user, archetype) DO UPDATE SET publisher = excluded.publisher, app_id = excluded.app_id', user, archetype, selectedKey.publisher, selectedKey.appId) !== 1) return fail('STORAGE_FAILURE');
-        const saved = await io.all<{ publisher: string; app_id: string }>('SELECT publisher, app_id FROM routing_defaults WHERE user = ? AND archetype = ?', user, archetype);
-        if (saved.length !== 1 || saved[0]!.publisher !== selectedKey.publisher || saved[0]!.app_id !== selectedKey.appId) return fail('STORAGE_FAILURE');
+        await writeDefault(io, user, archetype, selectedKey);
       });
+    },
+    importDefault: async (owner: TrustedUser, reviewed: ReviewedDefaultImport, options?: RequestOptions) => {
+      const {current, target} = reviewed;
+      const captured: ReviewedDefaultImport = {
+        archetype: routingRole(reviewed.archetype),
+        current: current === null ? null : key(current),
+        target: target === null ? null : {...key(target), eventId: publicKey(target.eventId), version: publicKey(target.version)},
+      };
+      return request(owner, options, (io, user, check) => applyReviewedDefault(io, user, check, captured));
     },
     remove: (owner: TrustedUser, selected: Readonly<{ publisher: string; appId: string }>, options?: RequestOptions) => {
       const captured = key(selected);

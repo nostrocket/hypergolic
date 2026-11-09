@@ -82,10 +82,11 @@ export class RoutingBroker {
     endpoint.assertActive();
   }
   /** Trusted catalog mutations only; recipient identity/domain is rechecked after every await. */
-  async catalogChanged(owner: TrustedUser, changedRoles: readonly string[] = []): Promise<void> {
+  async catalogChanged(owner: TrustedUser, changedRoles: readonly string[] = [], options?: Readonly<{readOnly: boolean}>): Promise<void> {
     owner.assertActive(); const revision = this.refresh(), state = this.native.state();
     const active = () => { owner.assertActive(); const now = this.native.state(); if (!now.available || now.user !== owner.user || now.epoch !== state.epoch || this.refresh() !== revision) revoked(); };
-    active(); const snapshot = await this.catalog.list({user: owner.user, assertActive: active}); active();
+    active(); const inspect = options?.readOnly ? this.catalog.inspect : this.catalog.list;
+    const snapshot = await inspect({user: owner.user, assertActive: active}); active();
     const roles = new Set([...changedRoles, ...snapshot.handlers.flatMap(handler => handler.roles.map(role => role.archetype))]);
     for (const role of roles) {
       const message = Object.freeze({type: 'intent.changed', availability: availability(snapshot, role)});

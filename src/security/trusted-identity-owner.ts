@@ -1,3 +1,4 @@
+import { createPublicPreferenceImport } from '../routing/public-preference-import';
 import {withCvmRelayDefaults} from '../cvm/cvm-relay-defaults';
 import {CvmService} from '../cvm/cvm-service';
 import {loadCvmNativePort} from '../cvm/cvm-native-loader';
@@ -136,7 +137,9 @@ async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android
     notifyBroker = new NotifyBroker(capability, routingNative, notifyPermissions);
     configBroker = new ConfigBroker(capability, routingNative, await openNativeConfigStore(), slot);
     routingBroker = new RoutingBroker(capability, routingNative, routingCatalog, reviews, createRoutingTargets(transition, () => runtime, reviews, routingNative));
-    const routing = Object.freeze({broker: routingBroker, catalog: routingCatalog, reviews, settings: createRoutingSettings(transition, routingNative, routingCatalog, routingBroker)});
+    const publicPreferences = createPublicPreferenceImport({identity:transition,native:routingNative,catalog:routingCatalog,broker:routingBroker,queries,
+      relays:() => relaySettings?.getSettings().networkRelays ?? [],slot});
+    const routing = Object.freeze({broker: routingBroker, catalog: routingCatalog, reviews, settings: createRoutingSettings(transition, routingNative, routingCatalog, routingBroker,publicPreferences)});
     const identityData = createIdentityDataService(identityCache, queries, Date.now, listAccess ?? undefined);
     const profileAvatar = createProfileAvatarStore(identityData, createProfileAvatarReader(requireNativeModule<NativePublishedHttpsPort>('HypergolicNappletHost')));
     releaseAvatar = bindProfileAvatarOwner(transition, profileAvatar);
