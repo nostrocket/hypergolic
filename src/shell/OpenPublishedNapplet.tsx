@@ -9,6 +9,7 @@ import { ShellTextInput as TextInput } from './ShellTextInput';
 import type { SettingsActions } from './Shell';
 import type { NappletConsentReview } from '../napplets/first-open-consent';
 import { resolvePublishedReference } from '../napplets/resolve-link';
+import { publishedOpenFailureText } from './published-settings-actions';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 
 /** A trusted settings surface for one explicit published open. */
@@ -47,8 +48,8 @@ export function OpenPublishedNapplet({ open }: { open: SettingsActions['openPubl
       if (controller.signal.aborted) { resolve(false); return; }
       decision.current = {review: request, resolve};
       setReview(request);
-    })).catch(() => {
-      if (!controller.signal.aborted) setError('The napplet could not be verified or opened. Check your Lookup relays and connection, then try again.');
+    })).catch(error => {
+      if (!controller.signal.aborted && pending.current === controller) setError(publishedOpenFailureText(error));
     }).finally(() => {
       if (pending.current === controller) pending.current = null;
       if (!controller.signal.aborted) setBusy(false);

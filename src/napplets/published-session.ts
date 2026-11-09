@@ -6,7 +6,7 @@ import type { ShellDatabase } from '../storage/database.ts';
 import type { SQLiteModule, TrustedApp } from '../storage/ports.ts';
 import { samePublishedPin, type NappletDescriptor } from '../shell/workspace.ts';
 import { requestFirstOpenConsent, type NappletConsentReview } from './first-open-consent.ts';
-import { loadPublishedArtifact, type PublishedArtifactSource } from './loader.ts';
+import { loadPublishedArtifact, PublishedLoadError, type PublishedArtifactSource } from './loader.ts';
 import { openPublishedArtifactCache } from './published-artifact-cache.ts';
 import { descriptorForPublishedArtifact, publishedHostInput } from './published-host-input.ts';
 import { stageAdmittedPublishedArtifact } from './admitted-transfer.ts';
@@ -169,7 +169,8 @@ async function preparePublishedSession(ports: PublishedSessionDependencies, requ
     });
   } catch (error) {
     if (error instanceof ReviewBusyError) throw error;
-    if (request.exactOpen && error instanceof PublishedTransferError) {
+    if ((request.link !== undefined && error instanceof PublishedLoadError) ||
+        (request.exactOpen && error instanceof PublishedTransferError)) {
       active();
       throw error;
     }

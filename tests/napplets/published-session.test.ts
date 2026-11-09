@@ -8,6 +8,7 @@ import { EMBEDDED_TEST_COORDINATE, EMBEDDED_TEST_EVENT, EMBEDDED_TEST_PUBLISHER,
   getEmbeddedTestHtmlBytes } from '../../src/napplets/embedded-test-fixture.ts';
 import { createPublishedSessionCoordinator, type PublishedSessionDependencies } from '../../src/napplets/published-session.ts';
 import type { NativePublishedTransferPort } from '../../src/napplets/native-transfer.ts';
+import { publishedOpenFailureText } from '../../src/shell/published-settings-actions.ts';
 import { registration, setup } from '../storage/harness.ts';
 import { descriptorForPublishedArtifact } from '../../src/napplets/published-host-input.ts';
 import { verifyArtifact, verifyManifest } from '../../src/napplets/verified-artifact.ts';
@@ -87,6 +88,62 @@ test('first open verifies, reviews, caches and stages; pinned restart uses cache
   assert.throws(() => reopened.assertActive());
 });
 
+
+test('explicit Settings open retains bounded loader reasons before consent or staging', async t => {
+  const { database, sqlite } = await setup(t);
+  const html = getEmbeddedTestHtmlBytes();
+  const hash = createHash('sha256').update(html).digest('hex');
+  const event = finalizeEvent({ kind: 5129, created_at: 1_800_000_000, content: 'Snapshot',
+    tags: [['x', hash]] }, new Uint8Array(32).fill(37));
+  const link = neventEncode({ id: event.id, kind: 5129, author: event.pubkey });
+  const lookupError = new Error('private relay diagnostics');
+  const downloadError = new Error('private server diagnostics');
+  const calls: string[] = [];
+  let active = true;
+  const coordinator = (source: PublishedSessionDependencies['source']) => createPublishedSessionCoordinator({
+    database, sqlite, source, native: native(calls), newInstanceId: () => SESSION,
+    lookupRelays: () => ['wss://relay.example.org'],
+    identity: { sessionAuthority: () => ({ user: USER, epoch: 3, assertActive() {
+      if (!active) throw new Error('private identity diagnostics');
+    } }), getSnapshot: () => ({ session: { epoch: 3 } }) } as PublishedSessionDependencies['identity'],
+  });
+  const source = { query: async () => [event], readHtml: async () => html };
+  const review = async () => assert.fail('an unverified napplet must not request consent');
+  const outcomes = [
+    { query: async () => { throw lookupError; }, code: 'PUBLISHED_LOOKUP_UNAVAILABLE', text: /could not complete its relay lookup/ },
+    { query: async () => [], code: 'PUBLISHED_NOT_FOUND', text: /No matching signed publication/ },
+    { readHtml: async () => { throw downloadError; }, code: 'PUBLISHED_DOWNLOAD_UNAVAILABLE', text: /could not download the napplet file/ },
+    { readHtml: async () => new Uint8Array([0]), code: 'PUBLISHED_HASH_MISMATCH', text: /does not match the hash/ },
+  ];
+  for (const { code, text, ...override } of outcomes) {
+    await assert.rejects(coordinator({ ...source, ...override }).openLink(link, new AbortController().signal, review), error => {
+      assert.equal((error as { code?: string }).code, code);
+      const message = publishedOpenFailureText(error);
+      assert.match(message, text);
+      assert.doesNotMatch(message, /private|wss:/);
+      return true;
+    });
+  }
+
+  const cancelled = new AbortController();
+  await assert.rejects(coordinator({ ...source, query: async () => {
+    cancelled.abort();
+    throw lookupError;
+  } }).openLink(link, cancelled.signal, review), { code: 'PUBLISHED_SESSION_FAILED' });
+  await assert.rejects(coordinator({ ...source, readHtml: async () => {
+    active = false;
+    throw downloadError;
+  } }).openLink(link, new AbortController().signal, review), { code: 'PUBLISHED_SESSION_FAILED' });
+  assert.deepEqual(calls, []);
+});
+
+test('Settings uses generic copy for unknown and untrusted errors', () => {
+  const fallback = 'The napplet could not be opened. Try again.';
+  assert.equal(publishedOpenFailureText(new Error('raw native diagnostic')), fallback);
+  assert.equal(publishedOpenFailureText({ code: 'PUBLISHED_LOOKUP_UNAVAILABLE', message: 'forged' }), fallback);
+  const hostile = new Proxy({}, { getPrototypeOf() { throw new Error('raw proxy diagnostic'); } });
+  assert.equal(publishedOpenFailureText(hostile), fallback);
+});
 
 test('restored exact pins retain prior game access and require approval before staging Intent', async t => {
   const {database, sqlite} = await setup(t);
