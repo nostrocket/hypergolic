@@ -39,7 +39,7 @@ final class LinkPublishedTests: XCTestCase {
    if let old=input.value as? String,!old.isEmpty {input.typeText(String(repeating:XCUIKeyboardKey.delete.rawValue,count:old.count))}
    input.typeText(link+"\n")
    let consent=app.staticTexts["Allow this napplet?"].firstMatch;XCTAssertTrue(consent.waitForExistence(timeout:30),app.debugDescription);settings(consent)
-   wait("Requested access: "+(role=="link" ? "link, resource":"resource"));capture(role+"-domain-consent")
+   if role=="link" {XCTAssertTrue(app.staticTexts["published-review-required-link"].firstMatch.waitForExistence(timeout:30),app.debugDescription)};XCTAssertTrue(app.staticTexts["published-review-required-"+("resource")].firstMatch.waitForExistence(timeout:30),app.debugDescription);capture(role+"-domain-consent")
    if reject{settingsButton("settings-napplet-reject");XCTAssertFalse(app.webViews.firstMatch.exists);absent();passed("domain-consent-decline-no-host");settingsButton("settings-open-napplet");XCTAssertTrue(consent.waitForExistence(timeout:30),app.debugDescription)}
    settingsButton("settings-napplet-approve");admitted()
   }

@@ -63,6 +63,44 @@ def node_bounds(node):
         raise CheckFailed('Control is not currently visible')
     return x1, y1, x2, y2
 
+def published_review_id(node, identifier):
+    return node.get('resource-id', '').rsplit('/', 1)[-1] == identifier
+
+
+def reveal_published_review(driver, initial, event):
+    toggle = 'published-review-technical-toggle'
+    if any(label(node) == event for node in initial):
+        raise CheckFailed('Technical details appeared before expansion')
+    observed = list(initial)
+
+    def capture(node, matches):
+        observed.append(node)
+        return matches(node)
+
+    nodes = driver.scroll_until(lambda node: capture(node, lambda value: published_review_id(value, toggle)),
+                                'technical details')
+    driver.tap(exactly_one(nodes, lambda node: published_review_id(node, toggle), 'technical details control'))
+    details = driver.scroll_until(lambda node: capture(node, lambda value: label(value) == event),
+                                  'exact signed event')
+    # The footer remains visible. Keep the latest coordinates for each observed field.
+    return list({(node.get('resource-id'), label(node)): node for node in observed + nodes + details}.values())
+
+
+def verify_published_review_claims(nodes, publisher, identifier, event, required):
+    if not any(published_review_id(node, 'settings-napplet-review') for node in nodes):
+        raise CheckFailed('First-open consent review is not visible')
+    for value, field in ((publisher, 'publisher'), (identifier, 'publication identifier'), (event, 'signed event')):
+        if not any(label(node) == value for node in nodes):
+            raise CheckFailed('Consent review did not show exact ' + field)
+    prefix = 'published-review-required-'
+    domains = {node.get('resource-id', '').rsplit('/', 1)[-1].removeprefix(prefix) for node in nodes
+               if node.get('resource-id', '').rsplit('/', 1)[-1].startswith(prefix)}
+    if domains != set(required):
+        raise CheckFailed('Consent review did not show exact required capabilities')
+    return exactly_one(nodes, lambda node: published_review_id(node, 'settings-napplet-approve'),
+                       'explicit first-open approval')
+
+
 def exactly_one(nodes, predicate, description):
     found = [n for n in nodes if predicate(n)]
     if len(found) != 1:

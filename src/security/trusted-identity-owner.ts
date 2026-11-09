@@ -1,3 +1,4 @@
+import { createLaunchReviewMedia, type LaunchReviewMedia } from '../napplets/launch-review-media';
 import { createPublicPreferenceImport } from '../routing/public-preference-import';
 import {withCvmRelayDefaults} from '../cvm/cvm-relay-defaults';
 import {CvmService} from '../cvm/cvm-service';
@@ -61,6 +62,7 @@ import { assertWorkspaceAvailability, initialTestWorkspace } from '../shell/fixt
 
 export interface TrustedIdentityOwner {
   readonly profileAvatar?: ProfileAvatarStore;
+  readonly launchReviewMedia?: LaunchReviewMedia;
   readonly notify?: NotifyBroker;
   readonly notificationSettings?: NotificationSettingsService;
   readonly config?: ConfigBroker;
@@ -82,7 +84,7 @@ export interface TrustedIdentityOwner {
 export class WorkspaceStartupError extends Error {
   constructor() { super('Workspace could not be opened'); this.name = 'WorkspaceStartupError'; }
 }
-async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android' | 'ios'): Promise<{ cvm:CvmService; profileAvatar: ProfileAvatarStore; notificationSettings: NotificationSettingsService; config: ConfigBroker; notify: NotifyBroker; routing: Readonly<{broker: RoutingBroker; catalog: RoutingCatalog; reviews: RoutingReviewService; settings: RoutingSettingsService}>; listAccess: IdentityListAccess | null; transition: IdentityTransition; runtime: RuntimeOwner; approvals: ApprovalService; relaySettings: NativeRelaySettings | null; resourceSettings: NativeResourceSettings | null; uploadSettings: NativeUploadSettings | null; uploads: UploadService; reviewSlot: ReviewSlot; fixturePublisher: FixturePublisher }> {
+async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android' | 'ios'): Promise<{ cvm:CvmService; profileAvatar: ProfileAvatarStore; launchReviewMedia: LaunchReviewMedia; notificationSettings: NotificationSettingsService; config: ConfigBroker; notify: NotifyBroker; routing: Readonly<{broker: RoutingBroker; catalog: RoutingCatalog; reviews: RoutingReviewService; settings: RoutingSettingsService}>; listAccess: IdentityListAccess | null; transition: IdentityTransition; runtime: RuntimeOwner; approvals: ApprovalService; relaySettings: NativeRelaySettings | null; resourceSettings: NativeResourceSettings | null; uploadSettings: NativeUploadSettings | null; uploads: UploadService; reviewSlot: ReviewSlot; fixturePublisher: FixturePublisher }> {
   const database = await openShellDatabase(SQLite, platform).catch(() => { throw new WorkspaceStartupError(); });
   let relaySettings: NativeRelaySettings | null = null;
   let resourceSettings: NativeResourceSettings | null = null;
@@ -141,18 +143,21 @@ async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android
       relays:() => relaySettings?.getSettings().networkRelays ?? [],slot});
     const routing = Object.freeze({broker: routingBroker, catalog: routingCatalog, reviews, settings: createRoutingSettings(transition, routingNative, routingCatalog, routingBroker,publicPreferences)});
     const identityData = createIdentityDataService(identityCache, queries, Date.now, listAccess ?? undefined);
-    const profileAvatar = createProfileAvatarStore(identityData, createProfileAvatarReader(requireNativeModule<NativePublishedHttpsPort>('HypergolicNappletHost')));
+    const readAvatar = createProfileAvatarReader(requireNativeModule<NativePublishedHttpsPort>('HypergolicNappletHost'));
+    const profileAvatar = createProfileAvatarStore(identityData, readAvatar);
+    const publishedSource = loadNativePublishedArtifactSource();
+    const launchReviewMedia = createLaunchReviewMedia(identityData, readAvatar, publishedSource, () => resourceSettings?.servers() ?? []);
     releaseAvatar = bindProfileAvatarOwner(transition, profileAvatar);
     runtime = createRuntimeOwner(database, transition, capability,
       { service: approvals, destinations: () => relaySettings?.getSettings().networkRelays ?? [], closeReview: id => slot.close(id) },
-      { sqlite: SQLite, source: loadNativePublishedArtifactSource(), native: loadNativePublishedTransferPort(),
+      { sqlite: SQLite, source: publishedSource, native: loadNativePublishedTransferPort(),
         lookupRelays: () => relaySettings?.getSettings().lookupRelays ?? [],
         networkRelays: () => relaySettings?.getSettings().networkRelays ?? [] },
       queries,
       loadNativeRelaySubscriptions(() => relaySettings?.getSettings().networkRelays ?? []),
       loadNativeResourceHost(() => resourceSettings?.servers() ?? [], queries), uploads, identityData, routing, notifyBroker, configBroker, outbox, loadNativeOutboxSubscriptions(outbox), discovery,cvm);
     const fixturePublisher=createNativeFixturePublisher(vault,transition);
-    return { cvm, profileAvatar, fixturePublisher, notificationSettings: createNotificationSettings(transition, routingNative, notifyBroker), config: configBroker, notify: notifyBroker, routing, listAccess, transition, approvals, relaySettings, resourceSettings, uploadSettings, uploads, reviewSlot, runtime };
+    return { cvm, profileAvatar, launchReviewMedia, fixturePublisher, notificationSettings: createNotificationSettings(transition, routingNative, notifyBroker), config: configBroker, notify: notifyBroker, routing, listAccess, transition, approvals, relaySettings, resourceSettings, uploadSettings, uploads, reviewSlot, runtime };
   } catch {
     cvm?.dispose(); releaseAvatar?.(); releaseLinks?.(); releaseRouting?.(); routingBroker?.stop(); notifyBroker?.stop(); configBroker?.stop(); reviewSlot?.dispose();
     try { await notifyPermissions?.close(); } catch { /* Preserve the workspace failure. */ }

@@ -13,7 +13,9 @@ class SettingsJourney(Journey):
   self.tap('handle-right');self.find('Loaded napplets');time.sleep(.6);self.tap('Open signed-routing-'+role+'-lab');time.sleep(.6);assert self.find('focused-napplet-name').get('text')=='signed-routing-'+role+'-lab'
  def data(self,label):self.guest_find(label);return json.loads(self.find(label).get('text'))
  def open_signed(self,role,domains):
-  address=self.find('signed-'+role+'-address').get('content-desc');self.tap('shell-settings');self.enter_address(address);self.settings_tap('settings-open-napplet');self.settings_find('Allow this napplet?');self.settings_find('Requested access: '+domains);self.settings_tap('settings-napplet-approve');
+  address=self.find('signed-'+role+'-address').get('content-desc');self.tap('shell-settings');self.enter_address(address);self.settings_tap('settings-open-napplet');self.settings_find('Allow this napplet?');
+  for domain in domains.split(', '):self.settings_find('published-review-required-'+domain)
+  self.settings_tap('settings-napplet-approve')
   if role!='auto-peer':self.find('SDK ready for routing.')
   assert self.find('focused-napplet-name').get('text')=='signed-routing-'+role+'-lab'
  def approve_topic(self):self.find('Allow this topic?');self.find('napplet:note/open');self.capture('cold-handler-topic-review');self.tap('routing-approve');self.find('SDK ready for routing.')

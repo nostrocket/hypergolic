@@ -80,23 +80,20 @@ class LiveUpdateDriver(embedded.PublishedUpdateDriver):
         return {'files': hashes, 'sha256': source_digest(hashes)}
 
     def check_review(self, nodes, update):
-        expected = ((self.fixture['publisher'], 'publisher'), (self.fixture['identifier'], 'napplet'),
-                    (self.fixture['v1'], 'current event'), (self.fixture['v2'], 'new event')) if update else (
-                    (self.fixture['publisher'], 'publisher'), (self.fixture['identifier'], 'napplet'),
-                    (self.fixture['v1'], 'signed event'))
-        for value, field in expected:
+        if not update:
+            return base.verify_published_review_claims(nodes, self.fixture['publisher'], self.fixture['identifier'],
+                                                       self.fixture['v1'], ('theme',))
+        for value, field in ((self.fixture['publisher'], 'publisher'), (self.fixture['identifier'], 'napplet'),
+                             (self.fixture['v1'], 'current event'), (self.fixture['v2'], 'new event')):
             if not any(label(node) == value for node in nodes):
                 raise CheckFailed('Live review did not show exact ' + field)
         if not any(label(node) == 'Requested access: theme' for node in nodes):
             raise CheckFailed('Live review did not show exact theme access')
-        if update:
-            identifiers = [embedded.resource_id_suffix(node) for node in nodes if re.fullmatch(
-                r'published-update-review-' + embedded.UUID.pattern, embedded.resource_id_suffix(node))]
-            if len(identifiers) != 1:
-                raise CheckFailed('Expected one session-bound live update review')
-            return identifiers[0].removeprefix('published-update-review-')
-        return exactly_one(nodes, lambda node: embedded.resource_id_is(node, 'settings-napplet-approve'),
-                           'explicit first-open approval')
+        identifiers = [embedded.resource_id_suffix(node) for node in nodes if re.fullmatch(
+            r'published-update-review-' + embedded.UUID.pattern, embedded.resource_id_suffix(node))]
+        if len(identifiers) != 1:
+            raise CheckFailed('Expected one session-bound live update review')
+        return identifiers[0].removeprefix('published-update-review-')
 
     def publish_v2(self):
         command = ['node', str(base.ROOT / 'tests/native/live-update-publication/cli.mjs'),
@@ -148,7 +145,8 @@ class LiveUpdateDriver(embedded.PublishedUpdateDriver):
         self.tap_id('settings-open-napplet', 'verify and open live QA napplet')
         _, nodes = self.wait(lambda observed: any(embedded.resource_id_is(node, 'settings-napplet-review')
                                                   for node in observed), 'live v1 first-open review', timeout=150)
-        approve = self.check_review(nodes, update=False)
+        claims = base.reveal_published_review(self, nodes, self.fixture['v1'])
+        approve = self.check_review(claims, update=False)
         self.check('live-first-open-review', {'publisher': self.fixture['publisher'],
                    'event': self.fixture['v1'], 'access': 'theme'})
         self.capture('02-first-open-review')

@@ -17,6 +17,7 @@ def consent_nodes():
         node(text=pud.FIXTURE['publisher']),
         node(text=pud.FIXTURE['app']),
         node(text=pud.FIXTURE['oldEvent']),
+        node('published-review-required-theme', 'Appearance'),
         node('org.test:id/settings-napplet-approve', 'Allow and open'),
     ]
 

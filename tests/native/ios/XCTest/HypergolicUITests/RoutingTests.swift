@@ -34,7 +34,7 @@ final class RoutingTests: XCTestCase {
    }
    input.typeText("\n")
    let consent=app.staticTexts["Allow this napplet?"].firstMatch;XCTAssertTrue(consent.waitForExistence(timeout:30),app.debugDescription);settings(consent)
-   wait("Requested access: inc, intent");capture(role+"-domain-consent");settingsButton("settings-napplet-approve");wait("SDK ready for routing.")
+   XCTAssertTrue(app.staticTexts["published-review-required-"+("inc")].firstMatch.waitForExistence(timeout:30),app.debugDescription);XCTAssertTrue(app.staticTexts["published-review-required-"+("intent")].firstMatch.waitForExistence(timeout:30),app.debugDescription);capture(role+"-domain-consent");settingsButton("settings-napplet-approve");wait("SDK ready for routing.")
    XCTAssertEqual(app.staticTexts["focused-napplet-name"].label,"signed-routing-"+role+"-lab")
   }
   func readJSON(_ contains:String,_ prefix:String)->Any {
@@ -133,7 +133,7 @@ final class RoutingTests: XCTestCase {
    }
    input.typeText("\n")
    let consent=app.staticTexts["Allow this napplet?"].firstMatch;XCTAssertTrue(consent.waitForExistence(timeout:30),app.debugDescription);settings(consent)
-   wait("Requested access: inc, intent");capture(role+"-domain-consent");settingsButton("settings-napplet-approve");wait("SDK ready for routing.")
+   XCTAssertTrue(app.staticTexts["published-review-required-"+("inc")].firstMatch.waitForExistence(timeout:30),app.debugDescription);XCTAssertTrue(app.staticTexts["published-review-required-"+("intent")].firstMatch.waitForExistence(timeout:30),app.debugDescription);capture(role+"-domain-consent");settingsButton("settings-napplet-approve");wait("SDK ready for routing.")
    XCTAssertEqual(app.staticTexts["focused-napplet-name"].label,"signed-routing-"+(role=="collision-peer" ? "peer":role)+"-lab")
   }
   func readJSON(_ contains:String,_ prefix:String)->Any {
@@ -202,7 +202,7 @@ final class RoutingTests: XCTestCase {
    }
    input.typeText("\n")
    let consent=app.staticTexts["Allow this napplet?"].firstMatch;XCTAssertTrue(consent.waitForExistence(timeout:30),app.debugDescription);settings(consent)
-   wait("Requested access: "+domains);capture(role+"-domain-consent");settingsButton("settings-napplet-approve");wait("SDK ready for routing.")
+   for domain in domains.components(separatedBy:", ") {XCTAssertTrue(app.staticTexts["published-review-required-"+(domain)].firstMatch.waitForExistence(timeout:30),app.debugDescription)};capture(role+"-domain-consent");settingsButton("settings-napplet-approve");wait("SDK ready for routing.")
    XCTAssertEqual(app.staticTexts["focused-napplet-name"].label,"signed-routing-"+role+"-lab")
   }
   func readJSON(_ contains:String,_ prefix:String)->Any {

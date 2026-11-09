@@ -63,7 +63,7 @@ class Journey(ui.Journey):
   def success(label,kind,wanted):self.guest(label);self.guest_find('Public '+kind+' read complete.');self.result(wanted)
   def error():self.guest_find('Public mutes read failed: identity request denied');self.delivered()
   def open_signed(role,reject=False):
-   address=self.find('signed-'+role+'-address').get('content-desc');assert address.startswith('naddr1');self.tap('shell-settings');self.settings_tap('settings-napplet-address');self.adb('shell','input','text',address);self.adb('shell','input','keyevent','4');self.settings_tap('settings-open-napplet');self.settings_find('Allow this napplet?');self.settings_find('Requested access: identity, '+('storage' if role=='state' else 'relay'));self.capture(role+'-domain-consent')
+   address=self.find('signed-'+role+'-address').get('content-desc');assert address.startswith('naddr1');self.tap('shell-settings');self.settings_tap('settings-napplet-address');self.adb('shell','input','text',address);self.adb('shell','input','keyevent','4');self.settings_tap('settings-open-napplet');self.settings_find('Allow this napplet?');self.settings_find('published-review-required-identity');self.settings_find('published-review-required-'+('storage' if role=='state' else 'relay'));self.capture(role+'-domain-consent')
    if reject:
     self.settings_tap('settings-napplet-reject');self.settings_tap('settings-open-napplet');self.settings_find('Allow this napplet?')
    self.settings_tap('settings-napplet-approve');self.find('Identity connected' if role=='state' else 'Ready to query.');self.capture(role+'-admitted');self.check('signed-'+role+'-normal-admission')

@@ -490,9 +490,9 @@ final class WorkspaceTests: XCTestCase {
       throw Failure.invalid("Published open reported verification error before review: " +
         String(openError.label.prefix(200)) + " / " + (source.exists ? String(source.label.prefix(200)) : "source stage unavailable"))
     }
-    let claims = Set(app.staticTexts.allElementsBoundByIndex.filter { $0.exists }.map(\.label))
+    let claims = try revealFirstOpenClaims()
     record("live-first-open-exact-review", claims.contains(publisher) && claims.contains("file-browser")
-      && claims.contains(event) && claims.contains("Requested access: theme"),
+      && claims.contains(event) && app.staticTexts["published-review-required-theme"].firstMatch.exists,
       ["publisher": publisher, "identifier": "file-browser", "eventId": event, "requestedAccess": "theme"])
     capture("live-published-review")
     try identityPress("settings-napplet-approve")
@@ -542,9 +542,9 @@ final class WorkspaceTests: XCTestCase {
       self.app.descendants(matching: .any).matching(identifier: "settings-napplet-review").firstMatch.exists
         && self.app.buttons.matching(identifier: "settings-napplet-approve").firstMatch.isHittable
     }
-    let claims = Set(app.staticTexts.allElementsBoundByIndex.filter { $0.exists }.map(\.label))
+    let claims = try revealFirstOpenClaims()
     record("live-first-open-exact-review", claims.contains(fixture.publisher) && claims.contains(fixture.identifier)
-      && claims.contains(fixture.v1) && claims.contains("Requested access: theme"),
+      && claims.contains(fixture.v1) && app.staticTexts["published-review-required-theme"].firstMatch.exists,
       ["publisher": fixture.publisher, "identifier": fixture.identifier, "eventId": fixture.v1,
        "requestedAccess": "theme", "explicitApprovalRequired": true])
     capture("live-update-v1-review")
@@ -665,13 +665,13 @@ final class WorkspaceTests: XCTestCase {
         && self.app.buttons.matching(identifier: "settings-napplet-approve").firstMatch.isHittable
     }
     let review = app.descendants(matching: .any).matching(identifier: "settings-napplet-review").firstMatch
-    let claims = Set(app.staticTexts.allElementsBoundByIndex.filter { $0.exists }.map(\.label))
+    let claims = try revealFirstOpenClaims()
     let publisher = "638cd26c28fb52d057f424d11a14e24526ac4b5e08cbad5d6c36f8f57cacce2f"
     let appId = "hypergolic-update-qa"
     let oldEvent = "dc078ef5973560de09933f39f19dddc28c51b2b30c7ec505157442db665a48b1"
     let newEvent = "df50ad4aa2bcbc0514f75a63ca72c0dfb12da1b1e9e199f551bd6d2d98a71640"
     let exactReview = claims.contains(publisher) && claims.contains(appId) && claims.contains(oldEvent)
-      && claims.contains("Requested access: theme")
+      && app.staticTexts["published-review-required-theme"].firstMatch.exists
       && app.buttons.matching(identifier: "settings-napplet-approve").firstMatch.exists
     record("first-open-exact-review", exactReview, ["publisher": publisher, "identifier": appId, "eventId": oldEvent,
       "reviewVisible": review.exists, "signing": "unavailable", "requestedAccess": "theme"])
@@ -858,9 +858,9 @@ final class WorkspaceTests: XCTestCase {
         && self.app.buttons.matching(identifier: "settings-napplet-approve").firstMatch.isHittable
     }
     let firstReview = app.descendants(matching: .any).matching(identifier: "settings-napplet-review").firstMatch
-    let initialClaims = Set(app.staticTexts.allElementsBoundByIndex.filter { $0.exists }.map(\.label))
+    let initialClaims = try revealFirstOpenClaims()
     let exactFirstOpen = initialClaims.contains(publisher) && initialClaims.contains(appId)
-      && initialClaims.contains(v1Event) && initialClaims.contains("Requested access: theme")
+      && initialClaims.contains(v1Event) && app.staticTexts["published-review-required-theme"].firstMatch.exists
     record("first-open-exact-review", exactFirstOpen, ["publisher": publisher, "appId": appId,
       "eventId": v1Event, "domains": ["theme"], "reviewVisible": firstReview.exists])
     capture("changed-access-first-open-review")
@@ -1070,6 +1070,19 @@ final class WorkspaceTests: XCTestCase {
     let section = app.buttons.matching(identifier: "settings-section-published-updates").firstMatch
     try stateNativeReveal(section)
     try identityPress(section.identifier)
+  }
+  private func revealFirstOpenClaims() throws -> Set<String> {
+    let scroll = app.scrollViews["published-review-content"].firstMatch
+    let technical = app.buttons["published-review-technical-toggle"].firstMatch
+    guard scroll.exists else { throw Failure.invalid("Missing launch review scroll surface") }
+    for _ in 0..<12 {
+      if technical.isHittable {
+        technical.tap()
+        return Set(scroll.staticTexts.allElementsBoundByIndex.filter { $0.exists }.map(\.label))
+      }
+      scroll.swipeUp(velocity: .slow)
+    }
+    throw Failure.invalid("Could not reveal launch review technical details")
   }
   private func stateNativeReveal(_ element: XCUIElement) throws {
     let scroll = app.scrollViews.firstMatch

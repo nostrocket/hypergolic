@@ -267,7 +267,7 @@ final class IdentityPublishedTests: XCTestCase {
    let address=app.staticTexts["signed-"+role+"-address"];XCTAssertTrue(address.waitForExistence(timeout:30),app.debugDescription);let link=address.label;XCTAssertTrue(link.hasPrefix("naddr1"))
    button("shell-settings");let input=app.textFields["settings-napplet-address"];settings(input);input.tap();input.typeText(link+"\n")
    let consent=app.staticTexts["Allow this napplet?"].firstMatch;XCTAssertTrue(consent.waitForExistence(timeout:30),app.debugDescription);settings(consent)
-   wait("Requested access: identity, "+(role=="state" ? "storage":"relay"));capture(role+"-domain-consent")
+   XCTAssertTrue(app.staticTexts["published-review-required-"+("identity")].firstMatch.waitForExistence(timeout:30),app.debugDescription);XCTAssertTrue(app.staticTexts["published-review-required-"+(role=="state" ? "storage":"relay")].firstMatch.waitForExistence(timeout:30),app.debugDescription);capture(role+"-domain-consent")
    if reject{settingsButton("settings-napplet-reject");settingsButton("settings-open-napplet");XCTAssertTrue(consent.waitForExistence(timeout:30),app.debugDescription)}
    settingsButton("settings-napplet-approve");wait(role=="state" ? "Identity connected":"Ready to query.");passed("signed-"+role+"-normal-admission");if reject {XCTAssertEqual(Array(stats()[1...2]),[0,0]);passed("domain-consent-decline-no-identity-query")}
   }

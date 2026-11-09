@@ -30,7 +30,7 @@ class Journey(base.Journey):
   while time.monotonic()<deadline:
    nodes=self.nodes()
    if any(n.get('resource-id')=='settings-napplet-approve' for n in nodes):
-    self.settings_find('Allow this napplet?');self.settings_find('Requested access: '+domain);self.capture('exact-signed-access-review-'+role);self.settings_tap('settings-napplet-approve');self.report.setdefault('signedAccessReviews',[]).append({'role':role,'eventId':by_role[role]['event']['id'],'domain':domain});break
+    self.settings_find('Allow this napplet?');self.settings_find('published-review-required-'+domain);self.capture('exact-signed-access-review-'+role);self.settings_tap('settings-napplet-approve');self.report.setdefault('signedAccessReviews',[]).append({'role':role,'eventId':by_role[role]['event']['id'],'domain':domain});break
    if any(n.get('text')=='SDK ready for routing.' for n in nodes) and not any(n.get('resource-id')=='settings-done' and self.visible(n) for n in nodes):
     self.report.setdefault('rememberedSignedAccess',[]).append({'role':role,'eventId':by_role[role]['event']['id'],'basis':'Normal shell closed Settings and restored connected verified SDK without another review; version/publisher are independently checked in native editor.'});break
    time.sleep(.2)

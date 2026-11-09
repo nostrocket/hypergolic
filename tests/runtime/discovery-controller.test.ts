@@ -14,6 +14,7 @@ const published = (digit: string): NappletDescriptor => ({id: `${digit.repeat(8)
 const update = {publisher, appId: 'discovery', previousEventId: '1'.repeat(64), nextEventId: '2'.repeat(64),
   previousVersion: '1'.repeat(64), nextVersion: '2'.repeat(64), domains: ['relay'], optionalDomains: ['upload']};
 const access = {user: 'c'.repeat(64), publisher, appId: 'discovery', eventId: '2'.repeat(64),
+  metadata: {title: 'Discover', description: '', reference: address, version: '2'.repeat(64), htmlHash: '3'.repeat(64)},
   domains: ['relay'], unsupportedDomains: [], optionalDomains: ['upload'], unsupportedOptionalDomains: []};
 
 function setup(configured: string | null = null) {

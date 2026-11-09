@@ -44,7 +44,7 @@ def consent_nodes():
         node(text=cad.FIXTURE['publisher']),
         node(text=cad.FIXTURE['app']),
         node(text=cad.FIXTURE['oldEvent']),
-        node(text='Requested access: theme'),
+        node('published-review-required-theme', 'Appearance'),
         node('org.test:id/settings-napplet-approve', 'Allow and open'),
     ]
 
@@ -74,11 +74,15 @@ class ChangedAccessDriverTests(unittest.TestCase):
     def test_first_open_review_requires_exact_v1_claims_and_explicit_approval(self):
         self.assertEqual(cad.verify_consent_review(consent_nodes())['text'], 'Allow and open')
         for index, wrong in ((1, 'other publisher'), (2, 'other napplet'),
-                             (3, 'other event'), (4, 'Requested access: relay')):
+                             (3, 'other event')):
             changed = consent_nodes()
             changed[index]['text'] = wrong
             with self.subTest(index=index), self.assertRaises(CheckFailed):
                 cad.verify_consent_review(changed)
+        changed = consent_nodes()
+        changed[4]['resource-id'] = 'published-review-required-relay'
+        with self.assertRaises(CheckFailed):
+            cad.verify_consent_review(changed)
         with self.assertRaises(CheckFailed):
             cad.verify_consent_review(consent_nodes()[:-1])
 
