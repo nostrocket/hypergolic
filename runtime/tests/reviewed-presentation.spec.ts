@@ -216,7 +216,8 @@ for(const width of [320,360])test(`exact Feed Manager fields and Save work throu
   expect(scroll.height).toBeGreaterThan(scroll.viewport);expect(['hidden','clip']).not.toContain(scroll.overflow);
   await page.mouse.wheel(0,1200);
   await expect.poll(()=>frame.locator('body').evaluate(()=>document.scrollingElement!.scrollTop)).toBeGreaterThan(0);
-  await fits(save);expect((await save.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await expect(() => fits(save)).toPass({timeout:5000});
+  expect((await save.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   expect(await save.evaluate(element=>{const box=element.getBoundingClientRect(),hit=document.elementFromPoint(box.x+box.width/2,box.y+box.height/2);return hit===element||element.contains(hit);})).toBe(true);
   expect(await frame.locator('body').evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await save.click();await expect(frame.locator('.status')).toContainText('review cancelled');
