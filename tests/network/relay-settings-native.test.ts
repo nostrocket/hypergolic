@@ -33,11 +33,12 @@ test('native relay settings survive database close and reopen without reseeding'
   const defaults = first.getSettings();
   await first.addRelay('lookup', 'wss://manifest.example.org');
   await first.removeRelay('network', defaults.networkRelays[0]!);
+  await first.moveNetworkRelay(defaults.networkRelays[2]!, 'up');
   await first.close();
 
   const reopened = await openNativeRelaySettings(sqlite, 'android');
   assert.deepEqual(reopened.getSettings(), {
-    networkRelays: defaults.networkRelays.slice(1),
+    networkRelays: [defaults.networkRelays[2], defaults.networkRelays[1]],
     lookupRelays: [...defaults.lookupRelays, 'wss://manifest.example.org'],
   });
   await reopened.close();

@@ -1,8 +1,8 @@
 {
   "networkRelays": [
-    "wss://relay.damus.io",
+    "wss://relay.ditto.pub",
     "wss://nos.lol",
-    "wss://bucket.coracle.social"
+    "wss://relay.damus.io"
   ],
   "lookupRelays": [
     "wss://purplepag.es",

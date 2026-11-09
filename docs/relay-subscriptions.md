@@ -28,8 +28,7 @@ A close or revocation invalidates intent and delivery revisions before cancellin
 
 The process allows eight subscriptions and 64 session coordinators. A session can
 hold three raw Relay streams, or two total streams when any stream uses Outbox.
-Raw Relay uses up to two trusted relays per stream. The native socket budget stays
-at 16 for the process. Filters retain the bounded core query
+Raw Relay uses the first two saved Network relays when the guest leaves the relay unspecified. Change their priority under Settings → Relays → Network. The native socket budget stays at 16 for the process. Filters retain the bounded core query
 profile. A valid request for more stored events uses the existing limit of 32
 per filter. Connections use fresh native UUIDs and host-created relay subscription
 IDs; caller IDs cannot reopen closed intent. Trusted Network destinations are

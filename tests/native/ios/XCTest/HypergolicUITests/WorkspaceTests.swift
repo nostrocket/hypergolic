@@ -334,7 +334,7 @@ final class WorkspaceTests: XCTestCase {
     let content = try one(app.staticTexts.matching(identifier: "approval-sheet-content"), "approval content")
     let publisher = try one(app.staticTexts.matching(identifier: "approval-sheet-publisher"), "approval publisher")
     let identity = try one(app.staticTexts.matching(identifier: "approval-sheet-identity"), "approval identity")
-    let relays = ["wss://relay.damus.io", "wss://nos.lol", "wss://bucket.coracle.social"]
+    let relays = ["wss://relay.ditto.pub", "wss://nos.lol", "wss://relay.damus.io"]
     let relayLabels = Set(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "wss://"))
       .allElementsBoundByIndex.map(\.label))
     let exactRelays = relayLabels == Set([relays.map { $0 + "/" }.joined(separator: "\n")])

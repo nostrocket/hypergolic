@@ -31,7 +31,8 @@ ACTIVITY = "org.nostrocket.hypergolic.dev.MainActivity"
 SELECTED_NPUB = "npub1ccz8l9zpa47k6vz9gphftsrumpw80rjt3nhnefat4symjhrsnmjs38mnyd"
 EXPECTED_PUBKEY = "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"
 NOTE = "Approval Lab test note"
-PATHS = {"/relay.damus.io", "/nos.lol", "/bucket.coracle.social"}
+RELAY_PATHS = {f"/{urlparse(relay).hostname}": relay for relay in DESTINATIONS}
+PATHS = set(RELAY_PATHS)
 APK = re.compile(r"[a-f0-9]{64}")
 
 
@@ -57,7 +58,7 @@ def relay_ready(path: Path) -> dict:
     status, control = urlparse(value["status"]), urlparse(value["control"])
     if status.scheme != "http" or control.scheme != "http" or status.hostname != "127.0.0.1" or control.hostname != "127.0.0.1" or status.port != control.port or status.path != "/status" or control.path != "/control":
         raise RuntimeError("Relay ready file does not describe one local loopback control server")
-    if value.get("relayPaths") != {"/relay.damus.io": DESTINATIONS[0], "/nos.lol": DESTINATIONS[1], "/bucket.coracle.social": DESTINATIONS[2]}:
+    if value.get("relayPaths") != RELAY_PATHS:
         raise RuntimeError("Relay ready file does not map the reviewed three destinations")
     return value
 

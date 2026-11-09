@@ -4,9 +4,9 @@ import { StyleSheet, Text, View } from 'react-native';
 import App from '../src/App';
 
 const relayPaths: Readonly<Record<string, string>> = {
-  'wss://relay.damus.io/': '/relay.damus.io',
+  'wss://relay.ditto.pub/': '/relay.ditto.pub',
   'wss://nos.lol/': '/nos.lol',
-  'wss://bucket.coracle.social/': '/bucket.coracle.social',
+  'wss://relay.damus.io/': '/relay.damus.io',
 };
 const port = Number(process.env.EXPO_PUBLIC_APPROVAL_RELAY_PORT);
 const Base = globalThis.WebSocket;

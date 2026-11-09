@@ -1,4 +1,6 @@
 export type RelayRole = 'network' | 'lookup';
+export type NetworkRelayMove = 'up' | 'down';
+export type CvmRelayDefaultsState = 'configured' | 'cleared' | 'unknown';
 export type RelaySettingsSnapshot = Readonly<{
   networkRelays: readonly string[];
   lookupRelays: readonly string[];
@@ -9,7 +11,7 @@ export interface RelaySettingsStoragePort {
   setItem(key: string, value: string): Promise<void>;
 }
 
-export type RelaySettingsErrorCode = 'INVALID_RELAY_URL' | 'DUPLICATE_RELAY' | 'INVALID_PERSISTED_SETTINGS' | 'INVALID_RELAY_ROLE' | 'RELAY_LIMIT_EXCEEDED';
+export type RelaySettingsErrorCode = 'INVALID_RELAY_URL' | 'DUPLICATE_RELAY' | 'INVALID_PERSISTED_SETTINGS' | 'INVALID_RELAY_ROLE' | 'RELAY_LIMIT_EXCEEDED' | 'INVALID_RELAY_MOVE';
 
 export class RelaySettingsError extends Error {
   readonly code: RelaySettingsErrorCode;
@@ -27,9 +29,9 @@ export const MAX_RELAYS_PER_ROLE = 16;
 // Kept aligned with src/config/default-relays.json; the service test asserts that source of truth.
 const defaultsRecord = {
   networkRelays: [
-    'wss://relay.damus.io',
+    'wss://relay.ditto.pub',
     'wss://nos.lol',
-    'wss://bucket.coracle.social',
+    'wss://relay.damus.io',
   ],
   lookupRelays: [
     'wss://purplepag.es',
@@ -127,8 +129,10 @@ const DEFAULTS = normalizeSettings({ schemaVersion: 1, ...defaultsRecord }, 'INV
 
 export interface RelaySettingsService {
   getSettings(): RelaySettingsSnapshot;
+  getCvmDefaultsState?(): CvmRelayDefaultsState;
   addRelay(role: RelayRole, url: string): Promise<RelaySettingsSnapshot>;
   removeRelay(role: RelayRole, url: string): Promise<RelaySettingsSnapshot>;
+  moveNetworkRelay(url: string, direction: NetworkRelayMove): Promise<RelaySettingsSnapshot>;
   restoreDefaults(role?: RelayRole): Promise<RelaySettingsSnapshot>;
 }
 
@@ -186,6 +190,19 @@ export async function openRelaySettings(storage: RelaySettingsStoragePort): Prom
         const relays = select(current, role);
         if (!relays.includes(url)) return current;
         return withRole(current, role, relays.filter((relay) => relay !== url));
+      });
+    },
+    moveNetworkRelay: (value: string, direction: NetworkRelayMove) => {
+      const url = normalizeRelayUrl(value);
+      if (direction !== 'up' && direction !== 'down') return fail('INVALID_RELAY_MOVE');
+      return commit(current => {
+        const relays = [...current.networkRelays], from = relays.indexOf(url);
+        if (from < 0) return fail('INVALID_RELAY_MOVE');
+        const to = from + (direction === 'up' ? -1 : 1);
+        if (to < 0 || to >= relays.length) return current;
+        relays.splice(from, 1);
+        relays.splice(to, 0, url);
+        return withRole(current, 'network', relays);
       });
     },
     restoreDefaults: (role?: RelayRole) => {
