@@ -32,6 +32,8 @@ One request per realm; eight pending/staging reviews and two approved transfers/
 
 The SDK receives a pending result after native staging and before file approval. Malformed public requests with a bounded ID receive a failure before staging.
 
+The reviewed Emoji Pack Creator release `1533e892517b313b316b6137759580cbae0a82ca1c9d1de23f6b2f0f2dea6dea` expects a URL from its first `upload.upload` Promise. For that exact verified release, a host-supplied adapter waits for the matching terminal status before resolving the guest-facing Promise. The initial SDK wire response and deadline, terminal status stream, native approval and upload policy stay the same. The adapter forwards terminal errors and drops its listener on settlement, document exit or deadline.
+
 Status goes only to captured renderer recipients; WebKit initial reply is one-use and progress uses a separate captured-world lane. Native progress/Cancel occupies shell space outside guest controls. A focused new hidden peer cannot steal review.
 
 ## Durable uncertainty and recovery

@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {finalizeEvent} from 'nostr-tools/pure';
 import {injectReviewedPresentation} from '../src/reviewed-presentation';
+import {injectCreatorUpload} from '../src/reviewed-creator-upload';
 import {preparePresentationFixtures} from '../tools/prepare-presentation-fixtures.mjs';
 const pins=JSON.parse(readFileSync('fixtures/reviewed-presentation-manifest.json','utf8'));
 const generation='12345678-1234-4234-8234-123456789abc';
@@ -31,7 +32,7 @@ test.beforeAll(async()=>{
   host=(Array.isArray(result)?result[0]:result).output.find((item:any)=>item.type==='chunk').code;
   document=/const document = `([\s\S]+?)`;/.exec(readFileSync('tools/build.mjs','utf8'))![1]!;
 });
-async function open(page:Page,appId:string,variant='exact') {
+async function open(page:Page,appId:string,variant='exact',uploadMode='complete') {
   const pin=pins.find((value:any)=>value.appId===appId);
   const domains=fixtureDomains[appId]??['identity','inc','relay','storage','theme'];
   const original=readFileSync(`.test-fixtures/presentation/${appId}.html`);
@@ -41,7 +42,7 @@ async function open(page:Page,appId:string,variant='exact') {
   await page.clock.install();
   await page.route('**/assets/runtime/index.html?*',route=>route.fulfill({contentType:'text/html',body:document}));
   await page.route('**/assets/runtime/host.js',route=>route.fulfill({contentType:'text/javascript',body:host}));
-  await page.addInitScript(({generation,appId,pin,variant,html,htmlHash,aggregateHash,note,pack,png,savedFeed,domains,pngHash})=>{
+  await page.addInitScript(({generation,appId,pin,variant,html,htmlHash,aggregateHash,note,pack,png,savedFeed,domains,pngHash,uploadMode})=>{
     if(window!==window.top)return;
     const bytes=Uint8Array.from(atob(html),character=>character.charCodeAt(0));
     const listeners=new Set<(event:{data:string})=>void>(),held=new Map<string,any>();
@@ -84,8 +85,17 @@ async function open(page:Page,appId:string,variant='exact') {
         else if(request.type==='relay.publish'){response.ok=false;response.error='review cancelled';}
         else if(request.type==='upload.__begin'){response.token='00000000-0000-4000-8000-000000000001';response.uploadId='presentation-upload';}
         else if(request.type==='upload.__append')response.cursor=request.offset+atob(request.base64).length;
-        else if(request.type==='upload.__seal')response.result={ok:true,uploadId:'presentation-upload',status:'complete',rail:'blossom',
-          url:`https://files.example.org/${pngHash}.png`,sha256:pngHash,size:atob(png).length,mimeType:'image/png'};
+        else if(request.type==='upload.__seal'){
+          if(uploadMode==='denied')response.error='policy denied';
+          else {
+            const complete={ok:true,uploadId:'presentation-upload',status:'complete',rail:'blossom',
+              url:`https://files.example.org/${pngHash}.png`,sha256:pngHash,size:atob(png).length,mimeType:'image/png'};
+            state.pushUpload=(status:unknown=complete,overrides={})=>emit({type:'capability.upload',sessionId:generation,sequence:envelope.sequence,
+              delivery:1,response:JSON.stringify({type:'upload.status.changed',status}),...overrides});
+            response.result=uploadMode==='complete'?complete:{ok:true,uploadId:'presentation-upload',status:'pending',rail:'blossom'};
+            if(uploadMode==='terminal-first')state.pushUpload();
+          }
+        }
         else if(request.type==='common.getProfile')response={...response,ok:false,profile:null};
         else if(request.type==='resource.bytesMany'){
           state.batches++;
@@ -100,10 +110,11 @@ async function open(page:Page,appId:string,variant='exact') {
         reply(envelope,response);
       },
     }});
-  },{generation,appId,pin,variant,html:bytes.toString('base64'),htmlHash,aggregateHash,note,pack,png,savedFeed,domains,pngHash});
+  },{generation,appId,pin,variant,html:bytes.toString('base64'),htmlHash,aggregateHash,note,pack,png,savedFeed,domains,pngHash,uploadMode});
   await page.goto(`/assets/runtime/index.html?sessionId=${generation}&source=published`);
   const frame=page.frameLocator('#napplet');
   await expect(frame.locator('#hypergolic-reviewed-presentation')).toHaveCount(variant==='exact'?1:0);
+  await expect(frame.locator('[data-hypergolic-creator-upload]')).toHaveCount(appId==='emoji-pack-creator'&&variant==='exact'?1:0);
   await expect(frame.locator('body')).not.toHaveText('');
   return frame;
 }
@@ -260,6 +271,69 @@ for(const width of [320,360])test(`exact Emoji Pack Creator fields, staging and 
   const calls=await page.evaluate(()=>(window as any).__presentation.requests.filter((row:any)=>row.type==='capability').map((row:any)=>JSON.parse(row.message)));
   expect(calls.filter((row:any)=>row.type==='relay.publish').map((row:any)=>row.event.kind)).toEqual([30030]);
 });
+async function startCreatorUpload(page:Page, mode:string, variant='exact') {
+  await page.route('**/*',route=>route.abort());
+  const frame=await open(page,'emoji-pack-creator',variant,mode);
+  await frame.getByRole('textbox',{name:'Emoji shortcode'}).fill('neutral_code');
+  const chooser=page.waitForEvent('filechooser');
+  await frame.getByRole('button',{name:'Upload emoji image'}).click();
+  await (await chooser).setFiles({name:'neutral.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')});
+  await expect.poll(()=>page.evaluate(()=>(window as any).__presentation.requests.filter((row:any)=>
+    row.type==='capability'&&JSON.parse(row.message).type==='upload.__seal').length)).toBe(1);
+  return frame;
+}
+test('exact Emoji Pack Creator stages only the matching trusted terminal upload after the SDK deadline',async({page})=>{
+  const frame=await startCreatorUpload(page,'pending');
+  const staged=frame.locator('[data-staged-emoji]');
+  await expect(staged).toHaveCount(0);await expect(frame.getByText('upload failed',{exact:true})).toHaveCount(0);
+  const complete={ok:true,uploadId:'presentation-upload',status:'complete',rail:'blossom',
+    url:`https://files.example.org/${pngHash}.png`,sha256:pngHash,size:Buffer.from(png,'base64').length,mimeType:'image/png'};
+  await frame.locator('body').evaluate(status=>{
+    window.dispatchEvent(new MessageEvent('message',{source:parent,data:{type:'upload.status.changed',status}}));
+    window.dispatchEvent(new Event('pagehide'));
+  },complete);
+  await page.evaluate(status=>{
+    const state=(window as any).__presentation;
+    state.pushUpload({...status,uploadId:'unrelated-upload'});
+    state.pushUpload(status,{sessionId:'unrelated-generation'});
+  },complete);
+  await page.clock.fastForward(31_000);
+  await expect(staged).toHaveCount(0);
+  await page.evaluate(()=>(window as any).__presentation.pushUpload());
+  await expect(staged).toHaveCount(1);await expect(frame.getByRole('status')).toContainText('Uploaded :neutral_code:');
+});
+test('exact Emoji Pack Creator handles a matching terminal upload before its pending response',async({page})=>{
+  const frame=await startCreatorUpload(page,'terminal-first');
+  await expect(frame.locator('[data-staged-emoji]')).toHaveCount(1);
+});
+for(const [status,error] of [['failed','outcome unknown'],['cancelled','user cancelled']]){
+  test(`exact Emoji Pack Creator preserves terminal upload ${status}`,async({page})=>{
+    const frame=await startCreatorUpload(page,'pending');
+    await page.evaluate(({status,error})=>(window as any).__presentation.pushUpload({
+      ok:false,uploadId:'presentation-upload',status,rail:'blossom',error}),{status,error});
+    await expect(frame.getByText(error,{exact:true})).toBeVisible();
+    await expect(frame.locator('[data-staged-emoji]')).toHaveCount(0);
+    await expect(frame.getByRole('button',{name:'Upload emoji image'})).toBeEnabled();
+  });
+}
+test('exact Emoji Pack Creator preserves an initial upload denial',async({page})=>{
+  const frame=await startCreatorUpload(page,'denied');
+  await expect(frame.getByText('policy denied',{exact:true})).toBeVisible();
+  await expect(frame.locator('[data-staged-emoji]')).toHaveCount(0);
+});
+test('exact Emoji Pack Creator times out an upload without a terminal status',async({page})=>{
+  const frame=await startCreatorUpload(page,'pending');
+  await page.clock.fastForward(661_000);
+  await expect(frame.getByText('upload confirmation timed out',{exact:true})).toBeVisible();
+  await page.evaluate(()=>(window as any).__presentation.pushUpload());
+  await expect(frame.locator('[data-staged-emoji]')).toHaveCount(0);
+});
+test('an unreviewed Emoji Pack Creator version receives the original pending upload result',async({page})=>{
+  const frame=await startCreatorUpload(page,'pending','new-version');
+  await expect(frame.getByText('upload failed',{exact:true})).toBeVisible();
+  await page.evaluate(()=>(window as any).__presentation.pushUpload());
+  await expect(frame.locator('[data-staged-emoji]')).toHaveCount(0);
+});
 test('exact Emoji Pack Creator desktop retains its original two-column metadata layout',async({page})=>{
   await page.setViewportSize({width:1024,height:740});const frame=await open(page,'emoji-pack-creator');
   const columns=await frame.locator('.meta').evaluate(element=>getComputedStyle(element).gridTemplateColumns.split(' '));
@@ -273,5 +347,6 @@ test('unpublished, wrong-app and future-version metadata retain byte-identical d
   for(const pin of pins){for(const metadata of [{published:false,appId:pin.appId,aggregateHash:pin.aggregateHash},
     {published:true,appId:'other',aggregateHash:pin.aggregateHash},{published:true,appId:pin.appId,aggregateHash:'f'.repeat(64)}]){
     expect(injectReviewedPresentation(html,metadata)).toBe(html);
+    expect(injectCreatorUpload(html,{...metadata,domains:['upload']})).toBe(html);
   }}
 });
