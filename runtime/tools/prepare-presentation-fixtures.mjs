@@ -13,7 +13,7 @@ function verify(bytes,pin) {
 }
 async function download(pin) {
   const response=await fetch(pin.url,{redirect:'error',signal:AbortSignal.timeout(15000)});
-  assert(response.ok&&response.body,'Pinned presentation fixture unavailable');
+  assert(response.ok&&response.body,`Pinned presentation fixture ${pin.appId} unavailable (HTTP ${response.status})`);
   const chunks=[];let length=0;
   for await(const chunk of response.body){length+=chunk.length;assert(length<=pin.bytes);chunks.push(chunk);}
   return verify(Buffer.concat(chunks,length),pin);
@@ -29,7 +29,8 @@ export async function preparePresentationFixtures() {
     const hosts={'emoji-browser':'cdn.hzrd149.com','creator-signals':'blssm.us','mapplets':'r2a.primal.net','feed-builder':'cdn.hzrd149.com','emoji-pack-creator':'blssm.us'};
     assert.equal(url.hostname,hosts[pin.appId]);
     assert.equal(url.port+url.username+url.password+url.search+url.hash,'');
-    assert.equal(url.pathname,'/'+pin.sha256);
+    const path=pin.appId==='mapplets'?'/uploads2/1/0c/be/'+pin.sha256+'.html':'/'+pin.sha256;
+    assert.equal(url.pathname,path);
     assert.equal(createHash('sha256').update(pin.sha256+' /index.html\n').digest('hex'),pin.aggregateHash);
     const destination=new URL(pin.appId+'.html',cache);
     try{verify(await readFile(destination),pin);continue;}catch(error){if(error.code!=='ENOENT')throw error;}
