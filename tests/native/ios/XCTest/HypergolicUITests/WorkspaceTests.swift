@@ -1072,7 +1072,7 @@ final class WorkspaceTests: XCTestCase {
     try identityPress(section.identifier)
   }
   private func revealFirstOpenClaims() throws -> Set<String> {
-    let scroll = app.scrollViews["published-review-content"].firstMatch
+    let scroll = app.otherElements["published-review-content"].scrollViews.firstMatch
     let technical = app.buttons["published-review-technical-toggle"].firstMatch
     guard scroll.exists else { throw Failure.invalid("Missing launch review scroll surface") }
     for _ in 0..<12 {

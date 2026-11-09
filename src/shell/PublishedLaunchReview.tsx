@@ -119,9 +119,10 @@ function LaunchIdentity({ target, source }: { target: ReviewTarget; source: Laun
   const { name, avatar, artwork } = useLaunchArtwork(target);
   const { title, description } = target.metadata;
   const [fullDescription, setFullDescription] = useState(false);
-  const hasLongDescription = description.length > 180;
+  const summary = description.replace(/\s+/gu, ' ');
+  const hasLongDescription = summary.length > 180;
   const npub = formatNpub(target.publisher);
-  const preview = hasLongDescription && !fullDescription ? description.slice(0, 177).trimEnd() + '…' : description;
+  const preview = hasLongDescription ? summary.slice(0, 177).replace(/\s+\S*$/u, '') + '…' : summary;
   return <View style={styles.section}>
     <View style={styles.identityRow}>
       <ReviewImage uri={artwork} />
@@ -141,7 +142,7 @@ function LaunchIdentity({ target, source }: { target: ReviewTarget; source: Laun
       </View>
     </View>
     {description !== '' && <View style={styles.group}>
-      <Text style={styles.detail}>{preview}</Text>
+      <Text style={styles.detail}>{fullDescription ? description : preview}</Text>
       {hasLongDescription && <ShellPressable accessibilityRole="button" accessibilityState={{ expanded: fullDescription }}
         onPress={() => setFullDescription(value => !value)} style={styles.descriptionToggle}>
         <Text style={styles.disclosureText}>{fullDescription ? 'Show less' : 'Read full description'}</Text>
@@ -165,7 +166,7 @@ function TechnicalDetails({ target, source }: { target: ReviewTarget; source: La
   if (!snapshotEventId(target.appId)) fields.splice(1, 0, ['Publication identifier', target.appId]);
   if (source?.publisher) fields.push(['Requesting catalog key', formatNpub(source.publisher)]);
   return <View style={styles.technical}>
-    <ShellPressable accessibilityRole="button" accessibilityState={{ expanded }} testID="published-review-technical-toggle"
+    <ShellPressable accessibilityRole="button" accessibilityLabel="Technical details" accessibilityState={{ expanded }} testID="published-review-technical-toggle"
       onPress={() => setExpanded(value => !value)} style={styles.disclosure}>
       <Text style={styles.disclosureText}>Technical details</Text>
       <Text accessible={false} importantForAccessibility="no" style={styles.disclosureText}>{expanded ? '−' : '+'}</Text>
