@@ -55,10 +55,11 @@ async function readQuery(request: Extract<CapabilityRequest, {type: 'relay.query
 }
 async function readOutboxQuery(request: OutboxReadRequest, service: OutboxReadService | undefined, registration: NativeRegistration, pending: CapabilityReadAdmission, active: () => void, nativeToken: string): Promise<CapabilityReply> {
   if (!service) return outboxReadFailure(request, 'policy denied')!;
+  const options = {appData:registration.appData,partialAuthorRoutes:true as const};
   try {
     if (request.type === 'outbox.getEvent') {
       if (!service.getEvent) return outboxReadFailure(request,'policy denied')!;
-      const result = await pending.schedule(active,signal => service.getEvent!(request,registration.user,signal,active,nativeToken,registration.appData));
+      const result = await pending.schedule(active,signal => service.getEvent!(request,registration.user,signal,active,nativeToken,options));
       return {type:'outbox.getEvent.result',id:request.id,...result};
     }
     if (request.type === 'outbox.resolveRelays') {
@@ -67,7 +68,7 @@ async function readOutboxQuery(request: OutboxReadRequest, service: OutboxReadSe
       const {relays,source,missingAuthors} = result;
       return {type:'outbox.resolveRelays.result',id:request.id,plan:{relays,source,...(missingAuthors.length ? {missingAuthors} : {})}};
     }
-    const result = await pending.schedule(active, signal => service.query(request, registration.user, signal, active, nativeToken,registration.appData));
+    const result = await pending.schedule(active, signal => service.query(request, registration.user, signal, active, nativeToken,options));
     return {type: 'outbox.query.result', id: request.id, events: result.events, ...(result.incomplete ? {incomplete: true} : {})};
   } catch (error) {
     const allowed = ['invalid filter', 'relay timeout', 'relay list unavailable', 'policy denied', 'no authors', 'not found'];

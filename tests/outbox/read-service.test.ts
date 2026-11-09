@@ -8,6 +8,7 @@ import {parseOutboxQuery,parseOutboxEvent,parseOutboxResolve} from '../../src/ou
 import {parseOutboxSubscribe} from '../../src/outbox/subscription-contract.ts';
 import {parseOutboxRelayList} from '../../src/outbox/relay-list.ts';
 import {createOutboxAuthorResolver, type OutboxAuthorResolver} from '../../src/outbox/author-resolver.ts';
+import {resolveOutboxPlan} from '../../src/outbox/route-plan.ts';
 const key = new Uint8Array(32).fill(36), author = getPublicKey(key);
 const event = JSON.parse(JSON.stringify(finalizeEvent({kind: 1, created_at: 1, tags: [], content: 'disjoint'}, key)));
 const list = parseOutboxRelayList(JSON.parse(JSON.stringify(finalizeEvent({kind: 10002, created_at: 1, content: '', tags: [['r','wss://read.nostr.net','read'],['r','wss://write.nostr.net','write']]}, key))), author);
@@ -44,7 +45,7 @@ test('query options are immutable and reject guest authority, private relays and
   const input = {...request,options:{authors:[author],relays:['wss://nos.lol'],limit:1,timeoutMs:1000}};
   const selected = parseOutboxQuery(input); input.options.relays[0]='wss://relay.damus.io';
   assert.deepEqual(selected.options.relays,['wss://nos.lol']); assert.ok(Object.isFrozen(selected.options));
-  for (const options of [{user:author},{relays:['wss://127.0.0.1']},{limit:-1},{limit:1.5},{limit:Number.MAX_SAFE_INTEGER+1},{timeoutMs:0},{timeoutMs:15001}]) assert.throws(()=>parseOutboxQuery({...request,options}));
+  for (const options of [{user:author},{partialAuthorRoutes:true},{relays:['wss://127.0.0.1']},{limit:-1},{limit:1.5},{limit:Number.MAX_SAFE_INTEGER+1},{timeoutMs:0},{timeoutMs:15001}]) assert.throws(()=>parseOutboxQuery({...request,options}));
   let called = false;
   assert.throws(()=>parseOutboxQuery({...request,options:{get authors() {called=true; return [author];}}})); assert.equal(called,false);
 });
@@ -75,6 +76,67 @@ test('routing overflow and revoked source produce zero data relay requests', asy
   const h = harness({async resolve(){return {list:many,source:'nip65',incomplete:false};}});
   await assert.rejects(h.service.query({...request,options:{relays:['wss://extra.nostr.net']}},author,signal(),()=>{},token)); assert.equal(h.calls.length,0);
   await assert.rejects(h.service.query(request,author,signal(),()=>{throw Error('revoked');},token)); assert.equal(h.calls.length,0);
+});
+test('oversized signed author routes keep hints and prefer matching Network peers, even for empty results', async () => {
+  const relays = Array.from({length:19},(_,i)=>`wss://relay${i}.nostr.net`);
+  const signed = finalizeEvent({kind:10002,created_at:1,content:'',tags:relays.map(relay=>['r',relay])},key);
+  const resolved = parseOutboxRelayList(JSON.parse(JSON.stringify(signed)),author);
+  const hint = 'wss://hint.nostr.net';
+  const h = harness({async resolve(){return {list:resolved,source:'nip65',incomplete:false};}},
+    [relays[18]!, 'wss://unrelated.nostr.net', relays[16]!]);
+  h.native.queryOutboxRelay = async (_token,_id,relay,_wire,sub) => {
+    h.calls.push(relay);return [JSON.stringify(['EOSE',sub])];
+  };
+  const result = await h.service.query({...request,options:{relays:[hint]}},author,signal(),()=>{},token,{partialAuthorRoutes:true});
+  assert.deepEqual(h.calls,[hint,relays[18],relays[16],...relays.slice(0,13)]);
+  assert.deepEqual(result.plan.relays,h.calls);
+  assert.deepEqual(result.plan.missingAuthors,[author]);
+  assert.equal(result.plan.source,'nip65');
+  assert.deepEqual(result.events,[]);
+  assert.equal(result.incomplete,true);
+  h.calls.length = 0;
+  const found = await h.service.getEvent({type:'outbox.getEvent',id:'exact',eventId:event.id,options:{author,relays:[hint]}},
+    author,signal(),()=>{},token,{partialAuthorRoutes:true});
+  assert.deepEqual(h.calls,result.plan.relays);
+  assert.deepEqual(found,{error:'not found',incomplete:true});
+});
+test('applicable role fitting 16 routes is complete even when signed metadata has more unique relays', async () => {
+  const relays = Array.from({length:19},(_,i)=>`wss://relay${i}.nostr.net`);
+  const signed = finalizeEvent({kind:10002,created_at:1,content:'',tags:relays.map((relay,i)=>['r',relay,i<16?'write':'read'])},key);
+  const resolved = parseOutboxRelayList(JSON.parse(JSON.stringify(signed)),author);
+  const h = harness({async resolve(){return {list:resolved,source:'nip65',incomplete:false};}});
+  const result = await h.service.query(request,author,signal(),()=>{},token,{partialAuthorRoutes:true});
+  assert.deepEqual(h.calls,relays.slice(0,16));
+  assert.deepEqual(result.plan.missingAuthors,[]);
+  assert.equal(result.incomplete,false);
+  assert.equal(result.events[0]?.event.id,event.id);
+});
+test('oversized authors leave whole normal author routes first and remain denied outside one-shot planning', async () => {
+  const relays = Array.from({length:19},(_,i)=>`wss://relay${i}.nostr.net`);
+  const signed = finalizeEvent({kind:10002,created_at:1,content:'',tags:relays.map(relay=>['r',relay])},key);
+  const resolved = parseOutboxRelayList(JSON.parse(JSON.stringify(signed)),author);
+  const otherKey = new Uint8Array(32).fill(37), otherAuthor = getPublicKey(otherKey);
+  const normalRelay = 'wss://whole.nostr.net';
+  const otherList = finalizeEvent({kind:10002,created_at:1,content:'',tags:[['r',normalRelay]]},otherKey);
+  const normal = parseOutboxRelayList(JSON.parse(JSON.stringify(otherList)),otherAuthor);
+  const resolver:OutboxAuthorResolver = {async resolve(_user, selected){
+    return {list:selected===author?resolved:normal,source:'nip65',incomplete:false};
+  }};
+  const network = [relays[18]!], h = harness(resolver,network);
+  const hint = 'wss://hint.nostr.net';
+  const mixed = {...request,filters:{authors:[author,otherAuthor],kinds:[1]},options:{relays:[hint]}};
+  const result = await h.service.query(mixed,author,signal(),()=>{},token,{partialAuthorRoutes:true});
+  assert.deepEqual(h.calls,[hint,normalRelay,relays[18],...relays.slice(0,13)]);
+  assert.deepEqual(result.plan.missingAuthors,[author]);
+  assert.equal(result.incomplete,true);
+  await assert.rejects(h.service.plan(request,author,signal(),()=>{}),/policy denied/);
+  for (const direction of ['read','write']) {
+    await assert.rejects(h.service.resolveRelays({type:'outbox.resolveRelays',id:'resolve',target:{authors:[author],direction}},
+      author,signal(),()=>{}),/policy denied/);
+  }
+  await assert.rejects(resolveOutboxPlan(resolver,{networkRelays:network,lookupRelays:[]},author,[author],[],'read',
+    signal(),()=>{},false,{wide:false,timeoutMs:7500}),/policy denied/);
+  assert.equal(h.calls.length,16);
 });
 test('total deadline cancels hanging discovery before data query', async () => {
   const h = harness({async resolve(){return new Promise(()=>{});}});

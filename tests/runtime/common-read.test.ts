@@ -7,7 +7,8 @@ import {decodeCommonNip19,encodeCommonNip19} from '../../src/common/common-codec
 import {createNativeRelayQuery} from '../../src/network/native-relay-query.ts';
 import {readCommon} from '../../src/common/common-service.ts';
 import type {NativeRegistration} from '../../src/runtime/capability-protocol.ts';
-import type {OutboxReadService} from '../../src/outbox/read-service.ts';
+import {createOutboxReadService,type OutboxReadService} from '../../src/outbox/read-service.ts';
+import {parseOutboxRelayList} from '../../src/outbox/relay-list.ts';
 
 const key = generateSecretKey();
 const profile:NostrEvent = JSON.parse(JSON.stringify(finalizeEvent({kind:0,created_at:10,tags:[],
@@ -109,6 +110,22 @@ test('Common profile lookup borrows the actual Outbox grant without making raw R
     token:'original-common-token',outbox,queries:{async query() {assert.fail('no raw Relay grant');}},
   });
   assert.equal(calls,1);assert.equal(result.ok,true);assert.equal(result.pubkey,publisher);
+});
+
+test('Common profile lookup does not opt into partial oversized Outbox routes', async () => {
+  const tags = Array.from({length:19},(_,i)=>['r',`wss://relay${i}.nostr.net`,'write']);
+  const signed = finalizeEvent({kind:10002,created_at:1,content:'',tags},key);
+  const list = parseOutboxRelayList(JSON.parse(JSON.stringify(signed)),publisher);
+  let sent = 0;
+  const outbox = createOutboxReadService({async resolve(){return {list,source:'nip65',incomplete:false};}},{
+    newInstanceId:()=> '00000000-0000-4000-8000-000000000001',
+    async queryOutboxRelay(_token,_id,_url,_wire,sub){sent++;return [JSON.stringify(['EVENT',sub,profile]),JSON.stringify(['EOSE',sub])];},
+    cancelPublishedRelay(){},
+  },()=>({networkRelays:['wss://network.nostr.net'],lookupRelays:[]}));
+  const result = await readCommon(request('common.getProfile',{target:publisher}),registration(['common','outbox']),signal(),active,
+    {token:'original-common-token',outbox});
+  assert.equal(sent,0);
+  assert.deepEqual(result,{type:'common.getProfile.result',id:'request',ok:false,pubkey:publisher,error:'relay-timeout'});
 });
 
 test('Common distinguishes an observed empty profile from failure and rechecks revocation before returning', async () => {

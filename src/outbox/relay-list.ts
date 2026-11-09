@@ -4,7 +4,7 @@ import { MAX_RELAYS_PER_ROLE, normalizeRelayUrl } from '../network/relay-setting
 import { utf8Bytes } from '../storage/codec.ts';
 
 export const OUTBOX_LIST_LIMITS = Object.freeze({ events: 32, bundleBytes: 256 * 1024,
-  relays: MAX_RELAYS_PER_ROLE, authors: 64, freshMs: 24 * 60 * 60_000,
+  relays: MAX_RELAYS_PER_ROLE, metadataRelays: 64, authors: 64, freshMs: 24 * 60 * 60_000,
   staleReadMs: 7 * 24 * 60 * 60_000 });
 export class OutboxRelayListError extends Error {
   constructor() { super('relay list unavailable'); this.name = 'OutboxRelayListError'; }
@@ -36,8 +36,7 @@ function roles(event: NostrEvent): OutboxRelayList {
     let relay: string;
     try { relay = normalizeRelayUrl(tag[1]); } catch { deniedDestinations++; continue; }
     all.add(relay);
-    // Never silently truncate a required recipient's signed relay set.
-    if (all.size > OUTBOX_LIST_LIMITS.relays) return fail();
+    if (all.size > OUTBOX_LIST_LIMITS.metadataRelays) return fail();
     if (tag[2] !== 'write') read.add(relay);
     if (tag[2] !== 'read') write.add(relay);
   }

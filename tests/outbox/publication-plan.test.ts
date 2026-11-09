@@ -44,6 +44,13 @@ test('required fanout overflow is a failure before review and is never silently 
  const many=list(recipientKey,Array.from({length:16},(_,i)=>['r',`wss://relay${i}.nostr.net`,'read']));const h=setup(async(_u,author)=>({list:author===user?own:many,source:'cache',incomplete:false}));
  await assert.rejects(h.planner.plan({...request,options:{toInboxes:[recipient]}},user,signal(),()=>{}),/policy denied/);
 });
+test('oversized verified own or required inbox routes deny publication without fallback or truncation',async()=>{
+ const tags=Array.from({length:19},(_,i)=>['r',`wss://relay${i}.nostr.net`]);
+ const ownLarge=list(ownKey,tags),inboxLarge=list(recipientKey,tags);
+ const h=setup(async(_u,author)=>({list:author===user?ownLarge:inboxLarge,source:'cache',incomplete:false}));
+ await assert.rejects(h.planner.plan(request,user,signal(),()=>{}),/policy denied/);
+ await assert.rejects(h.planner.plan({...request,options:{toOutbox:false,toInboxes:[recipient]}},user,signal(),()=>{}),/policy denied/);
+});
 test('missing own list uses labelled Network fallback and does not invent an ancillary list',async()=>{
  const h=setup(async()=>{throw Error('offline');}),plan=await h.planner.plan(request,user,signal(),()=>{});
  assert.equal(plan.ownSource,'network-fallback');assert.deepEqual(plan.event.destinations,['wss://fallback.nostr.net/']);assert.deepEqual(plan.destinations[0]?.sources,[{kind:'network-fallback',author:user}]);assert.equal(plan.ancillary,null);

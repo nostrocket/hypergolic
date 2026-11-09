@@ -18,7 +18,15 @@ half the remaining time inside the same 15-second total deadline. Missing batch
 results are not cached as absent. When the complete signed read relay union
 would exceed 16 destinations, configured Network relays and validated hints
 leave room for whole author relay sets that fit. Omitted author routes make the
-result incomplete. Packs with more than 32 per-member filters still exceed
+result incomplete. Verified NIP-65 metadata retains up to 64 unique normalized
+relays and their signed roles. If an author's applicable write set alone
+exceeds 16, Outbox query and getEvent preserve hints, whole author sets and
+existing fallback routes first. Remaining slots prefer signed matches in
+configured Network order, then the signed relay order. The result is incomplete
+and the plan records authors whose routes were omitted, including when no
+events were found. Live subscriptions, relay resolution, Common and publication
+still require their applicable route sets to fit the existing destination cap.
+Packs with more than 32 per-member filters still exceed
 this profile. A single-author one-shot read budgets up to half of its remaining
 deadline for route discovery and leaves the original remainder for data. A slow
 Lookup peer can leave the verified author metadata incomplete. The shell uses any verified route already

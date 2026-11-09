@@ -14,8 +14,9 @@ const result = {events:[],incomplete:true,plan:{relays:['wss://nos.lol'],source:
 test('attested query uses captured identity and returns original correlation with incomplete evidence', async t => {
   const {database} = await setup(t), native = new NativeLeases(), owner = registration({domains: ['outbox']});
   const filters = Array.from({length:22},(_,index)=>({authors:[hex(index+1)],kinds:[0],limit:1}));
-  const broker = bind(database,native,owner,{async query(input,user,_signal,active,nativeToken){
+  const broker = bind(database,native,owner,{async query(input,user,_signal,active,nativeToken,options){
     assert.equal(nativeToken,token);
+    assert.equal(options?.partialAuthorRoutes,true);
     assert.equal(user,owner.user); assert.deepEqual((input as {filters:unknown}).filters,filters);
     assert.equal((input as {id:string}).id,'outbox-1'); active(); return result;
   }});
@@ -57,7 +58,7 @@ test('native or broker revocation aborts outstanding Outbox and prevents stale r
 
 for(const operation of ['outbox.getEvent','outbox.resolveRelays'] as const) test(`${operation} is native identity-bound and replay denied with canonical correlation`, async t => {
   const {database}=await setup(t),native=new NativeLeases(),owner=registration();let calls=0;
-  const service={async query(){throw Error('wrong method');},async getEvent(_input:unknown,user:string){assert.equal(user,owner.user);calls++;return {error:'not found',incomplete:true as const};},async resolveRelays(_input:unknown,user:string){assert.equal(user,owner.user);calls++;return result.plan;}};
+  const service:OutboxReadService={async query(){throw Error('wrong method');},async getEvent(_input,user,_signal,_active,_token,options){assert.equal(user,owner.user);assert.equal(options?.partialAuthorRoutes,true);calls++;return {error:'not found',incomplete:true as const};},async resolveRelays(_input,user){assert.equal(user,owner.user);calls++;return result.plan;}};
   const broker=bind(database,native,owner,service);
   const input=operation==='outbox.getEvent'?{type:operation,id:'new-read',eventId:hex(8)}:{type:operation,id:'new-read',target:{pubkey:hex(8)}};
   const a=native.add(owner,input),b=native.add(owner,input);await broker.dispatch(a);await broker.dispatch(b);

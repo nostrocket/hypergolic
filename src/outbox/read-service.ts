@@ -17,9 +17,10 @@ export type OutboxEventResult = Readonly<{result?: OutboxEventRow; incomplete?: 
 export type NativeOutboxQueryPort = Pick<NativePublishedRelayPort, 'newInstanceId' | 'cancelPublishedRelay'> & {
   queryOutboxRelay(token: string, operationId: string, url: string, requestText: string, subscriptionId: string, timeoutMs: number): Promise<string[]>;
 };
+type OutboxReadOptions = Readonly<{appData?: AppDataContext | undefined; partialAuthorRoutes?: true}>;
 export interface OutboxReadService {
-  query(input: unknown, user: string, signal: AbortSignal, assertActive: () => void, nativeToken: string, appData?:AppDataContext): Promise<OutboxReadResult>;
-  getEvent?(input: unknown, user: string, signal: AbortSignal, assertActive: () => void, nativeToken: string, appData?:AppDataContext): Promise<OutboxEventResult>;
+  query(input: unknown, user: string, signal: AbortSignal, assertActive: () => void, nativeToken: string, options?: OutboxReadOptions): Promise<OutboxReadResult>;
+  getEvent?(input: unknown, user: string, signal: AbortSignal, assertActive: () => void, nativeToken: string, options?: OutboxReadOptions): Promise<OutboxEventResult>;
   resolveRelays?(input: unknown, user: string, signal: AbortSignal, assertActive: () => void): Promise<OutboxReadPlan>;
   plan?(input: unknown, user: string, signal: AbortSignal, assertActive: () => void, refresh?: boolean): Promise<OutboxReadPlan>;
 }
@@ -85,12 +86,13 @@ export function createOutboxReadService(resolver: OutboxAuthorResolver,
       return Object.freeze({...selected,relays:Object.freeze(relays),incomplete:false});
     });
   }
-  async function query(input: unknown,user: string,signal: AbortSignal,assertActive: () => void, nativeToken: string, appData?:AppDataContext): Promise<OutboxReadResult> {
+  async function query(input: unknown,user: string,signal: AbortSignal,assertActive: () => void, nativeToken: string, options?: OutboxReadOptions): Promise<OutboxReadResult> {
     const request = parseOutboxQuery(input);
     if (!nativeToken) throw new OutboxQueryError('policy denied');
     return bounded(request.options.timeoutMs,signal,assertActive,async (leased,active,remaining) => {
       const wide = request.filters.length > QUERY_LIMITS.filters;
-      const planning = {wide, timeoutMs:Math.max(1, Math.floor(remaining() / 2))};
+      const planning = {wide, timeoutMs:Math.max(1, Math.floor(remaining() / 2)), partialAuthorRoutes:options?.partialAuthorRoutes === true};
+      const appData = options?.appData;
       const storage=appDataReadPlan(request,appData,settings().networkRelays);
       const current=()=>{active();if(storage&&appData)assertCurrentAppDataSettings(appData,settings().networkRelays);};
       const plan = storage ?? await route(request,user,leased,current,false,planning); current();
@@ -111,10 +113,10 @@ export function createOutboxReadService(resolver: OutboxAuthorResolver,
   }
   return Object.freeze({
     query,
-    async getEvent(input: unknown,user: string,signal: AbortSignal,active: () => void,nativeToken: string, appData?:AppDataContext): Promise<OutboxEventResult> {
+    async getEvent(input: unknown,user: string,signal: AbortSignal,active: () => void,nativeToken: string, options?: OutboxReadOptions): Promise<OutboxEventResult> {
       const request = parseOutboxEvent(input);
       const result = await query({type:'outbox.query',id:request.id,filters:{ids:[request.eventId],limit:1},
-        options:{authors:request.options.author ? [request.options.author] : [],relays:request.options.relays,timeoutMs:request.options.timeoutMs,limit:1}},user,signal,active,nativeToken,appData);
+        options:{authors:request.options.author ? [request.options.author] : [],relays:request.options.relays,timeoutMs:request.options.timeoutMs,limit:1}},user,signal,active,nativeToken,options);
       const row = result.events[0];
       if (row && row.event.id !== request.eventId) throw new OutboxQueryError('invalid filter');
       return Object.freeze({...(row ? {result:row} : {error:'not found'}),...(result.incomplete ? {incomplete:true as const} : {})});
