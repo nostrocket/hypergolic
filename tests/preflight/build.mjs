@@ -21,7 +21,7 @@ const mocks = {
  'test:fixture': fixture,
  'expo': `import {fixture,store} from 'test:fixture'; export function requireNativeModule(name) { fixture.calls.push('module:'+name); if(name==='HypergolicSignerCore'&&!fixture.missingStore) return store; throw Error('TEST: module unavailable'); }`,
  'react-native': `import {forbidden} from 'test:fixture'; export const Platform={OS:'ios'}; export const View='View',Text='Text',ActivityIndicator='ActivityIndicator',Modal='Modal',ScrollView='ScrollView',StatusBar='StatusBar'; export const useColorScheme=()=> 'light'; export const StyleSheet={create:value=>value};`,
- 'expo-crypto': `import {forbidden} from 'test:fixture'; export const CryptoDigestAlgorithm={SHA256:'SHA-256'}; export const digest=()=>forbidden('artifact-digest'); export const digestStringAsync=()=>forbidden('config-digest');`,
+ 'expo-crypto': `import {forbidden} from 'test:fixture'; export const CryptoDigestAlgorithm={SHA256:'SHA-256'}; export const digest=()=>forbidden('artifact-digest'); export const digestStringAsync=()=>forbidden('config-digest'); export const randomUUID=()=>forbidden('random-id');`,
  'expo-sqlite': `import {forbidden} from 'test:fixture'; export const openDatabaseAsync=()=>forbidden('open-sqlite');`,
  'expo-secure-store': `import {forbidden} from 'test:fixture'; export const WHEN_UNLOCKED_THIS_DEVICE_ONLY='when-unlocked-device-only'; export const isAvailableAsync=()=>forbidden('secure-store'); export const getItemAsync=()=>forbidden('config-read'); export const setItemAsync=()=>forbidden('config-write'); export const deleteItemAsync=()=>forbidden('config-delete');`,
  'expo-image': `export const Image='Image';`,
