@@ -1,5 +1,6 @@
 import { emptyWorkspace, focusNapplet, openNapplet, type NappletDescriptor, type Workspace } from './workspace.ts';
 import { BUNDLED_FIXTURES, type BundledFixture } from '../runtime/bundled-catalog.ts';
+import { snapshotEventId } from '../napplets/published-identity.ts';
 
 export type BundledVariant = Exclude<BundledFixture, 'approval-lab-v1' | 'approval-lab-v2' | 'approval-lab-v3' | 'feed-lab-v1'> | 'state-lab-other-publisher';
 const variants: readonly BundledVariant[] = ['napplet-discovery', 'close-lab', 'nap-support', 'routing-lab-peer', 'routing-lab', 'upload-lab', 'state-lab-other-publisher', 'resource-lab', 'feed-lab', 'approval-lab', 'state-lab-peer', 'state-lab', 'ux-lab'];
@@ -65,8 +66,10 @@ const HEX64 = /^[0-9a-f]{64}$/;
 const validAppId = (value: string): boolean => value.length > 0 && value.trim() === value &&
   !/[\u0000-\u001f\u007f]/.test(value) && new TextEncoder().encode(value).byteLength <= 255;
 function assertPublishedSession(session: NappletDescriptor): void {
+  const snapshotId = snapshotEventId(session.appId);
+  const validPin = snapshotId === null ? validAppId(session.appId) : snapshotId === session.eventId;
   if (session.source !== 'published' || !uuid.test(session.id) || !HEX64.test(session.publisher) || !HEX64.test(session.version) ||
-      !HEX64.test(session.eventId ?? '') || !validAppId(session.appId) || session.title.length === 0 ||
+      !HEX64.test(session.eventId ?? '') || !validPin || session.title.length === 0 ||
       new TextEncoder().encode(session.title).byteLength > 128) throw new Error('Unavailable saved napplet');
 }
 
