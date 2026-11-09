@@ -8,7 +8,7 @@ import type { Workspace } from '../shell/workspace.ts';
 import { isExpectedDeletion } from './identity-deletion.ts';
 
 export type IdentityChange = Readonly<
-  | { pubkey: string; kind: 'import' | 'select' | 'connect' | 'connect-android' | 'refresh-remote' | 'delete-local-key' }
+  | { pubkey: string; kind: 'public' | 'import' | 'select' | 'connect' | 'connect-android' | 'refresh-remote' | 'delete-local-key' }
   | { pubkey: string; kind: 'select-method'; method: SigningMethodKind }
   | { pubkey: string; kind: 'disconnect-method'; method: 'nip46' | 'nip55' }
 >;
@@ -80,6 +80,12 @@ export class IdentityTransition {
     this.requireReady();
     if (!this.state.session.vault.identities.some(identity => identity.pubkey === pubkey && identity.status === 'active')) throw new VaultError('NOT_FOUND');
     return this.prepare({ pubkey, kind: 'select' });
+  }
+  preparePublicIdentity(pubkey: string): IdentityChange {
+    this.requireReady();
+    if (!/^[0-9a-f]{64}$/.test(pubkey) || !this.ports.vault.addPublicIdentity ||
+        this.state.session.vault.identities.some(identity => identity.pubkey === pubkey)) throw new VaultError('AUTHORIZATION_DENIED');
+    return this.prepare({ pubkey, kind: 'public' })!;
   }
   async prepareImport(): Promise<IdentityChange | null> {
     this.requireReady();
@@ -195,6 +201,9 @@ export class IdentityTransition {
   }
   private commit(pending: IdentityChange, candidate: NativeImportCandidate | null, remote: NativeRemoteCandidate | null): Promise<VaultSnapshot> {
     switch (pending.kind) {
+      case 'public':
+        if (!this.ports.vault.addPublicIdentity) throw new VaultError('AUTHORIZATION_DENIED');
+        return this.ports.vault.addPublicIdentity(pending.pubkey);
       case 'import':
         if (!candidate) throw new IdentityChangeError('STALE');
         return this.ports.vault.commitImport(candidate);

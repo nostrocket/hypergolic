@@ -32,7 +32,15 @@ public enum NativeSigningSourceFacade {
   private static func requester(_ registration: [String: Any]) -> String? {
     guard let publisher = registration["publisher"] as? String, let app = registration["appId"] as? String,
       let version = registration["version"] as? String, let session = registration["sessionId"] as? String else { return nil }
-    return "Napplet: \(app)\nPublisher: \(publisher)\nVersion: \(version)\nSession: \(session)"
+    let label: String
+    if let raw = registration["snapshot"] {
+      guard let snapshot = PublishedArtifactRegistry.Snapshot(raw), snapshot.appKey == app else { return nil }
+      label = snapshot.requester(publisher: publisher)
+    } else {
+      guard !app.hasPrefix(" 5129:") else { return nil }
+      label = "Napplet: \(app)\nPublisher: \(publisher)"
+    }
+    return "\(label)\nVersion: \(version)\nSession: \(session)"
   }
   public static func capture(kind: String, token: String) -> NativeSigningSourceCapture? {
     guard token.utf8.count == 36, UUID(uuidString: token) != nil else { return nil }

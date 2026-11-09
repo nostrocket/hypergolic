@@ -12,15 +12,21 @@ function bind(database: Parameters<typeof createCapabilityBroker>[0], native: Na
 }
 const result = {events:[],incomplete:true,plan:{relays:['wss://nos.lol'],source:'fallback' as const,missingAuthors:[],incomplete:true}};
 test('attested query uses captured identity and returns original correlation with incomplete evidence', async t => {
-  const {database} = await setup(t), native = new NativeLeases(), owner = registration();
-  const broker = bind(database,native,owner,{async query(input,user,_signal,active){assert.equal(user,owner.user); assert.equal((input as {id:string}).id,'outbox-1');active();return result;}});
-  const token = native.add(owner,request()); await broker.dispatch(token);
+  const {database} = await setup(t), native = new NativeLeases(), owner = registration({domains: ['outbox']});
+  const filters = Array.from({length:22},(_,index)=>({authors:[hex(index+1)],kinds:[0],limit:1}));
+  const broker = bind(database,native,owner,{async query(input,user,_signal,active,nativeToken,options){
+    assert.equal(nativeToken,token);
+    assert.equal(options?.partialAuthorRoutes,true);
+    assert.equal(user,owner.user); assert.deepEqual((input as {filters:unknown}).filters,filters);
+    assert.equal((input as {id:string}).id,'outbox-1'); active(); return result;
+  }});
+  const token = native.add(owner,{...request(),filters}); await broker.dispatch(token);
   assert.deepEqual(native.results.get(token),{type:'outbox.query.result',id:'outbox-1',events:[],incomplete:true});
 });
-test('both outbox and relay grants, exact generation and namespace are required before routing', async t => {
+test('Outbox grant, exact generation and namespace are required before routing', async t => {
   const {database} = await setup(t), native = new NativeLeases(); let calls = 0;
   const service = {async query(){calls++;return result;}};
-  for (const patch of [{domains:['outbox']},{domains:['relay']},{generation:'foreign'},{user:hex(5)}]) {
+  for (const patch of [{domains:['relay']},{generation:'foreign'},{user:hex(5)}]) {
     const owner = registration(), captured = registration(patch);
     const broker = bind(database,native, patch.domains ? captured : owner,service);
     const token = native.add(captured,request());await broker.dispatch(token);assert.equal(native.results.get(token),null);
@@ -52,7 +58,7 @@ test('native or broker revocation aborts outstanding Outbox and prevents stale r
 
 for(const operation of ['outbox.getEvent','outbox.resolveRelays'] as const) test(`${operation} is native identity-bound and replay denied with canonical correlation`, async t => {
   const {database}=await setup(t),native=new NativeLeases(),owner=registration();let calls=0;
-  const service={async query(){throw Error('wrong method');},async getEvent(_input:unknown,user:string){assert.equal(user,owner.user);calls++;return {error:'not found',incomplete:true as const};},async resolveRelays(_input:unknown,user:string){assert.equal(user,owner.user);calls++;return result.plan;}};
+  const service:OutboxReadService={async query(){throw Error('wrong method');},async getEvent(_input,user,_signal,_active,_token,options){assert.equal(user,owner.user);assert.equal(options?.partialAuthorRoutes,true);calls++;return {error:'not found',incomplete:true as const};},async resolveRelays(_input,user){assert.equal(user,owner.user);calls++;return result.plan;}};
   const broker=bind(database,native,owner,service);
   const input=operation==='outbox.getEvent'?{type:operation,id:'new-read',eventId:hex(8)}:{type:operation,id:'new-read',target:{pubkey:hex(8)}};
   const a=native.add(owner,input),b=native.add(owner,input);await broker.dispatch(a);await broker.dispatch(b);

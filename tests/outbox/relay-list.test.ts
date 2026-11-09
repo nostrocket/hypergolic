@@ -63,8 +63,22 @@ test('same timestamp chooses lowest id independent of arrival order', () => {
   assert.equal(selectOutboxRelayList([b, a], author)?.event.id, expected);
 });
 
-test('required relay set exceeding the native route bound fails rather than truncating', () => {
-  const tags = Array.from({length: OUTBOX_LIST_LIMITS.relays + 1}, (_, index) => ['r', `wss://relay${index}.nostr.net`, 'read']);
+test('metadata preserves all signed read and write roles beyond the 16-destination dispatch cap', () => {
+  const relays = Array.from({length: 19}, (_, index) => `wss://relay${index}.nostr.net`);
+  const event = signed(relays.map((relay, index) => index === 0 ? ['r', relay, 'write'] : ['r', relay]));
+  const list = parseOutboxRelayList(event, author);
+  assert.deepEqual(list.event, event);
+  assert.deepEqual(list.read, relays.slice(1));
+  assert.deepEqual(list.write, relays);
+});
+
+test('metadata accepts 64 unique normalized relays and rejects a 65th', () => {
+  const tags = Array.from({length: OUTBOX_LIST_LIMITS.metadataRelays}, (_, index) => ['r', `wss://relay${index}.nostr.net`, 'read']);
+  tags.push(['r', 'wss://RELAY0.nostr.net/', 'write']);
+  const list = parseOutboxRelayList(signed(tags), author);
+  assert.equal(list.read.length, 64);
+  assert.deepEqual(list.write, ['wss://relay0.nostr.net']);
+  tags.push(['r', 'wss://extra.nostr.net', 'write']);
   assert.throws(() => parseOutboxRelayList(signed(tags), author), OutboxRelayListError);
 });
 

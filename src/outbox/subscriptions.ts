@@ -1,7 +1,8 @@
 import {createRelaySubscriptions, type NativeRelayStreamPort, type RelaySubscriptionOwner} from '../network/relay-subscriptions.ts';
 import {decodeNativeRegistration} from '../runtime/capability-protocol.ts';
+import {QUERY_LIMITS} from '../network/relay-query-contract.ts';
 import {SUBSCRIPTION_LIMITS} from '../network/relay-subscription-contract.ts';
-import {OutboxQueryError} from './query-contract.ts';
+import {capOutboxFilters, OutboxQueryError} from './query-contract.ts';
 import type {OutboxReadService} from './read-service.ts';
 import {parseOutboxSubscribe, parseOutboxClose, type OutboxSubscribeRequest, type OutboxSubscriptionMessage} from './subscription-contract.ts';
 type Emit = (message:OutboxSubscriptionMessage) => boolean | 'paused';
@@ -9,7 +10,7 @@ type Row = {request:OutboxSubscribeRequest;emit:Emit;token:string;started:boolea
 /** Native epochs stop transport immediately; every return resolves fresh metadata before opening replacement sockets. */
 export function createOutboxSubscriptions(port:NativeRelayStreamPort,reads:OutboxReadService) {
   if(!reads.plan)throw new OutboxQueryError('policy denied');
-  const manager=createRelaySubscriptions(port,()=>[]),sessions=new Map<string,ReturnType<typeof session>>();
+  const manager=createRelaySubscriptions(port,()=>[],{domain:'outbox'}),sessions=new Map<string,ReturnType<typeof session>>();
   let foreground=true,epoch=0,total=0,planning=0;
   const waiting=new Set<()=>void>();
   async function slot(signal:AbortSignal):Promise<()=>void> {
@@ -28,7 +29,7 @@ export function createOutboxSubscriptions(port:NativeRelayStreamPort,reads:Outbo
   }
   function session(owner:RelaySubscriptionOwner) {
     const registration=decodeNativeRegistration(owner.registration);
-    if(!registration.domains.includes('outbox')||!registration.domains.includes('relay')||sessions.has(registration.generation)||sessions.size>=SUBSCRIPTION_LIMITS.sessions)throw new OutboxQueryError('policy denied');
+    if(!registration.domains.includes('outbox')||sessions.has(registration.generation)||sessions.size>=SUBSCRIPTION_LIMITS.sessions)throw new OutboxQueryError('policy denied');
     let revoked=false;
     const active=()=>{if(revoked)throw new OutboxQueryError('policy denied');owner.assertActive();};
     active();const transport=manager.session({registration,assertActive:active}),rows=new Map<string,Row>(),used=new Set<string>();
@@ -62,7 +63,7 @@ export function createOutboxSubscriptions(port:NativeRelayStreamPort,reads:Outbo
         else {
           const timeoutMs=row.request.options.timeoutMs-(Date.now()-startedAt);
           if(timeoutMs<1)throw new OutboxQueryError('relay timeout');
-          transport.subscribePlanned({type:'relay.subscribe',id:row.request.id,subId:row.request.subId,filters:row.request.filters},message=>forward(row,message),row.token,plan.relays,row.request.options.limit,timeoutMs);
+          transport.subscribePlanned({type:'relay.subscribe',id:row.request.id,subId:row.request.subId,filters:capOutboxFilters(row.request.filters)},message=>forward(row,message),row.token,plan.relays,Math.min(row.request.options.limit,QUERY_LIMITS.events),timeoutMs);
           row.started=true;
         }
       } catch {

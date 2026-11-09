@@ -17,7 +17,8 @@ internal object OutboxPublicationOwner {
     require(UploadJsonBounds.accepts(wire, NativeApprovalAuthority.MAX_BYTES))
     var send: NativeOutboxPlan.Send? = null
     ApprovalTransport.leases.performApproved(token) {
-      val plan = ApprovalTransport.leases.prepared(token) as? NativeOutboxPlan ?: throw IOException("Missing reviewed plan")
+      val captured = ApprovalTransport.leases.prepared(token)
+      val plan = (captured as? NativeOutboxPlan) ?: (captured as? NativeCommonPlan)?.publication ?: throw IOException("Missing reviewed plan")
       send = plan.reserve(group, wire, relay, SystemClock.elapsedRealtime())
     }
     val operation = send!!

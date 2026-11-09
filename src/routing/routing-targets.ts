@@ -15,7 +15,13 @@ export function createRoutingTargets(identity: Pick<IdentityTransition, 'getSnap
     const controller = state.session.workspace, before = controller.getSnapshot();
     if (before.error !== null) throw new ShellStorageError('REVOKED');
     const forceNew = request.behavior?.newWindow === true || request.behavior?.reuse === false;
-    const existing = forceNew ? undefined : before.workspace.sessions.find(session => session.source === 'published' && session.publisher === handler.publisher && session.appId === handler.appId && session.version === handler.version && session.eventId === handler.eventId);
+    const requiresReady = request.behavior?.focus === false && handler.manifest.format === 'nip-5d';
+    const mounted = requiresReady ? runtime() : null;
+    const existing = forceNew ? undefined : before.workspace.sessions.find(session =>
+      session.source === 'published' && session.publisher === handler.publisher && session.appId === handler.appId &&
+      session.version === handler.version && session.eventId === handler.eventId &&
+      (!requiresReady || mounted?.publishedReadyGeneration(session)));
+    if (requiresReady && !existing) return null;
     if (existing) {
       if (request.behavior?.focus !== false) controller.change(focusNapplet(controller.getSnapshot().workspace, existing.id));
       await controller.flush(); active();

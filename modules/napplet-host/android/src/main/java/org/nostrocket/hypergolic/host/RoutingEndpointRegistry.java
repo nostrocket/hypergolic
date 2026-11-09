@@ -7,9 +7,9 @@ import java.util.Map;
 public final class RoutingEndpointRegistry {
   private static final long MAX = 9_007_199_254_740_991L;
   private static final class Endpoint {
-    final String user; final long epoch; final boolean intent; final boolean inc; final boolean notify; final boolean config;
+    final String user; final long epoch; final boolean intent; final boolean inc; final boolean notify; final boolean config; final boolean publishedOpen;
     boolean ready; boolean focused; long reviewRevision;
-    Endpoint(String user, long epoch, boolean intent, boolean inc, boolean notify, boolean config) { this.user = user; this.epoch = epoch; this.intent = intent; this.inc = inc; this.notify = notify; this.config = config; }
+    Endpoint(String user, long epoch, boolean intent, boolean inc, boolean notify, boolean config, boolean publishedOpen) { this.user = user; this.epoch = epoch; this.intent = intent; this.inc = inc; this.notify = notify; this.config = config; this.publishedOpen = publishedOpen; }
   }
   private final Map<String, Endpoint> endpoints = new HashMap<>();
   private String user = "";
@@ -29,8 +29,11 @@ public final class RoutingEndpointRegistry {
   public synchronized boolean register(String generation, String ownerUser, long ownerEpoch, boolean intent, boolean inc) { return register(generation, ownerUser, ownerEpoch, intent, inc, false); }
   public synchronized boolean register(String generation, String ownerUser, long ownerEpoch, boolean intent, boolean inc, boolean notify) { return register(generation, ownerUser, ownerEpoch, intent, inc, notify, false); }
   public synchronized boolean register(String generation, String ownerUser, long ownerEpoch, boolean intent, boolean inc, boolean notify, boolean config) {
-    if (revision == MAX || generation == null || !generation.matches("[A-Za-z0-9_-]{1,80}") || !available || !user.equals(ownerUser) || ownerEpoch != epoch || !(intent || inc || notify || config) || endpoints.containsKey(generation) || endpoints.size() >= 64) return false;
-    endpoints.put(generation, new Endpoint(ownerUser, ownerEpoch, intent, inc, notify, config)); return true;
+    return register(generation, ownerUser, ownerEpoch, intent, inc, notify, config, false, false);
+  }
+  public synchronized boolean register(String generation, String ownerUser, long ownerEpoch, boolean intent, boolean inc, boolean notify, boolean config, boolean publishedOpen, boolean trackPublished) {
+    if (revision == MAX || generation == null || !generation.matches("[A-Za-z0-9_-]{1,80}") || !available || !user.equals(ownerUser) || ownerEpoch != epoch || !(intent || inc || notify || config || publishedOpen || trackPublished) || endpoints.containsKey(generation) || endpoints.size() >= 64) return false;
+    endpoints.put(generation, new Endpoint(ownerUser, ownerEpoch, intent, inc, notify, config, publishedOpen)); return true;
   }
   public synchronized void ready(String generation) { Endpoint endpoint = endpoints.get(generation); if (endpoint != null) endpoint.ready = true; }
   public synchronized boolean focus(String generation, boolean value) {
@@ -44,7 +47,7 @@ public final class RoutingEndpointRegistry {
   }
   public synchronized boolean mayDeliver(String generation, String domain) {
     Endpoint endpoint = endpoints.get(generation);
-    return active(generation) && (("intent".equals(domain) && endpoint.intent) || ("inc".equals(domain) && endpoint.inc) || ("notify".equals(domain) && endpoint.notify) || ("config".equals(domain) && endpoint.config));
+    return active(generation) && (("intent".equals(domain) && endpoint.intent) || ("inc".equals(domain) && endpoint.inc) || ("notify".equals(domain) && endpoint.notify) || ("config".equals(domain) && endpoint.config) || ("published-open".equals(domain) && endpoint.publishedOpen));
   }
   public synchronized boolean mayReview(String generation) { return active(generation) && endpoints.get(generation).focused && endpoints.get(generation).reviewRevision < MAX; }
   public synchronized long reviewRevision(String generation) { return mayReview(generation) ? endpoints.get(generation).reviewRevision : -1; }
@@ -56,4 +59,31 @@ public final class RoutingEndpointRegistry {
   public synchronized boolean foreground() { return foreground; }
   public synchronized boolean available() { return foreground && available && revision < MAX; }
   private static boolean hex(String value) { return value != null && value.matches("[0-9a-f]{64}"); }
+}
+
+final class RoutingPushCredits {
+  private final java.util.Map<Long, Boolean> pending = new java.util.HashMap<>();
+  private final java.util.TreeMap<Long, String> parked = new java.util.TreeMap<>();
+  private long lastOrdinaryAck;
+  boolean reserve(long id, String envelope) {
+    if (pending.size() >= 4 || pending.containsKey(id)) return false;
+    pending.put(id, envelope != null);
+    if (envelope != null) parked.put(id, envelope);
+    return true;
+  }
+  boolean contains(long id) { return pending.containsKey(id); }
+  void release(long id) { pending.remove(id); }
+  void expire(long id) { if (Boolean.FALSE.equals(pending.get(id))) release(id); }
+  void pause() { pending.values().removeIf(retained -> !retained); }
+  java.util.Set<Long> parkedIds() { return parked.navigableKeySet(); }
+  String takeParked(long id) {
+    return !parked.isEmpty() && parked.firstKey() == id ? parked.remove(id) : null;
+  }
+  void clear() { pending.clear(); parked.clear(); }
+  void acknowledge(long id) {
+    Boolean retained = pending.get(id);
+    if (retained == null || parked.containsKey(id) || (!retained && id <= lastOrdinaryAck)) return;
+    release(id);
+    if (!retained) lastOrdinaryAck = id;
+  }
 }

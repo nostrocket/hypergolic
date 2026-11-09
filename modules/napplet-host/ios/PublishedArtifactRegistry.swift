@@ -1,12 +1,47 @@
+import CoreFoundation
 import CryptoKit
 import Foundation
 
 /// Private, one-use transfer of already verified HTML into a native host generation.
 /// This registry checks bytes and ownership claims; it does not verify Nostr signatures.
 final class PublishedArtifactRegistry: @unchecked Sendable {
-  static let maximumHTMLBytes = 2 * 1024 * 1024
+  static let maximumHTMLBytes = 20 * 1024 * 1024
+  static let maximumPendingBytes = 32 * 1024 * 1024
   static let maximumPending = 4
   static let lifetime: Duration = .seconds(60)
+
+  struct Snapshot: Equatable, Sendable {
+    let eventId: String
+    let title: String
+
+    init?(eventId: String, title: String) {
+      guard PublishedArtifactRegistry.validSnapshotHex(eventId), (1...128).contains(title.utf8.count),
+        (title as NSString).range(of: Self.invalidTitle, options: .regularExpression).location == NSNotFound else { return nil }
+      self.eventId = eventId
+      self.title = title
+    }
+
+    init?(_ raw: Any) {
+      guard let fields = raw as? [String: Any], Set(fields.keys) == ["kind", "eventId", "title"],
+        let kind = fields["kind"] as? NSNumber, CFGetTypeID(kind) != CFBooleanGetTypeID(),
+        kind.doubleValue == 5129, let eventId = fields["eventId"] as? String,
+        let title = fields["title"] as? String else { return nil }
+      self.init(eventId: eventId, title: title)
+    }
+
+    var appKey: String { " 5129:" + eventId }
+    var wire: [String: Any] { ["kind": 5129, "eventId": eventId, "title": title] }
+
+    func requester(publisher: String) -> String {
+      "Snapshot (kind 5129): \(title)\nManifest event ID: \(eventId)\nPublisher: \(publisher)"
+    }
+
+    static func == (lhs: Snapshot, rhs: Snapshot) -> Bool {
+      lhs.eventId == rhs.eventId && lhs.title.utf8.elementsEqual(rhs.title.utf8)
+    }
+
+    private static let invalidTitle = #"\A | \z| {2}|[\x{0}-\x{1f}\x{7f}-\x{9f}\x{a0}\x{ad}\x{61c}\x{1680}\x{2000}-\x{200b}\x{200e}\x{200f}\x{2028}-\x{202f}\x{205f}\x{2060}\x{2066}-\x{206f}\x{3000}\x{feff}]"#
+  }
 
   struct Claims: Equatable, Sendable {
     let sessionId: String
@@ -15,6 +50,18 @@ final class PublishedArtifactRegistry: @unchecked Sendable {
     let eventId: String
     let aggregateHash: String
     let htmlHash: String
+    let snapshot: Snapshot?
+
+    init(sessionId: String, publisher: String, identifier: String, eventId: String,
+         aggregateHash: String, htmlHash: String, snapshot: Snapshot? = nil) {
+      self.sessionId = sessionId
+      self.publisher = publisher
+      self.identifier = identifier
+      self.eventId = eventId
+      self.aggregateHash = aggregateHash
+      self.htmlHash = htmlHash
+      self.snapshot = snapshot
+    }
   }
 
   struct ClaimedArtifact: Sendable {
@@ -57,12 +104,13 @@ final class PublishedArtifactRegistry: @unchecked Sendable {
     let htmlHash = Self.sha256(input)
     guard htmlHash == claims.htmlHash,
       Self.sha256(Data("\(htmlHash) /index.html\n".utf8)) == claims.aggregateHash else { return nil }
-    // Allocate a separate backing store before acquiring the lock. The caller may reuse its buffer.
-    let copy = Self.copy(input)
     return lock.withLock {
       pruneLocked()
-      guard activeSessions.contains(claims.sessionId),
+      let reserved = pending.values.reduce(input.count) { $0 + $1.htmlBytes.count }
+      guard activeSessions.contains(claims.sessionId), reserved <= Self.maximumPendingBytes,
         pending.count < Self.maximumPending else { return nil }
+      // The caller may reuse its buffer. Copy only after reserving budget.
+      let copy = Self.copy(input)
       var handle: String
       repeat { handle = UUID().uuidString.lowercased() } while pending[handle] != nil
       pending[handle] = Pending(claims: claims, htmlBytes: copy, expires: now().advanced(by: Self.lifetime))
@@ -77,7 +125,9 @@ final class PublishedArtifactRegistry: @unchecked Sendable {
       pruneLocked()
       guard let staged = pending.removeValue(forKey: handle),
         activeSessions.contains(staged.claims.sessionId),
-        Self.validGeneration(viewGeneration), staged.claims == claims else { return nil }
+        Self.validGeneration(viewGeneration), staged.claims == claims,
+        staged.claims.snapshot == nil || UUID(uuidString: viewGeneration)?.uuidString.lowercased() == viewGeneration
+        else { return nil }
       return ClaimedArtifact(claims: staged.claims, viewGeneration: viewGeneration,
                              htmlBytes: Self.copy(staged.htmlBytes))
     }
@@ -102,18 +152,29 @@ final class PublishedArtifactRegistry: @unchecked Sendable {
     pending = pending.filter { instant < $0.value.expires }
   }
 
-  private static func valid(_ claims: Claims) -> Bool {
-    validGeneration(claims.sessionId)
+  static func valid(_ claims: Claims) -> Bool {
+    let identityMatches: Bool
+    if let snapshot = claims.snapshot {
+      identityMatches = snapshot.appKey == claims.identifier && snapshot.eventId == claims.eventId
+        && claims.sessionId.range(of: #"\A[A-Za-z0-9_-]{1,80}\z"#, options: .regularExpression) != nil
+        && [claims.publisher, claims.aggregateHash, claims.htmlHash].allSatisfy(validSnapshotHex)
+    } else {
+      identityMatches = !claims.identifier.isEmpty
+        && claims.identifier.utf8.count <= 255
+        && claims.identifier == claims.identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        && claims.identifier.unicodeScalars.allSatisfy { !CharacterSet.controlCharacters.contains($0) }
+    }
+    return identityMatches && validGeneration(claims.sessionId)
       && validHex(claims.publisher) && validHex(claims.eventId)
       && validHex(claims.aggregateHash) && validHex(claims.htmlHash)
-      && !claims.identifier.isEmpty
-      && claims.identifier.utf8.count <= 255
-      && claims.identifier == claims.identifier.trimmingCharacters(in: .whitespacesAndNewlines)
-      && claims.identifier.unicodeScalars.allSatisfy { !CharacterSet.controlCharacters.contains($0) }
   }
 
   private static func validGeneration(_ value: String) -> Bool {
     value.range(of: "^[A-Za-z0-9_-]{1,80}$", options: .regularExpression) != nil
+  }
+
+  private static func validSnapshotHex(_ value: String) -> Bool {
+    value.utf8.count == 64 && value.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) }
   }
 
   private static func validHex(_ value: String) -> Bool {

@@ -8,6 +8,7 @@ final class NativeVaultSession {
   volatile boolean activated, actionBusy;
   volatile long epoch;
   private long actionEpoch;
+  private volatile boolean localForeground = true;
 
   void activate(BooleanSupplier owner) {
     synchronized (lock) {
@@ -39,6 +40,22 @@ final class NativeVaultSession {
   void requireAction(long expectedEpoch, BooleanSupplier owner) {
     require(expectedEpoch, owner);
     if (!actionBusy || actionEpoch != expectedEpoch) throw new NativeVault.Error("AUTHORIZATION_DENIED");
+  }
+
+  void suspendLocalLeases(NativeVault vault) {
+    synchronized (lock) {
+      localForeground = false;
+      if (vault != null) vault.retireLocalLeases();
+    }
+  }
+
+  void resumeLocalLeases() {
+    synchronized (lock) { localForeground = true; }
+  }
+
+  // Lock order: session → vault.
+  boolean localLeaseCurrent(long expectedEpoch, BooleanSupplier owner) {
+    return localForeground && activated && epoch == expectedEpoch && owner.getAsBoolean();
   }
 
   void invalidate(boolean background) {

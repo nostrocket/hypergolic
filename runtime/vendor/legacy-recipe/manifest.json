@@ -1,0 +1,200 @@
+{
+  "schema": 1,
+  "profile": "legacy-read-only-v1",
+  "builder": {
+    "name": "esbuild",
+    "version": "0.28.2",
+    "format": "esm",
+    "platform": "browser",
+    "target": "es2022",
+    "minify": true
+  },
+  "packages": [
+    {
+      "name": "zod",
+      "version": "3.23.8",
+      "registry": "https://registry.npmjs.org/zod/3.23.8",
+      "tarball": "https://registry.npmjs.org/zod/-/zod-3.23.8.tgz",
+      "integrity": "sha512-XBx9AXhXktjUqnepgTiE5flcKIYWi/rme0Eaj+5Y0lftuGBq+jyRu/md4WnuxqgP1ubdpNCsYEYPxrzVHD8d6g==",
+      "license": "MIT",
+      "licenseText": "MIT License\n\nCopyright (c) 2020 Colin McDonnell\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n"
+    },
+    {
+      "name": "@noble/hashes",
+      "version": "1.4.0",
+      "registry": "https://registry.npmjs.org/@noble/hashes/1.4.0",
+      "tarball": "https://registry.npmjs.org/@noble/hashes/-/hashes-1.4.0.tgz",
+      "integrity": "sha512-V1JJ1WTRUqHHrOSh597hURcMqVKVGL/ea3kv0gSnEdsEZ0/+VyPghM1lMNGc00z7CIQorSvbKpuJkxvuHbvdbg==",
+      "license": "MIT",
+      "licenseText": "The MIT License (MIT)\n\nCopyright (c) 2022 Paul Miller (https://paulmillr.com)\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the “Software”), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE."
+    },
+    {
+      "name": "@noble/curves",
+      "version": "1.4.0",
+      "registry": "https://registry.npmjs.org/@noble/curves/1.4.0",
+      "tarball": "https://registry.npmjs.org/@noble/curves/-/curves-1.4.0.tgz",
+      "integrity": "sha512-p+4cb332SFCrReJkCYe8Xzm0OWi4Jji5jVdIZRL/PmacmDkFNw6MrrV+gGpiPxLHbV+zKFRywUWbaseT+tZRXg==",
+      "license": "MIT",
+      "licenseText": "The MIT License (MIT)\n\nCopyright (c) 2022 Paul Miller (https://paulmillr.com)\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the “Software”), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE."
+    }
+  ],
+  "modules": [
+    {
+      "specifier": "https://esm.sh/zod@3.23.8",
+      "file": "zod.mjs",
+      "sha256": "d54fc4a5639e21c561403dc032ef2de6247116b88ac483242c55b1f13fa3833d",
+      "bytes": 58451,
+      "sources": [
+        {
+          "path": "zod/lib/index.mjs",
+          "sha256": "184625bf845a735100b3e3291659c756b67ca51355a66056f9738c7e37f79f5f",
+          "bytes": 149510
+        }
+      ]
+    },
+    {
+      "specifier": "https://esm.sh/@noble/hashes@1.4.0/sha256",
+      "file": "sha256.mjs",
+      "sha256": "497a90889eebbfad0112a0e1046c715cfc3131ede327ca616e2c02efc545890b",
+      "bytes": 4878,
+      "sources": [
+        {
+          "path": "@noble/hashes/esm/_assert.js",
+          "sha256": "b32ab2fad690f26bccc440ee4251879fd327871ded8ee22e344e0b985f121f7d",
+          "bytes": 1521
+        },
+        {
+          "path": "@noble/hashes/esm/crypto.js",
+          "sha256": "9211d026c5d21e60e0126dd6f01150d87da5ba7261b8f468215c1264372ff5a5",
+          "bytes": 146
+        },
+        {
+          "path": "@noble/hashes/esm/utils.js",
+          "sha256": "f949e17b905e87aa052f84ebe7fe32d0f49376c3c5ed783df3c6269e080bd883",
+          "bytes": 7245
+        },
+        {
+          "path": "@noble/hashes/esm/_md.js",
+          "sha256": "fa35c9a4ca7e79b4bd5e799c0dea9adb0981c24776bc20520e055b01fcf9f545",
+          "bytes": 4636
+        },
+        {
+          "path": "@noble/hashes/esm/sha256.js",
+          "sha256": "4075e3ec36a67545796cac603decc602227cacbad0dfd8f6a362a67f41f119c7",
+          "bytes": 4906
+        }
+      ]
+    },
+    {
+      "specifier": "https://esm.sh/@noble/hashes@1.4.0/utils",
+      "file": "utils.mjs",
+      "sha256": "11829c101fb20fb862733fd510997d78d6b76dc6945f6ec11bab32e508fabdca",
+      "bytes": 3390,
+      "sources": [
+        {
+          "path": "@noble/hashes/esm/crypto.js",
+          "sha256": "9211d026c5d21e60e0126dd6f01150d87da5ba7261b8f468215c1264372ff5a5",
+          "bytes": 146
+        },
+        {
+          "path": "@noble/hashes/esm/_assert.js",
+          "sha256": "b32ab2fad690f26bccc440ee4251879fd327871ded8ee22e344e0b985f121f7d",
+          "bytes": 1521
+        },
+        {
+          "path": "@noble/hashes/esm/utils.js",
+          "sha256": "f949e17b905e87aa052f84ebe7fe32d0f49376c3c5ed783df3c6269e080bd883",
+          "bytes": 7245
+        }
+      ]
+    },
+    {
+      "specifier": "https://esm.sh/@noble/curves@1.4.0/secp256k1",
+      "file": "secp256k1.mjs",
+      "sha256": "b08c49ad83a301f7992f3077140eb2a6c787cef8f9cfda917d6905046d2213fe",
+      "bytes": 36806,
+      "sources": [
+        {
+          "path": "@noble/hashes/esm/_assert.js",
+          "sha256": "b32ab2fad690f26bccc440ee4251879fd327871ded8ee22e344e0b985f121f7d",
+          "bytes": 1521
+        },
+        {
+          "path": "@noble/hashes/esm/crypto.js",
+          "sha256": "9211d026c5d21e60e0126dd6f01150d87da5ba7261b8f468215c1264372ff5a5",
+          "bytes": 146
+        },
+        {
+          "path": "@noble/hashes/esm/utils.js",
+          "sha256": "f949e17b905e87aa052f84ebe7fe32d0f49376c3c5ed783df3c6269e080bd883",
+          "bytes": 7245
+        },
+        {
+          "path": "@noble/hashes/esm/_md.js",
+          "sha256": "fa35c9a4ca7e79b4bd5e799c0dea9adb0981c24776bc20520e055b01fcf9f545",
+          "bytes": 4636
+        },
+        {
+          "path": "@noble/hashes/esm/sha256.js",
+          "sha256": "4075e3ec36a67545796cac603decc602227cacbad0dfd8f6a362a67f41f119c7",
+          "bytes": 4906
+        },
+        {
+          "path": "@noble/curves/esm/abstract/utils.js",
+          "sha256": "b45de503c166f00a9611b979d70f67667a3afcc0984d56f9fdcbaf6d61c1c943",
+          "bytes": 10403
+        },
+        {
+          "path": "@noble/curves/esm/abstract/modular.js",
+          "sha256": "33b756ce7b13dba500aa3a6f2f1a2c32797199fff874e6b30219ace87a4199fd",
+          "bytes": 16981
+        },
+        {
+          "path": "@noble/curves/esm/abstract/curve.js",
+          "sha256": "0f67d7a6780bee1bf53ca27107292795275f29e373f4810e7403c674e5399b10",
+          "bytes": 6945
+        },
+        {
+          "path": "@noble/curves/esm/abstract/weierstrass.js",
+          "sha256": "e51d4c9b4b1775af1852b2379777eccedee22ec2a5302e338df20b9483a1effb",
+          "bytes": 45830
+        },
+        {
+          "path": "@noble/curves/esm/abstract/hash-to-curve.js",
+          "sha256": "cc5cd8076651dcc328b282b19df531c38d17cf09cabadbc977decfe09e8f526a",
+          "bytes": 6535
+        },
+        {
+          "path": "@noble/hashes/esm/hmac.js",
+          "sha256": "ffbf43710421711022d8f7eb3bafb44218213b80f089fdbce9a45234668fd70d",
+          "bytes": 2795
+        },
+        {
+          "path": "@noble/curves/esm/_shortw_utils.js",
+          "sha256": "320767dbeaae6c29d59a457fcbd3952a04133374b01d92efb5729b6451535b90",
+          "bytes": 663
+        },
+        {
+          "path": "@noble/curves/esm/secp256k1.js",
+          "sha256": "77b2994954860ca73927151a59d55403bde1b7ed9d0bb00c4c2d6d7d122144ee",
+          "bytes": 11814
+        }
+      ]
+    }
+  ],
+  "patches": [
+    {
+      "package": "zod",
+      "baseVersion": "3.23.8",
+      "localRevision": "hypergolic-size-gate-1",
+      "file": "zod-size-gate.patch",
+      "sha256": "b429cf43fdf7e1f80463db318bf5def7777abaa777383a1188d1ba259b67e862",
+      "path": "zod/lib/index.mjs",
+      "baseSha256": "17435ea7cb27d56b11c6fd64401001084fd6ab8b8f1c501442dfb2d1eabe10b6",
+      "patchedSha256": "184625bf845a735100b3e3291659c756b67ca51355a66056f9738c7e37f79f5f",
+      "advisory": "https://github.com/advisories/GHSA-mrhx-c7xc-m3w5",
+      "upstreamCommit": "https://github.com/colinhacks/zod/commit/a0ebf970f2d752e5f58527cd2942ff48be4f46bd",
+      "scope": "Backport early abort for oversized array max/length and set max/size. Unbounded collections remain unchanged, matching upstream. Zod 3 maps have no built-in size-bound API."
+    }
+  ]
+}

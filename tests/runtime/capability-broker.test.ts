@@ -185,6 +185,12 @@ test('capability requests retain strict field checks without Object.hasOwn', () 
     assert.deepEqual(parseCapabilityRequest({ type: 'storage.get', id: 'legacy', key: 'draft' }),
       { type: 'storage.get', id: 'legacy', scope: 'shared', key: 'draft' });
     assert.equal(decodeNativeRegistration(registration()).appId, 'state-lab');
+    const social = {...registration({fixture:'published',domains:['common','identity','outbox']}),commonProfile:'social-v1'};
+    assert.equal(decodeNativeRegistration(social).commonProfile,'social-v1');
+    assert.equal(decodeNativeRegistration(social).domains.includes('relay'),false);
+    for(const invalid of [{commonProfile:'unknown'},{fixture:'bundled'},{domains:['common','outbox']},{domains:['common','identity']}]) {
+      assert.throws(()=>decodeNativeRegistration({...social,...invalid}));
+    }
     assert.throws(() => parseCapabilityRequest({ type: 'storage.get', id: 'legacy', key: 'draft', extra: true }));
   } finally { Object.defineProperty(Object, 'hasOwn', descriptor); }
 });

@@ -1,11 +1,13 @@
 import { TrustedBand } from './TrustedBand';
 import { useMemo, useState } from 'react';
 import { Image } from 'expo-image';
-import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ShellModal as Modal } from './ShellModal';
 import { ShellPressable as Pressable } from './ShellPressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { UploadItem } from '../uploads/upload-service.ts';
 import { formatNpub } from '../security/public-identity.ts';
+import {snapshotEventId} from '../napplets/published-identity';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 interface Props {item: UploadItem | null; title: string; onApprove(id: string): void; onReject(id: string): void}
 function preview(item: UploadItem): string | null {
@@ -34,13 +36,14 @@ function inspection(item: UploadItem): string | null {
   } finally {bytes.fill(0);}
 }
 function Review({item, title, onApprove, onReject}: Omit<Props, 'item'> & {item: UploadItem}) {
+  const manifestEventId = snapshotEventId(item.origin.appId);
   const { styles } = useShellStyles(createStyles);
   const insets = useSafeAreaInsets(), [decoded, setDecoded] = useState(false);
   const uri = useMemo(() => item.previewReady ? preview(item) : null, [item]);
   const header = useMemo(() => item.previewReady && item.review.metadataPolicy === 'attachment-unchanged' ? inspection(item) : null, [item]);
   const canApprove = item.previewReady && (item.review.metadataPolicy === 'attachment-unchanged' ? header !== null : decoded);
   return <Modal transparent animationType="none" visible onRequestClose={() => onReject(item.id)}>
-    <View style={styles.backdrop}><View testID="upload-sheet" accessibilityViewIsModal style={[styles.sheet, {paddingBottom: Math.max(16, insets.bottom)}]}>
+    <View style={[styles.backdrop, {paddingLeft: insets.left, paddingRight: insets.right}]}><View testID="upload-sheet" accessibilityViewIsModal style={[styles.sheet, {paddingBottom: Math.max(16, insets.bottom)}]}>
       <TrustedBand />
       <ScrollView contentContainerStyle={styles.content}>
         <Text accessibilityRole="header" style={styles.title}>Approve file upload</Text>
@@ -51,6 +54,7 @@ function Review({item, title, onApprove, onReject}: Omit<Props, 'item'> & {item:
           <Text testID="upload-attachment-inspection" selectable style={styles.mono}>{header}</Text>
         </View> : <Text style={styles.detail}>Preparing reviewed file…</Text>}
         <Text style={styles.label}>Requesting napplet</Text><Text style={styles.detail}>{title}</Text>
+        {manifestEventId && <><Text style={styles.label}>Snapshot (kind 5129)</Text><Text selectable style={styles.mono}>{manifestEventId}</Text></>}
         <Text style={styles.label}>Publisher</Text><Text selectable style={styles.mono}>{item.origin.publisher === 'f'.repeat(64) && item.origin.appId === 'upload-lab' ? 'Unsigned bundled fixture' : formatNpub(item.origin.publisher)}</Text>
         <Text style={styles.label}>Selected identity</Text><Text testID="upload-review-identity" selectable style={styles.mono}>{formatNpub(item.review.identity)}</Text>
         <Text style={styles.label}>Upload to</Text><Text testID="upload-review-destination" selectable style={styles.mono}>{item.review.destination}</Text>

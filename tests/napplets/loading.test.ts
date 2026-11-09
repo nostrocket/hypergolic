@@ -69,6 +69,7 @@ test('verifies signed manifest, recomputes optional aggregate, and returns froze
     const event = signed(await fixtureTags({ x: includeX }));
     const manifest = await verifyManifest(coordinate(), event);
     assert.equal(manifest.id, event.id); assert.equal(manifest.eventId, event.id);
+    assert.equal(manifest.format, 'legacy-path');
     assert.equal(manifest.versionId, manifest.aggregateHash);
     assert.equal(manifest.expectedHtmlHash, await sha(HTML));
     assert.equal(Object.isFrozen(manifest), true); assert.equal(Object.isFrozen(manifest.tags), true);
@@ -143,7 +144,8 @@ test('rejects malformed UTF-8/HTML, mismatched hashes and oversized blobs before
   await rejects(() => verifyArtifact(manifest, new Uint8Array([0xff, 0xfe])));
   await rejects(() => verifyArtifact(manifest, new TextEncoder().encode('<html><body>truncated')));
   await rejects(() => verifyArtifact(manifest, new TextEncoder().encode('<!doctype html><html><head></head><body>wrong</body></html>')));
-  await rejects(() => verifyArtifact(manifest, new Uint8Array(MAX_HTML_BYTES + 1)));
+  assert.equal(MAX_HTML_BYTES, 20 * 1024 * 1024);
+  await rejects(() => verifyArtifact(manifest, new Uint8Array(20 * 1024 * 1024 + 1)));
 });
 
 test('rejects an unregistered lookalike manifest at the artifact verification boundary', async () => {
@@ -163,10 +165,117 @@ test('accepts a balanced document containing raw-text script source and rejects 
   await rejects(() => verifyArtifact(beforeHeadManifest, beforeHead));
 });
 
+test('verified prefix comments preserve exact signed HTML bytes', async () => {
+  const html = new TextEncoder().encode(`<!doctype html>
+    <!-- Publisher notes: <head><meta http-equiv="Content-Security-Policy" content="default-src *"> -->
+    <html lang="en"><!-- more notes --><head><title>Harness</title></head><body>ready</body></html>`);
+  const event = signed([['d', 'hello'], ['x', await sha(html)]], {content: 'Harness'});
+  const manifest = await verifyManifest(coordinate(), event);
+  assert.deepEqual((await verifyArtifact(manifest, html)).htmlBytes, html);
+});
+
+test('signed prefix comments cannot hide tokens that a browser would parse before the head', async () => {
+  const early = '<script src="https://example.org/early.js"></script>';
+  for (const prefix of [
+    `<!-->${early}-->`, `<!--->${early}-->`, `<!-- note --!>${early}-->`,
+    '<!-- nested <!-- comment --> -->', '<!-- unterminated', '<!-- end <!--->',
+    '\u00a0', `<!-- valid -->${early}`,
+  ]) {
+    const html = new TextEncoder().encode(`<!doctype html>${prefix}<html><head></head><body>test</body></html>`);
+    const manifest = await verifyManifest(coordinate(), signed(await fixtureTags({html})));
+    await rejects(() => verifyArtifact(manifest, html));
+  }
+});
+
+test('only the UTF-8 decoder can consume a byte order mark before the doctype', async () => {
+  const document = '<!doctype html><html><head></head><body>test</body></html>';
+  const html = new TextEncoder().encode(`\uFEFF${document}`);
+  const manifest = await verifyManifest(coordinate(), signed(await fixtureTags({html})));
+  assert.deepEqual((await verifyArtifact(manifest, html)).htmlBytes, html);
+
+  const malformed = new TextEncoder().encode(`\uFEFF\uFEFF${document}`);
+  const badManifest = await verifyManifest(coordinate(), signed(await fixtureTags({html: malformed})));
+  await rejects(() => verifyArtifact(badManifest, malformed));
+});
+
 test('rejects a duplicate optional x tag and requires any included x to match', async () => {
   const base = await fixtureTags();
   await rejects(() => verifyManifest(coordinate(), signed([...base, ...base.filter(tag => tag[0] === 'x')])));
   const noX = base.filter(tag => tag[0] !== 'x');
   const validNoX = await verifyManifest(coordinate(), signed(noX));
   await rejects(() => verifyArtifact(validNoX, new TextEncoder().encode('<!doctype html><html><head></head><body>tampered</body></html>')));
+});
+
+test('a modern named manifest binds original HTML and projects the legacy runtime version without rewriting signed tags', async () => {
+  const hash = await sha(HTML);
+  const tags = [
+    ['d', 'hello'], ['x', hash], ['R', 'relay'], ['O', 'theme'], ['O', 'unknown-domain'],
+    ['title', 'Literal <title>'], ['z', 'feed'], ['i', 'napplet:feed/edit', 'filters'], ['icon', 'unusable'],
+  ];
+  const event = signed(tags, {content: 'Read <b>feeds</b>'});
+  const manifest = await verifyManifest(coordinate(), event);
+  assert.equal(manifest.format, 'nip-5d');
+  assert.equal(manifest.id, event.id);
+  assert.equal(manifest.content, event.content);
+  assert.deepEqual(manifest.tags, event.tags);
+  assert.deepEqual(manifest.requiredDomains, ['relay']);
+  assert.deepEqual(manifest.optionalDomains, ['theme', 'unknown-domain']);
+  assert.equal(Object.isFrozen(manifest.tags[1]), true);
+  event.tags[1][1] = '0'.repeat(64);
+  assert.deepEqual(manifest.tags[1], ['x', hash]);
+
+  const artifact = await verifyArtifact(manifest, HTML);
+  const legacy = await verifyManifest(coordinate(), signed(await fixtureTags()));
+  assert.equal(artifact.htmlHash, hash);
+  assert.equal(artifact.aggregateHash, legacy.versionId);
+  assert.notEqual(artifact.aggregateHash, hash);
+  const altered = new TextEncoder().encode(new TextDecoder().decode(HTML).replace('ok', 'changed'));
+  await rejects(() => verifyArtifact(manifest, altered));
+});
+
+test('modern admission rejects mixed formats, ambiguous declarations and unsupported kinds', async () => {
+  const hash = await sha(HTML), base = [['d', 'hello'], ['x', hash]];
+  for (const extras of [
+    [['x', hash]], [['requires', 'relay']], [['description', 'Legacy']], [['archetype', 'feed']],
+    [['path', '/index.html', hash]], [['a', '35129:invalid']], [['A', '35129:invalid']],
+    [['R', 'relay'], ['O', 'relay']], [['R', 'relay'], ['R', 'relay']], [['O', 'theme'], ['O', 'theme']],
+    [['O', 'theme', 'unexpected']], [['R', 'NAP-RELAY']],
+  ]) await rejects(() => verifyManifest(coordinate(), signed([...base, ...extras], {content: 'Description'})));
+  await rejects(() => verifyManifest(coordinate(), signed(base, {content: '  '})));
+  await rejects(() => verifyManifest(coordinate(), signed([['d', 'hello'], ['x', hash.toUpperCase()]], {content: 'Description'})));
+  await rejects(() => verifyManifest(coordinate(), signed(base, {content: 'Description', kind: 5129})));
+  for (const tag of [['R', 'relay'], ['O', 'theme'], ['z', 'feed']]) {
+    const legacy = signed(await fixtureTags({extras: [tag]}));
+    await rejects(() => verifyManifest(coordinate(), legacy));
+  }
+});
+
+test('admits signed inline SVG graphics with HTML integration and return to SVG', async () => {
+  const html = new TextEncoder().encode(`<!doctype html><html><head><title>Vector</title></head><body><button>
+    <svg viewBox="0 0 24 24"><g><path d="M0 0 L1 1" /><circle cx="1" cy="1" r="1"/></g>
+      <foreignObject><div><svg><rect/></svg></div></foreignObject><line />
+    </svg></button></body></html>`);
+  const event = signed([['d', 'hello'], ['x', await sha(html)]], {content: 'Vector controls'});
+  const manifest = await verifyManifest(coordinate(), event);
+  assert.deepEqual((await verifyArtifact(manifest, html)).htmlBytes, html);
+});
+
+test('rejects self-closing HTML, namespace breakouts and active SVG syntax', async () => {
+  for (const body of [
+    '<div/>',
+    '<path d="M0 0" />',
+    '<svg><foreignObject><div /></foreignObject></svg>',
+    '<svg><foreignObject><path/></foreignObject></svg>',
+    '<svg><desc><circle/></desc></svg>',
+    '<svg><title><circle/></title></svg>',
+    '<svg><div></div><path /></svg>',
+    '<svg><font color="red"></font><path /></svg>',
+    '<svg><script href="https://example.org/script.js"/></svg>',
+    '<svg><circle r=2/></svg>',
+    '<math><svg><path /></svg></math>',
+  ]) {
+    const html = new TextEncoder().encode(`<!doctype html><html><head></head><body>${body}</body></html>`);
+    const manifest = await verifyManifest(coordinate(), signed(await fixtureTags({html})));
+    await rejects(() => verifyArtifact(manifest, html));
+  }
 });

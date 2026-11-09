@@ -9,7 +9,7 @@ import java.util.Set;
 /** Small host-side binding rules shared by the Android parser and its JVM proof. */
 final class PublishedCapabilityBinding {
   private static final Set<String> DOMAINS = Collections.unmodifiableSet(
-      new HashSet<>(Arrays.asList("identity", "storage", "theme", "relay", "resource", "upload", "link", "intent", "inc", "notify", "config", "outbox")));
+      new HashSet<>(Arrays.asList("identity", "storage", "theme", "relay", "resource", "upload", "link", "intent", "inc", "notify", "config", "outbox", "keys", "media", "common", "cvm")));
 
   private PublishedCapabilityBinding() { }
 

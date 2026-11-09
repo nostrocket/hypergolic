@@ -1,7 +1,5 @@
 package org.nostrocket.hypergolic.host;
 
-import java.io.ByteArrayOutputStream;
-import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -16,10 +14,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
@@ -27,6 +23,8 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import org.nostrocket.hypergolic.host.PublishedHttpsResponseReader.DeadlineInputStream;
+import org.nostrocket.hypergolic.host.PublishedHttpsResponseReader.TransferIdle;
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
@@ -38,13 +36,17 @@ import javax.net.ssl.SSLSocketFactory;
 /** Bounded HTTPS-only retrieval for published napplet artifacts. */
 public final class PublishedHttpsTransport {
   public static final int MAX_BODY_BYTES = 2 * 1024 * 1024;
+  static final int MAX_ARTIFACT_BYTES = 20 * 1024 * 1024;
+  enum ReadProfile {
+    AVATAR(MAX_BODY_BYTES, 0), RESOURCE(10 * 1024 * 1024, 2), ARTIFACT(MAX_ARTIFACT_BYTES, 3), LIVE_MP3(0, 3);
+    final int maxBytes, redirects;
+    ReadProfile(int maxBytes, int redirects) { this.maxBytes = maxBytes; this.redirects = redirects; }
+  }
   public static final int MAX_RESPONSE_HEADER_BYTES = 32 * 1024;
   public static final int CONNECT_TIMEOUT_MS = 8_000;
   public static final int READ_TIMEOUT_MS = 12_000;
   public static final int TOTAL_TIMEOUT_MS = 30_000;
-  private static final int MAX_RESPONSE_HEADERS = 128;
-  private static final int MAX_CHUNK_LINE_BYTES = 128;
-  private static final ThreadPoolExecutor DNS = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
+  static final ThreadPoolExecutor DNS = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
       new ArrayBlockingQueue<>(4), task -> {
         Thread thread = new Thread(task, "napplet-https-dns");
         thread.setDaemon(true);
@@ -72,29 +74,66 @@ public final class PublishedHttpsTransport {
   static byte[] getWithTransport(String rawUrl, AddressPolicy policy, Cancellation cancellation,
       HostResolver resolver, ThreadPoolExecutor executor, SSLSocketFactory socketFactory,
       HostnameVerifier hostnameVerifier) throws IOException {
-    return getBoundedWithTransport(rawUrl, policy, cancellation, resolver, executor, socketFactory, hostnameVerifier, MAX_BODY_BYTES, TOTAL_TIMEOUT_MS);
+    return getBoundedWithTransport(rawUrl, policy, cancellation, resolver, executor, socketFactory, hostnameVerifier, ReadProfile.AVATAR, TOTAL_TIMEOUT_MS);
   }
 
-  /** Separate app-only resource profile; the published-loader entry point remains bounded at 2 MiB. */
+  /** Published HTML uses its own immutable content and connection budget. */
+  static byte[] getArtifact(String rawUrl, AddressPolicy policy, Cancellation cancellation) throws IOException {
+    return getArtifactWithTransport(rawUrl, policy, cancellation, InetAddress::getAllByName, DNS,
+        defaultSocketFactory(), HttpsURLConnection.getDefaultHostnameVerifier());
+  }
+
+  static byte[] getArtifactWithTransport(String rawUrl, AddressPolicy policy, Cancellation cancellation,
+      HostResolver resolver, ThreadPoolExecutor executor, SSLSocketFactory socketFactory,
+      HostnameVerifier hostnameVerifier) throws IOException {
+    URL initial = validateRequest(rawUrl, policy);
+    if (initial.getQuery() != null || !initial.getPath().matches("/[0-9a-f]{64}")) {
+      throw new IOException("Published artifact requires an exact SHA-256 path");
+    }
+    return getBoundedWithTransport(rawUrl, policy, cancellation, resolver, executor, socketFactory, hostnameVerifier,
+        ReadProfile.ARTIFACT, 15_000);
+  }
+
+  /** Separate app-only resource profile. */
   static byte[] getResource(String rawUrl, AddressPolicy policy, Cancellation cancellation) throws IOException {
     return getBoundedWithTransport(rawUrl, policy, cancellation, InetAddress::getAllByName, DNS,
-        defaultSocketFactory(), HttpsURLConnection.getDefaultHostnameVerifier(), 10 * 1024 * 1024, 15_000);
+        defaultSocketFactory(), HttpsURLConnection.getDefaultHostnameVerifier(), ReadProfile.RESOURCE, 15_000);
   }
   static byte[] getResourceWithTransport(String rawUrl, AddressPolicy policy, Cancellation cancellation,
       HostResolver resolver, ThreadPoolExecutor executor, SSLSocketFactory socketFactory,
       HostnameVerifier hostnameVerifier) throws IOException {
-    return getBoundedWithTransport(rawUrl, policy, cancellation, resolver, executor, socketFactory, hostnameVerifier, 10 * 1024 * 1024, 15_000);
+    return getBoundedWithTransport(rawUrl, policy, cancellation, resolver, executor, socketFactory, hostnameVerifier, ReadProfile.RESOURCE, 15_000);
   }
   private static byte[] getBoundedWithTransport(String rawUrl, AddressPolicy policy, Cancellation cancellation,
       HostResolver resolver, ThreadPoolExecutor executor, SSLSocketFactory socketFactory,
-      HostnameVerifier hostnameVerifier, int maximumBytes, int timeoutMs) throws IOException {
+      HostnameVerifier hostnameVerifier, ReadProfile profile, int timeoutMs) throws IOException {
+    return fetchWithTransport(rawUrl, policy, cancellation, resolver, executor, socketFactory, hostnameVerifier,
+        profile, Deadline.afterMillis(timeoutMs), READ_TIMEOUT_MS, null,
+        (input, abort) -> PublishedHttpsResponseReader.readGet(input, cancellation, profile));
+  }
+
+  static <T> T getMedia(String rawUrl, AddressPolicy policy, Cancellation cancellation, Deadline deadline,
+      int idleMs, ResponseReader<T> reader) throws IOException {
+    TransferIdle idle = new TransferIdle(idleMs);
+    Cancellation active = () -> idle.expired() || (cancellation != null && cancellation.isCancelled());
+    return fetchWithTransport(rawUrl, policy, active, InetAddress::getAllByName, DNS,
+        defaultSocketFactory(), HttpsURLConnection.getDefaultHostnameVerifier(), ReadProfile.RESOURCE,
+        deadline, idleMs, idle, reader);
+  }
+  interface ResponseReader<T> {
+    T read(InputStream input, AbortMonitor abort) throws IOException;
+  }
+
+  static <T> T fetchWithTransport(String rawUrl, AddressPolicy policy, Cancellation cancellation,
+      HostResolver resolver, ThreadPoolExecutor executor, SSLSocketFactory socketFactory,
+      HostnameVerifier hostnameVerifier, ReadProfile wireProfile, Deadline deadline, int idleMs,
+      TransferIdle idle, ResponseReader<T> reader) throws IOException {
     if (cancellationRequested(cancellation)) throw new IOException("Request cancelled");
-    Deadline deadline = Deadline.afterMillis(timeoutMs);
     AbortMonitor abort = new AbortMonitor(cancellation, deadline);
     String current = rawUrl;
     java.util.Set<String> visited = new java.util.HashSet<>();
     try {
-      for (int hop = 0; hop <= 2; hop++) {
+      for (int hop = 0; hop <= wireProfile.redirects; hop++) {
         abort.check();
         URL url = validateRequest(current, policy);
         if (!visited.add(url.toExternalForm())) throw new PublishedHttpsResponseReader.ResourceFailure("blocked-by-policy", "Resource redirect loop");
@@ -104,13 +143,15 @@ public final class PublishedHttpsTransport {
         SSLSocket socket = openPinnedTls(url.getHost(), url.getPort() < 0 ? 443 : url.getPort(), policy,
             abort, deadline, resolver, executor, socketFactory, hostnameVerifier);
         try (SSLSocket closeable = socket) {
-          closeable.setSoTimeout(deadline.timeoutMs(READ_TIMEOUT_MS));
-          sendRequest(closeable.getOutputStream(), uri, url);
-          byte[] body = PublishedHttpsResponseReader.readBounded(new DeadlineInputStream(closeable.getInputStream(), closeable, deadline), cancellation, maximumBytes);
+          closeable.setSoTimeout(deadline.timeoutMs(idleMs));
+          OutputStream output = closeable.getOutputStream();
           abort.check();
-          return body;
+          sendRequest(output, uri, url, wireProfile);
+          T result = reader.read(new DeadlineInputStream(closeable.getInputStream(), closeable, deadline, idleMs, idle), abort);
+          abort.check();
+          return result;
         } catch (PublishedHttpsResponseReader.ResourceRedirect redirect) {
-          if (maximumBytes <= MAX_BODY_BYTES || hop == 2) throw new PublishedHttpsResponseReader.ResourceFailure("blocked-by-policy", "Resource redirect limit");
+          if (hop == wireProfile.redirects) throw new PublishedHttpsResponseReader.ResourceFailure("blocked-by-policy", "Resource redirect limit");
           try { current = uri.resolve(redirect.location).toString(); validateRequest(current, policy); }
           catch (IOException | IllegalArgumentException invalid) {
             throw new PublishedHttpsResponseReader.ResourceFailure("blocked-by-policy", "Invalid resource redirect target");
@@ -122,23 +163,7 @@ public final class PublishedHttpsTransport {
   }
 
   static URL parseUrl(String rawUrl) throws IOException {
-    if (rawUrl == null || rawUrl.length() > 8192 || rawUrl.indexOf('\\') >= 0) {
-      throw new IOException("Invalid HTTPS URL");
-    }
-    for (int i = 0; i < rawUrl.length(); i++) {
-      char c = rawUrl.charAt(i);
-      if (c <= 0x20 || c == 0x7f) throw new IOException("Invalid HTTPS URL");
-    }
-    final URI uri;
-    try { uri = new URI(rawUrl); }
-    catch (URISyntaxException error) { throw new IOException("Invalid HTTPS URL", error); }
-    if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getRawUserInfo() != null ||
-        uri.getHost() == null || uri.getPort() == 0 || uri.getPort() < -1 ||
-        uri.getPort() > 65535 || uri.getRawFragment() != null) {
-      throw new IOException("Only credential-free HTTPS URLs are supported");
-    }
-    try { return uri.toURL(); }
-    catch (IllegalArgumentException error) { throw new IOException("Invalid HTTPS URL", error); }
+    return PublicAddressPolicy.parseUrl(rawUrl);
   }
 
   static URL validateRequest(String rawUrl, AddressPolicy policy) throws IOException {
@@ -152,37 +177,7 @@ public final class PublishedHttpsTransport {
   }
 
   static boolean isDnsHostname(String host) {
-    if (host == null || host.length() > 253 || host.indexOf(':') >= 0 || !host.contains(".")) return false;
-    String lower = host.toLowerCase(Locale.ROOT);
-    if (lower.endsWith(".") || lower.equals("localhost") || lower.endsWith(".localhost") ||
-        lower.endsWith(".local") || lower.endsWith(".internal") || lower.endsWith(".test") ||
-        lower.equals("example") || lower.endsWith(".example") || lower.equals("invalid") ||
-        lower.endsWith(".invalid") || lower.endsWith(".lan") || lower.endsWith(".home") ||
-        lower.endsWith(".home.arpa") || lower.endsWith(".onion") || lower.endsWith(".arpa")) return false;
-    if (lower.matches("[0-9.]+") || looksLikeNonDecimalIpv4(lower)) return false;
-    String[] labels = lower.split("\\.", -1);
-    for (String label : labels) {
-      if (label.isEmpty() || label.length() > 63 || label.startsWith("-") || label.endsWith("-") ||
-          !label.matches("[a-z0-9-]+")) return false;
-    }
-    return true;
-  }
-
-  private static boolean looksLikeNonDecimalIpv4(String host) {
-    String[] parts = host.split("\\.", -1);
-    if (parts.length > 4) return false;
-    boolean numeric = true;
-    for (String part : parts) {
-      if (part.isEmpty()) return false;
-      boolean decimal = true;
-      for (int i = 0; i < part.length(); i++) if (!Character.isDigit(part.charAt(i))) decimal = false;
-      if (!decimal) numeric = false;
-      if (part.length() > 2 && part.startsWith("0x")) {
-        for (int i = 2; i < part.length(); i++) if (Character.digit(part.charAt(i), 16) < 0) return false;
-        return true;
-      }
-    }
-    return numeric && parts.length < 4;
+    return PublicAddressPolicy.isDnsHostname(host);
   }
 
   static InetAddress[] checkedAddresses(InetAddress[] resolved, AddressPolicy policy) throws IOException {
@@ -278,13 +273,18 @@ public final class PublishedHttpsTransport {
     catch (GeneralSecurityException error) { throw new IOException("Default TLS is unavailable", error); }
   }
 
-  private static void sendRequest(OutputStream output, URI uri, URL url) throws IOException {
+  private static void sendRequest(OutputStream output, URI uri, URL url, ReadProfile profile) throws IOException {
     String target = requestTarget(uri);
     String host = url.getHost();
     int port = url.getPort();
     String hostHeader = port < 0 || port == 443 ? host : host + ":" + port;
+    String userAgent = profile == ReadProfile.LIVE_MP3
+        ? "User-Agent: Hypergolic-LiveMP3/1.0 (https://github.com/nostrocket/hypergolic)\r\n" : profile == ReadProfile.RESOURCE
+        ? "User-Agent: Hypergolic-Resource/1.0 (https://github.com/nostrocket/hypergolic)\r\n" : "";
     String request = "GET " + target + " HTTP/1.1\r\n" +
         "Host: " + hostHeader + "\r\n" +
+        userAgent +
+        (profile == ReadProfile.LIVE_MP3 ? "Accept: audio/mpeg\r\nIcy-MetaData: 0\r\n" : "") +
         "Accept-Encoding: identity\r\n" +
         "Connection: close\r\n" +
         "\r\n";
@@ -346,28 +346,6 @@ public final class PublishedHttpsTransport {
       long rounded = (remaining + 999_999L) / 1_000_000L;
       return (int) Math.max(1L, Math.min((long) maximumMs, rounded));
     }
-  }
-
-  static final class DeadlineInputStream extends FilterInputStream {
-    private final Socket socket;
-    private final Deadline deadline;
-    DeadlineInputStream(InputStream input, Socket socket, Deadline deadline) {
-      super(input);
-      this.socket = socket;
-      this.deadline = deadline;
-    }
-    private void updateTimeout() throws IOException { socket.setSoTimeout(deadline.timeoutMs(READ_TIMEOUT_MS)); }
-    @Override public int read() throws IOException { updateTimeout(); return super.read(); }
-    @Override public int read(byte[] bytes, int offset, int length) throws IOException {
-      updateTimeout();
-      return super.read(bytes, offset, length);
-    }
-  }
-
-  private static final class HeaderBlock {
-    final String text;
-    final int size;
-    HeaderBlock(String text, int size) { this.text = text; this.size = size; }
   }
 
   static final class AbortMonitor implements AutoCloseable {

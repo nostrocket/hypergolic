@@ -5,9 +5,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.charset.CharacterCodingException;
 import java.util.Arrays;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /** Native byte classification; failed photos never become opaque attachments. */
 final class UploadFileProfile {
+  private static final Pattern HTML = Pattern.compile("^\uFEFF?[\\t\\n\\r ]*<!doctype[\\t\\n\\r ]+html[\\t\\n\\r ]*>", Pattern.CASE_INSENSITIVE);
   record Prepared(byte[] bytes, String mimeType, String metadataPolicy) {}
   private UploadFileProfile() {}
   static Prepared prepare(byte[] input) {
@@ -71,10 +73,11 @@ final class UploadFileProfile {
     try {
       String value = StandardCharsets.UTF_8.newDecoder().decode(ByteBuffer.wrap(input)).toString();
       String start = value.replace("\uFEFF", "").stripLeading();
-      if (start.isEmpty() || start.startsWith("<") || start.startsWith("GIF8") || start.startsWith("II*") || start.startsWith("MM")) return null;
+      if (start.isEmpty() || start.startsWith("GIF8") || start.startsWith("II*") || start.startsWith("MM")) return null;
       for (int index = 0; index < value.length(); index++) {
         char c = value.charAt(index); if ((c < 32 && c != 9 && c != 10 && c != 13) || c == 127) return null;
       }
+      if (start.startsWith("<")) return HTML.matcher(value).find() ? "text/html" : null;
       return "text/plain";
     } catch (CharacterCodingException invalid) {return null;}
   }

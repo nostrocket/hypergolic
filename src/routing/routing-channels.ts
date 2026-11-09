@@ -1,6 +1,7 @@
 import type {NativeRegistration} from '../runtime/capability-protocol.ts';
 import type {RoutingNativePort} from './routing-port.ts';
 import {ROUTING_LIMITS,type RoutingMessage} from './routing-contract.ts';
+import {routingAppLabel} from '../napplets/published-identity.ts';
 export type ChannelEndpoint = Readonly<{registration: NativeRegistration}>;
 type Channel = Readonly<{id: string; a: ChannelEndpoint; b: ChannelEndpoint}>;
 type Terminal = Readonly<{endpoint: ChannelEndpoint; message: Readonly<{type: 'inc.channel.closed'; channelId: string; reason: string}>}>;
@@ -23,13 +24,13 @@ export class RoutingChannels {
     if (!/^[A-Za-z0-9_-]{1,128}$/.test(id) || this.channels.has(id) || [...this.terminals.values()].some(rows => rows.some(row => row.message.channelId === id))) return null;
     const channel = Object.freeze({id, a, b}); this.channels.set(id, channel);
     // Native enqueues target handle creation before the broker returns opener success.
-    if (!this.native.send(b.registration.generation, revision, {type: 'inc.channel.opened', channelId: id, peer: a.registration.appId})) {this.channels.delete(id); return null;}
-    return Object.freeze({channelId: id, peer: b.registration.appId});
+    if (!this.native.send(b.registration.generation, revision, {type: 'inc.channel.opened', channelId: id, peer: routingAppLabel(a.registration.appId)})) {this.channels.delete(id); return null;}
+    return Object.freeze({channelId: id, peer: routingAppLabel(b.registration.appId)});
   }
   list(endpoint: ChannelEndpoint, revision: number) {
     this.active(endpoint, revision); this.flush(revision);
     const result: Readonly<{id: string; peer: string}>[] = [];
-    for (const channel of this.channels.values()) if (this.contains(channel, endpoint)) result.push(Object.freeze({id: channel.id, peer: this.peer(channel, endpoint).registration.appId}));
+    for (const channel of this.channels.values()) if (this.contains(channel, endpoint)) result.push(Object.freeze({id: channel.id, peer: routingAppLabel(this.peer(channel, endpoint).registration.appId)}));
     return result;
   }
   private terminal(channel: Channel, reason: string, revision: number, omit?: string) {
@@ -54,7 +55,7 @@ export class RoutingChannels {
       const peer = this.peer(channel, endpoint);
       try {
         this.active(endpoint, revision); this.active(peer, revision);
-        if (!this.native.send(peer.registration.generation, revision, {type: 'inc.channel.event', channelId: channel.id, sender: endpoint.registration.appId, ...(Object.prototype.hasOwnProperty.call(message, 'payload') ? {payload: message.payload} : {})})) this.terminal(channel, 'buffer overflow', revision);
+        if (!this.native.send(peer.registration.generation, revision, {type: 'inc.channel.event', channelId: channel.id, sender: routingAppLabel(endpoint.registration.appId), ...(Object.prototype.hasOwnProperty.call(message, 'payload') ? {payload: message.payload} : {})})) this.terminal(channel, 'buffer overflow', revision);
       } catch {this.terminal(channel, 'peer unavailable', revision);}
     }
   }

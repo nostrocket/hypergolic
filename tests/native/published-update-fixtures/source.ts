@@ -52,7 +52,7 @@ export function createPublishedUpdateFixtureSource(expectedLookupRelays: readonl
   const revisionForId = (id: string) => fixtures.flatMap(fixture => fixture.revisions).find(revision => revision.event.id === id);
 
   const query: PublishedArtifactSource['query'] = async (coordinate, lookupRelays, pinnedEventId, signal) => {
-    if (signal.aborted || lookupRelays.length !== expectedLookupRelays.length ||
+    if (coordinate.kind !== 35129 || signal.aborted || lookupRelays.length !== expectedLookupRelays.length ||
         lookupRelays.some((relay, index) => relay !== expectedLookupRelays[index])) throw new Error('Fixture lookup rejected');
     const fixture = fixtureFor(coordinate);
     if (!fixture) throw new Error('Fixture coordinate rejected');

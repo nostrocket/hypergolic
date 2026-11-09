@@ -13,6 +13,8 @@ the signed manifest and content, requests access consent and pins the accepted
 version. Updates require a separate review. Verification establishes artifact
 integrity and publisher identity; it does not grant native authority.
 
+The reviewed Mapplets release `3a5eeb98b3251a48a3ff1e32cb92ce76b7488b721dd492ae1659e90eeffe76f5` accepts a single finger drag when its rectangle tool is armed. The host translates this gesture into the guest’s existing local rectangle events under the trusted input gate. A second finger, cancellation, or loss of input ends the unfinished drag. Ordinary map gestures still use MapLibre’s handlers. Opening the editor requires a separate activation of **Edit** and the usual Intent review.
+
 Android WebView and iOS WKWebView host the packaged runtime. Native code stages
 verified artifact bytes through a one-use registry. The runtime mediates guest
 messages through the selected capability profile. There is no general-purpose
@@ -24,10 +26,16 @@ generation, request and lifetime. Account changes, teardown and relevant lifecyc
 events revoke authority. Async completion must recheck that binding before
 delivering a result or performing a subsequent effect.
 
+A separately selected [legacy read-only profile](legacy-read-only.md) supplies
+bounded public relay reads and reviewed local compatibility libraries to two
+immutable legacy publications. It retains an opaque sandbox and their original
+empty NAP grant set. Ordinary napplet execution is unchanged.
+
 ## Accounts and signing
 
 An account is identified by its Nostr public key. Its selected signing method is
 explicit: local native key, NIP-46 remote signer, or Android NIP-55 signer app.
+A public-only profile can omit a signing method and cannot sign or publish.
 There is no automatic fallback. Method changes preserve account-scoped napplet
 data while revoking old signing authority and restarting sessions.
 
@@ -81,9 +89,10 @@ Hosted Expo updates are disabled.
 | Runtime and capability authority | [Native contract](native-contract.md), [capability contract](capability-contract.md), [admission](nap-support.md) |
 | Identity and signing | [Identity storage](identity-storage.md), [account transitions](identity-switching.md), [signing core](signing-core.md), [external methods](external-signing.md), [approval](signing-approval.md) |
 | Workspace | [Storage](workspace-storage.md), [optional close check](close-check.md) |
-| Published artifacts | [Network boundary](published-network.md), [native registry](published-artifact-registry.md) |
+| Published artifacts | [Network boundary](published-network.md), [native registry](published-artifact-registry.md), [Discover](discovery.md), [opening from Discover](published-open.md) |
 | Relay operations | [Relay settings](relays.md), [query](relay-query.md), [subscriptions](relay-subscriptions.md), [Outbox](outbox-routing.md) |
-| Other capabilities | [Resources](resource-access.md), [uploads](upload-access.md), [identity data](public-identity-data.md), [links](external-links.md), [intent/INC](intent-inc.md), [notifications/configuration](notifications-configuration.md) |
+| Public application records | [Shared application data](shared-app-data.md) |
+| Other capabilities | [Resources](resource-access.md), [uploads](upload-access.md), [identity data](public-identity-data.md), [links](external-links.md), [intent/INC](intent-inc.md), [notifications/configuration](notifications-configuration.md), [encrypted CVM](cvm.md) |
 | Build dependencies | [Patches](dependency-patches.md), [notices and provenance](native-dependency-notices.md) |
 
 ## Current limits

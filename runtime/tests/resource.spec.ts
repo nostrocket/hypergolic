@@ -25,7 +25,12 @@ async function open(page: import('@playwright/test').Page, mode = 'image') {
         else if(mode === 'denied')response={type:request.type+'.error',id:request.id,error:'blocked-by-policy'};
         else if(request.type === 'resource.__chunk')response={type:request.type+'.result',id:request.id,base64:mode === 'tamper'?'QQ==':png};
         else if(request.type === 'resource.bytes')response={type:request.type+'.result',id:request.id,transfer:{handle,length:atob(png).length,mime:mode === 'audio'?'audio/wav':'image/png'}};
-        else if(request.type === 'resource.bytesMany')response={type:request.type+'.result',id:request.id,items:request.urls.map((url:string)=>({url,ok:true,transfer:{handle,length:atob(png).length,mime:'image/png'}}))};
+        else if (request.type === 'resource.bytesMany') {
+          const urls = request.urls ?? request.requests.map((item: {url: string}) => item.url);
+          response = {type: request.type+'.result', id: request.id, items: urls.map((url: string) => ({
+            url, ok: true, transfer: {handle, length: atob(png).length, mime: 'image/png'},
+          }))};
+        }
         else if(request.type === 'resource.info')response={type:request.type+'.result',id:request.id,info:{schemes:[{scheme:'https',enabled:true},{scheme:'htree',enabled:false}],maxBytes:10485760,maxUrls:8}};
         const data=JSON.stringify({type:'capability.result',sessionId:envelope.sessionId,sequence:envelope.sequence,response:response===null?null:JSON.stringify(response)});
         const deliver = () => { for(const listener of listeners)listener({data}); };
@@ -129,5 +134,40 @@ test('canonical single and bulk success envelopes carry MIME matching the recons
     {type:'resource.bytes.result',mime:'image/png',blobType:'image/png'},
     {type:'resource.bytesMany.result',mime:'image/png',blobType:'image/png'},
     {type:'resource.bytesMany.result',mime:'image/png',blobType:'image/png'},
+  ]);
+});
+
+test('modern Resource arguments preserve single hints and ordered batch items through the host', async ({page}) => {
+  await open(page);
+  const guest = page.frames().find(frame => frame.parentFrame() === page.mainFrame())!;
+  const input = {url: `blossom:${'a'.repeat(64)}?xs=cdn.example.com&xs=mirror.example.com`,
+    servers: Array.from({length: 10}, (_, index) => `https://cdn${index}.example.com`)};
+  const items = [input, {url: 'https://assets.example.com/second.png'}];
+  const outputs = await guest.evaluate(async ({input, items}) => {
+    const resource = (window as any).napplet.resource;
+    const blob = await resource.bytes(input.url, {servers: input.servers});
+    const batch = await resource.bytesMany(items);
+    return [blob.type, ...batch.map((item: {url: string; blob: Blob}) => [item.url, item.blob.type])];
+  }, {input, items});
+  expect(outputs).toEqual(['image/png', ...items.map(item => [item.url, 'image/png'])]);
+  const calls = await page.evaluate(() => (window as any).resourceCalls);
+  expect(calls.filter((call: {type: string}) => call.type !== 'resource.__chunk')).toEqual([
+    {type: 'resource.bytes', id: expect.any(String), ...input},
+    {type: 'resource.bytesMany', id: expect.any(String), requests: items},
+  ]);
+});
+
+test('oversized advisory server arrays stop at the WebView gate', async ({page}) => {
+  await open(page);
+  const guest = page.frames().find(frame => frame.parentFrame() === page.mainFrame())!;
+  await guest.evaluate(async () => {
+    const resource = (window as any).napplet.resource;
+    parent.postMessage({type: 'resource.bytes', id: 'too-many-hints', url: `blossom:${'a'.repeat(64)}`,
+      servers: Array(17).fill('https://cdn.example.com')}, '*');
+    await resource.bytes('data:,control');
+  });
+  const calls = await page.evaluate(() => (window as any).resourceCalls);
+  expect(calls.filter((call: {type: string}) => call.type === 'resource.bytes')).toEqual([
+    {type: 'resource.bytes', id: expect.any(String), url: 'data:,control'},
   ]);
 });

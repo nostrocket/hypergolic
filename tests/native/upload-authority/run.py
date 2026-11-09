@@ -18,7 +18,7 @@ tokens = json.loads(subprocess.check_output(['node', str(HERE/'credential-fixtur
 with tempfile.TemporaryDirectory(prefix='hypergolic-upload-authority-') as temporary:
     out = Path(temporary)
     subprocess.run(['javac', '-Xlint:all', '-Werror', '-d', str(out),
-                    *[str(ANDROID / (name + '.java')) for name in ['NativeSigningHold', 'UploadJsonBounds', 'UploadRecoveryLedger', 'UploadRecoveryReadAuthority', 'UploadLeaseRegistry', 'UploadFileProfile', 'UploadPngProfile', 'UploadExifMetadata', 'UploadPngMetadata', 'NativeUploadAuthority', 'NativeBlossomPermit', 'PublishedHttpsTransport', 'PublishedHttpsResponseReader']],
+                    *[str(ANDROID / (name + '.java')) for name in ['NativeSigningHold', 'UploadJsonBounds', 'UploadRecoveryLedger', 'UploadRecoveryReadAuthority', 'UploadLeaseRegistry', 'UploadFileProfile', 'UploadPngProfile', 'UploadExifMetadata', 'UploadPngMetadata', 'NativeUploadAuthority', 'NativeBlossomPermit', 'PublishedHttpsTransport', 'PublishedHttpsResponseReader', 'PublicAddressPolicy']],
                     str(HERE / 'UploadQueueProof.java'), str(HERE / 'UploadRecoveryReadProof.java'), str(HERE / 'UploadRecoveryProof.java'), str(HERE / 'UploadJsonBoundsProof.java'), str(HERE / 'UploadRegistryProof.java'), str(HERE / 'UploadPngProof.java'), str(HERE / 'UploadExifProof.java'), str(HERE / 'UploadFileProof.java'), str(HERE / 'UploadAuthorityProof.java'), str(HERE / 'UploadResponseProof.java'), str(HERE/'NativePermitProof.java')], check=True)
     subprocess.run(['java', '-cp', str(out), 'org.nostrocket.hypergolic.host.UploadRecoveryProof', str(out)], check=True)
     subprocess.run(['swiftc', '-swift-version', '6', '-warnings-as-errors', '-module-cache-path', str(out/'swift-cache'),

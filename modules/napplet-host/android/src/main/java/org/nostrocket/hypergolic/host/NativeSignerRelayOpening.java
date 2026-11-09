@@ -27,6 +27,9 @@ final class NativeSignerRelayOpening {
     int reserveRead(int wanted) throws IOException;
     void finishRead(int reserved, int received);
     void beforeWrite(int bytes) throws IOException;
+    default boolean tracksResolution() { return false; }
+    default void resolutionReserved() {}
+    default void resolutionDrained() {}
   }
   static class RelayTransport {
     final PublishedHttpsTransport.AddressPolicy policy;
@@ -48,13 +51,18 @@ final class NativeSignerRelayOpening {
     final OutputStream output;
     final AbortMonitor abort;
     final Socket raw;
+    private boolean attemptedClose, knownClose;
     OpenRelay(DeadlineInput input, OutputStream output, AbortMonitor abort, Socket raw) {
       this.input = input; this.output = output; this.abort = abort; this.raw = raw;
     }
-    @Override public void close() {
-      try { raw.close(); } catch (IOException ignored) {}
-      abort.close();
+    synchronized boolean closeKnown() {
+      if (attemptedClose) return knownClose;
+      attemptedClose = true;
+      boolean socketClosed = true;
+      try { raw.close(); } catch (IOException unknown) { socketClosed = false; }
+      abort.close(); knownClose = socketClosed && !abort.monitor.isAlive(); return knownClose;
     }
+    @Override public void close() { closeKnown(); }
   }
   static OpenRelay openRelay(String rawUrl, OpenControl control, Deadline deadline) throws IOException {
     return openRelay(rawUrl, control, deadline, new RelayTransport(PublishedHttpsRequestOwner.addressPolicy(),
@@ -70,7 +78,7 @@ final class NativeSignerRelayOpening {
     AbortMonitor abort = new AbortMonitor(monitorControl, deadline);
     boolean opened = false;
     try {
-      InetAddress[] addresses = PublishedRelayWssQuery.checkedAddresses(PublishedRelayWssQuery.resolve(relay.host, deadline, abort, transport.resolver, transport.executor), transport.policy);
+      InetAddress[] addresses = PublishedRelayWssQuery.checkedAddresses(resolve(relay.host, deadline, abort, transport, control), transport.policy);
       SSLSocket tls = PublishedRelayWssQuery.connect(relay, addresses, transport.policy, abort, deadline, transport.factory, transport.verifier);
       DeadlineInput input = new DeadlineInput(accountedInput(tls.getInputStream(), control), tls, deadline);
       OutputStream output = tls.getOutputStream();
@@ -93,6 +101,12 @@ final class NativeSignerRelayOpening {
       if (!opened) { Socket tcp = raw.get(); if (tcp != null) try { tcp.close(); } catch (IOException ignored) {} abort.close(); }
     }
   }
+  private static InetAddress[] resolve(String host, Deadline deadline, AbortMonitor abort, RelayTransport transport, OpenControl control) throws IOException {
+    if (!control.tracksResolution()) return PublishedRelayWssQuery.resolve(host, deadline, abort, transport.resolver, transport.executor);
+    NativeResolverOwnership tracked = new NativeResolverOwnership(transport.resolver, control::resolutionReserved, control::resolutionDrained);
+    try { return PublishedRelayWssQuery.resolve(host, deadline, abort, tracked, transport.executor); }
+    finally { tracked.ownerLeft(); }
+  }
   private static PublicationControl openingControl(OpenControl control, Deadline deadline, AtomicReference<Socket> raw) {
     return new PublicationControl() {
       @Override public void attach(Socket socket) throws IOException { raw.set(socket); control.attach(socket); }
@@ -111,16 +125,16 @@ final class NativeSignerRelayOpening {
     return new InputStream() {
       @Override public int read() throws IOException {
         int reserved = control.reserveRead(1);
-        int value = input.read();
-        control.finishRead(reserved, value < 0 ? 0 : 1);
-        return value;
+        int received = 0;
+        try { int value = input.read(); received = value < 0 ? 0 : 1; return value; }
+        finally { control.finishRead(reserved, received); }
       }
       @Override public int read(byte[] bytes, int offset, int length) throws IOException {
         if (length == 0) return 0;
         int reserved = control.reserveRead(length);
-        int received = input.read(bytes, offset, reserved);
-        control.finishRead(reserved, Math.max(0, received));
-        return received;
+        int received = 0;
+        try { int count = input.read(bytes, offset, reserved); received = Math.max(0, count); return count; }
+        finally { control.finishRead(reserved, received); }
       }
     };
   }

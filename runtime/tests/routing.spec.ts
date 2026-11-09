@@ -19,11 +19,12 @@ async function open(page: Page) {
         state.sequences.push(envelope.sequence);
         const wrapper = JSON.parse(envelope.message); if (wrapper.type !== 'routing.call') throw Error('Unexpected transport');
         const message = wrapper.message; state.calls.push(message);
-        const available = {archetype: 'note', available: true, candidates: [{dTag: 'native-bound-handler', title: 'Handler', actions: ['open'], conventions: ['napplet:note/open'], isDefault: false}], hasDefault: false};
+        const handler = state.mode==='snapshot' ? {id:' snapshot:'+'2'.repeat(64),contracts:[{convention:'napplet:note/open',params:[]}]} : {dTag:'native-bound-handler'};
+        const available = {archetype: 'note', available: true, candidates: [{...handler, title: 'Handler', actions: ['open'], conventions: ['napplet:note/open'], isDefault: false}], hasDefault: false};
         let response: any = null;
         if (message.type === 'intent.available') response = {type: message.type + '.result', id: message.id, availability: available};
         if (message.type === 'intent.handlers') response = {type: message.type + '.result', id: message.id, handlers: [available]};
-        if (message.type === 'intent.invoke') response = {type: message.type + '.result', id: message.id, result: {ok: true, handled: true, archetype: message.request.archetype, action: message.request.action, handler: 'native-bound-handler', windowId: 'actual-native-target', convention: message.request.convention}};
+        if (message.type === 'intent.invoke') response = {type: message.type + '.result', id: message.id, result: {ok: true, handled: true, archetype: message.request.archetype, action: message.request.action, handler: state.mode==='snapshot'?message.request.handler:'native-bound-handler', windowId: 'actual-native-target', convention: message.request.convention}};
         if (message.type === 'inc.subscribe') response = {type: message.type + '.result', id: message.id, ...(state.mode === 'deny' ? {error: 'user denied'} : {})};
         if (message.type === 'inc.channel.open') response = {type: 'inc.channel.open.result', id: message.id, channelId: 'native-channel', peer: message.target};
         const result = {type: 'routing.call.result', id: wrapper.id, response};
@@ -46,6 +47,21 @@ test('genuine SDK catalog availability and dispatch use the whole native routing
   expect(invoke.request.payload).toEqual({text: 'routing tracer + ⚡', nested: [null, false, 3]});
   expect(invoke.request.behavior).toEqual({focus: true, newWindow: false});
   expect(Object.keys(invoke).sort()).toEqual(['id', 'request', 'type']);
+});
+test('snapshot catalog candidates retain the opaque ID without a fabricated dTag',async({page})=>{
+  await open(page);
+  await page.evaluate(()=>{(window as any).routingNative.mode='snapshot';});
+  const frame=page.frames().find(value=>value.parentFrame()===page.mainFrame())!;
+  const {availability,result}=await frame.evaluate(async()=>{
+    const intent=(window as any).napplet.intent;
+    const availability=await intent.available('note');
+    return {availability,result:await intent.invoke('napplet:note/open',{handler:availability.candidates[0].id})};
+  });
+  const id=' snapshot:'+'2'.repeat(64);
+  expect(availability.candidates).toEqual([{id:' snapshot:'+'2'.repeat(64),title:'Handler',actions:['open'],
+    conventions:['napplet:note/open'],contracts:[{convention:'napplet:note/open',params:[]}],isDefault:false}]);
+  expect(result.handler).toBe(id);
+  expect(await page.evaluate(()=>(window as any).routingNative.calls.find((call:any)=>call.type==='intent.invoke').request.handler)).toBe(id);
 });
 test('genuine SDK topic subscription receives canonical native-attested events and acknowledges privately', async ({page}) => {
   const guest = await open(page); await guest.locator('#subscribe').click();

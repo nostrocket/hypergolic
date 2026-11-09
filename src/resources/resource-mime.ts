@@ -1,3 +1,4 @@
+import {classifyMapPbf} from './resource-map-pbf.ts';
 import { ResourceError, RESOURCE_LIMITS } from './resource-contract.ts';
 
 const jpegFrames = new Set([192,193,194,195,197,198,199,201,202,203,205,206,207]);
@@ -49,6 +50,58 @@ function webpDimensions(bytes: Uint8Array, view: DataView): void {
   }
   return bad();
 }
+const glbJsonType = 0x4e4f534a;
+const glbBinaryType = 0x004e4942;
+const glbJsonBytes = 2 * 1024 * 1024;
+const glbChunks = 16;
+function requireGlbAsset(bytes: Uint8Array): void {
+  let version: unknown;
+  try {
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    version = JSON.parse(text)?.asset?.version;
+  } catch { return bad(); }
+  if (typeof version !== 'string' || !/^2\.[0-9]+$/.test(version)) return bad();
+}
+/** Validate GLB v2 framing and its asset header. The guest still owns model decoding. */
+function classifyGlb(bytes: Uint8Array, view: DataView): string {
+  if (bytes.length < 24 || view.getUint32(4, true) !== 2 || view.getUint32(8, true) !== bytes.length ||
+    view.getUint32(16, true) !== glbJsonType) return bad();
+  const jsonLength = view.getUint32(12, true);
+  if (jsonLength < 4 || jsonLength % 4 || jsonLength > Math.min(glbJsonBytes, bytes.length - 20)) return bad();
+  const jsonEnd = 20 + jsonLength;
+  requireGlbAsset(bytes.subarray(20, jsonEnd));
+  let cursor = jsonEnd;
+  for (let index = 1; cursor < bytes.length; index++) {
+    if (index >= glbChunks || bytes.length - cursor < 8) return bad();
+    const length = view.getUint32(cursor, true);
+    const type = view.getUint32(cursor + 4, true);
+    if (length % 4 || length > bytes.length - cursor - 8 || type === glbJsonType ||
+      (index !== 1 && type === glbBinaryType)) return bad();
+    cursor += 8 + length;
+  }
+  return 'model/gltf-binary';
+}
+/** Check bounded RFC 1952 header fields and leave compressed bytes opaque. */
+function classifyGzip(bytes: Uint8Array, view: DataView): string {
+  const flags = bytes[3]!;
+  if (bytes.length < 20 || bytes[2] !== 8 || (flags & 0xe0)) return bad();
+  const headerEnd = Math.min(64 * 1024, bytes.length - 10);
+  let cursor = 10;
+  if (flags & 4) {
+    if (cursor + 2 > headerEnd) return bad();
+    cursor += 2 + view.getUint16(cursor, true);
+  }
+  const header = bytes.subarray(0, headerEnd);
+  for (const flag of [8, 16]) {
+    if (!(flags & flag)) continue;
+    const end = header.indexOf(0, cursor);
+    if (end < 0) return bad();
+    cursor = end + 1;
+  }
+  if (flags & 2) cursor += 2;
+  if (cursor > headerEnd || (bytes[cursor]! & 6) === 6) return bad();
+  return 'application/gzip';
+}
 /** Byte classification, never an upstream Content-Type. Native/browser decoding remains separately tested. */
 export function classifyResourceBytes(bytes: Uint8Array): string {
   if (!(bytes instanceof Uint8Array) || bytes.byteLength > RESOURCE_LIMITS.fileBytes) throw new ResourceError('too-large');
@@ -75,11 +128,17 @@ export function classifyResourceBytes(bytes: Uint8Array): string {
     return bad();
   }
   if (ascii(bytes, 0, '%PDF-')) return 'application/pdf';
-  // A leading text/XML probe rejects active document bytes even with a lying server header.
-  let text: string;
-  try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { return bad(); }
+  if (ascii(bytes, 0, 'glTF')) return classifyGlb(bytes, view);
+  if (bytes[0] === 0x1f && bytes[1] === 0x8b) return classifyGzip(bytes, view);
+  // Valid binary framing can resemble whitespace followed by a text/XML prefix.
+  const pbf=classifyMapPbf(bytes);if(pbf)return pbf;
+  // Unrecognized HTML/XML remains denied even with a lying server header.
+  let text: string|undefined;
+  try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { /* Unknown non-text bytes are denied below. */ }
+  if (text?.trimStart().startsWith('<')) return bad();
+  if (text===undefined) return bad();
   const trimmed = text.trimStart();
-  if (trimmed.startsWith('<') || /^[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(trimmed) ||
+  if (/^[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(trimmed) ||
     /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(text)) return bad();
   if (/^[{[]/.test(trimmed)) { try { JSON.parse(text); return 'application/json'; } catch { return bad(); } }
   return 'text/plain';

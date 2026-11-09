@@ -6,11 +6,16 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
 SOURCES = [
+    "modules/napplet-host/ios/NativeCanonicalJSON.swift",
+    "modules/napplet-host/ios/NativeAppDataPolicy.swift",
     "modules/napplet-host/ios/NativeApprovalAuthority.swift",
     "modules/napplet-host/ios/NativeOutboxPlan.swift",
+    "modules/napplet-host/ios/NativeCommonPlan.swift",
+    "modules/napplet-host/ios/NativeCommonNpub.swift",
     "modules/napplet-host/ios/PublishedRelayWebSocketClientFrames.swift",
     "modules/napplet-host/ios/CapabilityLeaseRegistry.swift",
     "modules/napplet-host/ios/CapabilityTransport.swift",
+    "modules/napplet-host/ios/LegacyReadOnlyContext.swift",
     "modules/napplet-host/ios/ApprovalTransport.swift",
 ]
 

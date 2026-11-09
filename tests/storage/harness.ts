@@ -30,7 +30,7 @@ export class DiskSQLite implements SQLiteModule {
     return result;
   }
   async openDatabaseAsync(name: string, options: { useNewConnection: true; enableChangeListener: false }): Promise<SQLiteConnection> {
-    assert.ok(name === SHELL_DATABASE || name === 'hypergolic-published-artifacts-v1.db' || name === 'hypergolic-public-identity-v1.db' || name === 'hypergolic-identity-list-access-v1.db' || name === 'hypergolic-routing-v1.db' || name === 'hypergolic-notify-v1.db' || name === 'hypergolic-outbox-lists-v1.db'); this.openOptions.push(options);
+    assert.ok(name === SHELL_DATABASE || name === 'hypergolic-published-artifacts-v1.db' || name === 'hypergolic-public-identity-v1.db' || name === 'hypergolic-identity-list-access-v1.db' || name === 'hypergolic-routing-v1.db' || name === 'hypergolic-routing-v2.db' || name === 'hypergolic-notify-v1.db' || name === 'hypergolic-outbox-lists-v1.db'); this.openOptions.push(options);
     const db = await this.step('OPEN', [], () => new DatabaseSync(join(this.directory, name)));
     this.connections.add(db);
     return {

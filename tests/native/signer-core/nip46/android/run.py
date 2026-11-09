@@ -41,7 +41,7 @@ host_names = ['PublicAddressPolicy', 'PublishedHttpsResponseReader', 'PublishedH
     'PublishedRelayWebSocketHandshake', 'PublishedRelayWebSocketFrames', 'PublishedRelayWebSocketClientFrames',
     'PublishedRelayWssQuery', 'NativeSignerRelayOpening', 'NativeSigningHold', 'PublishedRelayWssIo', 'PublishedRelayResponseClassifier', 'NativeSignerRelay']
 signer_names = ['NativeSigningKey', 'NativeEvent', 'NativeSignerCore', 'NativeReviewPanel', 'NativeSecretBuffer',
-    'NativeVaultFile', 'NativeVault', 'NativeVaultRecordCodec', 'NativeVaultMetadata', 'NativeVaultMethods', 'NativeAndroidSignerBinding', 'NativeAndroidSignerCandidates', 'NativeTransportCrypto', 'NativeRemoteBinding', 'NativeConnectionCandidate', 'NativeBunker',
+    'NativeVaultFile', 'NativeVault', 'NativeLocalVaultLease', 'NativeVaultRecordCodec', 'NativeVaultMetadata', 'NativeVaultMethods', 'NativeAndroidSignerBinding', 'NativeAndroidSignerCandidates', 'NativeTransportCrypto', 'NativeRemoteBinding', 'NativeConnectionCandidate', 'NativeBunker',
     'NativeRpcJson', 'NativeSignedEvent', 'NativeRemoteOperation', 'NativeNip46Client']
 sources = [host / (name + '.java') for name in host_names] + [signer / (name + '.java') for name in signer_names]
 sources += [HERE / 'NativeSignerRelayFixture.java', HERE / 'Nip46ProofActivity.java']

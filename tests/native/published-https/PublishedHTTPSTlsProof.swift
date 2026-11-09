@@ -48,9 +48,15 @@ private final class ResultBox: @unchecked Sendable {
     } else { addresses = [loopback] }
     let result = ResultBox()
     let done = DispatchSemaphore(value: 0)
+    let artifact = mode == "artifact-redirect"
+    let path = artifact ? String(repeating: "a", count: 64) : "fixture"
     let operation = try PublishedPinnedHTTPS.fetchForProof(
-      "https://blossom.example.net:\(port)/fixture", maximumBodyBytes: 64,
-      addresses: addresses, anchorDER: mode == "untrusted" ? nil : anchor
+      "https://blossom.example.net:\(port)/\(path)", maximumBodyBytes: 64,
+      addresses: addresses, anchorDER: mode == "untrusted" ? nil : anchor,
+      resolverForProof: { host in
+        guard host == "blossom.example.net" else { throw PublishedPinnedHTTPS.Failure.invalidURL }
+        return [loopback]
+      }, artifactProfile: artifact
     ) { outcome in
       result.set(outcome)
       done.signal()
@@ -62,7 +68,8 @@ private final class ResultBox: @unchecked Sendable {
       throw NSError(domain: "proof timed out", code: 1)
     }
     switch (mode, outcome) {
-    case ("valid", .success(let response)), ("failover", .success(let response)):
+    case ("valid", .success(let response)), ("failover", .success(let response)),
+         ("artifact-redirect", .success(let response)):
       guard response.status == 200, response.body == Data("proof".utf8) else {
         throw NSError(domain: "wrong HTTPS response", code: 1)
       }

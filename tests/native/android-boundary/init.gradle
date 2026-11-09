@@ -11,6 +11,7 @@ gradle.beforeProject { project ->
         project.android.sourceSets.release.manifest.srcFile(new File(boundaryRoot, 'NetworkControlManifest.xml'))
       }
       project.android.buildTypes.release.signingConfig = project.android.signingConfigs.debug
+      project.android.buildTypes.release.proguardFiles(new File(boundaryRoot, 'reflection.pro'))
       project.android.sourceSets.androidTest.java.srcDir(new File(boundaryRoot, 'src'))
       project.android.sourceSets.androidTest.manifest.srcFile(new File(boundaryRoot, 'AndroidManifest.xml'))
       project.dependencies.add('androidTestImplementation', project.project(':hypergolic-napplet-host'))

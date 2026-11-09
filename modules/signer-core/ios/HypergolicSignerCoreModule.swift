@@ -9,10 +9,24 @@ import UIKit
 public final class HypergolicSignerCoreModule: Module {
   private let binding = EphemeralSignerBinding()
   private let nativeVault = NativeVaultBinding()
+  private let publicVerification = NativePublicVerification()
   public func definition() -> ModuleDefinition {
     let binding = self.binding
     let nativeVault = self.nativeVault
+    let publicVerification = self.publicVerification
+    let publicAuthority = appContext.map { NativeVaultRuntimeAuthority(context: $0) }
     Name("HypergolicSignerCore")
+    Events("onCvmMessage", "onCvmClosed")
+    nonisolated(unsafe) weak let cvmEmitter = self
+    let cvm = NativeCvmSessions(active: { publicAuthority?.isOwner() == true }, emit: { event, raw in
+      if let payload = try? JSONSerialization.jsonObject(with:Data(raw.utf8)) as? [String: Any] { cvmEmitter?.emit(event:event,payload:payload) }
+    })
+    AsyncFunction("openCvmSession") { (token: String) async throws -> String in try await cvm.open(token) }
+    AsyncFunction("prepareCvmMessage") { (session: String, token: String, purpose: String, message: String, replyTo: String?) async throws -> String in
+      try await cvm.prepare(session:session,token:token,purpose:purpose,message:message,replyTo:replyTo)
+    }
+    AsyncFunction("commitCvmMessage") { (session: String, plan: String) async throws in try await cvm.commit(session:session,plan:plan) }
+    Function("closeCvmSession") { (session: String) in cvm.close(session:session) }
     Function("activateEphemeralSigner") { () throws -> Bool in
       try signerResult {
         guard let appContext, NativeIdentityOwnerContext.owns(appContext) else { throw SignerFailure.staleOwner }
@@ -125,6 +139,12 @@ public final class HypergolicSignerCoreModule: Module {
         return try await nativeVault.lease().session().commitImport(handle: handle, vaultID: vaultID, revision: revision)
       }
     }
+    AsyncFunction("addNativePublicIdentityAsync") { (pubkey: String, vaultID: String, revision: Double) async throws -> String in
+      try await nativeVaultResult {
+        let revision = try nativeVaultRevision(revision); try nativeVaultID(vaultID); try nativeVaultPubkey(pubkey)
+        return try await nativeVault.lease().session().addPublicIdentity(pubkey: pubkey, vaultID: vaultID, revision: revision)
+      }
+    }
     AsyncFunction("selectNativeIdentityAsync") { (pubkey: String, vaultID: String, revision: Double) async throws -> String in
       try await nativeVaultResult {
         let revision = try nativeVaultRevision(revision); try nativeVaultID(vaultID); try nativeVaultPubkey(pubkey)
@@ -182,7 +202,18 @@ public final class HypergolicSignerCoreModule: Module {
     Function("cancelNativeSigning") { (kind: String, token: String) throws in
       try nativeVaultResult { try nativeVault.lease().cancelSigning(kind: kind, token: token) }
     }
-    OnDestroy { binding.revoke(); nativeVault.close() }
+    AsyncFunction("verifyPublicSignatures") { (operationId: String, tuples: String, timeoutMs: Double) async throws -> String in
+      guard let publicAuthority, publicAuthority.isOwner() else { throw NativePublicVerification.Failure.denied }
+      let foreground = await MainActor.run {
+        let active = UIApplication.shared.applicationState == .active
+        publicVerification.setForeground(active)
+        return active
+      }
+      guard foreground else { throw NativePublicVerification.Failure.denied }
+      return try await publicVerification.verify(id: operationId, raw: tuples, milliseconds: timeoutMs, active: { publicAuthority.isOwner() })
+    }
+    Function("cancelPublicSignatures") { (operationId: String) in publicVerification.cancel(operationId) }
+    OnDestroy { cvm.close(); publicAuthority?.close(); publicVerification.close(); binding.revoke(); nativeVault.close() }
   }
 }
 

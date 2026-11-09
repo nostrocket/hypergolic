@@ -10,7 +10,7 @@
   "scripts": {
     "build": "node tools/build.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node tools/build-capability-fixture.mjs && playwright test",
+    "test": "node tools/prepare-legacy-fixtures.mjs && node tools/build-capability-fixture.mjs && node tools/prepare-presentation-fixtures.mjs && playwright test",
     "verify": "pnpm typecheck && pnpm build && pnpm test",
     "preview": "node tools/serve.mjs"
   },

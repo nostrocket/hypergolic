@@ -12,15 +12,51 @@ const identity = {
   publisher: '1'.repeat(64), appId: 'published-test', eventId: '2'.repeat(64), version, htmlHash,
 };
 
-type Mode = 'normal' | 'bad-hash' | 'malformed-base64' | 'replayed-sequence' | 'unknown-domain' | 'relay-domain' | 'attributed-head' | 'upload-domain' | 'all-domains' | 'outbox-domain' | 'outbox-only' | 'published-approval';
+type Mode = 'normal' | 'keys-domain' | 'bad-hash' | 'malformed-base64' | 'replayed-sequence' | 'unknown-domain' | 'relay-domain' | 'attributed-head' | 'commented-head' | 'unsafe-head-comment' | 'upload-domain' | 'all-domains' | 'outbox-domain' | 'outbox-only' | 'published-approval' | 'intent-only' | 'soy-policy' | 'soy-policy-change'
+  | 'snapshot' | 'snapshot-mismatch' | 'snapshot-title-change' | 'snapshot-discovery';
+
+function artifactFor(mode: Mode): Buffer {
+  if (mode === 'published-approval') return approvalHtml;
+  if (mode === 'intent-only') return Buffer.from('<!doctype html><html><head><title>Intent</title></head><body><output id="deliveries"></output></body></html>');
+  const source = html.toString();
+  if(mode==='soy-policy'||mode==='soy-policy-change'||mode==='snapshot-title-change')return Buffer.from(source.replace('</body>','<!--'+'x'.repeat(64*1024)+'--></body>'));
+  if (mode === 'keys-domain') return Buffer.from(source.replace('</body>', `
+    <keys-declarative-editor id="keys-declarative" style="display:block">
+      <template shadowrootmode="closed"><input aria-label="Declarative editor"></template>
+    </keys-declarative-editor></body>`));
+  if (mode === 'attributed-head') return Buffer.from(source.replace('<head>', '<HEAD data-fixture="attribute">'));
+  if (mode === 'commented-head') {
+    const commented = source.replace('<!doctype html>', '<!doctype html>\n<!-- <head><meta http-equiv="Content-Security-Policy" content="default-src *"> -->');
+    return Buffer.from(commented.replace('<head>\n', `<!-- Before the real head --><head>
+      <script>
+        window.prefixProbe = {sdk: Boolean(window.napplet?.shell), support: Boolean(window.hypergolicSupportReport)};
+        fetch('/prefix-network-probe').then(() => prefixProbe.outcome = 'sent', () => prefixProbe.outcome = 'blocked');
+      </script>`));
+  }
+  if (mode === 'unsafe-head-comment') return Buffer.from(source.replace('<!doctype html>',
+    '<!doctype html><!--><script>fetch("/prefix-network-probe")</script>-->'));
+  return html;
+}
 
 async function openPublished(page: Page, mode: Mode = 'normal', extraQuery = '') {
-  const artifact = mode === 'published-approval' ? approvalHtml : mode === 'attributed-head' ? Buffer.from(html.toString().replace('<head>','<HEAD data-fixture="attribute">')) : html;
+  const artifact = artifactFor(mode);
   const artifactHash = digest(artifact);
   const artifactIdentity = {...identity,htmlHash:artifactHash,version:digest(`${artifactHash} /index.html\n`)};
   await page.addInitScript(({ generation, htmlBase64, htmlLength, identity, badHashVersion, mode }) => {
     if (window !== window.top) return;
+    let delivery = 0;
+    const held = new Set<number>();
     const state = { requests: [] as unknown[], diagnostics: [] as unknown[],
+      pushIntent(message: unknown, target = generation) {
+        const sequence = ++delivery;
+        for (const listener of listenerSet) listener({data: JSON.stringify({
+          type: 'routing.event', sessionId: target, delivery: sequence, response: JSON.stringify(message),
+        })});
+      },
+      offerIntent(message: unknown) {
+        if (held.size === 4) return false;
+        held.add(delivery + 1); state.pushIntent(message); return true;
+      },
       reply(sequence: number, response: unknown) {
         for (const listener of listenerSet) listener({data: JSON.stringify({
           type: 'capability.result', sessionId: generation, sequence,
@@ -40,11 +76,18 @@ async function openPublished(page: Page, mode: Mode = 'normal', extraQuery = '')
     const emit = (sequence: number) => {
       const payload = bytes.slice(sequence * 48 * 1024, (sequence + 1) * 48 * 1024);
       const base64 = mode === 'malformed-base64' ? '!!!!' : btoa(String.fromCharCode(...payload));
+      const snapshot = mode.startsWith('snapshot') ? {
+        appId: ' 5129:'+identity.eventId,
+        snapshot:{kind:5129,eventId:mode==='snapshot-mismatch'?'f'.repeat(64):identity.eventId,
+          title:mode==='snapshot-title-change'&&sequence>0?'Changed title':'Immutable snapshot'},
+        ...(mode==='snapshot-discovery'?{publishedOpen:true}:{}),
+      } : {};
       const envelope = {
         type: 'artifact.chunk', sessionId: generation,
         sequence: mode === 'replayed-sequence' ? sequence + 1 : sequence,
         base64, byteLength: payload.length, totalBytes: htmlLength,
-        ...claims, domains: mode === 'published-approval' ? ['identity', 'relay', 'theme'] : mode === 'unknown-domain' ? ['future-domain'] : mode === 'outbox-domain' ? ['outbox', 'relay', 'theme'] : mode === 'outbox-only' ? ['outbox', 'theme'] : mode === 'relay-domain' ? ['relay', 'theme'] : mode === 'upload-domain' ? ['upload'] : mode === 'all-domains' ? ['config', 'identity', 'inc', 'intent', 'link', 'notify', 'outbox', 'relay', 'resource', 'storage', 'theme', 'upload'] : ['theme'],
+        ...claims, ...snapshot, ...((mode==='soy-policy'||mode==='soy-policy-change')?{appData:{sourceKind:35129,policy:{profile:'soy.app-data/1',scope:mode==='soy-policy-change'&&sequence>0?'f'.repeat(64):'b7890c0793a7fa9c2570c56500f403724b1a4c0e453a9194ec7200132c634f8b',maxContentBytes:3072,relays:['wss://relay.damus.io'],defaultRelays:['wss://relay.damus.io']}}}:{}),
+        domains: mode==='soy-policy'||mode==='soy-policy-change'?['identity','outbox','theme']:mode === 'intent-only' ? ['intent'] : mode === 'published-approval' ? ['identity', 'relay', 'theme'] : mode === 'unknown-domain' ? ['future-domain'] : mode === 'outbox-domain' ? ['outbox', 'relay', 'theme'] : mode === 'outbox-only' ? ['outbox', 'theme'] : mode === 'relay-domain' ? ['relay', 'theme'] : mode === 'upload-domain' ? ['upload'] : mode === 'keys-domain' ? ['keys', 'theme'] : mode === 'all-domains' ? ['config', 'identity', 'inc', 'intent', 'link', 'notify', 'outbox', 'relay', 'resource', 'storage', 'theme', 'upload'] : ['theme'],
         done: (sequence + 1) * 48 * 1024 >= htmlLength,
       };
       for (const listener of listenerSet) listener({ data: JSON.stringify(envelope) });
@@ -55,12 +98,20 @@ async function openPublished(page: Page, mode: Mode = 'normal', extraQuery = '')
       postMessage(raw: string) {
         const request = JSON.parse(raw);
         state.requests.push(request);
+        if (request.type === 'routing-ack') held.delete(request.delivery);
         if (request.type === 'artifact.read') { emit(request.sequence); return; }
         if (request.type === 'ready' || request.type === 'error') state.diagnostics.push(request);
         if (request.type === 'capability') {
           const wire = JSON.parse(request.message);
           let response;
-          if (wire.type === 'identity.getPublicKey') response = {type: 'identity.getPublicKey.result', id: wire.id, pubkey: '1'.repeat(64)};
+          if (mode === 'intent-only' && wire.type === 'routing.call') {
+            const {message} = wire;
+            const {archetype, action, convention} = message.request ?? {};
+            const result = message.type === 'intent.invoke' ? {type: 'intent.invoke.result', id: message.id,
+              result: {ok: true, handled: true, archetype, action, convention, handler: 'native-handler'}} : null;
+            response = {type: 'routing.call.result', id: wire.id, response: result};
+          }
+          else if (wire.type === 'identity.getPublicKey') response = {type: 'identity.getPublicKey.result', id: wire.id, pubkey: '1'.repeat(64)};
           else if (wire.type === 'outbox.query') response = {type: 'outbox.query.result', id: wire.id, events: []};
           else if (wire.type === 'outbox.publish') response = {type: 'outbox.publish.result', id: wire.id, ok: false, error: 'user rejected'};
           if (response) for (const listener of listenerSet) listener({data: JSON.stringify({type: 'capability.result', sessionId: generation, sequence: request.sequence, response: JSON.stringify(response)})});
@@ -111,6 +162,23 @@ test('older WebView query counting still rejects unexpected published parameters
   ]);
   expect(await page.evaluate(() => (window as any).__publishedTest.requests.filter((request: any) => request.type === 'artifact.read'))).toEqual([]);
 });
+
+test('published snapshot uses its verified title and only the existing native grants',async({page})=>{
+  await openPublished(page,'snapshot');
+  const guest=await publishedGuest(page);
+  await expect(page.locator('#napplet')).toHaveAttribute('title','Immutable snapshot');
+  expect(await guest.evaluate(()=>(window as any).napplet.shell.supports('intent'))).toBe(false);
+});
+
+for(const mode of ['snapshot-mismatch','snapshot-title-change','snapshot-discovery'] as const){
+  test(`published artifact rejects ${mode} before guest mount`,async({page})=>{
+    await openPublished(page,mode);
+    await expect.poll(()=>page.evaluate(()=>(window as any).__publishedTest.diagnostics)).toEqual([
+      {type:'error',code:'artifact-integrity',sessionId:generation},
+    ]);
+    await expect(page.locator('#napplet')).toHaveCount(0);
+  });
+}
 
 test('published napplet streams verified bytes, gets theme only, and runs in an isolated frame', async ({ page }) => {
   await openPublished(page);
@@ -167,6 +235,33 @@ test('trusted media prelude preserves the leading CSP in a valid attributed uppe
   expect(await guest.evaluate(()=>document.head.firstElementChild?.getAttribute('http-equiv'))).toBe('Content-Security-Policy');
 });
 
+test('the published head keeps trusted bootstraps and CSP ahead of publisher content after comments', async ({page}) => {
+  const requests: string[] = [];
+  await page.route('**/prefix-network-probe', route => {
+    requests.push(route.request().url());
+    return route.fulfill({body: 'probe', headers: {'access-control-allow-origin': '*'}});
+  });
+  await openPublished(page, 'commented-head');
+  const guest = await publishedGuest(page);
+  await expect.poll(() => guest.evaluate(() => (window as any).prefixProbe)).toEqual({
+    sdk: true, support: true, outcome: 'blocked',
+  });
+  expect(await guest.evaluate(() => document.head.firstElementChild?.getAttribute('content'))).toContain("connect-src 'none'");
+  expect(requests).toEqual([]);
+});
+
+test('a malformed comment cannot hide publisher execution before trusted CSP', async ({page}) => {
+  const requests: string[] = [];
+  await page.route('**/prefix-network-probe', route => {
+    requests.push(route.request().url());
+    return route.fulfill({body: 'probe'});
+  });
+  await openPublished(page, 'unsafe-head-comment');
+  await expect(page.getByRole('alert')).toHaveText('The napplet could not be loaded.');
+  await expect(page.locator('iframe')).toHaveCount(0);
+  expect(requests).toEqual([]);
+});
+
 for (const mode of ['upload-domain', 'all-domains'] as const) {
   test(`published ${mode} preserves native-declared access through artifact verification`, async ({page}) => {
     await openPublished(page, mode);
@@ -197,13 +292,18 @@ test('URL parameters cannot grant published Outbox or bypass the exact native ar
   await expect(page.locator('#napplet')).toHaveCount(0);
   expect(await page.evaluate(() => (window as any).__publishedTest.requests)).toHaveLength(1);
 });
-test('an Outbox-only native grant neither exposes usable Outbox nor acquires relay authority', async ({page}) => {
-  await openPublished(page, 'outbox-only'); await expect(page.locator('#napplet')).toHaveCount(1);
+test('an Outbox-only native grant exposes Outbox while raw Relay stays denied', async ({page}) => {
+  await openPublished(page, 'outbox-only');
   const guest = await publishedGuest(page);
-  await expect.poll(() => guest.evaluate(() => (window as any).napplet.shell.supports('outbox'))).toBe(false);
+  expect(await guest.evaluate(() => (window as any).napplet.shell.supports('outbox'))).toBe(true);
   expect(await guest.evaluate(() => (window as any).napplet.shell.supports('relay'))).toBe(false);
-  await guest.evaluate(() => {parent.postMessage({type: 'outbox.query', id: 'missing-relay', filters: [{kinds: [1], limit: 0}]}, '*');});
-  expect(await page.evaluate(() => (window as any).__publishedTest.requests.filter((x: any) => x.type === 'capability'))).toHaveLength(0);
+  await guest.evaluate(() => {
+    parent.postMessage({type: 'relay.query', id: 'ungranted-relay', filters: [{kinds: [1], limit: 0}]}, '*');
+  });
+  expect(await guest.evaluate(() => (window as any).napplet.outbox.query({kinds: [1], limit: 0})))
+    .toMatchObject({type: 'outbox.query.result', events: []});
+  const calls = await page.evaluate(() => (window as any).__publishedTest.requests.filter((x: any) => x.type === 'capability'));
+  expect(calls.map((x: any) => JSON.parse(x.message).type)).toEqual(['outbox.query']);
 });
 
 
@@ -224,6 +324,55 @@ async function publishedApprovalCalls(page: Page) {
   return page.evaluate(() => (window as any).__publishedTest.requests
     .filter((entry: any) => entry.type === 'capability' && JSON.parse(entry.message).type === 'relay.publish'));
 }
+
+test('published Relay promptly rejects a missing timestamp without opening native approval', async ({page}) => {
+  await openPublished(page, 'relay-domain');
+  const guest = await publishedGuest(page);
+  await guest.evaluate(() => {
+    const state = window as any;
+    state.napplet.relay.publish({kind: 1, content: 'Invalid unsigned note', tags: []}).then(
+      () => { state.__publishOutcome = 'unexpected success'; },
+      (error: Error) => { state.__publishOutcome = error.message; });
+  });
+  await expect.poll(() => guest.evaluate(() => (window as any).__publishOutcome), {timeout: 2_000})
+    .toBe('Invalid event template.');
+
+  await guest.evaluate(() => {
+    const state = window as any;
+    state.__invalidPublishReplies = [];
+    addEventListener('message', event => {
+      if (event.source === parent && event.data?.type === 'relay.publish.result') {
+        state.__invalidPublishReplies.push(event.data.id);
+      }
+    });
+    parent.postMessage({type: 'relay.publish', id: 'é'.repeat(65), event: {}}, '*');
+  });
+  await page.evaluate(() => {
+    const source = document.querySelector<HTMLIFrameElement>('#napplet')?.contentWindow;
+    window.dispatchEvent(new MessageEvent('message', {
+      source, data: {type: 'relay.publish', id: 'synthetic-publish', event: {}},
+    }));
+  });
+  await guest.evaluate(() => (window as any).napplet.theme.get());
+  expect(await guest.evaluate(() => (window as any).__invalidPublishReplies)).toEqual([]);
+  expect(await publishedApprovalCalls(page)).toEqual([]);
+});
+
+test('published Upload promptly rejects malformed requests before native staging', async ({page}) => {
+  await openPublished(page, 'upload-domain');
+  const guest = await publishedGuest(page);
+  await guest.evaluate(() => {
+    const state = window as any;
+    const fail = (error: Error) => error.message;
+    void Promise.all([
+      state.napplet.upload.upload({data: new Uint8Array([1])}).catch(fail),
+      state.napplet.upload.upload({data: new ArrayBuffer(1), rail: 'nip96'}).catch(fail),
+    ]).then(failures => { state.__uploadFailures = failures; });
+  });
+  await expect.poll(() => guest.evaluate(() => (window as any).__uploadFailures), {timeout: 2_000}).toEqual(['invalid request', 'unsupported rail']);
+  expect(await page.evaluate(() => (window as any).__publishedTest.requests
+    .filter((entry: any) => entry.type === 'capability' && JSON.parse(entry.message).type.startsWith('upload.')))).toEqual([]);
+});
 
 test('published Approval Lab SDK survives both short deadlines and receives one correlated delayed denial', async ({page}) => {
   await page.clock.install({time: new Date('2026-01-01T00:00:00Z')});
@@ -272,4 +421,332 @@ test('published Approval Lab remains bounded by the original 660-second response
   await expect(ui.locator('.request[data-sequence="1"]')).toHaveAttribute('data-state', 'failed');
   await expect(ui.locator('#pending')).toHaveText('0');
   expect(await publishedApprovalCalls(page)).toEqual(original);
+});
+
+test('verified Intent-only guest invokes modern URIs through the existing native request', async ({page}) => {
+  await openPublished(page, 'intent-only');
+  await expect(page.frameLocator('#napplet').locator('#deliveries')).toBeAttached();
+  const guest = page.frames().find(frame => frame.parentFrame() === page.mainFrame())!;
+  const results = await guest.evaluate(async () => {
+    const {intent, inc} = (window as any).napplet;
+    const outcomes = await Promise.all([
+      intent.invoke('napplet:napptest/open?msg=hello%2Bworld'),
+      intent.open('napplet:napptest/open?msg=hello+world'),
+    ]);
+    const rejected = [];
+    for (const call of [
+      () => intent.invoke('napplet:napptest/open?msg=one&%6dsg=two'),
+      () => intent.invoke('napplet:napptest/open?msg=one', {payload: {msg: 'two'}}),
+      () => intent.open('napplet:napptest/edit'),
+      () => intent.invoke('napplet:napptest/open?msg=%xx'),
+      () => intent.invoke('napplet:napptest/open#untrusted-hint'),
+    ]) {
+      try { await call(); rejected.push(false); } catch { rejected.push(true); }
+    }
+    return {outcomes, rejected, exposesInc: inc !== undefined};
+  });
+  const accepted = {ok: true, archetype: 'napptest', action: 'open', convention: 'napplet:napptest/open', handler: 'native-handler'};
+  expect(results).toEqual({outcomes: [accepted, accepted], rejected: [true, true, true, true, true], exposesInc: false});
+  const requests = await page.evaluate(() => (window as any).__publishedTest.requests
+    .filter((value: any) => value.type === 'capability').map((value: any) => JSON.parse(value.message).message)
+    .filter((value: any) => value.type === 'intent.invoke').map((value: any) => value.request));
+  const normalized = {archetype: 'napptest', action: 'open', convention: 'napplet:napptest/open', payload: {msg: 'hello+world'}};
+  expect(requests).toEqual([normalized, normalized]);
+});
+
+test('verified Intent-only guest holds four credits until consumption and cannot forge a receipt', async ({page}) => {
+  await openPublished(page, 'intent-only');
+  const output = page.frameLocator('#napplet').locator('#deliveries');
+  await expect(output).toBeAttached();
+  const guest = page.frames().find(frame => frame.parentFrame() === page.mainFrame())!;
+  const nativeAcks = () => page.evaluate(() => (window as any).__publishedTest.requests.filter((value: any) => value.type === 'routing-ack').length);
+  await expect.poll(() => page.evaluate(() => (window as any).__publishedTest.requests.some((value: any) =>
+    value.type === 'capability' && JSON.parse(value.message).message?.type === 'routing.__register'))).toBe(true);
+  const valid = {type: 'intent.deliver', delivery: {sender: 'native-attested-caller', archetype: 'napptest', action: 'open',
+    convention: 'napplet:napptest/open', payload: {msg: 'hello+world'}}};
+  await guest.evaluate(message => {
+    window.dispatchEvent(new MessageEvent('message', {source: parent, data: message}));
+    window.postMessage(message, '*');
+    parent.postMessage(message, '*');
+    const forged = new MessageChannel();
+    parent.postMessage({type: 'hypergolic.intent.delivery-port'}, '*', [forged.port2]);
+    forged.port1.postMessage(1);
+  }, valid);
+  const admitted = await page.evaluate(message => {
+    const host = (window as any).__publishedTest;
+    host.pushIntent(message, 'wrong-generation');
+    host.pushIntent({...message, delivery: {...message.delivery, convention: 'napplet:wrong/open'}});
+    return [1, 2, 3, 4, 5].map(index => host.offerIntent({...message, delivery: {...message.delivery, payload: {index}}}));
+  }, valid);
+  expect(admitted).toEqual([true, true, true, true, false]);
+  expect(await nativeAcks()).toBe(0);
+  await guest.evaluate(() => {
+    const subscription = (window as any).napplet.intent.onDelivery((delivery: {payload: {index: number}}) => {
+      document.getElementById('deliveries')!.textContent += String(delivery.payload.index);
+      if (delivery.payload.index === 2) throw Error('Guest callback failed after invocation');
+    });
+    subscription.close();
+  });
+  await expect(output).toHaveText('1234');
+  await expect.poll(nativeAcks).toBe(4);
+  expect(await page.evaluate(message => (window as any).__publishedTest.offerIntent(message), valid)).toBe(true);
+  expect(await nativeAcks()).toBe(4);
+  await guest.evaluate(() => (window as any).napplet.intent.onDelivery((delivery: {payload: {msg: string}}) => {
+    document.getElementById('deliveries')!.textContent += delivery.payload.msg;
+  }));
+  await expect(output).toHaveText('1234hello+world');
+  await expect.poll(nativeAcks).toBe(5);
+});
+
+test('Keys dispatches real focused hardware shortcuts and scopes its action list', async ({page, browserName}) => {
+  await openPublished(page, 'keys-domain');
+  const guest = await publishedGuest(page);
+  const state = await guest.evaluate(async () => {
+    const keys = (window as any).napplet.keys;
+    (window as any).keyActions = [];
+    window.addEventListener('message', event => {
+      if (event.isTrusted && event.source === parent && event.data?.type === 'hypergolic.private.media-active') {
+        (window as any).keysActive = event.data.inputActive;
+      }
+    });
+    const id = 'test-keys-registration';
+    Object.defineProperty(crypto, 'randomUUID', {configurable: true, value: () => id});
+    let pending: Promise<{binding?: string}>;
+    try {
+      pending = keys.registerAction({id: 'game.shoot', label: 'Shoot', defaultKey: 'Space'});
+      window.dispatchEvent(new MessageEvent('message', {source: parent, data: {
+        type: 'keys.registerAction.result', id, actionId: 'game.shoot', binding: 'B',
+      }}));
+    } finally {
+      Reflect.deleteProperty(crypto, 'randomUUID');
+    }
+    const first = await pending;
+    keys.onAction('game.shoot', () => (window as any).keyActions.push('shoot'));
+    const second = await keys.registerAction({id: 'game.pause', label: 'Pause', defaultKey: 'p'});
+    const spaceCollision = await keys.registerAction({id: 'game.other-space', label: 'Other space', defaultKey: ' '});
+    keys.onAction('game.pause', () => (window as any).keyActions.push('pause'));
+    const reserved = await keys.registerAction({id: 'game.tab', label: 'Tab', defaultKey: 'Tab'});
+    const collision = await keys.registerAction({id: 'game.other', label: 'Other', defaultKey: 'p'});
+    let duplicate = false;
+    try { await keys.registerAction({id: 'game.pause', label: 'Duplicate'}); } catch { duplicate = true; }
+    const surface = document.createElement('canvas');
+    surface.tabIndex = 0;
+    surface.dataset.testid = 'keys-surface';
+    const editor = document.createElement('input');
+    editor.dataset.testid = 'keys-editor';
+    document.body.prepend(surface, editor);
+    return {first, second, spaceCollision, reserved, collision, duplicate};
+  });
+  expect(state.first.binding).toBe(' ');
+  expect(state.second.binding).toBe('P');
+  expect(state.spaceCollision.binding).toBeUndefined();
+  expect(state.reserved.binding).toBeUndefined();
+  expect(state.collision.binding).toBeUndefined();
+  expect(state.duplicate).toBe(true);
+  const actions = () => guest.evaluate(() => (window as any).keyActions);
+  const surface = guest.getByTestId('keys-surface');
+  const editor = guest.getByTestId('keys-editor');
+  await surface.focus();
+  await page.keyboard.press('p');
+  expect(await actions()).toEqual([]);
+  await page.evaluate(() => (window as any).__hypergolicMediaActive(true));
+  await expect.poll(() => guest.evaluate(() => (window as any).keysActive)).toBe(true);
+  await guest.evaluate(() => {
+    document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', {key: 'p', bubbles: true}));
+    window.dispatchEvent(new MessageEvent('message', {source: parent, data: {type: 'keys.action', actionId: 'game.shoot'}}));
+  });
+  expect(await actions()).toEqual([]);
+  await page.keyboard.press('p');
+  await page.keyboard.press('Space');
+  expect(await actions()).toEqual(['pause', 'shoot']);
+  await editor.focus();
+  await page.keyboard.press('p');
+  await expect(editor).toHaveValue('p');
+  expect(await actions()).toEqual(['pause', 'shoot']);
+  await surface.focus();
+  await page.keyboard.press('Control+p');
+  await page.keyboard.press('Escape');
+  expect(await actions()).toEqual(['pause', 'shoot']);
+  if (browserName === 'chromium') {
+    // DevTools emits a trusted Android/IME-style Process keydown (keyCode 229).
+    await guest.evaluate(() => document.addEventListener('keydown', event => {
+      (window as any).imeProbe = {trusted: event.isTrusted, code: event.keyCode};
+    }, {once: true}));
+    const session = await page.context().newCDPSession(page);
+    await session.send('Input.dispatchKeyEvent', {type: 'rawKeyDown', key: 'p', code: 'KeyP', windowsVirtualKeyCode: 229});
+    await session.send('Input.dispatchKeyEvent', {type: 'keyUp', key: 'p', code: 'KeyP', windowsVirtualKeyCode: 229});
+    await session.detach();
+    expect(await guest.evaluate(() => (window as any).imeProbe)).toEqual({trusted: true, code: 229});
+    expect(await actions()).toEqual(['pause', 'shoot']);
+  }
+
+  await page.evaluate(() => (window as any).__hypergolicMediaActive(false));
+  await expect.poll(() => guest.evaluate(() => (window as any).keysActive)).toBe(false);
+  await page.keyboard.press('p');
+  expect(await actions()).toEqual(['pause', 'shoot']);
+  await page.evaluate(() => (window as any).__hypergolicMediaActive(true));
+  await expect.poll(() => guest.evaluate(() => (window as any).keysActive)).toBe(true);
+  await guest.evaluate(() => (window as any).napplet.keys.unregisterAction('game.pause'));
+  await page.keyboard.press('p');
+  expect(await actions()).toEqual(['pause', 'shoot']);
+  expect(await guest.evaluate(async () => (await (window as any).napplet.keys.registerAction({
+    id: 'game.new-pause', label: 'New pause', defaultKey: 'p',
+  })).binding)).toBe('P');
+
+  await guest.evaluate(() => location.replace('about:blank'));
+  await expect(page.locator('#napplet')).toHaveCount(0);
+});
+
+test('Keys preserves typing in closed shadow editors and captures ordinary body fallback', async ({page}) => {
+  await openPublished(page, 'keys-domain');
+  const guest = await publishedGuest(page);
+  await guest.evaluate(async () => {
+    const state = window as any;
+    state.actions = 0;
+    window.addEventListener('message', event => {
+      if (event.isTrusted && event.source === parent && event.data?.type === 'hypergolic.private.media-active') {
+        state.keysActive = event.data.inputActive;
+      }
+    });
+    // Capture the genuine selector for the assertion, then replace it before
+    // the guest first accesses the lazily created Keys API.
+    const nativeMatches = Element.prototype.matches;
+    state.nativeMatches = nativeMatches;
+    Element.prototype.matches = function (selector) {
+      return this === document.body && selector === ':focus' ? false : nativeMatches.call(this,selector);
+    };
+    const {keys} = state.napplet;
+    await keys.registerAction({id: 'game.action', label: 'Action', defaultKey: 's'});
+    keys.onAction('game.action', () => state.actions++);
+
+    const plain = document.createElement('div');
+    plain.tabIndex = 0;
+    document.body.prepend(plain);
+    const programmatic = document.createElement('div');
+    programmatic.id = 'keys-programmatic';
+    document.body.prepend(programmatic);
+    const programmaticInput = document.createElement('input');
+    programmatic.attachShadow({mode:'closed'}).append(programmaticInput);
+    const inputs: Record<string, HTMLInputElement | null> = {
+      programmatic: programmaticInput, declarative: null, body: null,
+    };
+    state.closedInputs = inputs;
+    customElements.define('keys-declarative-editor', class extends HTMLElement {
+      constructor() {
+        super();
+        const root = this.attachInternals().shadowRoot;
+        if (root?.mode !== 'closed') throw Error('Expected parser-created closed shadow root');
+        inputs.declarative = root.querySelector('input');
+      }
+    });
+    plain.focus();
+  });
+  await page.evaluate(() => (window as any).__hypergolicMediaActive(true));
+  await expect.poll(() => guest.evaluate(() => (window as any).keysActive)).toBe(true);
+  const actions = () => guest.evaluate(() => (window as any).actions);
+  await page.keyboard.press('s');
+  expect(await actions()).toBe(0);
+
+  await guest.evaluate(() => (document.activeElement as HTMLElement).blur());
+  expect(await guest.evaluate(() => [document.hasFocus(), document.activeElement === document.body,
+    document.body.matches(':focus')])).toEqual([true, true, false]);
+  await page.keyboard.press('s');
+  expect(await actions()).toBe(1);
+
+  for (const editor of ['programmatic','declarative']) {
+    const active = await guest.evaluate(name => {
+      (window as any).closedInputs[name].focus();
+      return document.activeElement?.id;
+    }, editor);
+    expect(active).toBe(`keys-${editor}`);
+    await page.keyboard.press('s');
+    expect(await guest.evaluate(name => (window as any).closedInputs[name].value,editor)).toBe('s');
+    expect(await actions()).toBe(1);
+  }
+
+  expect(await guest.evaluate(() => {
+    const input = document.createElement('input');
+    document.body.attachShadow({mode:'closed'}).append(input);
+    (window as any).closedInputs.body = input;
+    input.focus();
+    return [document.activeElement === document.body,
+      (window as any).nativeMatches.call(document.body, ':focus')];
+  })).toEqual([true, true]);
+  await page.keyboard.press('s');
+  expect(await guest.evaluate(() => (window as any).closedInputs.body.value)).toBe('s');
+  expect(await actions()).toBe(1);
+});
+
+test('Keys allows a focused native button shortcut and preserves its Space activation and editor input', async ({page}) => {
+  await openPublished(page, 'keys-domain');
+  const guest = await publishedGuest(page);
+  await guest.evaluate(async () => {
+    const state = window as any;
+    state.buttonActions = [];
+    state.buttonClicks = 0;
+    window.addEventListener('message', event => {
+      if (event.isTrusted && event.source === parent && event.data?.type === 'hypergolic.private.media-active') {
+        state.keysActive = event.data.inputActive;
+      }
+    });
+    const {keys} = state.napplet;
+    await keys.registerAction({id:'game.pause', label:'Pause', defaultKey:'p'});
+    await keys.registerAction({id:'game.shoot', label:'Shoot', defaultKey:' '});
+    keys.onAction('game.pause', () => state.buttonActions.push('pause'));
+    keys.onAction('game.shoot', () => state.buttonActions.push('shoot'));
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = 'Resume game';
+    button.dataset.testid = 'keys-resume';
+    button.addEventListener('click', () => state.buttonClicks++);
+    document.body.prepend(button);
+    button.focus();
+  });
+  await page.evaluate(() => (window as any).__hypergolicMediaActive(true));
+  await expect.poll(() => guest.evaluate(() => (window as any).keysActive)).toBe(true);
+  const observation = () => guest.evaluate(() => {
+    const {buttonActions,buttonClicks} = window as any;
+    return {buttonActions,buttonClicks};
+  });
+  await page.keyboard.press('p');
+  expect(await observation()).toEqual({buttonActions:['pause'],buttonClicks:0});
+  await page.keyboard.press('Space');
+  expect(await observation()).toEqual({buttonActions:['pause'],buttonClicks:1});
+
+  await guest.evaluate(() => {
+    const editor = document.createElement('input');
+    editor.dataset.testid = 'keys-nested-editor';
+    document.querySelector('[data-testid="keys-resume"]')!.append(editor);
+    editor.focus();
+  });
+  const editor = guest.getByTestId('keys-nested-editor');
+  await expect(editor).toBeFocused();
+  await page.keyboard.press('p');
+  await expect(editor).toHaveValue('p');
+  expect(await observation()).toEqual({buttonActions:['pause'],buttonClicks:1});
+});
+
+test('ungranted Keys remains absent and raw requests get no reply', async ({page}) => {
+  await openPublished(page);
+  const guest = await publishedGuest(page);
+  const supported = await guest.evaluate(() => {
+    window.addEventListener('message', event => {
+      if (event.data?.type === 'keys.registerAction.result') (window as any).gotUnapprovedKeys = true;
+    });
+    parent.postMessage({type: 'keys.registerAction', id: 'raw', action: {id: 'game.shoot', label: 'Shoot'}}, '*');
+    return (window as any).napplet.shell.supports('keys') || Boolean((window as any).napplet.keys);
+  });
+  expect(supported).toBe(false);
+  await guest.evaluate(() => (window as any).napplet.shell.ready());
+  expect(await guest.evaluate(() => (window as any).gotUnapprovedKeys)).toBeUndefined();
+});
+
+test('application-data native chunk context reaches actual runtime and cached guest onReady without Relay inference',async({page})=>{
+  await openPublished(page,'soy-policy');const frame=await publishedGuest(page);
+  const result=await frame.evaluate(async()=>{const api=(window as any).napplet.shell;const ready=await api.ready();let cached:any;api.onReady((value:any)=>{cached=value;});return {ready,cached};});
+  expect(result.ready.capabilities.domains).toEqual(['identity','theme','outbox']);expect(result.ready.capabilities.appData).toMatchObject({profile:'soy.app-data/1',maxContentBytes:3072,relays:['wss://relay.damus.io'],defaultRelays:['wss://relay.damus.io']});expect(result.cached).toEqual(result.ready);
+});
+test('application-data policy changes across native artifact chunks reject mount before guest startup',async({page})=>{
+  await openPublished(page,'soy-policy-change');await expect(page.getByRole('alert')).toHaveText('The napplet could not be loaded.');await expect(page.locator('#napplet')).toHaveCount(0);
 });

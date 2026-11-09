@@ -13,14 +13,24 @@ public final class PublishedRelayResponseClassifier implements PublishedRelayWss
   private static final int MAX_TEXT_BYTES = PublishedRelayWebSocketFrames.MAX_BYTES;
   private static final int MAX_NOTICE_BYTES = 256;
   private static final int MAX_DEPTH = 32;
+  enum ResponseProfile {
+    STANDARD(PublishedRelayWssQuery.MAX_EVENTS, PublishedRelayWssQuery.MAX_TEXT_MESSAGES), OUTBOX(200, 256);
+    final int events, frames;
+    ResponseProfile(int events, int frames) { this.events = events; this.frames = frames; }
+  }
   private final String subscriptionId;
+  private final ResponseProfile profile;
 
-  public PublishedRelayResponseClassifier(String subscriptionId) {
+  public PublishedRelayResponseClassifier(String subscriptionId) { this(subscriptionId, ResponseProfile.STANDARD); }
+  PublishedRelayResponseClassifier(String subscriptionId, ResponseProfile profile) {
     if (subscriptionId == null || !subscriptionId.matches("[A-Za-z0-9_-]{1,64}")) {
       throw new IllegalArgumentException("Invalid relay subscription id");
     }
     this.subscriptionId = subscriptionId;
+    this.profile = profile;
   }
+
+  @Override public ResponseProfile profile() { return profile; }
 
   /** Rejects a mismatched or malformed outbound REQ before a socket is opened. */
   public static void validateRequest(String text, String subscriptionId) throws IOException {
@@ -240,11 +250,12 @@ public final class PublishedRelayResponseClassifier implements PublishedRelayWss
 
   static final class ResponseCollector {
     private final TextStopPolicy stopPolicy;
+    private final ResponseProfile profile;
     private final ArrayList<String> messages = new ArrayList<>();
     private int totalBytes;
     private int eventCount;
     private boolean complete;
-    ResponseCollector(TextStopPolicy stopPolicy) { this.stopPolicy = stopPolicy; }
+    ResponseCollector(TextStopPolicy stopPolicy) { this.stopPolicy = stopPolicy; this.profile = stopPolicy.profile(); }
     void preflight(List<PublishedRelayWebSocketFrames.Event> batch) throws IOException {
       int textCount = 0;
       int textBytes = 0;
@@ -255,12 +266,12 @@ public final class PublishedRelayResponseClassifier implements PublishedRelayWss
           textBytes += event.text.getBytes(StandardCharsets.UTF_8).length;
         }
       }
-      if (textCount > PublishedRelayWssQuery.MAX_TEXT_MESSAGES - messages.size() || textBytes > PublishedRelayWssQuery.MAX_TEXT_BYTES - totalBytes) {
+      if (textCount > profile.frames - messages.size() || textBytes > PublishedRelayWssQuery.MAX_TEXT_BYTES - totalBytes) {
         throw new IOException("Relay query exceeded response bounds");
       }
     }
     boolean accept(String text) throws IOException {
-      if (complete || text == null || messages.size() >= PublishedRelayWssQuery.MAX_TEXT_MESSAGES) {
+      if (complete || text == null || messages.size() >= profile.frames) {
         throw new IOException("Relay query exceeded response bounds");
       }
       int length = text.getBytes(StandardCharsets.UTF_8).length;
@@ -273,7 +284,7 @@ public final class PublishedRelayResponseClassifier implements PublishedRelayWss
       try { kind = stopPolicy.classify(text); }
       catch (RuntimeException invalid) { throw new IOException("Relay text validation failed", invalid); }
       if (kind == null) throw new IOException("Relay text validation failed");
-      if (kind == TextKind.EVENT && ++eventCount > PublishedRelayWssQuery.MAX_EVENTS) throw new IOException("Relay query exceeded event limit");
+      if (kind == TextKind.EVENT && ++eventCount > profile.events) throw new IOException("Relay query exceeded event limit");
       complete = kind == TextKind.EOSE;
       return complete;
     }

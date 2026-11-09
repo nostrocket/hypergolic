@@ -37,6 +37,7 @@ class Journey(base.Journey):
   else:raise AssertionError('Neither exact signed access review nor approved connected view was observed')
   self.find('SDK ready for routing.')
  def update_check(self):
+  self.settings_tap('settings-section-published-updates')
   self.settings_tap('published-update-check-'+self.report['originalInstance'])
  def guest_viewport(self,nodes):
   # Physical Android exposes nested, unlabeled WebView nodes with identical frames.

@@ -36,7 +36,7 @@ final class UploadRecoveryHttps {
           abort.check(); String host = url.getHost() + (url.getPort() < 0 || url.getPort() == 443 ? "" : ":" + url.getPort());
           String request = "GET " + url.getPath() + " HTTP/1.1\r\nHost: " + host + "\r\nAccept: */*\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n";
           socket.getOutputStream().write(request.getBytes(StandardCharsets.US_ASCII)); socket.getOutputStream().flush();
-          var response = PublishedHttpsResponseReader.readRecovery(new PublishedHttpsTransport.DeadlineInputStream(socket.getInputStream(), socket, deadline), cancellation, NativeUploadAuthority.MAX_BYTES);
+          var response = PublishedHttpsResponseReader.readRecovery(new PublishedHttpsResponseReader.DeadlineInputStream(socket.getInputStream(), socket, deadline), cancellation, NativeUploadAuthority.MAX_BYTES);
           abort.check();
           if (response.status == 404 && (!url.getHost().equalsIgnoreCase(original.getHost()) || url.getPort() != original.getPort())) throw new IOException("Alternate provider absence unresolved");
           return response;

@@ -3,12 +3,13 @@ import { parseQueryFilters, type QueryFilter, QUERY_LIMITS } from './relay-query
 import { utf8Bytes } from '../storage/codec.ts';
 import { normalizeRelayUrl } from './relay-settings.ts';
 
-export const SUBSCRIPTION_LIMITS = Object.freeze({ process:8, session:2, sessions:64,
+export const SUBSCRIPTION_LIMITS = Object.freeze({ process:8, session:2, rawSession:3, sessions:64,
   relays:2, requestBytes:QUERY_LIMITS.requestBytes, dedupe:1024, callerIds:4096,
   framesPerSecond:64, retries:5, retryMs:Object.freeze([1000,2000,4000,8000,16000]) });
 export type RelaySubscribeRequest = Readonly<{type:'relay.subscribe';id:string;subId:string;filters:readonly QueryFilter[];relay?:string}>;
 export type RelayCloseRequest = Readonly<{type:'relay.close';id:string;subId:string}>;
-export type RelaySubscriptionMessage = Readonly<{type:'relay.event';subId:string;result:Readonly<{event:NostrEvent;sidecar?:Readonly<{relayHints:readonly string[]}>}>}>
+/** Coordinator-to-runtime delivery. The private live marker is removed before NAP-RELAY delivery. */
+export type RelaySubscriptionMessage = Readonly<{type:'relay.event';subId:string;live?:true;result:Readonly<{event:NostrEvent;sidecar?:Readonly<{relayHints:readonly string[]}>}>}>
   | Readonly<{type:'relay.eose';subId:string}> | Readonly<{type:'relay.closed';subId:string;reason?:string}>;
 export class RelaySubscriptionError extends Error {
   constructor(message='relay subscription unavailable'){super(message);this.name='RelaySubscriptionError';}

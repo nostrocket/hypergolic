@@ -60,6 +60,7 @@ import HypergolicNappletHost
       protectedData: UIApplication.shared.isProtectedDataAvailable)
   }
   private func resignActive() {
+    authority.suspendLocalLeases()
     NativeSignerIdentityActions.clearBackup()
     if authentication == nil { background() } else { cancelImport(); cancelSigning() }
   }
@@ -272,6 +273,16 @@ import HypergolicNappletHost
     return try await core.commitImport(key: key, vaultID: vaultID, revision: revision,
       authority: authority.permit(committedEpoch, deadline: candidate.expires),
       current: { [authority] in authority.current(committedEpoch) && ContinuousClock.now < candidate.expires }, revokePending: { NativeSigningSourceFacade.revokeAll() })
+  }
+  func addPublicIdentity(pubkey: String, vaultID: String, revision: UInt64) async throws -> String {
+    try idle(); handoffs.cancelAll(); let epoch = try activeEpoch()
+    _ = try await core.snapshot(vaultID: vaultID, revision: revision, current: current(epoch))
+    guard NativeVaultRecord.isPoint(pubkey),
+      await confirm(title: "Use public identity?", message: "Public key:\n" + pubkey + "\nRead public data as this account. No private key or signing method is added. Open napplets restart and pending requests are cancelled.", approve: "Use public identity"),
+      authority.current(epoch) else { throw NativeVaultFailure.denied }
+    candidates.cancelAll(); let committedEpoch = epoch
+    return try await core.addPublicIdentity(pubkey: pubkey, vaultID: vaultID, revision: revision,
+      authority: authority.permit(committedEpoch), current: current(committedEpoch), revokePending: { NativeSigningSourceFacade.revokeAll() })
   }
   func select(pubkey: String, vaultID: String, revision: UInt64) async throws -> String {
     try idle(); handoffs.cancelAll(); let epoch = try activeEpoch()

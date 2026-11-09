@@ -12,6 +12,7 @@ public final class RelaySubscriptionRegistry {
   public static final int MAX_SNAPSHOT_BYTES = 32 * 1024;
   private static final int MAX_STREAMS = 8;
   private static final int MAX_PER_GENERATION = 2;
+  private static final int MAX_RAW_PER_GENERATION = 3;
   private static final long ADMISSION_MS = 25_000;
   private final LongSupplier now;
   private final Predicate<String> generationActive;
@@ -41,8 +42,14 @@ public final class RelaySubscriptionRegistry {
     if (!foreground || !activeGeneration(generation) || snapshot == null || snapshot.length() > MAX_SNAPSHOT_BYTES ||
         snapshot.getBytes(StandardCharsets.UTF_8).length > MAX_SNAPSHOT_BYTES || streams.size() >= MAX_STREAMS ||
         clock < 0 || clock > Long.MAX_VALUE - ADMISSION_MS) return null;
-    long own = streams.values().stream().filter(stream -> stream.generation.equals(generation)).count();
-    if (own >= MAX_PER_GENERATION) return null;
+    int own = 0;
+    boolean mixed = outbox;
+    for (Stream stream : streams.values()) {
+      if (!stream.generation.equals(generation)) continue;
+      own++;
+      mixed |= stream.outbox;
+    }
+    if (own >= (mixed ? MAX_PER_GENERATION : MAX_RAW_PER_GENERATION)) return null;
     String token = UUID.randomUUID().toString();
     streams.put(token, new Stream(generation, snapshot, clock + ADMISSION_MS, outbox));
     return token;
@@ -61,6 +68,7 @@ public final class RelaySubscriptionRegistry {
     prune(); Stream stream = streams.get(token);
     return stream != null && stream.claimed && stream.accepted;
   }
+  public synchronized String capturedSnapshot(String token) { prune(); Stream stream = streams.get(token); return stream != null && stream.claimed && stream.accepted ? stream.snapshot : null; }
   public synchronized int connectionLimit(String token) {
     prune(); Stream stream = streams.get(token);
     return stream != null && stream.claimed && stream.accepted ? (stream.outbox ? 16 : 2) : 0;

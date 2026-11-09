@@ -32,21 +32,23 @@ final class ResourceHTTPSBridgeOwner: @unchecked Sendable {
   }
   deinit { timer.cancel(); for value in observers { NotificationCenter.default.removeObserver(value) }; revokeAll() }
 
-  static func admission(_ token: String) throws -> String {
+  static func admission(_ token: String, url: String) throws -> String {
     guard let snapshot = CapabilityTransport.leases.borrowedSnapshot(token),
       let raw = try JSONSerialization.jsonObject(with: Data(snapshot.utf8)) as? [String: Any],
       let registration = raw["registration"] as? [String: Any],
-      let domains = registration["domains"] as? [String], domains.contains("resource"),
+      let domains = registration["domains"] as? [String],
       let generation = registration["generation"] as? String,
       let request = raw["request"] as? String,
       let message = try JSONSerialization.jsonObject(with: Data(request.utf8)) as? [String: Any],
-      let type = message["type"] as? String, ["resource.bytes", "resource.bytesMany"].contains(type)
+      let type = message["type"] as? String,
+      (domains.contains("resource") && ["resource.bytes", "resource.bytesMany"].contains(type)) || LegacyReadOnlyContext.permitsImage(snapshot, url: url),
+      CapabilityTransport.leases.isActive(token)
     else { throw Failure.policy }
     return generation
   }
   func fetch(_ id: String, token: String, url: String) async throws -> Int {
     guard UUID(uuidString: id)?.uuidString.lowercased() == id, id.dropFirst(14).first == "4" else { throw Failure.invalidRequest }
-    let generation = try Self.admission(token)
+    let generation = try Self.admission(token, url: url)
     return try await withCheckedThrowingContinuation { continuation in
       lock.lock()
       guard foreground, !used.contains(id), used.count < 65_536, pending.count < 4,
@@ -65,7 +67,7 @@ final class ResourceHTTPSBridgeOwner: @unchecked Sendable {
     }
   }
   private func start(_ id: String, token: String, url: String) {
-    guard CapabilityTransport.leases.isActive(token), lock.withLock({ foreground && pending[id] != nil }) else { cancel(id); return }
+    guard (try? Self.admission(token, url: url)) != nil, lock.withLock({ foreground && pending[id] != nil }) else { cancel(id); return }
     do {
       let operation = try PublishedPinnedHTTPS.fetchResource(url) { [weak self] result in self?.complete(id, result: result) }
       let retained = lock.withLock { () -> Bool in

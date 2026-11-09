@@ -108,6 +108,14 @@ Bound before allocation, authenticate MAC before decryption and clear owned
 temporaries. The caller verifies outer signature, peer and recipient before
 decrypting. No encryption/shared-secret Expo API exists.
 
+Android Release consumers retain the exact JNI-only
+`NativeTransportCrypto.hmac(byte[], byte[])` callback through the signer library
+consumer rule. The same rule retains the JNI-named denial exception and its
+String constructor, which preserves the existing fixed message. Removing or renaming
+the HMAC callback breaks both CVM and outgoing NIP-46
+NIP-44 encryption. The [minified transport proof](../tests/native/signer-core/r8-transport/README.md)
+checks actual callback code retention; packaged Release artifacts need the same audit.
+
 Plaintext limit is 4,202,496 bytes; encoded payload 6,990,604 bytes. Enforce strict
 UTF-8, canonical padded base64, exact padding/prefix bounds and zero padding.
 The [NIP-44 contract](../modules/signer-core/tests/nip44/README.md) owns complete

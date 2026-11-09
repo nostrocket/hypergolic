@@ -23,7 +23,80 @@ object CapabilityConfigurationProof {
     checkProof(runCatching { CapabilityConfiguration(raw, "view-generation", published) }.isFailure)
   }
 
+  private fun outboxQueryAuthority() {
+    var elapsed = 1L
+    var sequence = 0L
+    val generation = "outbox-generation"
+    val leases = CapabilityLeaseRegistry { elapsed }
+    checkProof(leases.register(generation))
+    fun issue(type: String, domains: List<String>): String {
+      val snapshot = JSONObject()
+        .put("registration", JSONObject().put("domains", JSONArray(domains)))
+        .put("request", JSONObject().put("type", type).toString())
+      return checkNotNull(leases.admit(generation, ++sequence, snapshot.toString()))
+    }
+    fun admitted(token: String) = OutboxQueryCapability.admits(leases, token)
+    for ((type, domains) in listOf("relay.query" to listOf("outbox", "relay"),
+        "outbox.resolveRelays" to listOf("outbox"), "outbox.query" to listOf("relay"),
+        "common.getProfile" to listOf("common"), "common.getProfile" to listOf("outbox"),
+        "common.follows" to listOf("common", "outbox"))) {
+      val token = issue(type, domains)
+      checkProof(leases.take(token) != null && !admitted(token))
+      checkProof(leases.finish(token))
+    }
+    val query = issue("outbox.query", listOf("outbox"))
+    checkProof(!admitted(query) && leases.take(query) != null && admitted(query))
+    checkProof(leases.take(query) == null)
+    checkProof(leases.finish(query) && !admitted(query))
+    val common = issue("common.getProfile", listOf("common", "outbox"))
+    checkProof(!admitted(common) && leases.take(common) != null && admitted(common))
+    checkProof(leases.finish(common) && !admitted(common))
+    val event = issue("outbox.getEvent", listOf("outbox"))
+    checkProof(leases.take(event) != null && admitted(event))
+    elapsed += 25_000
+    checkProof(!admitted(event))
+    val old = issue("outbox.query", listOf("outbox"))
+    checkProof(leases.take(old) != null && admitted(old))
+    leases.setForeground(false)
+    leases.setForeground(true)
+    checkProof(!admitted(old))
+    val revoked = issue("outbox.query", listOf("outbox"))
+    checkProof(leases.take(revoked) != null && admitted(revoked))
+    leases.revoke(generation)
+    checkProof(leases.register(generation) && !admitted(revoked))
+  }
+
+  private fun snapshotConfiguration() {
+    val event = "b".repeat(64)
+    val metadata = JSONObject().put("kind", 5129).put("eventId", event).put("title", "Verified café")
+    val expectedKey = " 5129:$event"
+    val body = JSONObject(raw("published", listOf("inc", "resource")))
+      .put("appId", expectedKey).put("snapshot", metadata)
+    val rawConfig = body.toString()
+    val config = CapabilityConfiguration(rawConfig, "snapshot-generation", true, metadata)
+    val registration = JSONObject(config.snapshot)
+    checkProof(registration.getString("generation") == "snapshot-generation")
+    checkProof(registration.getString("appId") == expectedKey)
+    checkProof(registration.getJSONObject("snapshot").getString("title") == "Verified café")
+    checkProof(config.grantedDomains == listOf("inc", "resource"))
+    denied(rawConfig)
+    denied(JSONObject(rawConfig).apply { remove("snapshot") }.toString())
+    for (name in listOf("appData", "legacyReadOnly", "publishedOpen")) {
+      val attempted = JSONObject(rawConfig).put(name, true)
+      checkProof(runCatching { CapabilityConfiguration(attempted.toString(), "view", true, metadata) }.isFailure)
+    }
+    for ((name, replacement) in listOf("title" to "Verified cafe\u0301", "eventId" to "c".repeat(64), "kind" to "5129", "extra" to true)) {
+      val attempted = JSONObject(rawConfig)
+      attempted.getJSONObject("snapshot").put(name, replacement)
+      checkProof(runCatching { CapabilityConfiguration(attempted.toString(), "view", true, metadata) }.isFailure)
+    }
+    val disguised = JSONObject(rawConfig).put("appId", expectedKey.trim())
+    checkProof(runCatching { CapabilityConfiguration(disguised.toString(), "view", true, metadata) }.isFailure)
+  }
+
   @JvmStatic fun main(args: Array<String>) {
+    snapshotConfiguration()
+    outboxQueryAuthority()
     val old = CapabilityConfiguration(raw("ux-lab", listOf("theme")), "old-generation")
     checkProof(old.fixture == "ux-lab" && old.grantedDomains == listOf("theme"))
     checkProof(old.snapshot.contains("old-generation"))
@@ -62,6 +135,10 @@ object CapabilityConfigurationProof {
     checkProof(outbox.snapshot.contains("outbox-generation"))
     val noRelay = CapabilityConfiguration(raw("published", listOf("outbox")), "outbox-only", true)
     checkProof(!noRelay.allowsRelay && noRelay.grantedDomains == listOf("outbox"))
+    val mixed = listOf("intent", "keys", "media", "outbox")
+    val mixedConfig = CapabilityConfiguration(raw("published", mixed), "mixed-generation", true)
+    checkProof(!mixedConfig.allowsRelay && mixedConfig.grantedDomains == mixed)
+    denied(raw("published", mixed + "gamepad"))
     denied(raw("published", listOf("outbox", "outbox", "relay")))
     denied(raw("published", listOf("outbox", "relay")), published = false)
     val published = CapabilityConfiguration(raw("published", listOf("identity", "storage", "theme", "relay")),
@@ -85,6 +162,26 @@ object CapabilityConfigurationProof {
     denied(raw("ux-lab", listOf("identity", "theme")))
     denied(raw("published", listOf("theme"), extra = "untrusted"))
     denied("{" + " ".repeat(8200) + "}")
+    val finiteMedia = CapabilityConfiguration(raw("published", listOf("media")), "finite-generation", true)
+    checkProof(finiteMedia.mediaProfile == null)
+    val liveRaw = JSONObject(raw("published", listOf("media"))).put("mediaProfile", "finite-live-mp3-v1").toString()
+    val live = CapabilityConfiguration(liveRaw, "live-generation", true)
+    checkProof(live.mediaProfile == "finite-live-mp3-v1")
+    checkProof(JSONObject(live.snapshot).get("mediaProfile") == "finite-live-mp3-v1")
+    for (invalid in listOf(true, 1, "finite-video-v1", JSONObject.NULL, JSONArray())) {
+      denied(JSONObject(raw("published", listOf("media"))).put("mediaProfile", invalid).toString())
+    }
+    denied(JSONObject(raw("published", listOf("theme"))).put("mediaProfile", "finite-live-mp3-v1").toString())
+    denied(JSONObject(raw("ux-lab", listOf("theme"))).put("mediaProfile", "finite-live-mp3-v1").toString())
+    val combinedRaw = JSONObject(raw("published", listOf("common", "identity", "outbox", "cvm", "media")))
+      .put("commonProfile", "social-v1").put("cvmProfile", "free-foreground-v1").put("mediaProfile", "finite-live-mp3-v1")
+    val combined = CapabilityConfiguration(combinedRaw.toString(), "combined-generation", true)
+    checkProof(combined.commonProfile == "social-v1" && combined.cvmProfile == "free-foreground-v1" && combined.mediaProfile == "finite-live-mp3-v1")
+    val combinedSnapshot = JSONObject(combined.snapshot)
+    checkProof(listOf("commonProfile", "cvmProfile", "mediaProfile").all { combinedSnapshot.getString(it) == combinedRaw.getString(it) })
+    combinedRaw.remove("mediaProfile")
+    val oldCombined = CapabilityConfiguration(combinedRaw.toString(), "old-combined-generation", true)
+    checkProof(oldCombined.mediaProfile == null && oldCombined.commonProfile == "social-v1" && oldCombined.cvmProfile == "free-foreground-v1")
     println("{\"status\":\"passed\",\"assertions\":$assertions}")
   }
 }

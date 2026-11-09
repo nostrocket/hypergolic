@@ -118,3 +118,17 @@ for (const archive of ['feed-lab-v1'] as const) test(`saved Feed Lab ${archive} 
     {eventId: '0'.repeat(64)}, {title: 'Other Lab 8'}, {id: 'feed-lab-v1-8'},
   ]) assert.throws(() => resolveBundledSession({...saved, ...mutation}));
 });
+
+
+test('saved Discover uses the packaged replacement with the same capabilities', async () => {
+  const {bundledDescriptor, resolveBundledSession} = await import('./fixtures.ts');
+  const latest = bundledDescriptor('napplet-discovery', 1);
+  for (const version of ['388c5b99b75a8f9e8ee228eca5d81b3a0d96597a41710bbb69eea315b8a347fa',
+    'f07c32a2bf46d5c84b403356f4183bfe0e310148d1585cc9a7fc1b9639a6cfd6']) {
+    const saved = {...latest, version};
+    assert.notEqual(saved.version, latest.version);
+    assert.deepEqual(resolveBundledSession(saved), resolveBundledSession(latest));
+    assert.deepEqual(resolveBundledSession(saved).domains, ['relay', 'resource', 'theme']);
+  }
+  assert.throws(() => resolveBundledSession({...latest, version: '0'.repeat(64)}));
+});

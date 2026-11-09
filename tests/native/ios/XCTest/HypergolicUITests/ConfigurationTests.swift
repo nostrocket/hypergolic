@@ -88,6 +88,7 @@ final class PresentationLifecycleTests: XCTestCase {
  }
  func register() {guest("Register configuration");wait("Configuration schema accepted.")}
  func updateCheck() {
+  settingsButton("settings-section-published-updates")
   let title=app.staticTexts["signed-config-caller-lab"].firstMatch;scroll(title)
   // UIKit flattens card children. Match the observed, attributed row by geometry.
   let controls=app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH %@","published-update-check-")).allElementsBoundByIndex

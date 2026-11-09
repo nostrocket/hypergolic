@@ -1,6 +1,8 @@
+import {publishedAppLabel} from '../napplets/published-identity';
 import { TrustedBand } from './TrustedBand';
 import {useState, useSyncExternalStore} from 'react';
-import {AccessibilityInfo, Keyboard, Modal, FlatList, StyleSheet, Text, View} from 'react-native';
+import {AccessibilityInfo, Keyboard, FlatList, StyleSheet, Text, View} from 'react-native';
+import { ShellModal as Modal } from './ShellModal';
 import { ShellPressable as Pressable } from './ShellPressable';
 import { ShellTextInput as TextInput } from './ShellTextInput';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -80,9 +82,10 @@ function Editor({service, review}: {service: ConfigBroker; review: ConfigReview}
         {!secret && <Action id={'config-reset-' + id} label="Reset to declared default" onPress={() => setDraft(old => {const next = {...old}; delete next[key]; return next;})}/>}
       </View>;
   };
-  return <Modal visible transparent animationType="fade" onRequestClose={() => service.closeReview(review.id)}><View style={[styles.shade, {paddingTop: insets.top}]}><TrustedBand label="Napplet settings" /><FlatList automaticallyAdjustKeyboardInsets testID="configuration-settings" keyboardShouldPersistTaps="handled" data={rows} keyExtractor={field => fieldKey(field.path)} renderItem={renderField} initialNumToRender={8} windowSize={5} removeClippedSubviews={false} contentContainerStyle={[styles.sheet, {paddingBottom: Math.max(insets.bottom, 24)}]} ListHeaderComponent={<View style={styles.group}>
+  return <Modal visible transparent animationType="fade" onRequestClose={() => service.closeReview(review.id)}><View style={[styles.shade, {paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right}]}><TrustedBand label="Napplet settings" /><FlatList automaticallyAdjustKeyboardInsets testID="configuration-settings" keyboardShouldPersistTaps="handled" data={rows} keyExtractor={field => fieldKey(field.path)} renderItem={renderField} initialNumToRender={8} windowSize={5} removeClippedSubviews={false} contentContainerStyle={[styles.sheet, {paddingBottom: Math.max(insets.bottom, 24)}]} ListHeaderComponent={<View style={styles.group}>
     <Text accessibilityRole="header" style={styles.heading}>Napplet configuration</Text>
-    <Text style={styles.title}>{review.origin.appId}</Text><Text selectable style={styles.detail}>{formatNpub(review.origin.publisher)}</Text>
+    <Text style={styles.title}>{review.origin.snapshot?.title ?? publishedAppLabel(review.origin.appId)}</Text><Text selectable style={styles.detail}>{formatNpub(review.origin.publisher)}</Text>
+    {review.origin.snapshot && <Text selectable style={styles.detail}>Snapshot (kind 5129) · {review.origin.snapshot.eventId}</Text>}
     <Text style={styles.detail}>Selected identity: {formatNpub(review.origin.user)}</Text><Text selectable style={styles.detail}>Version: {review.origin.version}</Text>
     <Text style={styles.detail}>Only Save settings commits changes. Secret values stay masked here and are delivered to this napplet when explicitly supplied.</Text>
   </View>} ListFooterComponent={<View style={styles.group}>

@@ -45,6 +45,7 @@ public final class BoundaryInstrumentation extends Instrumentation {
   private final JSONArray cases = new JSONArray();
   private int assertions;
   private String step = "initialization";
+  private String substep;
   private CapabilityLeaseRegistry leases;
   private Object transport;
 
@@ -59,6 +60,26 @@ public final class BoundaryInstrumentation extends Instrumentation {
     runOnMainSync(() -> { try { value.set(action.call()); } catch (Throwable failure) { error.set(failure); } });
     if (error.get() != null) throw new Exception("Native UI action failed", error.get());
     return value.get();
+  }
+  private static String causeType(Throwable failure) {
+    for (int depth = 0; depth < 4; depth++) {
+      Throwable cause = failure.getCause();
+      if (cause == null || cause == failure) break;
+      failure = cause;
+    }
+    if (failure instanceof NoClassDefFoundError) return "NoClassDefFoundError";
+    if (failure instanceof NoSuchMethodError) return "NoSuchMethodError";
+    if (failure instanceof NoSuchFieldError) return "NoSuchFieldError";
+    if (failure instanceof AbstractMethodError) return "AbstractMethodError";
+    if (failure instanceof LinkageError) return "LinkageError";
+    if (failure instanceof ReflectiveOperationException) return "ReflectionError";
+    if (failure instanceof UnsupportedOperationException) return "UnsupportedOperationException";
+    if (failure instanceof IllegalArgumentException) return "IllegalArgumentException";
+    if (failure instanceof IllegalStateException) return "IllegalStateException";
+    if (failure instanceof NullPointerException) return "NullPointerException";
+    if (failure instanceof SecurityException) return "SecurityException";
+    if (failure instanceof AssertionError) return "AssertionError";
+    return "Other";
   }
   private Object field(Object owner, String name) throws Exception {
     Field value = owner.getClass().getDeclaredField(name); value.setAccessible(true); return value.get(owner);
@@ -112,17 +133,23 @@ public final class BoundaryInstrumentation extends Instrumentation {
     WebView view;
     ScriptHandler script;
     String generation;
+    boolean observerAttached;
     boolean closed;
     Probe() throws Exception {
       owned.add(this);
       ui(() -> {
+        substep = "probe-create-host";
         host = new NappletHostView(template.getContext(), template.getAppContext());
         host.setId(View.generateViewId());
         container.addView(host, new FrameLayout.LayoutParams(-1, -1));
+        substep = "probe-read-host-fields";
         view = (WebView) field(host, "webView");
         generation = (String) field(host, "generation");
+        substep = "probe-web-message-feature";
         check(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER), "Actual native listener available");
+        substep = "probe-document-start-feature";
         check(WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT), "Frame observer injection available");
+        substep = "probe-attach-listener";
         WebViewCompat.addWebMessageListener(view, observer, java.util.Set.of("*"), (source, message, origin, main, reply) -> {
           try {
             check(source == view, "Diagnostic callback belongs to this actual WebView");
@@ -136,6 +163,7 @@ public final class BoundaryInstrumentation extends Instrumentation {
             }
           } catch (Exception error) { results.put("observer-failure", new JSONObject()); }
         });
+        observerAttached = true;
         String source = "(() => {const nonce=" + JSONObject.quote(nonce) + ", observer=window[" + JSONObject.quote(observer) + "];"
           + "const report=value=>observer.postMessage(JSON.stringify({nonce,...value}));"
           + "observer.onmessage=async event=>{const command=JSON.parse(event.data);if(command.nonce!==nonce)return;try{let value;"
@@ -152,19 +180,23 @@ public final class BoundaryInstrumentation extends Instrumentation {
           + "else throw Error('Unknown diagnostic operation');report({kind:'result',id:command.id,value});}"
           + "catch(error){report({kind:'result',id:command.id,error:String(error)});}};"
           + "addEventListener('DOMContentLoaded',()=>report({kind:'frame',href:location.href,nativeBridge:typeof HypergolicHost}),{once:true});})();";
+        substep = "probe-attach-document-script";
         script = WebViewCompat.addDocumentStartJavaScript(view, source, java.util.Set.of("*"));
         JSONObject config = new JSONObject().put("sessionId", session).put("epoch", 3)
           .put("user", "1".repeat(64)).put("publisher", "2".repeat(64)).put("appId", "ux-lab")
           .put("version", "3".repeat(64)).put("instanceId", "native-boundary-instance")
           .put("fixture", "ux-lab").put("domains", new JSONArray().put("theme"));
+        substep = "probe-start-configured-session";
         host.startConfiguredSession(config.toString()); return null;
       });
+      substep = "probe-observe-first-frames";
       until("actual native ready and real opaque guest frame", () -> {
         try { return Boolean.TRUE.equals(field(host, "ready")) && frameReplies.containsKey("null|about:srcdoc"); }
         catch (Exception error) { return false; }
       });
       check(!Boolean.TRUE.equals(ui(() -> field(host, "disposed"))), "Bootstrap remains live");
       check(ui(() -> frames.toString()).contains("\"nativeMainFrame\":true"), "Observed genuine main callback");
+      substep = "probe-observe-sdk-theme";
       JSONObject isolation = guest("isolation", null);
       // A settled original SDK response is mandatory; injection alone is not readiness.
       long end = SystemClock.elapsedRealtime() + 5_000;
@@ -173,6 +205,7 @@ public final class BoundaryInstrumentation extends Instrumentation {
         SystemClock.sleep(20); isolation = guest("isolation", null);
       }
       barrier();
+      substep = null;
     }
     JSONObject command(String href, String operation, String wire) throws Exception {
       String id = UUID.randomUUID().toString();
@@ -208,7 +241,13 @@ public final class BoundaryInstrumentation extends Instrumentation {
       JSONObject response = guest("barrier", null);
       check("theme.get.result".equals(response.getString("type")), "Parent-source correlated theme barrier");
       JSONObject colors = response.getJSONObject("theme").getJSONObject("colors");
-      check("#140f0b".equals(colors.getString("background")) && "#f3efeb".equals(colors.getString("text")) && "#e8805d".equals(colors.getString("primary")), "Exact existing theme palette");
+      boolean light = main("return {light:window.matchMedia('(prefers-color-scheme: light)').matches};").getBoolean("light");
+      // The runtime projects the shell palette's accent into the guest's primary color.
+      String background = light ? "#FFFFFF" : "#080F17";
+      String text = light ? "#17202A" : "#EEF3F7";
+      String primary = light ? "#AA4708" : "#F5A04B";
+      check(background.equals(colors.getString("background")) && text.equals(colors.getString("text"))
+          && primary.equals(colors.getString("primary")), "Exact theme palette for the host appearance");
     }
     void send(int... sequences) throws Exception {
       JSONArray values = new JSONArray(); for (int sequence : sequences) values.put(sequence);
@@ -222,9 +261,33 @@ public final class BoundaryInstrumentation extends Instrumentation {
       return main("const deadline=performance.now()+3000;while(!window.boundaryReplies?.[" + sequence + "]){"
         + "if(performance.now()>deadline)throw Error('Missing real native response');await new Promise(resolve=>setTimeout(resolve,10));}return window.boundaryReplies[" + sequence + "];" );
     }
+    private void removeObserver() throws Exception {
+      if (Boolean.TRUE.equals(field(host, "disposed"))) return;
+      try {
+        if (script != null) script.remove();
+      } finally {
+        if (observerAttached) WebViewCompat.removeWebMessageListener(view, observer);
+      }
+    }
     void close() throws Exception {
-      if (closed) return; closed = true;
-      ui(() -> { if (!Boolean.TRUE.equals(field(host, "disposed"))) { script.remove(); WebViewCompat.removeWebMessageListener(view, observer); host.destroySession(); } container.removeView(host); return null; });
+      if (closed) return;
+      substep = "probe-close-owned-host";
+      ui(() -> {
+        if (host == null) return null;
+        try {
+          removeObserver();
+        } finally {
+          try { host.destroySession(); }
+          finally { container.removeView(host); }
+        }
+        if (!Boolean.TRUE.equals(field(host, "disposed")) || host.getParent() != null || host.getChildCount() != 0
+            || generation != null && leases.sessionActive(generation)) {
+          throw new IllegalStateException("Owned probe cleanup incomplete");
+        }
+        return null;
+      });
+      closed = true;
+      substep = null;
     }
     JSONObject receipt() throws Exception {
       return new JSONObject().put("session", session).put("generation", generation).put("frames", frames)
@@ -436,24 +499,33 @@ public final class BoundaryInstrumentation extends Instrumentation {
     try {
       check(PACKAGE.equals(getTargetContext().getPackageName()),"Refuse primary or QA product target");
       check(arguments!=null&&arguments.getString("runId", "").matches("[A-Za-z0-9_-]{1,80}"),"Explicit bounded run identifier required");
+      substep="initialize-capability-owner";
       Class<?> owner=Class.forName("org.nostrocket.hypergolic.host.CapabilityTransport");
       transport=owner.getField("INSTANCE").get(null);leases=(CapabilityLeaseRegistry)owner.getMethod("getLeases").invoke(transport);
+      substep="initialize-upload-proof-policy";
       Class<?> config=Class.forName("org.nostrocket.hypergolic.host.BuildConfig");
-      check(!config.getField("UPLOAD_NETWORK_PROOF").getBoolean(null),"Production fault hooks remain disabled");
+      check(!config.getField("UPLOAD_NETWORK_PROOF").getBoolean(null),"UPLOAD_NETWORK_PROOF remains false");
+      substep="initialize-expo-host";
       Intent intent=new Intent(Intent.ACTION_MAIN).setComponent(new ComponentName(PACKAGE,"org.nostrocket.hypergolic.dev.MainActivity")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
       activity=startActivitySync(intent);
       until("ordinary Expo host exists",()->{template=find(activity.getWindow().getDecorView());return template!=null;});
       ui(()->{container=new FrameLayout(activity);((ViewGroup)activity.findViewById(android.R.id.content)).addView(container,new ViewGroup.LayoutParams(-1,-1));return null;});
+      substep=null;
       isolation();schema();childFrame();bounds();lifecycle();utf8();renderer();
       if(arguments.containsKey("receiverURL")||arguments.containsKey("receiverNonce"))network();
       result.putString("result","passed");
     } catch(Throwable error) {
       result.putString("result","failed");result.putString("step",step);result.putString("errorType",error.getClass().getSimpleName());
+      if(substep!=null)result.putString("substep",substep);
+      result.putString("causeType",causeType(error));
       if(error instanceof AssertionError)result.putString("assertion",error.getMessage());
       // Only test-controlled diagnostics, no throwable/stack containing retained app data.
     } finally {
-      for(Probe p:owned)try{p.close();}catch(Exception error){result.putString("result","failed");result.putString("cleanup","failed");}
-      try{foreground(true);ui(()->{if(container!=null)((ViewGroup)container.getParent()).removeView(container);return null;});}catch(Exception error){result.putString("result","failed");}
+      for(Probe p:owned)try{p.close();}catch(Exception error){
+        result.putString("result","failed");result.putString("cleanup","failed");
+        result.putString("cleanupCauseType",causeType(error));
+      }
+      try{if(transport!=null)foreground(true);ui(()->{if(container!=null)((ViewGroup)container.getParent()).removeView(container);return null;});}catch(Exception error){result.putString("result","failed");}
       JSONArray probes=new JSONArray();for(Probe p:owned)try{probes.put(p.receipt());}catch(Exception error){result.putString("result","failed");}
       result.putString("cases",cases.toString());result.putString("probes",probes.toString());result.putInt("assertions",assertions);
       result.putString("scope","Unmodified production host in disposable ordinary Expo app; privileged native script stimulus and real native frame callbacks. No protected signer, storage authorization, OS background journey, packet-level egress or full SEC claim.");

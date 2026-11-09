@@ -15,6 +15,20 @@ checks apply around asynchronous work and mutations. Only a completely absent
 store may initialize. Missing established state, corrupt metadata, unavailable
 keys and unknown writes require recovery without replacement identities.
 
+### Public-only profiles
+
+Settings can add a validated npub or hexadecimal public key as a read-only
+profile after shell and native confirmation. The native vault persists its public
+metadata with origin `public`, no local key, no connected signer and no selected
+signing method. It rejects duplicate saved public keys; selecting an existing
+identity does not silently replace its signing method.
+
+Native signing rejects a profile without a selected method before review or
+transport dispatch. Switching profiles revokes prior session authority and keeps
+existing identity data intact. A carried workspace does not transfer legacy-mode
+consent: that choice is bound to both the exact publication and account public
+key. Adding a public profile does not manufacture its follows, posts or activity.
+
 ### Android
 
 [`NativeVaultFile`](../modules/signer-core/android/src/main/java/org/nostrocket/hypergolic/signercore/NativeVaultFile.java)

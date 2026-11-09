@@ -55,7 +55,7 @@ async function openFixture(notify:(value:Observation)=>void):Promise<{owner:Trus
  }},()=>offline?[]:['wss://relay.example.org']);
  const query={query:(filters:readonly QueryFilter[],signal:AbortSignal,active:()=>void)=>{queries++;report();return controlled.query(filters,signal,active);}};
  const runtime=createRuntimeOwner(database,transition,observed,undefined,{sqlite:SQLite,native:loadNativePublishedTransferPort(),lookupRelays:()=>['wss://relay.example.org'],
-  source:{async query(coordinate){artifacts++;report();const value=SIGNED_IDENTITY_ARTIFACTS.find(value=>value.event.pubkey===coordinate.pubkey&&value.appId===coordinate.identifier);if(!value)throw Error('Unknown local signed artifact');return [value.event];},
+  source:{async query(coordinate){artifacts++;report();const value=coordinate.kind===35129&&SIGNED_IDENTITY_ARTIFACTS.find(value=>value.event.pubkey===coordinate.pubkey&&value.appId===coordinate.identifier);if(!value)throw Error('Unknown local signed artifact');return [value.event];},
    async readHtml(hash){const value=SIGNED_IDENTITY_ARTIFACTS.find(value=>value.htmlHash===hash);if(!value)throw Error('Unknown local bytes');return new TextEncoder().encode(value.html);}}},query,undefined,undefined,undefined,
   createIdentityDataService(cache,query,()=>Date.now()+(advanced?300001:0),listAccess));
  report();return {owner:Object.freeze({transition,formatNpub,runtime,listAccess,relaySettings:null,resourceSettings:null}),

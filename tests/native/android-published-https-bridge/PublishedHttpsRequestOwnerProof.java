@@ -18,6 +18,8 @@ public final class PublishedHttpsRequestOwnerProof {
     capsConcurrentRequestsAndReleasesSlots();
     cancellationAndBackgroundRevokeRunningReads();
     appliesTheProductionAddressPolicy();
+    artifactChunksAreOneUseAndCleared();
+    preservesBodyBudgetUntilCancelledFetchUnwinds();
     System.out.println("PublishedHttpsRequestOwnerProof: " + assertions.get() + " assertions passed");
   }
 
@@ -117,6 +119,92 @@ public final class PublishedHttpsRequestOwnerProof {
     check(!policy.isAllowedAddress(InetAddress.getByAddress(new byte[] { 10, 0, 0, 1 })));
     throwsIo(() -> PublishedHttpsTransport.validateRequest("https://printer.local/a", policy));
     throwsIo(() -> PublishedHttpsTransport.validateRequest("https://127.0.0.1/a", policy));
+  }
+
+  private static void artifactChunksAreOneUseAndCleared() throws Exception {
+    final int chunk = 48 * 1024;
+    byte[] retained = new byte[chunk + 1];
+    java.util.Arrays.fill(retained, (byte) 7);
+    PublishedHttpsRequestOwner owner = new PublishedHttpsRequestOwner((url, cancellation) -> retained);
+    owner.setForeground(true);
+    String url = "https://napplets.example.org/" + "a".repeat(64);
+    String id = UUID.randomUUID().toString();
+    equal(retained.length, owner.fetchArtifact(id, url, () -> true));
+    throwsIo(() -> owner.readArtifactChunk(id, chunk));
+    equal(chunk, owner.readArtifactChunk(id, 0).length);
+    throwsIo(() -> owner.readArtifactChunk(id, 0));
+    equal(7, owner.readArtifactChunk(id, chunk)[0]);
+    equal(0, retained[0]);
+    throwsIo(() -> owner.readArtifactChunk(id, chunk));
+    throwsIo(() -> owner.fetchArtifact(id, url, () -> true));
+
+    String cancelled = UUID.randomUUID().toString();
+    java.util.Arrays.fill(retained, (byte) 5);
+    owner.fetchArtifact(cancelled, url, () -> true);
+    check(owner.cancel(cancelled));
+    equal(0, retained[0]);
+    throwsIo(() -> owner.readArtifactChunk(cancelled, 0));
+    String backgrounded = UUID.randomUUID().toString();
+    java.util.Arrays.fill(retained, (byte) 6);
+    owner.fetchArtifact(backgrounded, url, () -> true);
+    owner.setForeground(false);
+    equal(0, retained[0]);
+    throwsIo(() -> owner.readArtifactChunk(backgrounded, 0));
+  }
+
+  private static void preservesBodyBudgetUntilCancelledFetchUnwinds() throws Exception {
+    CountDownLatch started = new CountDownLatch(1);
+    CountDownLatch sawCancellation = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    AtomicInteger attempts = new AtomicInteger();
+    PublishedHttpsRequestOwner owner = new PublishedHttpsRequestOwner((url, cancellation) -> new byte[] { 1 },
+        (url, cancellation) -> {
+          if (attempts.incrementAndGet() > 1) return new byte[] { 2 };
+          started.countDown();
+          waitForCancellation(cancellation);
+          sawCancellation.countDown();
+          await(release);
+          throw new IOException("cancelled");
+        });
+    owner.setForeground(true);
+    String target = "https://napplets.example.org/" + "a".repeat(64);
+    String first = UUID.randomUUID().toString(), second = UUID.randomUUID().toString();
+    Thread pending = new Thread(() -> startPendingArtifact(owner, first, target));
+    pending.setDaemon(true);
+    pending.start();
+    check(started.await(2, TimeUnit.SECONDS));
+    throwsIo(() -> owner.fetchArtifact(second, target, () -> true));
+    equal(1, owner.fetch(UUID.randomUUID().toString(), target, () -> true).length);
+    check(owner.cancel(first));
+    check(sawCancellation.await(2, TimeUnit.SECONDS));
+    throwsIo(() -> owner.fetchArtifact(second, target, () -> true));
+    equal(1, attempts.get());
+    release.countDown();
+    pending.join(2_000);
+    check(!pending.isAlive());
+    equal(1, owner.fetchArtifact(second, target, () -> true));
+    equal(2, owner.readArtifactChunk(second, 0)[0]);
+
+    int maximum = 20 * 1024 * 1024, remainder = 12 * 1024 * 1024;
+    String smallTarget = "https://napplets.example.org/" + "b".repeat(64);
+    PublishedHttpsRequestOwner retained = new PublishedHttpsRequestOwner((url, cancellation) ->
+        new byte[url.equals(smallTarget) ? remainder : maximum]);
+    retained.setForeground(true);
+    String third = UUID.randomUUID().toString();
+    equal(maximum, retained.fetchArtifact(first, target, () -> true));
+    throwsIo(() -> retained.fetchArtifact(second, smallTarget, () -> true));
+    check(retained.cancel(first));
+    equal(remainder, retained.fetchArtifact(second, smallTarget, () -> true));
+    equal(maximum, retained.fetchArtifact(third, target, () -> true));
+    throwsIo(() -> retained.fetchArtifact(UUID.randomUUID().toString(), target, () -> true));
+    retained.revokeAll();
+    throwsIo(() -> retained.readArtifactChunk(second, 0));
+    throwsIo(() -> retained.readArtifactChunk(third, 0));
+  }
+
+  private static void startPendingArtifact(PublishedHttpsRequestOwner owner, String id, String url) {
+    try { owner.fetchArtifact(id, url, () -> true); }
+    catch (IOException expected) { assertions.incrementAndGet(); }
   }
 
   private static void await(CountDownLatch latch) throws IOException {

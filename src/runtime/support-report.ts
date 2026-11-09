@@ -2,7 +2,20 @@ import { SUPPORTED_CAPABILITY_DOMAINS } from './capability-protocol.ts';
 
 export type SupportAvailability = 'available' | 'unavailable' | 'unknown';
 // Bump when public availability, operations or limits change: this identifies reviewed support.
-export const SUPPORT_PROFILE = 'hypergolic-native-2026-10-13-v1';
+const PROFILE_PREFIX = 'hypergolic-native-2026-11-06';
+const BASE_SUPPORT_PROFILE = `${PROFILE_PREFIX}-v1`;
+const INTENT_SUPPORT_PROFILE = 'hypergolic-native-2026-11-06-intent-v1';
+export const MEDIA_ACCESS_DETAIL = 'Media access lets this napplet offer public HTTPS videos and MP3 radio. Play in the shell authorizes a video download up to 256 MiB or foreground radio up to 15 minutes and 32 MiB. Sources may redirect to other public HTTPS sites. Live radio needs a fresh Media review; old grants stay finite-only.';
+const MEDIA_SUPPORT_PROFILE = `${PROFILE_PREFIX}-media-file-v1`;
+const LIVE_MEDIA_SUPPORT_PROFILE = `${PROFILE_PREFIX}-media-live-mp3-v1`;
+const COMMON_SOCIAL_SUPPORT_PROFILE=`${PROFILE_PREFIX}-common-social-v1`;
+const CVM_SUPPORT_PROFILE=`${PROFILE_PREFIX}-cvm-free-foreground-v1`;
+export const REPORTED_SUPPORT_PROFILE = `${PROFILE_PREFIX}-outbox-keys-v1/${MEDIA_SUPPORT_PROFILE}/${LIVE_MEDIA_SUPPORT_PROFILE}/${PROFILE_PREFIX}-common-read-v1/${COMMON_SOCIAL_SUPPORT_PROFILE}/${CVM_SUPPORT_PROFILE}`;
+export type ReviewedSupportProfile = 'current' | 'before-live' | 'before-cvm' | 'before-social' | 'before-common' | 'legacy';
+const beforeCommonDomains = Object.freeze(SUPPORTED_CAPABILITY_DOMAINS.filter(domain => domain !== 'common' && domain !== 'cvm'));
+const legacyDomains = Object.freeze(['identity', 'storage', 'theme', 'relay', 'resource', 'upload',
+  'link', 'intent', 'inc', 'notify', 'config', 'outbox']);
+
 const notes: Readonly<Record<string, string>> = Object.freeze({
   shell: 'Handshake and scoped discovery are implemented. Availability is not a full conformance assessment.',
   theme: 'Shell colours are delivered; the selected theme profile is bounded.',
@@ -12,11 +25,15 @@ const notes: Readonly<Record<string, string>> = Object.freeze({
   resource: 'Bounded HTTPS, Blossom, one-hop Nostr and data bytes; selected audio/video playback. Hashtree, SVG and streaming are unavailable.',
   upload: 'Blossom only; selected files, metadata sanitation and approval for every upload.',
   link: 'Approved HTTPS links use the device handler. Other schemes are unavailable.',
-  intent: 'Selected loaded-napplet routing; arbitrary discovery and automatic opening are unavailable.',
+  intent: 'Reviewed dispatch to installed napplets, including NIP-5D intent delivery. Uninstalled handler discovery is unavailable.',
   inc: 'Selected session-bound messages and channels; no background delivery.',
   notify: 'Foreground shell notifications. OS push is unavailable.',
   config: 'Selected bounded schemas and retained settings; unrestricted schema support is unavailable.',
-  outbox: 'Selected bounded Outbox reads, subscriptions and approved publication for verified napplets. Operations also require the relay grant; final device E2E remains open.',
+  outbox: 'Outbox queries return up to 200 events. Bounded subscriptions and approved publication are available. Raw Relay operations require a separate grant.',
+  keys: 'Hardware keyboard actions for the focused napplet. Ordinary suggested shortcuts can work outside text entry.',
+  media: 'Shell-owned foreground HTTPS MP4 and bounded MP3 radio after native Play. Radio is limited to 15 minutes and 32 MiB, with a new Media review. Playlists and napplet-owned sessions are unavailable.',
+  cvm: 'Encrypted free-only MCP requests after exact provider, arguments and foreground service review. Up to 2 minutes; no shell payments. Another card may be used while the source napplet stays open. Discovery and registry execution are unavailable.',
+  common: 'Public NIP-19 helpers. Profile lookup needs a Relay or Outbox grant; follows needs Identity. Social writes need renewed Common access, Identity and Relay or Outbox, a selected signing method and exact event approval. Follow replacements are bounded by the existing 8 KiB publication frame.',
 });
 
 export function supportForDomain(domain: string): Readonly<{status: SupportAvailability; detail: string}> {
@@ -25,10 +42,32 @@ export function supportForDomain(domain: string): Readonly<{status: SupportAvail
     detail: notes[domain] ?? 'This shell does not provide this NAP. No permission can enable it.'});
 }
 
-export function capabilityCompatibility(requested: readonly string[], available: readonly string[] = SUPPORTED_CAPABILITY_DOMAINS) {
+function supportProfile(requested: readonly string[], policy: ReviewedSupportProfile,granted:readonly string[]): string {
+  const intent = requested.includes('intent');
+  const previous = intent ? INTENT_SUPPORT_PROFILE : BASE_SUPPORT_PROFILE;
+  if (policy === 'legacy') return previous;
+  const added = ['outbox', 'keys'].filter(domain => requested.includes(domain));
+  if (intent && added.length) added.push('intent');
+  const profile = added.length ? `${PROFILE_PREFIX}-${added.join('-')}-v1` : previous;
+  const finite = requested.includes('media') ? `${profile}/${MEDIA_SUPPORT_PROFILE}` : profile;
+  const media = policy==='current'&&requested.includes('media')?`${finite}/${LIVE_MEDIA_SUPPORT_PROFILE}`:finite;
+  const read=policy!=='before-common'&&requested.includes('common')?`${media}/${PROFILE_PREFIX}-common-read-v1`:media;
+  const social=granted.includes('common')&&granted.includes('identity')&&(granted.includes('relay')||granted.includes('outbox'));
+  const selected=(['current','before-live','before-cvm'].includes(policy))&&social&&requested.includes('common')?`${read}/${COMMON_SOCIAL_SUPPORT_PROFILE}`:read;
+  return (policy==='current'||policy==='before-live')&&requested.includes('cvm')&&granted.includes('cvm')?`${selected}/${CVM_SUPPORT_PROFILE}`:selected;
+}
+
+export function capabilityCompatibility(requested: readonly string[], available: readonly string[] = SUPPORTED_CAPABILITY_DOMAINS,
+  policy: ReviewedSupportProfile = 'current',combinedRequested:readonly string[]=requested) {
   const offered = new Set(available);
   const domains = Object.freeze([...requested].filter(domain => offered.has(domain)).sort());
   const unsupportedDomains = Object.freeze([...requested].filter(domain => domain !== 'shell' && !offered.has(domain)).sort());
+  const profile = supportProfile(requested, policy,combinedRequested.filter(domain=>offered.has(domain)));
   return Object.freeze({domains, unsupportedDomains,
-    review: JSON.stringify({profile: SUPPORT_PROFILE, requested: [...requested].sort(), domains})});
+    review: JSON.stringify({profile, requested: [...requested].sort(), domains})});
+}
+
+export function reviewedCapabilityCompatibility(requested: readonly string[], policy: ReviewedSupportProfile,combinedRequested:readonly string[]=requested) {
+  const available = policy === 'legacy' ? legacyDomains : policy === 'before-common' ? beforeCommonDomains : (policy==='current'||policy==='before-live')?SUPPORTED_CAPABILITY_DOMAINS:SUPPORTED_CAPABILITY_DOMAINS.filter(domain=>domain!=='cvm');
+  return capabilityCompatibility(requested, available, policy,combinedRequested);
 }

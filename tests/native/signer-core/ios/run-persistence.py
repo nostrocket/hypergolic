@@ -13,6 +13,8 @@ HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location('native_signer_runner', HERE / 'run.py')
 native = importlib.util.module_from_spec(spec); spec.loader.exec_module(native)
 EXTRA = [
+    'modules/napplet-host/ios/NativeCanonicalJSON.swift',
+    'modules/napplet-host/ios/NativeAppDataPolicy.swift',
     'tests/native/signer-core/ios/App/NativeHandoffProbeController.swift',
     'modules/identity-owner/ios/IdentityOwnerContextRegistry.swift',
     'modules/napplet-host/ios/FixtureReleaseAuthority.swift',
@@ -36,11 +38,13 @@ EXTRA = [
     'modules/signer-core/ios/NativeVaultMutationGate.swift',
     'modules/signer-core/ios/NativeVaultRecord.swift',
     'modules/signer-core/ios/NativeVaultCore.swift',
+    'modules/signer-core/ios/NativeLocalVaultLease.swift',
     'modules/signer-core/ios/NativeVaultImportPanel.swift',
     'modules/napplet-host/ios/NativeSignerRelayPolicy.swift',
     'modules/napplet-host/ios/NativeApprovalAuthority.swift',
     'modules/napplet-host/ios/CapabilityLeaseRegistry.swift',
     'modules/napplet-host/ios/CapabilityTransport.swift',
+    'modules/napplet-host/ios/LegacyReadOnlyContext.swift',
     'modules/napplet-host/ios/ApprovalTransport.swift',
     'modules/napplet-host/ios/NativeOutboxPlan.swift',
     'modules/napplet-host/ios/PublishedRelayWebSocketClientFrames.swift',

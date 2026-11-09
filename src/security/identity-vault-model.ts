@@ -3,7 +3,7 @@ export const MAX_IDENTITIES = 16;
 export type Identity = Readonly<{
   pubkey: string;
   addedAt: number;
-  origin: 'generated' | 'imported' | 'connected';
+  origin: 'generated' | 'imported' | 'connected' | 'public';
 }>;
 
 export type Inventory = Readonly<{
@@ -148,7 +148,7 @@ export function inventory(value: unknown): Inventory {
   const identities: Identity[] = candidate.identities.map(item => {
     const identity = record(item);
     fields(identity, ['pubkey', 'addedAt', 'origin']);
-    if (!pubkey(identity.pubkey) || !integer(identity.addedAt) || !['generated', 'imported', 'connected'].includes(String(identity.origin))) {
+    if (!pubkey(identity.pubkey) || !integer(identity.addedAt) || !['generated', 'imported', 'connected', 'public'].includes(String(identity.origin))) {
       throw new VaultError('CORRUPT_METADATA');
     }
     return { pubkey: identity.pubkey, addedAt: identity.addedAt, origin: identity.origin as Identity['origin'] };

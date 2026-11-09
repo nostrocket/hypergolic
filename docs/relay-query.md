@@ -19,13 +19,20 @@ validation failure is never represented as an empty successful result.
 | Boundary | Selected limit/behavior |
 | --- | --- |
 | Filters | 1–4; ids/authors/kinds/since/until/limit and single-letter tag filters |
-| Lists | 1–64 entries; exact lowercase hex64 for ids/authors/#e/#p |
-| Request | 16 KiB; limit defaults to 32; explicit 0–32 accepted |
-| Events | 32 raw events/relay and 32 unique aggregate events; 64 KiB/event; 512 KiB aggregate event bytes |
+| Filter values | 1–64 entries per list, up to 1 KiB per string. Exact lowercase hex64 for ids/authors/#e/#p |
+| Request | 16 KiB; limit defaults to 32; nonnegative safe integers above 32 are capped to 32 |
+| Events | 32 raw events/relay and 32 unique aggregate events; 64 KiB per serialized event, including escaped content and tags. 512 KiB aggregate event bytes |
 | Transport | Up to 16 selected public WSS Network relays, sequentially; 64 frames/relay |
 | Lifetime | One 15-second total deadline; two concurrent queries per service and per broker |
 | Selection | Filter conditions AND; filters OR; newest timestamp first, then ascending id; per-filter limits |
 | Validation | Fresh NIP-01 fields, independent event hash and signature, filter match; no verification-cache trust |
+
+Incoming tag rows are bounded by the remaining serialized-event byte budget:
+each row needs at least two brackets and a separator, except the first separator.
+The validator still limits each tag to 64 string fields and accounts for JSON
+escaping and UTF-8 bytes. Signed contact lists with more than 256 tags can fit
+this read profile. Signing, trusted event review and Mesh retain their separate
+bounds and authority requirements.
 
 Unknown extensions, empty lists, partial hex prefixes, invalid timestamps and
 caller-selected relay/identity fields are denied. The selected bounded profile

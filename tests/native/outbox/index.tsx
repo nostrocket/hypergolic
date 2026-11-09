@@ -11,7 +11,7 @@ import {loadNativeCapabilityPort} from '../../../src/runtime/native-capability-p
 import {createNativeRelayQuery} from '../../../src/network/native-relay-query';
 import {openOutboxRelayListCache} from '../../../src/outbox/relay-list-cache';
 import {createOutboxAuthorResolver} from '../../../src/outbox/author-resolver';
-import {createOutboxReadService} from '../../../src/outbox/read-service';
+import {createOutboxReadService, type NativeOutboxQueryPort} from '../../../src/outbox/read-service';
 import type {NativePublishedRelayPort} from '../../../src/napplets/native-published-relay';
 import {BUNDLED_FIXTURES} from '../../../src/runtime/bundled-catalog';
 import {openShellDatabase} from '../../../src/storage/database';
@@ -36,7 +36,7 @@ function Fixture({caseName,selected}:{caseName:CaseName;selected:boolean}) {
     let streams:ReturnType<typeof createOutboxSubscriptionBroker>|null=null,streamManager:ReturnType<typeof createOutboxSubscriptions>|null=null,detach:(()=>void)|null=null;
     let live=true,broker:ReturnType<typeof createCapabilityBroker>|null=null,generation:string|null=null;
     let database:Awaited<ReturnType<typeof openShellDatabase>>|null=null,cache:Awaited<ReturnType<typeof openOutboxRelayListCache>>|null=null;
-    const capability=loadNativeCapabilityPort(),native=requireNativeModule<NativePublishedRelayPort>('HypergolicNappletHost');
+    const capability=loadNativeCapabilityPort(),native=requireNativeModule<NativePublishedRelayPort & NativeOutboxQueryPort>('HypergolicNappletHost');
     const platform=Platform.OS==='ios'?'ios':'android';
     const close=()=> {
       const selectedDatabase=database,selectedCache=cache;database=null;cache=null;
@@ -49,7 +49,11 @@ function Fixture({caseName,selected}:{caseName:CaseName;selected:boolean}) {
       if(!live) return;
       const calls:{role:string;relay:string}[]=[];
       const observed=(role:string)=>({...native,newInstanceId:()=>native.newInstanceId(),cancelPublishedRelay:(id:string)=>native.cancelPublishedRelay(id),
-        queryPublishedRelay:(id:string,relay:string,wire:string,sub:string)=>{calls.push({role,relay});setTrace(JSON.stringify({calls}));return native.queryPublishedRelay(id,relay,wire,sub);}});
+        queryPublishedRelay:(id:string,relay:string,wire:string,sub:string)=>{calls.push({role,relay});setTrace(JSON.stringify({calls}));return native.queryPublishedRelay(id,relay,wire,sub);},
+        queryOutboxRelay:(token:string,id:string,relay:string,wire:string,sub:string,timeoutMs:number)=>{
+          calls.push({role,relay});setTrace(JSON.stringify({calls}));
+          return native.queryOutboxRelay(token,id,relay,wire,sub,timeoutMs);
+        }});
       const discovery=createNativeRelayQuery(observed('discovery'),()=>['wss://nos.lol']);
       const resolver=createOutboxAuthorResolver(cache,discovery);
       const read=createOutboxReadService(resolver,observed('data'),()=>({networkRelays:['wss://relay.mostro.network'],lookupRelays:['wss://nos.lol']}));

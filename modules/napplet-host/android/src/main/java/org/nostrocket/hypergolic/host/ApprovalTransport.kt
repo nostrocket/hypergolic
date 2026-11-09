@@ -9,7 +9,7 @@ import org.json.JSONObject
 internal object ApprovalTransport {
   val leases = ApprovalLeaseRegistry(SystemClock::elapsedRealtime)
   private val main = Handler(Looper.getMainLooper())
-  private data class Pending(val generation: String, val id: String, val resultType: String, val reply: (String?) -> Unit)
+  private data class Pending(val generation: String, val id: String, val resultType: String, val appData: Boolean, val reply: (String?) -> Unit)
   private val pending = mutableMapOf<String, Pending>()
 
   fun register(generation: String): Boolean = leases.register(generation)
@@ -20,11 +20,32 @@ internal object ApprovalTransport {
   fun admit(generation: String, snapshot: String, id: String, reply: (String?) -> Unit): String? {
     check(Looper.myLooper() == Looper.getMainLooper())
     sweep()
-    val outbox = runCatching { JSONObject(JSONObject(snapshot).getString("request")).getString("type") == "outbox.publish" }.getOrDefault(false)
-    val token = leases.admit(generation, snapshot, outbox) ?: return null
-    pending[token] = Pending(generation, id, if (outbox) "outbox.publish.result" else "relay.publish.result", reply)
+    val request = runCatching { JSONObject(JSONObject(snapshot).getString("request")) }.getOrNull()
+    val type = request?.optString("type").orEmpty()
+    val outbox = type == "outbox.publish"
+    val common = type in NativeCommonPlan.operations
+    val appData = request?.let { NativeAppDataPolicy.claims(it) } ?: false
+    val token = leases.admit(generation, snapshot, request == null || outbox || common || appData) ?: return null
+    pending[token] = Pending(generation, id, if (common) "$type.result" else if (outbox) "outbox.publish.result" else "relay.publish.result", appData, reply)
     main.postDelayed({ sweep() }, NativeApprovalAuthority.LIFETIME_MS)
     return token
+  }
+  fun prepareCommon(token:String,raw:String):Boolean=runCatching {
+    synchronized(leases){val snapshot=leases.claimedSnapshot(token)?:return false
+      val plan=NativeCommonPlan.capture(snapshot,raw);require(plan.publication!=null);leases.prepare(token,plan)}
+  }.getOrDefault(false)
+  fun completeCommonNoop(token:String,raw:String):Boolean=runCatching {
+    synchronized(leases){val snapshot=leases.claimedSnapshot(token)?:return false
+      val plan=NativeCommonPlan.capture(snapshot,raw);require(plan.publication==null)
+      val request=JSONObject(JSONObject(snapshot).getString("request"))
+      val response=JSONObject().put("type",request.getString("type")+".result").put("id",request.getString("id")).put("ok",true).toString()
+      leases.cancel(token);main.post { deliver(token,response) };true}
+  }.getOrDefault(false)
+  fun failCommon(token:String,error:String){
+    val captured=error.takeIf { it.toByteArray().size in 1..4096 }?:"user-denied"
+    leases.cancel(token);main.post { val row=pending[token]
+      if(row?.resultType in NativeCommonPlan.operations.map { "$it.result" })deliver(token,JSONObject().put("type",row!!.resultType).put("id",row.id).put("ok",false).put("error",captured).toString())
+      else deliver(token,null) }
   }
   fun prepareOutbox(token: String, raw: String): Boolean = runCatching {
     synchronized(leases) {
@@ -37,7 +58,7 @@ internal object ApprovalTransport {
     leases.cancel(token)
     main.post {
       val row = pending[token]
-      if (row?.resultType == "outbox.publish.result") deliver(token, JSONObject().put("type", row.resultType)
+      if (row != null && (row.resultType == "outbox.publish.result" || row.appData)) deliver(token, JSONObject().put("type", row.resultType)
         .put("id", row.id).put("ok", false).put("error", captured).toString())
       else deliver(token, null)
     }
@@ -77,6 +98,6 @@ internal object ApprovalTransport {
       response
     }.getOrNull()
     request.reply(exact ?: JSONObject().put("type", request.resultType).put("id", request.id)
-      .put("ok", false).put("error", "approval denied").toString())
+      .put("ok", false).put("error", if(request.resultType.startsWith("common."))"user-denied" else "approval denied").toString())
   }
 }

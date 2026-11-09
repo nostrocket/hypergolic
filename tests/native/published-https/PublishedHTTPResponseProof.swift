@@ -52,6 +52,28 @@ import Foundation
       try noHeaderEnd.append(Data(repeating: 0x61, count: 5))
       throw NSError(domain: "unbounded header accepted", code: 1)
     } catch is PublishedHTTPResponse.Failure { checks += 1 }
+    let artifactCap = 20 * 1024 * 1024
+    guard artifactCap == PublishedHTTPResponse.maximumArtifactBodyBytes else { throw NSError(domain: "artifact profile cap", code: 1) }
+    for count in [artifactCap - 1, artifactCap] {
+      let wire = data("HTTP/1.1 200 OK\r\nContent-Length: \(count)\r\n\r\n") + Data(repeating: 0x61, count: count)
+      let artifact = try PublishedHTTPResponse.parse(wire, maximumBodyBytes: artifactCap, artifactProfile: true)
+      guard artifact.body.count == count else { throw NSError(domain: "artifact byte limit", code: 1) }
+      checks += 1
+    }
+    do {
+      _ = try PublishedHTTPResponse.parse(data("HTTP/1.1 200 OK\r\nContent-Length: \(artifactCap + 1)\r\n\r\n"),
+          maximumBodyBytes: artifactCap, artifactProfile: true)
+      throw NSError(domain: "oversized artifact accepted", code: 1)
+    } catch is PublishedHTTPResponse.Failure { checks += 1 }
+    do {
+      let redirect = data("HTTP/1.1 302 Found\r\nLocation: https://cdn.example.net/asset.html\r\nContent-Length: 0\r\n\r\n")
+      let reader = try PublishedHTTPResponseAccumulator(maximumBodyBytes: artifactCap, artifactProfile: true)
+      try reader.append(redirect)
+      throw NSError(domain: "artifact redirect not classified", code: 1)
+    } catch PublishedHTTPResponse.Failure.resourceRedirect(let location) {
+      guard location == "https://cdn.example.net/asset.html" else { throw NSError(domain: "incorrect redirect URL", code: 1) }
+      checks += 1
+    }
     var retry = VettedAddressCursor(["first", "second"])
     guard retry.next() == "first", retry.next() == "second", retry.next() == nil else {
       throw NSError(domain: "vetted address exhaustion", code: 1)
@@ -65,6 +87,17 @@ import Foundation
     let request = try PublishedPinnedHTTPS.Request("https://blossom.example.net:8443/abc?format=html")
     try checkRequest(request, host: "blossom.example.net", port: 8443,
       wire: "GET /abc?format=html HTTP/1.1\r\nHost: blossom.example.net:8443\r\nAccept: text/html\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n")
+    checks += 1
+    let resource = try PublishedPinnedHTTPS.Request("https://media.example.net/image.jpg", resourceProfile: true)
+    try checkRequest(resource, host: "media.example.net", port: 443,
+      wire: "GET /image.jpg HTTP/1.1\r\nHost: media.example.net\r\nAccept: */*\r\nUser-Agent: Hypergolic-Resource/1.0 (https://github.com/nostrocket/hypergolic)\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n")
+    checks += 1
+    let contentHash = String(repeating: "a", count: 64)
+    let artifact = try PublishedPinnedHTTPS.Request("https://blossom.example.net/\(contentHash)", artifactProfile: true)
+    let recovery = try PublishedPinnedHTTPS.Request("https://blossom.example.net/\(contentHash)", recoveryProfile: true)
+    guard [artifact, recovery].allSatisfy({ !String(decoding: $0.wire, as: UTF8.self).contains("User-Agent:") }) else {
+      throw NSError(domain: "Resource agent leaked to another profile", code: 1)
+    }
     checks += 1
     for invalid in ["http://blossom.example.net/", "https://localhost/", "https://127.0.0.1/",
                     "https://user:pass@blossom.example.net/", "https://blossom.example.net/#fragment",

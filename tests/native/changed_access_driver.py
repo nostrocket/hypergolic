@@ -159,6 +159,12 @@ class ChangedAccessDriver(base.Driver):
         except CheckFailed:
             return False
 
+    def open_updates(self):
+        self.open_settings()
+        identifier = 'settings-section-published-updates'
+        nodes = self.scroll_until(lambda n: resource_id_is(n, identifier), 'published updates section')
+        self.tap(exactly_one(nodes, lambda n: resource_id_is(n, identifier), 'published updates section'))
+
     def open_settings(self):
         _, nodes = self.nodes()
         if any(label(n) == 'Settings' for n in nodes):
@@ -236,7 +242,7 @@ class ChangedAccessDriver(base.Driver):
                              'make-new-revision-available action'))
         self.wait(lambda observed: any('Changed-access revision available' in label(n) for n in observed),
                   'fixture release activated')
-        self.open_settings()
+        self.open_updates()
         nodes = self.scroll_until(lambda n: re.fullmatch(r'published-update-check-' + UUID.pattern,
                                                           resource_id_suffix(n)) is not None,
                                   'published update check action')
@@ -282,7 +288,7 @@ class ChangedAccessDriver(base.Driver):
         if guest_marker(nodes, 'changed-access-v2'):
             raise CheckFailed('Declining changed access changed the v1 guest revision')
 
-        self.open_settings()
+        self.open_updates()
         nodes = self.scroll_until(lambda n: resource_id_suffix(n) == 'published-update-check-' + session,
                                   'repeat update check after access decline')
         self.tap(exactly_one(nodes, lambda n: resource_id_suffix(n) == 'published-update-check-' + session,

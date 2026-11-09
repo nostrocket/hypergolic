@@ -24,7 +24,7 @@ NPUB = re.compile(r"npub1[023456789acdefghjklmnpqrstuvwxyz]{58}")
 APK = re.compile(r"[a-f0-9]{64}")
 PUBLIC_PUBLISHER = "f" * 64
 PUBLIC_PUBLISHER_NPUB = "npub1lllllllllllllllllllllllllllllllllllllllllllllllllllsq7lrjw"
-DESTINATIONS = ("wss://relay.damus.io/", "wss://nos.lol/", "wss://bucket.coracle.social/")
+DESTINATIONS = ("wss://relay.ditto.pub/", "wss://nos.lol/", "wss://relay.damus.io/")
 PUBLIC_FIXTURE_NOTE = "Approval Lab test note"
 
 

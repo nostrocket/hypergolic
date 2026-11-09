@@ -1,4 +1,10 @@
 import Foundation
+private final class TestClock: @unchecked Sendable {
+  private let lock = NSLock()
+  private var time = ContinuousClock.now
+  func read() -> ContinuousClock.Instant { lock.withLock { time } }
+  func advance(_ seconds: Int64) { lock.withLock { time = time.advanced(by: .seconds(seconds)) } }
+}
 @main struct RoutingCoreTests {
   static var count = 0
   static func expect(_ value: Bool) { count += 1; precondition(value, "Routing assertion \(count)") }
@@ -40,6 +46,41 @@ import Foundation
     expect(reviews.focus("peer", true)); expect(reviews.reviewRevision("settings") == currentReview); expect(reviews.matchesRevision(deliveryRevision))
     reviews.setForeground(false); expect(reviews.reviewRevision("settings") == -1); reviews.setForeground(true); expect(!reviews.matchesRevision(deliveryRevision))
     reviews.revoke("settings"); expect(reviews.reviewRevision("settings") == -1)
+    let discovery = RoutingEndpointRegistry(); expect(discovery.synchronizeOwner(a, epoch: 0, available: true))
+    expect(discovery.register("catalog", user: a, epoch: 0, intent: false, inc: false, publishedOpen: true))
+    expect(discovery.register("target", user: a, epoch: 0, intent: false, inc: false, trackPublished: true))
+    discovery.focus("catalog", true); expect(!discovery.mayReview("catalog")); discovery.ready("catalog")
+    expect(discovery.mayReview("catalog")); expect(discovery.mayDeliver("catalog", domain: "published-open"))
+    expect(!discovery.mayDeliver("catalog", domain: "intent")); discovery.focus("catalog", false)
+    expect(!discovery.mayReview("catalog")); expect(discovery.mayDeliver("catalog", domain: "published-open"))
+    discovery.ready("target"); discovery.focus("target", true)
+    expect(discovery.mayReview("target")); expect(!discovery.mayDeliver("target", domain: "published-open"))
+    discovery.revoke("catalog"); expect(!discovery.mayDeliver("catalog", domain: "published-open"))
+    let clock = TestClock(), leases = CapabilityLeaseRegistry(now: { clock.read() })
+    expect(leases.register("catalog"))
+    let ordinary = leases.admit("catalog", sequence: 1, snapshot: "{}")!
+    let open = leases.admit("catalog", sequence: 2, snapshot: "{}", publishedOpen: true)!
+    expect(leases.take(ordinary) != nil); expect(leases.take(open) != nil); expect(leases.take(open) == nil)
+    clock.advance(25)
+    expect(!leases.isActive(ordinary)); expect(leases.isActive(open))
+    expect(leases.setForeground(false).contains(open)); _ = leases.setForeground(true)
+    expect(!leases.isActive(open)); expect(!leases.finish(open))
+    let next = leases.admit("catalog", sequence: 3, snapshot: "{}", publishedOpen: true)!
+    expect(leases.take(next) != nil); clock.advance(120); expect(!leases.isActive(next))
+    var credits = RoutingPushCredits()
+    expect(credits.reserve(1, envelope: "first")); expect(credits.reserve(2, envelope: "second"))
+    expect(credits.reserve(3, envelope: nil)); expect(credits.reserve(4, envelope: "fourth"))
+    expect(!credits.reserve(5, envelope: "overflow"))
+    credits.acknowledge(2); credits.expire(1)
+    expect(!credits.reserve(5, envelope: "overflow")); expect(credits.takeParked(2) == nil)
+    credits.pause(); expect(!credits.contains(3))
+    expect(credits.parkedIds() == [1, 2, 4])
+    expect(credits.takeParked(1) == "first"); expect(credits.takeParked(1) == nil)
+    expect(credits.takeParked(2) == "second"); expect(credits.takeParked(4) == "fourth")
+    expect(credits.reserve(5, envelope: nil)); credits.acknowledge(5)
+    credits.expire(1); expect(credits.contains(1)); credits.acknowledge(1)
+    expect(!credits.contains(1)); expect(credits.reserve(6, envelope: "next"))
+    credits.clear(); expect(!credits.contains(6)); expect(credits.parkedIds().isEmpty)
     print("iOS routing core \(count) assertions passed")
   }
 }

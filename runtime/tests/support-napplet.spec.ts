@@ -11,7 +11,7 @@ test('bundled Support napplet reads live report, filters, expands and has no fil
   await expect(frame.locator('#host')).toContainText('Hypergolic');
   await expect(frame.locator('#naps > li')).toHaveCount(35);
   await expect(frame.locator('li[data-domain="fs"] .support')).toHaveText('✕Unavailable');
-  await expect(frame.locator('li[data-domain="media"] .support')).toHaveText('✕Unavailable');
+  await expect(frame.locator('li[data-domain="media"] .support')).toHaveText('✓Available');
   await expect(frame.locator('li[data-domain="resource"] .support')).toHaveText('✓Available');
   await expect(frame.locator('li[data-domain="outbox"] .support')).toHaveText('✓Available');
   await expect(frame.locator('.legend')).toContainText('not full conformance');

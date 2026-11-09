@@ -102,10 +102,12 @@ def serve(mode: str, key: Path, cert: Path, listener: socket.socket,
                 return
             req = read_request_frame(peer)
             observed.append("req")
-            if req != '["REQ","proof",{"kinds":[35129]}]':
+            expected = ('["REQ","proof",{"kinds":[31237],"limit":32,"search":"café jazz"}]'
+                        if mode == "auth-announcement" else '["REQ","proof",{"kinds":[35129]}]')
+            if req != expected:
                 errors.append("wrong masked REQ payload")
-            if mode == "cancel":
-                time.sleep(0.8)
+            if mode in {"cancel", "short-deadline"}:
+                time.sleep(1.4 if mode == "short-deadline" else 0.8)
             elif mode == "oversize":
                 peer.sendall(b"\x81\x7f" + (66_561).to_bytes(8, "big"))
             elif mode == "auth-announcement":
@@ -113,7 +115,7 @@ def serve(mode: str, key: Path, cert: Path, listener: socket.socket,
             else:
                 peer.sendall(frame("EVENT") + frame("EOSE"))
     except (ConnectionError, OSError, ssl.SSLError) as error:
-        if mode not in {"untrusted", "wrong-host", "cancel", "oversize"}:
+        if mode not in {"untrusted", "wrong-host", "cancel", "short-deadline", "oversize"}:
             errors.append(str(error))
     except AssertionError as error:
         errors.append(str(error))
@@ -144,7 +146,7 @@ def main() -> None:
             *(str(NATIVE / source) for source in SOURCES), str(PROOF),
         ], cwd=ROOT, env=compiler_environment, check=True)
         for mode in ("valid", "auth-announcement", "failover", "untrusted", "wrong-host", "redirect",
-                     "bad-accept", "oversize", "cancel"):
+                     "bad-accept", "oversize", "cancel", "short-deadline"):
             key, cert, anchor = (
                 (wrong_key, wrong_cert, wrong_der) if mode == "wrong-host"
                 else (valid_key, valid_cert, valid_der)

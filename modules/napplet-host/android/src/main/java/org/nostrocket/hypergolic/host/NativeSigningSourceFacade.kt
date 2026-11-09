@@ -63,7 +63,7 @@ object NativeSigningSourceFacade {
       "upload" -> synchronized(UploadTransport.leases) {
         val row=UploadTransport.leases.signingCapture(token) ?: error("Native upload unavailable")
         val exact=uploadEvent(row.review,unsigned);val registration=JSONObject(row.registration)
-        val requester="Napplet: ${registration.getString("appId")}\nPublisher: ${registration.getString("publisher")}\nVersion: ${registration.getString("version")}"
+        val requester = signingRequester(registration)
         val expiration=JSONObject(exact).getLong("created_at")+120
         Capture(row.review.identity,exact,requester,listOf(row.review.destination),UploadTransport.leases,
           { UploadTransport.leases.signingCurrent(token,row.marker) && System.currentTimeMillis()/1000<expiration },

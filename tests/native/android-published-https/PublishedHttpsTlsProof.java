@@ -70,6 +70,7 @@ public final class PublishedHttpsTlsProof {
       rejectsRedirectAfterTls(serverContext, trusted, dns);
       cancelsBlockedResponse(serverContext, trusted, dns);
       boundedResourceRedirects(serverContext, trusted, dns);
+      boundedArtifactRedirects(serverContext, trusted, dns);
     } finally {
       dns.shutdownNow();
       check(dns.awaitTermination(2, TimeUnit.SECONDS));
@@ -88,6 +89,7 @@ public final class PublishedHttpsTlsProof {
       equal("hello", new String(body, StandardCharsets.US_ASCII));
       check(server.requestArrived.await(2, TimeUnit.SECONDS));
       check(server.request.startsWith("GET /artifact HTTP/1.1\r\nHost: napplets.example.org:" + server.port()));
+      check(!server.request.contains("\r\nUser-Agent:"));
       equal(1, server.accepted);
     }
   }
@@ -163,6 +165,9 @@ public final class PublishedHttpsTlsProof {
          LocalServer first = new LocalServer(context, redirect("https://napplets.example.org:" + last.port() + "/artifact"), false)) {
       byte[] body = resource(first, proofPolicy, host -> {lookups.incrementAndGet();return new InetAddress[]{LOOPBACK};}, dns, trusted);
       equal("resource", new String(body, StandardCharsets.US_ASCII));equal(2,lookups.get());equal(1,first.requestCount);equal(1,last.requestCount);
+      String userAgent = "\r\nUser-Agent: Hypergolic-Resource/1.0 (https://github.com/nostrocket/hypergolic)\r\n";
+      check(first.request.contains(userAgent));
+      check(last.request.contains(userAgent));
     }
     try (LocalServer first = new LocalServer(context, redirect("/artifact"), false)) {
       throwsIo(() -> resource(first, proofPolicy, host -> new InetAddress[]{LOOPBACK}, dns, trusted));equal(1,first.requestCount);
@@ -184,6 +189,68 @@ public final class PublishedHttpsTlsProof {
       throwsIo(() -> resource(first,proofPolicy,host->{calls.incrementAndGet();return host.equals("mixed.example.org") ? new InetAddress[]{InetAddress.getByAddress(new byte[]{8,8,8,8}),InetAddress.getByAddress(new byte[]{10,0,0,1})}:new InetAddress[]{LOOPBACK};},dns,trusted));equal(2,calls.get());
     }
   }
+  private static void boundedArtifactRedirects(SSLContext context, SSLSocketFactory trusted,
+      ThreadPoolExecutor dns) throws Exception {
+    PublishedHttpsTransport.AddressPolicy policy = new PublishedHttpsTransport.AddressPolicy() {
+      @Override public boolean isAllowedHost(String host) { return true; }
+      @Override public boolean isAllowedAddress(InetAddress address) { return address.isLoopbackAddress(); }
+    };
+    AtomicInteger lookups = new AtomicInteger();
+    PublishedHttpsTransport.HostResolver resolver = host -> { lookups.incrementAndGet(); return new InetAddress[]{LOOPBACK}; };
+    String hash = "a".repeat(64);
+    try (LocalServer last = new LocalServer(context, ok("artifact"), false);
+         LocalServer hop2 = new LocalServer(context, redirect("https://napplets.example.org:" + last.port() + "/uploads/" + hash + ".html"), false);
+         LocalServer hop1 = new LocalServer(context, redirect("https://napplets.example.org:" + hop2.port() + "/cdn"), false);
+         LocalServer first = new LocalServer(context, redirect("https://napplets.example.org:" + hop1.port() + "/mirror"), false)) {
+      byte[] body = artifact(first, hash, policy, () -> false, resolver, dns, trusted);
+      equal("artifact", new String(body, StandardCharsets.US_ASCII));
+      equal(4, lookups.get());
+      check(last.request.startsWith("GET /uploads/" + hash + ".html "));
+      check(!first.request.contains("\r\nUser-Agent:") && !last.request.contains("\r\nUser-Agent:"));
+      throwsIo(() -> artifact(first, "bad-hash", policy, () -> false, resolver, dns, trusted));
+      equal(4, lookups.get());
+    }
+    for (String location : new String[]{"http://napplets.example.org/target", "https://127.0.0.1/target",
+        "https://user@napplets.example.org/target", "/" + hash, "https://printer.local/target"}) {
+      try (LocalServer first = new LocalServer(context, redirect(location), false)) {
+        lookups.set(0);
+        throwsIo(() -> artifact(first, hash, policy, () -> false, resolver, dns, trusted));
+        equal(1, lookups.get());
+      }
+    }
+    try (LocalServer last = new LocalServer(context, ok("late"), true);
+         LocalServer first = new LocalServer(context, redirect("https://napplets.example.org:" + last.port() + "/slow"), false)) {
+      AtomicBoolean cancelled = new AtomicBoolean();
+      FutureTask<Boolean> pending = new FutureTask<>(() -> {
+        try { artifact(first, hash, policy, cancelled::get, resolver, dns, trusted); return false; }
+        catch (IOException expected) { return true; }
+      });
+      Thread worker = new Thread(pending, "artifact-redirect-cancellation-proof");
+      worker.setDaemon(true);
+      worker.start();
+      check(last.requestArrived.await(2, TimeUnit.SECONDS));
+      cancelled.set(true);
+      check(pending.get(2, TimeUnit.SECONDS));
+    }
+    int cap = 20 * 1024 * 1024;
+    equal(cap, PublishedHttpsTransport.MAX_ARTIFACT_BYTES);
+    for (int length : new int[]{cap - 1, cap}) {
+      byte[] wire = ok("x".repeat(length)).getBytes(StandardCharsets.US_ASCII);
+      equal(length, PublishedHttpsResponseReader.readGet(new java.io.ByteArrayInputStream(wire), () -> false,
+          PublishedHttpsTransport.ReadProfile.ARTIFACT).length);
+    }
+    byte[] excess = ("HTTP/1.1 200 OK\r\nContent-Length: " + (cap + 1) + "\r\n\r\n").getBytes(StandardCharsets.US_ASCII);
+    throwsIo(() -> PublishedHttpsResponseReader.readGet(new java.io.ByteArrayInputStream(excess), () -> false,
+        PublishedHttpsTransport.ReadProfile.ARTIFACT));
+  }
+
+  private static byte[] artifact(LocalServer server, String hash, PublishedHttpsTransport.AddressPolicy policy,
+      PublishedHttpsTransport.Cancellation cancellation, PublishedHttpsTransport.HostResolver resolver,
+      ThreadPoolExecutor dns, SSLSocketFactory factory) throws IOException {
+    return PublishedHttpsTransport.getArtifactWithTransport("https://napplets.example.org:" + server.port() + "/" + hash,
+        policy, cancellation, resolver, dns, factory, PROOF_HOSTNAME_VERIFIER);
+  }
+
   private static String redirect(String location) {return "HTTP/1.1 302 Found\r\nLocation: " + location + "\r\nContent-Length: 0\r\n\r\n";}
   private static byte[] resource(LocalServer server, PublishedHttpsTransport.AddressPolicy policy,
       PublishedHttpsTransport.HostResolver resolver, ThreadPoolExecutor dns, SSLSocketFactory factory) throws IOException {
@@ -229,10 +296,10 @@ public final class PublishedHttpsTlsProof {
     return "HTTP/1.1 200 OK\r\nContent-Length: " + body.length() + "\r\n\r\n" + body;
   }
 
-  private static final class LocalServer implements AutoCloseable {
+  static final class LocalServer implements AutoCloseable {
     private final SSLServerSocket listener;
     private final Thread thread;
-    private final String response;
+    private final byte[] response;
     private final boolean waitForRelease;
     final CountDownLatch requestArrived = new CountDownLatch(1);
     private final CountDownLatch releaseResponse = new CountDownLatch(1);
@@ -242,7 +309,10 @@ public final class PublishedHttpsTlsProof {
     volatile Exception failure;
 
     LocalServer(SSLContext context, String response, boolean waitForRelease) throws IOException {
-      this.response = response;
+      this(context, response.getBytes(StandardCharsets.US_ASCII), waitForRelease);
+    }
+    LocalServer(SSLContext context, byte[] response, boolean waitForRelease) throws IOException {
+      this.response = response.clone();
       this.waitForRelease = waitForRelease;
       listener = (SSLServerSocket) context.getServerSocketFactory().createServerSocket(0, 1, LOOPBACK);
       listener.setSoTimeout(3_000);
@@ -271,7 +341,7 @@ public final class PublishedHttpsTlsProof {
         requestArrived.countDown();
         if (waitForRelease && !releaseResponse.await(3, TimeUnit.SECONDS)) return;
         OutputStream output = client.getOutputStream();
-        output.write(response.getBytes(StandardCharsets.US_ASCII));
+        output.write(response);
         output.flush();
       } catch (SocketException expectedWhenClosed) {
         // Closing the listener or a cancelled client is expected in negative cases.

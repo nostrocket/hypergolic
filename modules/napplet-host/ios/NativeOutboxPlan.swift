@@ -48,14 +48,14 @@ final class NativeOutboxPlan: @unchecked Sendable {
     return Send(ownerId, relay, id, "[\"EVENT\"," + signed + "]", deadline!)
   }
   func owns(_ operation: Send) -> Bool { operation.ownerId == ownerId }
-  static func signingSnapshot(snapshot: String, raw: String) throws -> (json: String, destinations: [String]) {
+  static func signingSnapshot(snapshot: String, raw: String, derived:[String:Any]? = nil) throws -> (json: String, destinations: [String]) {
     let envelope = try object(snapshot), review = try object(raw)
     guard let registration = envelope["registration"] as? [String: Any],
       let identity = registration["user"] as? String, hex(identity, 64),
       let requestRaw = envelope["request"] as? String else { throw Failure.invalid }
     let request = try object(requestRaw)
-    guard ["relay.publish", "outbox.publish"].contains(request["type"] as? String ?? ""),
-      let original = request["event"] as? [String: Any], let event = review["event"] as? [String: Any] else { throw Failure.invalid }
+    guard (["relay.publish", "outbox.publish"].contains(request["type"] as? String ?? "") && derived == nil || derived != nil && NativeCommonPlan.granted(registration) && NativeCommonPlan.operations.contains(request["type"] as? String ?? "")),
+      let original = derived ?? request["event"] as? [String: Any], let event = review["event"] as? [String: Any] else { throw Failure.invalid }
     try fields(review, ["event", "selectedPubkey", "destinations", "hash"])
     let originalTemplate = try unsigned(original, strict: true), capturedTemplate = try unsigned(event, strict: true)
     let capturedHash = try eventHash(event, identity: identity)
@@ -68,17 +68,17 @@ final class NativeOutboxPlan: @unchecked Sendable {
     let encoded: [String: Any] = ["registration": registration, "event": capturedEvent, "destinations": destinations]
     return (String(decoding: try JSONSerialization.data(withJSONObject: encoded, options: [.sortedKeys, .withoutEscapingSlashes]), as: UTF8.self), destinations)
   }
-  static func capture(snapshot: String, raw: String) throws -> NativeOutboxPlan {
+  static func capture(snapshot: String, raw: String, derived:[String:Any]? = nil) throws -> NativeOutboxPlan {
     let envelope = try object(snapshot), plan = try object(raw)
     guard let registration = envelope["registration"] as? [String: Any],
       let requestText = envelope["request"] as? String, let identity = registration["user"] as? String,
-      hex(identity, 64), let domains = registration["domains"] as? [String], domains.contains("relay"), domains.contains("outbox")
+      hex(identity, 64), let domains = registration["domains"] as? [String]
     else { throw Failure.invalid }
     let request = try object(requestText)
     try fields(plan, ["requestId", "event", "destinations", "requiredInboxes", "ownSource", "ancillary"])
-    guard request["type"] as? String == "outbox.publish", let id = request["id"] as? String,
+    guard (derived == nil && (domains.contains("outbox") && request["type"] as? String == "outbox.publish" || NativeAppDataPolicy.rawRelay(registration, request)) || derived != nil && NativeCommonPlan.granted(registration) && NativeCommonPlan.operations.contains(request["type"] as? String ?? "")), let id = request["id"] as? String,
       plan["requestId"] as? String == id, let event = plan["event"] as? [String: Any],
-      let source = request["event"] as? [String: Any], let captured = event["event"] as? [String: Any],
+      let source = derived ?? request["event"] as? [String: Any], let captured = event["event"] as? [String: Any],
       event["selectedPubkey"] as? String == identity else { throw Failure.invalid }
     try fields(event, ["event", "selectedPubkey", "destinations", "hash"])
     let template = try unsigned(source, strict: true), kind = try integer(source["kind"], maximum: 65535)
@@ -91,6 +91,10 @@ final class NativeOutboxPlan: @unchecked Sendable {
       let required = plan["requiredInboxes"] as? [String], required.allSatisfy({ destinations.contains($0) })
     else { throw Failure.invalid }
     for relay in destinations { try relayURL(relay) }
+    if NativeAppDataPolicy.claims(request) {
+      try NativeAppDataPolicy.validatePublication(registration, request, destinations: destinations)
+      guard plan["ancillary"] is NSNull, request["type"] as? String != "relay.publish" || required.isEmpty else { throw Failure.invalid }
+    }
     let skipped = (request["options"] as? [String: Any])?["toOutbox"] as? Bool == false
     guard !skipped || plan["ownSource"] as? String == "skipped" else { throw Failure.invalid }
     var ancillary: String?
@@ -104,7 +108,7 @@ final class NativeOutboxPlan: @unchecked Sendable {
     return NativeOutboxPlan(id, destinations, template, identity, hash, ancillary)
   }
   private static func bytesEqual(_ a: String, _ b: String) -> Bool { a.utf8.elementsEqual(b.utf8) }
-  private static func object(_ raw: String) throws -> [String: Any] {
+  static func object(_ raw: String) throws -> [String: Any] {
     guard boundedJSON(raw), let data = raw.data(using: .utf8),
       let value = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw Failure.invalid }
     return value
@@ -121,10 +125,10 @@ final class NativeOutboxPlan: @unchecked Sendable {
     }
     return depth == 0 && !quoted
   }
-  private static func fields(_ value: [String: Any], _ expected: Set<String>) throws {
+  static func fields(_ value: [String: Any], _ expected: Set<String>) throws {
     guard Set(value.keys) == expected else { throw Failure.invalid }
   }
-  private static func integer(_ value: Any?, maximum: Int64) throws -> Int64 {
+  static func integer(_ value: Any?, maximum: Int64) throws -> Int64 {
     guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
       number.doubleValue.isFinite, number.doubleValue.rounded(.towardZero) == number.doubleValue,
       number.doubleValue >= 0, number.doubleValue <= Double(maximum) else { throw Failure.invalid }
@@ -134,13 +138,13 @@ final class NativeOutboxPlan: @unchecked Sendable {
     guard let rows = value as? [[String]], rows.allSatisfy({ !$0.isEmpty }) else { throw Failure.invalid }
     return "[" + rows.map { "[" + $0.map(quote).joined(separator: ",") + "]" }.joined(separator: ",") + "]"
   }
-  private static func unsigned(_ value: [String: Any], strict: Bool = false) throws -> String {
+  static func unsigned(_ value: [String: Any], strict: Bool = false) throws -> String {
     if strict { try fields(value, ["kind", "content", "tags", "created_at"]) }
     let kind = try integer(value["kind"], maximum: 65535), created = try integer(value["created_at"], maximum: 9_007_199_254_740_991)
     guard let content = value["content"] as? String else { throw Failure.invalid }
     return "{\"kind\":\(kind),\"content\":\(quote(content)),\"tags\":\(try tags(value["tags"])),\"created_at\":\(created)}"
   }
-  private static func eventHash(_ value: [String: Any], identity: String) throws -> String {
+  static func eventHash(_ value: [String: Any], identity: String) throws -> String {
     let kind = try integer(value["kind"], maximum: 65535), created = try integer(value["created_at"], maximum: 9_007_199_254_740_991)
     guard let content = value["content"] as? String else { throw Failure.invalid }
     let canonical = "[0,\(quote(identity)),\(created),\(kind),\(try tags(value["tags"])),\(quote(content))]"
@@ -154,26 +158,10 @@ final class NativeOutboxPlan: @unchecked Sendable {
     guard value["id"] as? String == hash else { throw Failure.invalid }
     return "{\"id\":\(quote(hash)),\"pubkey\":\(quote(identity)),\"created_at\":\(try integer(value["created_at"], maximum: 9_007_199_254_740_991)),\"kind\":\(try integer(value["kind"], maximum: 65535)),\"tags\":\(try tags(value["tags"])),\"content\":\(quote(content)),\"sig\":\(quote(signature))}"
   }
-  private static func hex(_ value: String, _ size: Int) -> Bool {
+  static func hex(_ value: String, _ size: Int) -> Bool {
     value.utf8.count == size && value.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) }
   }
-  private static func quote(_ value: String) -> String {
-    var result = "\""
-    for scalar in value.unicodeScalars {
-      switch scalar.value {
-      case 34: result += "\\\""
-      case 92: result += "\\\\"
-      case 8: result += "\\b"
-      case 12: result += "\\f"
-      case 10: result += "\\n"
-      case 13: result += "\\r"
-      case 9: result += "\\t"
-      case 0...31: result += String(format: "\\u%04x", scalar.value)
-      default: result.unicodeScalars.append(scalar)
-      }
-    }
-    return result + "\""
-  }
+  private static func quote(_ value: String) -> String { NativeCanonicalJSON.quote(value) }
   private static func relayURL(_ raw: String) throws {
     guard raw.utf8.count <= 2048, raw.utf8.allSatisfy({ (33...126).contains($0) }), !raw.contains("\\"),
       let url = URLComponents(string: raw), url.scheme == "wss", url.user == nil, url.password == nil,

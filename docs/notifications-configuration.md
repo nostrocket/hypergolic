@@ -44,8 +44,11 @@ Card interaction consumes the card. Declining a verified artifact update preserv
 ## Shell-owned configuration
 
 A napplet registers a bounded Core Subset schema and can get or subscribe to
-validated values and request its trusted shell editor. The shell is the sole
-writer. The editor displays verified source and artifact version, ordered groups,
+validated values and request its trusted shell editor. After registration, open
+**Napplet settings** from that napplet’s title menu. The shell waits for native
+focus to return to the same running instance and shows the editor only when the
+review slot is free. The shell is the sole writer. The editor displays verified
+source and artifact version, ordered groups,
 plain descriptions, enum and boolean controls and validated JSON controls for
 primitive arrays or otherwise supported values. Cancel does not save. Save reports
 validation errors and preserves the draft; duplicate Save cannot create a second

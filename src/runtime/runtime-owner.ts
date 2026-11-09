@@ -1,3 +1,6 @@
+import {createLegacyImageBroker} from './legacy-image-broker.ts';
+import {createLegacySubscriptionBroker} from './legacy-subscription-broker.ts';
+import type {CvmService} from '../cvm/cvm-service';
 import {createOutboxSubscriptionBroker} from '../outbox/subscription-broker.ts';
 import type {createOutboxSubscriptions} from '../outbox/subscriptions.ts';
 import type { OutboxReadService } from '../outbox/read-service';
@@ -14,21 +17,30 @@ import type { RelayQueryService } from '../network/native-relay-query';
 import type { IdentityTransition } from '../security/identity-transition.ts';
 import type { ShellDatabase } from '../storage/database.ts';
 import { ShellStorageError } from '../storage/ports.ts';
-import type { NappletDescriptor } from '../shell/workspace.ts';
+import { samePublishedPin, type NappletDescriptor } from '../shell/workspace.ts';
 import { bundledDescriptor, resolveBundledSession, type BundledVariant } from '../shell/fixtures.ts';
 import { createCapabilityBroker, type NativeCapabilityPort } from './capability-broker.ts';
 import type { ApprovalOrigin, ApprovalService } from '../security/approval-service.ts';
 import { identifier } from '../storage/codec.ts';
 import { createPublishedSessionCoordinator, type PreparedPublishedSession, type PublishedSessionDependencies, type PublishedUpdateReview } from '../napplets/published-session.ts';
 import type { NappletConsentReview } from '../napplets/first-open-consent.ts';
+import { isDiscoveryEntry } from '../napplets/discovery-entry.ts';
+import type { DiscoveryOpenBroker } from '../napplets/discovery-open-broker.ts';
+import type { VerifiedNappletArtifact } from '../napplets/verified-artifact.ts';
 import type { NativeRegistration } from './capability-protocol.ts';
 
-export interface NativeCapabilityEvent { type: 'capability'; sessionId: string; generation: string; token: string; lane?: 'approval' | 'outbox-subscription' | 'subscription' | 'upload' | 'routing' | 'presentation' | 'configuration' }
+export interface NativeCapabilityEvent { type: 'capability'; sessionId: string; generation: string; token: string; lane?: 'approval' | 'outbox-subscription' | 'subscription' | 'upload' | 'routing' | 'presentation' | 'configuration' | 'published-open' | 'cvm' | 'legacy-subscription' | 'legacy' | 'legacy-image' }
 export interface RuntimeBinding { readonly configuration: string; receive(event: NativeCapabilityEvent): void; revoke(): void }
-export interface PublishedRuntimeBinding { readonly publishedArtifact: string; readonly requestedDomains: readonly string[]; receive(event: NativeCapabilityEvent): void; assertApproval(origin: ApprovalOrigin,domain?:'outbox'): void; assertUpload(origin: ApprovalOrigin): void; revoke(): void }
+type PublishedCapabilities = Readonly<{requiredDomains: readonly string[]; optionalDomains: readonly string[]}>;
+export interface PublishedRuntimeBinding { readonly publishedArtifact: string; readonly requestedDomains: PublishedCapabilities;
+  ready(generation: string): void; readyGeneration(): string | null; receive(event: NativeCapabilityEvent): void; assertApproval(origin: ApprovalOrigin,domain?:'outbox'|'common'): void; assertUpload(origin: ApprovalOrigin): void; revoke(): void }
 export interface RuntimeNativePort extends NativeCapabilityPort { newInstanceId(): string; subscriptions?: NativeRelaySubscriptionPort }
 export interface RuntimeOwner {
-  publishedCapabilities(session: NappletDescriptor): readonly string[] | null;
+  publishedCapabilities(session: NappletDescriptor): PublishedCapabilities | null;
+  resolveDiscovered(link: string, expectedEventId: string, signal: AbortSignal, active: () => void): Promise<VerifiedNappletArtifact>;
+  prepareDiscovered(artifact: VerifiedNappletArtifact, signal: AbortSignal, assertActive: () => void,
+    reviewLaunch: (changesAccess: boolean, legacyReadOnlyAvailable?: boolean) => Promise<boolean | 'legacy-read-only-v1'>, existing?: NappletDescriptor): Promise<NappletDescriptor>;
+  publishedReadyGeneration(session: NappletDescriptor): string | null;
   open(session: NappletDescriptor): RuntimeBinding;
   descriptor(variant: Exclude<BundledVariant, 'ux-lab'>, number: number): NappletDescriptor;
   openPublishedLink(link: string, signal: AbortSignal, review: (request: NappletConsentReview) => Promise<boolean>): Promise<NappletDescriptor>;
@@ -39,7 +51,7 @@ export interface RuntimeOwner {
   prepareInstalled(handler: CatalogHandler, signal: AbortSignal, review: (request: NappletConsentReview) => Promise<boolean>): Promise<NappletDescriptor>;
   discardPublished(sessionId: string): void;
   revokeAllPublished(): void;
-  assertPublishedApproval(origin: ApprovalOrigin,domain?:'outbox'): void;
+  assertPublishedApproval(origin: ApprovalOrigin,domain?:'outbox'|'common'): void;
   assertPublishedUpload(origin: ApprovalOrigin): void;
 }
 
@@ -53,13 +65,16 @@ function configurationUser(ready: PreparedPublishedSession): string {
 
 function capabilityReceiver(database: ShellDatabase, native: RuntimeNativePort,
   approvals: Readonly<{ service: ApprovalService; destinations: () => readonly string[] }> | undefined,
-  sessionId: string, configuration: Omit<NativeRegistration, 'generation'>, assertActive: () => void, queries?: RelayQueryService, subscriptions?: ReturnType<typeof createRelaySubscriptions>, resources?: ResourceHost, uploads?: UploadService, identityData?: IdentityDataPort, routing?: RoutingBroker, notify?: NotifyBroker, config?: ConfigBroker, outbox?: OutboxReadService, outboxStreams?:ReturnType<typeof createOutboxSubscriptions>) {
+  sessionId: string, configuration: Omit<NativeRegistration, 'generation'>, assertActive: () => void, queries?: RelayQueryService, subscriptions?: ReturnType<typeof createRelaySubscriptions>, resources?: ResourceHost, uploads?: UploadService, identityData?: IdentityDataPort, routing?: RoutingBroker, notify?: NotifyBroker, config?: ConfigBroker, outbox?: OutboxReadService, outboxStreams?:ReturnType<typeof createOutboxSubscriptions>,
+  discovery?: Readonly<{ broker: DiscoveryOpenBroker; source: NappletDescriptor }>, cvm?:CvmService) {
   let generation: string | null = null;
   let broker: ReturnType<typeof createCapabilityBroker> | null = null;
   let streams:ReturnType<typeof createRelaySubscriptionBroker>|null=null;
+  let legacyStreams:ReturnType<typeof createLegacySubscriptionBroker>|null=null;
+  let legacyImages:ReturnType<typeof createLegacyImageBroker>|null=null;
   let outboxSubscriptions:ReturnType<typeof createOutboxSubscriptionBroker>|null=null;
   return Object.freeze({
-    revoke: () => { broker?.revoke(); streams?.revoke(); outboxSubscriptions?.revoke(); if (generation) {routing?.close(generation); notify?.close(generation); config?.close(generation);} },
+    revoke: () => { broker?.revoke(); streams?.revoke(); legacyStreams?.revoke(); legacyImages?.revoke(); outboxSubscriptions?.revoke(); if (generation) {routing?.close(generation); notify?.close(generation); config?.close(generation);} },
     assertGeneration: (candidate: string) => { if (generation === null || generation !== candidate) throw new ShellStorageError('REVOKED'); },
     receive(event: NativeCapabilityEvent): void {
       try {
@@ -69,12 +84,21 @@ function capabilityReceiver(database: ShellDatabase, native: RuntimeNativePort,
         if (generation === null) {
           generation = event.generation;
           const owner={registration:{...configuration,generation},assertActive};
+          if(configuration.legacyReadOnly && configuration.domains.length === 0 && resources) legacyImages=createLegacyImageBroker(native,resources,owner);
+          if(configuration.legacyReadOnly && configuration.domains.length === 0 && native.subscriptions && subscriptions) legacyStreams=createLegacySubscriptionBroker(native.subscriptions,native,subscriptions,owner);
           if(configuration.domains.includes('relay')&&native.subscriptions&&subscriptions)streams=createRelaySubscriptionBroker(native.subscriptions,subscriptions,owner);
-          if(configuration.domains.includes('outbox')&&configuration.domains.includes('relay')&&native.subscriptions&&outboxStreams)outboxSubscriptions=createOutboxSubscriptionBroker(native.subscriptions,outboxStreams,owner);
-          broker = createCapabilityBroker(database, native, owner, queries, request=>streams?.close(request), resources, identityData, outbox,request=>outboxSubscriptions?.close(request));
+          if(configuration.domains.includes('outbox')&&native.subscriptions&&outboxStreams)outboxSubscriptions=createOutboxSubscriptionBroker(native.subscriptions,outboxStreams,owner);
+          broker = createCapabilityBroker(database, native, owner, queries, request=>streams?.close(request), resources, identityData, outbox,request=>outboxSubscriptions?.close(request), discovery !== undefined);
         }
         if (event.generation !== generation) return;
-        if (event.lane === 'configuration') {
+        if(event.lane==='legacy-image')void legacyImages?.dispatch(event.token);
+        else if(event.lane==='legacy-subscription')legacyStreams?.dispatch(event.token);
+        else if(event.lane==='legacy')legacyStreams?.dispatchClose(event.token);
+        else if(event.lane==='cvm'){
+          if(configuration.cvmProfile==='free-foreground-v1'&&configuration.domains.includes('cvm'))void cvm?.receive(event.token);
+        } else if (event.lane === 'published-open') {
+          void discovery?.broker.dispatch(event.token, {registration: {...configuration, generation}, assertActive}, discovery.source);
+        } else if (event.lane === 'configuration') {
           void config?.dispatch(event.token, {registration: {...configuration, generation}, assertActive});
         } else if (event.lane === 'presentation') {
           void notify?.dispatch(event.token, {registration: {...configuration, generation}, assertActive});
@@ -83,7 +107,7 @@ function capabilityReceiver(database: ShellDatabase, native: RuntimeNativePort,
         } else if (event.lane === 'upload') {
           if (configuration.domains.includes('upload')) uploads?.enqueue(event.token, {...configuration, generation});
         } else if (event.lane === 'approval') {
-          if (!configuration.domains.includes('relay')) return;
+          if (!configuration.domains.includes('relay') && !configuration.domains.includes('outbox')) return;
           approvals?.service.enqueue(event.token, approvals.destinations(), { ...configuration, generation });
         } else if(event.lane==='outbox-subscription')outboxSubscriptions?.dispatch(event.token);
         else if(event.lane==='subscription')streams?.dispatch(event.token);
@@ -95,37 +119,53 @@ function capabilityReceiver(database: ShellDatabase, native: RuntimeNativePort,
 /** The process-owned database and identity authority remain outside React/WebView props. */
 export function createRuntimeOwner(database: ShellDatabase,
   identity: Pick<IdentityTransition, 'getSnapshot' | 'sessionAuthority'>, native: RuntimeNativePort,
-  approvals?: Readonly<{ service: ApprovalService; destinations: () => readonly string[] }>,
-  published?: Omit<PublishedSessionDependencies, 'identity' | 'database' | 'newInstanceId'>, queries?: RelayQueryService, subscriptions?: ReturnType<typeof createRelaySubscriptions>, resources?: ResourceHost, uploads?: UploadService, identityData?: IdentityDataPort, routing?: Readonly<{broker: RoutingBroker; catalog: RoutingCatalog}>, notify?: NotifyBroker, config?: ConfigBroker, outbox?: OutboxReadService, outboxStreams?:ReturnType<typeof createOutboxSubscriptions>): RuntimeOwner {
+  approvals?: Readonly<{ service: ApprovalService; destinations: () => readonly string[]; closeReview?(sessionId: string): void }>,
+  published?: Omit<PublishedSessionDependencies, 'identity' | 'database' | 'newInstanceId'>, queries?: RelayQueryService, subscriptions?: ReturnType<typeof createRelaySubscriptions>, resources?: ResourceHost, uploads?: UploadService, identityData?: IdentityDataPort, routing?: Readonly<{broker: RoutingBroker; catalog: RoutingCatalog}>, notify?: NotifyBroker, config?: ConfigBroker, outbox?: OutboxReadService, outboxStreams?:ReturnType<typeof createOutboxSubscriptions>, discovery?: DiscoveryOpenBroker,cvm?:CvmService): RuntimeOwner {
   const coordinator = published ? createPublishedSessionCoordinator({
     ...published, identity, database, newInstanceId: () => native.newInstanceId(),
   }) : null;
   const prepared = new Map<string, PreparedPublishedSession>();
   const running = new Map<string, PublishedRuntimeBinding>();
-  const exactSession = (session: NappletDescriptor): void => {
+  const closeCapabilityReviews = (id: string) => {
+    approvals?.service.close(id); uploads?.close(id); cvm?.close(id); approvals?.closeReview?.(id);
+  };
+  const exactSession = (session: NappletDescriptor): NappletDescriptor => {
     const state = identity.getSnapshot().session.workspace.getSnapshot();
     const current = state.workspace.sessions.find(value => value.id === session.id);
-    if (state.error !== null || !current || current.source !== 'published' ||
-        current.publisher !== session.publisher || current.appId !== session.appId ||
-        current.version !== session.version || current.eventId !== session.eventId || current.title !== session.title) throw new ShellStorageError('REVOKED');
+    if (state.error !== null || !current || !samePublishedPin(current, session)) throw new ShellStorageError('REVOKED');
+    return current;
   };
   const bindingFor = (selected: NappletDescriptor, ready: PreparedPublishedSession): PublishedRuntimeBinding => {
     let revoked = false;
-    const host = JSON.parse(ready.hostInput) as { configuration: string };
+    let mounted: string | null = null;
+    // Keep only binding metadata and callbacks after staging, not the HTML buffer.
+    const {hostInput, assertActive: assertPreparedActive, revoke: revokePrepared} = ready;
+    const host = JSON.parse(hostInput) as { configuration: string };
     const configuration = JSON.parse(host.configuration) as Omit<NativeRegistration, 'generation'>;
+    const entry = discovery && isDiscoveryEntry(selected) ? { broker: discovery, source: selected } : undefined;
     const assertActive = () => {
       if (revoked) throw new ShellStorageError('REVOKED');
-      ready.assertActive();
+      assertPreparedActive();
       exactSession(selected);
     };
-    const receiver = capabilityReceiver(database, native, approvals, selected.id, configuration, assertActive, queries, subscriptions, resources, uploads, identityData, routing?.broker, notify, config, outbox, outboxStreams);
+    const receiver = capabilityReceiver(database, native, approvals, selected.id, configuration, assertActive, queries, subscriptions, resources, uploads, identityData, routing?.broker, notify, config, outbox, outboxStreams, entry, cvm);
     const binding: PublishedRuntimeBinding = Object.freeze({
-      publishedArtifact: ready.hostInput,
-      requestedDomains: ready.artifact.manifest.requiredDomains,
-      assertApproval(origin: ApprovalOrigin,domain?:'outbox'): void {
+      publishedArtifact: entry ? JSON.stringify({...host, configuration: JSON.stringify({...configuration, publishedOpen: true})}) : hostInput,
+      requestedDomains: Object.freeze({ requiredDomains: ready.artifact.manifest.requiredDomains,
+        optionalDomains: ready.artifact.manifest.optionalDomains }),
+      ready(generation: string) {
+        assertActive();
+        mounted = identifier(generation);
+      },
+      readyGeneration() {
+        assertActive();
+        return mounted;
+      },
+      assertApproval(origin: ApprovalOrigin,domain?:'outbox'|'common'): void {
         assertActive();
         receiver.assertGeneration(origin.generation);
-        if ((domain==='outbox'&&!configuration.domains.includes('outbox'))||!configuration.domains.includes('relay') ||
+        if (domain==='common'&&(configuration.commonProfile!=='social-v1'||!configuration.domains.includes('identity')||!configuration.domains.some(value=>value==='relay'||value==='outbox')))throw new ShellStorageError('REVOKED');
+        if (!configuration.domains.includes(domain ?? 'relay') ||
             origin.sessionId !== configuration.sessionId || origin.epoch !== configuration.epoch ||
             origin.user !== configuration.user || origin.publisher !== configuration.publisher ||
             origin.appId !== configuration.appId || origin.version !== configuration.version ||
@@ -139,7 +179,7 @@ export function createRuntimeOwner(database: ShellDatabase,
       },
       revoke(): void {
         if (revoked) return;
-        revoked = true; receiver.revoke(); ready.revoke(); approvals?.service.close(selected.id); uploads?.close(selected.id);
+        revoked = true; receiver.revoke(); revokePrepared(); closeCapabilityReviews(selected.id);
         if (running.get(selected.id) === binding) running.delete(selected.id);
       },
       receive: receiver.receive,
@@ -155,9 +195,30 @@ export function createRuntimeOwner(database: ShellDatabase,
       prepared.set(id, ready);
       return ready.descriptor;
     },
+    resolveDiscovered(link: string, expectedEventId: string, signal: AbortSignal, active: () => void) {
+      if (!coordinator) throw new ShellStorageError('REVOKED');
+      return coordinator.resolveExact(link, expectedEventId, signal, active);
+    },
+    async prepareDiscovered(artifact: VerifiedNappletArtifact, signal: AbortSignal, assertActive: () => void,
+      reviewLaunch: (changesAccess: boolean, legacyReadOnlyAvailable?: boolean) => Promise<boolean | 'legacy-read-only-v1'>, existing?: NappletDescriptor) {
+      if (!coordinator) throw new ShellStorageError('REVOKED');
+      const ready = await coordinator.prepareExact(artifact, { assertActive, reviewLaunch, ...(existing ? { existing } : {}) }, signal);
+      const id = ready.descriptor.id;
+      try {
+        assertActive();
+        if (existing) exactSession(existing);
+        if (prepared.has(id) || running.has(id)) throw new ShellStorageError('CONFLICT');
+        prepared.set(id, ready);
+        return ready.descriptor;
+      } catch (error) { ready.revoke(); throw error; }
+    },
+    publishedReadyGeneration(session: NappletDescriptor) {
+      exactSession(session);
+      return running.get(session.id)?.readyGeneration() ?? null;
+    },
     publishedCapabilities(session: NappletDescriptor) {
       exactSession(session);
-      return running.get(session.id)?.requestedDomains ?? prepared.get(session.id)?.artifact.manifest.requiredDomains ?? null;
+      return running.get(session.id)?.requestedDomains ?? prepared.get(session.id)?.artifact.manifest ?? null;
     },
     async preparePublishedUpdate(session: NappletDescriptor, signal: AbortSignal,
       reviewUpdate: (request: PublishedUpdateReview) => Promise<boolean>,
@@ -181,9 +242,7 @@ export function createRuntimeOwner(database: ShellDatabase,
       if (ready) prepared.delete(session.id);
       else ready = await coordinator.reopenPinned(session, signal, review);
       try {
-        if (ready.descriptor.id !== session.id || ready.descriptor.publisher !== session.publisher || ready.descriptor.appId !== session.appId ||
-            ready.descriptor.version !== session.version || ready.descriptor.eventId !== session.eventId ||
-            ready.descriptor.title !== session.title) throw new ShellStorageError('CONFLICT');
+        if (!samePublishedPin(ready.descriptor, session)) throw new ShellStorageError('CONFLICT');
         exactSession(session);
         ready.assertActive();
         if (routing) {
@@ -192,8 +251,15 @@ export function createRuntimeOwner(database: ShellDatabase,
           await routing.catalog.remember(catalogOwner, ready.artifact, {signal});
           await routing.broker.catalogChanged(catalogOwner, previous.handlers.flatMap(handler => handler.roles.map(role => role.archetype)));
         }
-        ready.assertActive(); exactSession(session);
+        ready.assertActive();
+        const current = exactSession(session);
         const binding = bindingFor(session, ready);
+        if (current.title !== ready.descriptor.title) {
+          const store = identity.getSnapshot().session.workspace;
+          const workspace = store.getSnapshot().workspace;
+          store.change({...workspace, sessions: workspace.sessions.map(value => value.id === session.id ? ready.descriptor : value)});
+          ready.assertActive(); exactSession(session);
+        }
         running.set(session.id, binding);
         return binding;
       } catch (error) { ready.revoke(); throw error; }
@@ -220,7 +286,7 @@ export function createRuntimeOwner(database: ShellDatabase,
       if (!binding) throw new ShellStorageError('REVOKED');
       binding.assertUpload(origin);
     },
-    assertPublishedApproval(origin: ApprovalOrigin,domain?:'outbox') {
+    assertPublishedApproval(origin: ApprovalOrigin,domain?:'outbox'|'common') {
       const binding = running.get(origin.sessionId);
       if (!binding) throw new ShellStorageError('REVOKED');
       binding.assertApproval(origin,domain);
@@ -246,9 +312,9 @@ export function createRuntimeOwner(database: ShellDatabase,
           current.version !== descriptor.version || current.source !== descriptor.source || current.title !== descriptor.title) throw new ShellStorageError('REVOKED');
     };
     assertActive();
-    const receiver = capabilityReceiver(database, native, approvals, descriptor.id, configuration, assertActive, queries, subscriptions, resources, uploads, identityData, routing?.broker, notify, config, outbox, outboxStreams);
+    const receiver = capabilityReceiver(database, native, approvals, descriptor.id, configuration, assertActive, queries, subscriptions, resources, uploads, identityData, routing?.broker, notify, config, outbox, outboxStreams, discovery && isDiscoveryEntry(descriptor) ? { broker: discovery, source: descriptor } : undefined);
     return Object.freeze({ configuration: JSON.stringify(configuration),
-      revoke(): void { revoked = true; receiver.revoke(); approvals?.service.close(descriptor.id); uploads?.close(descriptor.id); },
+      revoke(): void { revoked = true; receiver.revoke(); closeCapabilityReviews(descriptor.id); },
       receive: receiver.receive,
     });
   } });

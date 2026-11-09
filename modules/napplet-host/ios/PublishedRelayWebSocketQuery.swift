@@ -12,6 +12,11 @@ enum PublishedRelayWebSocketQuery {
   static let maxTextMessages = 64
   static let maxTextBytes = 2 * 1024 * 1024
 
+  enum ResponseProfile: Sendable {
+    case standard, outbox
+    var events: Int { self == .outbox ? 200 : PublishedRelayWebSocketQuery.maxEvents }
+    var frames: Int { self == .outbox ? 256 : PublishedRelayWebSocketQuery.maxTextMessages }
+  }
   enum TextKind: Equatable { case event, other, eose, invalid }
 
   /// Holds bounded complete text envelopes, including OTHER and EOSE, like Android's
@@ -21,13 +26,15 @@ enum PublishedRelayWebSocketQuery {
     private var bytes = 0
     private var eventCount = 0
     private var ended = false
+    private let profile: ResponseProfile
+    init(profile: ResponseProfile = .standard) { self.profile = profile }
 
     mutating func accept(_ values: [(String, TextKind)]) throws -> Bool {
-      guard values.count <= PublishedRelayWebSocketQuery.maxTextMessages - envelopes.count else { throw Failure.limit }
+      guard values.count <= profile.frames - envelopes.count else { throw Failure.limit }
       let newBytes = values.reduce(0) { $0 + Data($1.0.utf8).count }
       guard newBytes <= PublishedRelayWebSocketQuery.maxTextBytes - bytes else { throw Failure.limit }
       let newEvents = values.filter { $0.1 == .event }.count
-      guard newEvents <= PublishedRelayWebSocketQuery.maxEvents - eventCount,
+      guard newEvents <= profile.events - eventCount,
             !values.contains(where: { $0.1 == .invalid }) else { throw Failure.limit }
       var sawEOSE = false
       for (_, kind) in values {
@@ -91,13 +98,15 @@ enum PublishedRelayWebSocketQuery {
     let send: @Sendable (@Sendable () -> Void) throws -> Void
   }
   static func query(_ url: String, subscription: String,
-                    publication: PublicationControl? = nil,
+                    publication: PublicationControl? = nil, profile: ResponseProfile = .standard, timeoutMs: Int = 10_000,
+                    readAuthorized: @escaping @Sendable () -> Bool = { true },
                     classifyText: @escaping @Sendable (String) throws -> TextKind,
                     completion: @escaping @Sendable (Result<[String], Error>) -> Void) throws -> Operation {
     let request = try Request(url)
-    guard Data(subscription.utf8).count <= PublishedRelayWebSocketClientFrames.maxTextBytes,
+    guard (1...10_000).contains(timeoutMs), Data(subscription.utf8).count <= PublishedRelayWebSocketClientFrames.maxTextBytes,
           String(data: Data(subscription.utf8), encoding: .utf8) == subscription else { throw Failure.invalidURL }
-    let operation = Operation(request: request, subscription: subscription, classifyText: classifyText, completion: completion)
+    let operation = Operation(request: request, subscription: subscription, classifyText: classifyText, completion: completion,
+      profile: profile, timeoutMs: timeoutMs, readAuthorized: readAuthorized)
     operation.publication = publication
     operation.start()
     return operation
@@ -120,15 +129,15 @@ enum PublishedRelayWebSocketQuery {
   /// Host-only proof seam. The production query cannot choose addresses or trust anchors.
   static func queryForProof(_ url: String, subscription: String,
                             addresses: [PublishedPinnedHTTPS.Address], anchorDER: Data?,
-                            publication: PublicationControl? = nil,
+                            publication: PublicationControl? = nil, timeoutMs: Int = 10_000,
                             classifyText: @escaping @Sendable (String) throws -> TextKind,
                             completion: @escaping @Sendable (Result<[String], Error>) -> Void) throws -> Operation {
     let request = try Request(url)
-    guard Data(subscription.utf8).count <= PublishedRelayWebSocketClientFrames.maxTextBytes,
+    guard (1...10_000).contains(timeoutMs), Data(subscription.utf8).count <= PublishedRelayWebSocketClientFrames.maxTextBytes,
           String(data: Data(subscription.utf8), encoding: .utf8) == subscription,
           !addresses.isEmpty else { throw Failure.invalidURL }
     let operation = Operation(request: request, subscription: subscription,
-                              classifyText: classifyText, completion: completion)
+                              classifyText: classifyText, completion: completion, timeoutMs: timeoutMs)
     operation.proofAddresses = addresses
     operation.proofAnchorDER = anchorDER
     operation.publication = publication
@@ -159,7 +168,9 @@ enum PublishedRelayWebSocketQuery {
     private var nonce = Data()
     private var handshake = HandshakeAccumulator()
     private var total = 0
-    private var collector = TextCollector()
+    private var collector: TextCollector
+    private let readAuthorized: @Sendable () -> Bool
+    private let timeoutMs: Int
     private var ended = false
     fileprivate var publication: PublicationControl?
     fileprivate var streamDelivery: StreamDelivery?
@@ -177,13 +188,17 @@ enum PublishedRelayWebSocketQuery {
 
     fileprivate init(request: Request, subscription: String,
                      classifyText: @escaping @Sendable (String) throws -> TextKind,
-                     completion: @escaping @Sendable (Result<[String], Error>) -> Void) {
+                     completion: @escaping @Sendable (Result<[String], Error>) -> Void,
+                     profile: ResponseProfile = .standard, timeoutMs: Int = 10_000, readAuthorized: @escaping @Sendable () -> Bool = { true }) {
       self.request = request; self.subscription = subscription; self.classifyText = classifyText; self.completion = completion
+      self.collector = TextCollector(profile: profile)
+      self.timeoutMs = timeoutMs
+      self.readAuthorized = readAuthorized
     }
 
     fileprivate func start() {
-      guard publication?.mayContinue() != false else { finish(.failure(Failure.cancelled)); return }
-      queue.asyncAfter(deadline: .now() + 10) { if self.streamDelivery == nil || !self.streamEOSE { self.finish(.failure(Failure.timeout)) } }
+      guard readAuthorized(), publication?.mayContinue() != false else { finish(.failure(Failure.cancelled)); return }
+      queue.asyncAfter(deadline: .now() + .milliseconds(timeoutMs)) { if self.streamDelivery == nil || !self.streamEOSE { self.finish(.failure(Failure.timeout)) } }
 #if HYPERGOLIC_NETWORK_PROOF
       if let proofAddresses {
         queue.async {
@@ -211,7 +226,7 @@ enum PublishedRelayWebSocketQuery {
     func cancel() { cancellation.cancel(); queue.async { self.finish(.failure(Failure.cancelled)) } }
 
     private func connectNext() {
-      guard publication?.mayContinue() != false else { finish(.failure(Failure.cancelled)); return }
+      guard readAuthorized(), publication?.mayContinue() != false else { finish(.failure(Failure.cancelled)); return }
       guard let address = addresses?.next() else { finish(.failure(Failure.connection)); return }
       connection?.stateUpdateHandler = nil
       connection?.cancel()
@@ -290,6 +305,7 @@ enum PublishedRelayWebSocketQuery {
                 else { self.consumeFrames(parts.prefetchedFrames) }
               })
             }
+            guard self.readAuthorized() else { self.finish(.failure(Failure.cancelled)); return }
             if let publication = self.publication { try publication.send(emit) } else { emit() }
           } catch { self.finish(.failure(error)) }
         } else { self.receiveHandshake() }
@@ -316,6 +332,7 @@ enum PublishedRelayWebSocketQuery {
 
     private func consumeFrames(_ data: Data) {
       guard !ended, let connection else { return }
+      guard readAuthorized() else { finish(.failure(Failure.cancelled)); return }
       let events = frames.feed(data)
       if events.contains(where: { if case .error = $0 { return true }; return false }) {
         finish(.failure(Failure.frame)); return

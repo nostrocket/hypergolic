@@ -1,17 +1,31 @@
 import { emptyWorkspace, focusNapplet, openNapplet, type NappletDescriptor, type Workspace } from './workspace.ts';
 import { BUNDLED_FIXTURES, type BundledFixture } from '../runtime/bundled-catalog.ts';
+import { snapshotEventId } from '../napplets/published-identity.ts';
 
 export type BundledVariant = Exclude<BundledFixture, 'approval-lab-v1' | 'approval-lab-v2' | 'approval-lab-v3' | 'feed-lab-v1'> | 'state-lab-other-publisher';
-const variants: readonly BundledVariant[] = ['close-lab', 'nap-support', 'routing-lab-peer', 'routing-lab', 'upload-lab', 'state-lab-other-publisher', 'resource-lab', 'feed-lab', 'approval-lab', 'state-lab-peer', 'state-lab', 'ux-lab'];
+const variants: readonly BundledVariant[] = ['napplet-discovery', 'close-lab', 'nap-support', 'routing-lab-peer', 'routing-lab', 'upload-lab', 'state-lab-other-publisher', 'resource-lab', 'feed-lab', 'approval-lab', 'state-lab-peer', 'state-lab', 'ux-lab'];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-// Exact previous stateless Support fixture, with the same link/theme authority.
-// Retained descriptors load current hash-verified packaged bytes; no remote pin is relaxed.
+// Retained bundled descriptors can load reviewed packaged replacements with the same authority.
 const previousSupportVersion = 'd580bdedb19857d66a4b5f2928016c3f756960f42e56f7d98f8fb98df90f1653';
+const previousDiscoveryVersions = [
+  '1360132bc9b4ea9a29ce5d4783ce04b862d776fbc214d2083186fb228267d7ed',
+  '6eb956ead5bc710d70c3511715bf1dab281314d4979ff4bd99d9d1785176655c',
+  'ec8f1cb8dddca04865f59105f86e6b9741e4e2d6c1f3cab586bcaf48645fae0a',
+  '54f25dd032cb8916b526f0a55888fdfd0fc9e685d622a112cd760424dc32c6ce',
+  '388c5b99b75a8f9e8ee228eca5d81b3a0d96597a41710bbb69eea315b8a347fa',
+  'f07c32a2bf46d5c84b403356f4183bfe0e310148d1585cc9a7fc1b9639a6cfd6',
+] as const;
+
+function compatiblePackagedVersion(variant: BundledVariant, version: string): boolean {
+  if (variant === 'nap-support') return version === previousSupportVersion;
+  return variant === 'napplet-discovery' && previousDiscoveryVersions.some(previous => previous === version) &&
+    BUNDLED_FIXTURES['napplet-discovery'].domains.join(',') === 'relay,resource,theme';
+}
 export function bundledDescriptor(variant: BundledVariant, number: number, instance = String(number)): NappletDescriptor {
   const fixture = variant === 'state-lab-other-publisher' ? 'state-lab' : variant;
   const entry = BUNDLED_FIXTURES[fixture];
   const alternate = variant === 'state-lab-other-publisher';
-  return { id: `${variant}-${instance}`, title: `${alternate ? 'State Lab Other Publisher' : entry.title} ${number}`,
+  return { id: `${variant}-${instance}`, title: fixture === 'napplet-discovery' ? entry.title : `${alternate ? 'State Lab Other Publisher' : entry.title} ${number}`,
     publisher: alternate ? 'bundled-unsigned-peer' : 'bundled-unsigned-fixture', appId: entry.appId,
     // Preserve already-saved UX Lab descriptors; privileged namespaces use the aggregate below.
     version: fixture === 'ux-lab' ? entry.sha256 : entry.aggregateHash, source: 'bundled' };
@@ -24,20 +38,19 @@ export function initialTestWorkspace(): Workspace {
 export function resolveBundledSession(session: NappletDescriptor) {
   if (session.eventId !== undefined) throw new Error('Unavailable saved napplet');
   const variant = variants.find(value => session.id.startsWith(value + '-'));
-  const number = Number(session.title.match(/ ([1-9][0-9]*)$/)?.[1]);
+  const number = variant === 'napplet-discovery' ? 1 : Number(session.title.match(/ ([1-9][0-9]*)$/)?.[1]);
   if (!variant || !Number.isSafeInteger(number)) throw new Error('Unavailable saved napplet');
   const instance = session.id.slice(variant.length + 1);
   if (instance !== String(number) && !uuid.test(instance)) throw new Error('Unavailable saved napplet');
   if (variant === 'ux-lab' && instance !== String(number)) throw new Error('Unavailable saved napplet');
   const expected = bundledDescriptor(variant, number, instance);
-  const compatibleSupport = variant === 'nap-support' && session.version === previousSupportVersion;
   const archivedFixture = variant === 'approval-lab'
     ? (['approval-lab-v1', 'approval-lab-v2', 'approval-lab-v3'] as const).find(key => session.version === BUNDLED_FIXTURES[key].aggregateHash)
     : variant === 'feed-lab' && session.version === BUNDLED_FIXTURES['feed-lab-v1'].aggregateHash
       ? 'feed-lab-v1' : undefined;
   if (session.title !== expected.title || session.publisher !== expected.publisher || session.appId !== expected.appId ||
-      (session.version !== expected.version && !compatibleSupport && !archivedFixture) || session.source !== expected.source) throw new Error('Unavailable saved napplet');
-  // Select the exact retained bytes rather than silently upgrading a saved pin.
+      (session.version !== expected.version && !archivedFixture && !compatiblePackagedVersion(variant, session.version)) || session.source !== expected.source) throw new Error('Unavailable saved napplet');
+  // Archived labs keep their exact bytes. Compatible bundled descriptors use the packaged replacement.
   const fixture = archivedFixture ?? (variant === 'state-lab-other-publisher' ? 'state-lab' : variant);
   const entry = BUNDLED_FIXTURES[fixture];
   return Object.freeze({ fixture, appId: entry.appId, version: entry.aggregateHash, domains: entry.domains,
@@ -53,8 +66,10 @@ const HEX64 = /^[0-9a-f]{64}$/;
 const validAppId = (value: string): boolean => value.length > 0 && value.trim() === value &&
   !/[\u0000-\u001f\u007f]/.test(value) && new TextEncoder().encode(value).byteLength <= 255;
 function assertPublishedSession(session: NappletDescriptor): void {
+  const snapshotId = snapshotEventId(session.appId);
+  const validPin = snapshotId === null ? validAppId(session.appId) : snapshotId === session.eventId;
   if (session.source !== 'published' || !uuid.test(session.id) || !HEX64.test(session.publisher) || !HEX64.test(session.version) ||
-      !HEX64.test(session.eventId ?? '') || !validAppId(session.appId) || session.title.length === 0 ||
+      !HEX64.test(session.eventId ?? '') || !validPin || session.title.length === 0 ||
       new TextEncoder().encode(session.title).byteLength > 128) throw new Error('Unavailable saved napplet');
 }
 

@@ -1,4 +1,5 @@
-import {artifact} from './fixtures.ts';
+import {artifact, modernHandler,snapshotHandler} from './fixtures.ts';
+import {namedIntentId} from '../../src/routing/routing-contract.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {setup, tick, reviewReady, user} from './harness.ts';
@@ -84,4 +85,105 @@ test('catalog changes reach only live same-identity intent recipients, including
  await h.broker.catalogChanged({user,assertActive(){}},['note']);assert.equal(h.sent.length,1);assert.equal(h.sent[0]!.generation,h.source.generation);assert.equal(h.sent[0]!.message.type,'intent.changed');
  await h.catalog.remove({user,assertActive(){}},{publisher:h.a.manifest.pubkey,appId:'notes'});await h.broker.catalogChanged({user,assertActive(){}},['note']);assert.deepEqual(h.sent[1]!.message.availability,{archetype:'note',available:false,candidates:[],hasDefault:false});
  h.lifecycle({user:'05'.repeat(32),epoch:1});await assert.rejects(h.broker.catalogChanged({user,assertActive(){}},['note']));assert.equal(h.sent.length,2);
+});
+
+test('modern verified handlers receive only reviewed Intent deliveries with an attested sender', async t => {
+  const h = await setup(t, await modernHandler(), ['intent']);
+  await h.register(h.target);
+  const role = 'napptest', convention = 'napplet:napptest/open';
+  const id = namedIntentId(h.target.publisher, h.target.appId);
+  const available = h.dispatch(h.source, {type: 'intent.available', id: 'available-modern', archetype: role});
+  await available.promise;
+  assert.deepEqual(available.reply().availability.candidates[0], {
+    id, dTag: h.target.appId, title: h.target.appId, actions: ['open'], conventions: [convention],
+    contracts: [{convention, params: ['msg']}], isDefault: false,
+  });
+  const invoke = () => h.dispatch(h.source, {type: 'intent.invoke', id: 'invoke-modern', request: {
+    archetype: role, action: 'open', convention, handler: id, payload: {msg: 'hello+world'},
+  }});
+  const denied = invoke(), denial = await reviewReady(h.reviews);
+  h.reviews.decide(denial.id, {allow: false}); await denied.promise;
+  assert.equal(denied.reply().result.error, 'user cancelled');
+  assert.deepEqual(h.activated, []); assert.deepEqual(h.sent, []);
+  const allowed = invoke(), approval = await reviewReady(h.reviews);
+  assert.equal(approval.request.kind, 'intent');
+  assert.deepEqual(h.sent, []);
+  h.reviews.decide(approval.id, {allow: true}); await allowed.promise;
+  assert.equal(allowed.reply().result.handler, id);
+  assert.deepEqual(h.sent, [{generation: h.target.generation, message: {type: 'intent.deliver', delivery: {
+    sender: namedIntentId(h.source.publisher, h.source.appId), archetype: role, action: 'open', convention,
+    payload: {msg: 'hello+world'},
+  }}}]);
+});
+
+test('modern Intent advertisements cannot grant a recipient domain or allow a forged push', async t => {
+  const h = await setup(t, await modernHandler(), ['inc']);
+  await h.register(h.target);
+  const convention = 'napplet:napptest/open';
+  const invoke = (request: Record<string, unknown>) => h.dispatch(h.source, {type: 'intent.invoke', id: 'invalid-modern',
+    request: {archetype: 'napptest', action: 'open', convention, ...request}});
+  for (const request of [{convention: 'napplet:note/open'}, {handler: h.target.appId}]) {
+    const rejected = invoke(request); await rejected.promise;
+    assert.equal(rejected.reply().result.ok, false); assert.equal(h.reviews.getSnapshot(), null);
+  }
+  const forged = h.dispatch(h.source, {type: 'intent.deliver', delivery: {sender: 'forged', convention}});
+  await forged.promise; assert.equal(forged.reply(), undefined);
+  const request = invoke({}), approval = await reviewReady(h.reviews);
+  h.reviews.decide(approval.id, {allow: true}); await request.promise;
+  assert.equal(request.reply().result.ok, false);
+  assert.deepEqual(h.sent, []);
+});
+
+test('same-HTML snapshots use independent opaque IDs and approved dispatch selects the exact pin',async t=>{
+  const selected=await snapshotHandler(), other=await snapshotHandler(['intent'],1_800_000_001), named=await modernHandler();
+  const h=await setup(t,selected,['intent','inc']);
+  assert.equal(selected.aggregateHash,other.aggregateHash);
+  assert.equal(selected.aggregateHash,named.aggregateHash);
+  const owner={user,assertActive(){}}, id=` snapshot:${selected.manifest.id}`, convention='napplet:napptest/open';
+  await h.catalog.remember(owner,other);
+  await h.catalog.remember(owner,named);
+  await h.catalog.remember(owner,await snapshotHandler(['inc'],1_800_000_002));
+  const lookalike = `5129:${selected.manifest.id}`;
+  await h.catalog.remember(owner,await artifact(9,lookalike,'napptest',1_800_000_000,[convention]));
+  await h.register(h.target);
+  const available=h.dispatch(h.source,{type:'intent.available',id:'available-snapshots',archetype:'napptest'});await available.promise;
+  const candidates=available.reply().availability.candidates;
+  assert.equal(candidates.length,4);
+  assert.ok(candidates.some((row:{dTag?:string})=>row.dTag===lookalike));
+  assert.deepEqual(candidates.find((row:{id:string})=>row.id===id),{id,title:'Snapshot handler',actions:['open'],
+    conventions:[convention],contracts:[{convention,params:['msg']}],isDefault:false});
+  const run=h.dispatch(h.source,{type:'intent.invoke',id:'exact-snapshot',request:{archetype:'napptest',convention,handler:id,payload:{msg:'exact'}}});
+  const review=await reviewReady(h.reviews);
+  assert.equal(review.request.kind,'intent');
+  if(review.request.kind!=='intent')throw Error('Wrong review');
+  assert.equal(review.request.selected?.eventId,selected.manifest.id);
+  h.reviews.decide(review.id,{allow:true,remember:true});await run.promise;
+  assert.equal(run.reply().result.handler,id);
+  assert.deepEqual(h.sent.at(-1),{generation:h.target.generation,message:{type:'intent.deliver',
+    delivery:{sender:namedIntentId(h.source.publisher,h.source.appId),archetype:'napptest',action:'open',convention,payload:{msg:'exact'}}}});
+  assert.equal((await h.catalog.list(owner)).defaults[0]?.appId,h.target.appId);
+  await h.catalog.remove(owner,{publisher:h.target.publisher,appId:h.target.appId});
+  const removed=h.dispatch(h.source,{type:'intent.invoke',id:'missing-snapshot',request:{archetype:'napptest',convention,handler:id}});
+  await removed.promise;
+  assert.equal(removed.reply().result.error,'no handler');
+  assert.equal(h.reviews.getSnapshot(),null);
+  assert.equal(h.activated.length,1);
+});
+
+test('native Intent pressure and unavailable unfocused handlers produce explicit unsuccessful results', async t => {
+  const h = await setup(t, await modernHandler(), ['intent']);
+  await h.register(h.target); h.denyPush(true);
+  const invoke = () => h.dispatch(h.source, {type: 'intent.invoke', id: 'capacity', request: {
+    archetype: 'napptest', action: 'open', convention: 'napplet:napptest/open', behavior: {focus: false},
+  }});
+  const full = invoke();
+  h.reviews.decide((await reviewReady(h.reviews)).id, {allow: true}); await full.promise;
+  assert.equal(full.reply().result.ok, false);
+  assert.equal(full.reply().result.error, 'handler delivery unavailable');
+  h.rejectActivation();
+  const cold = invoke();
+  h.reviews.decide((await reviewReady(h.reviews)).id, {allow: true}); await cold.promise;
+  assert.equal(cold.reply().result.ok, false);
+  assert.equal(cold.reply().result.error, 'handler requires focus');
+  assert.deepEqual(h.sent, []);
 });

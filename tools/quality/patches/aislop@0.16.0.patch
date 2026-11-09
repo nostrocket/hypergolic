@@ -1,0 +1,69 @@
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -3344,9 +3344,9 @@
+ 	if (trimmed.startsWith("#")) return trimmed.slice(1).trim();
+ 	return trimmed;
+ };
+-const isTrivialComment = (trimmed, nextLine) => {
++const isTrivialComment = (trimmed, nextLine, ext) => {
+ 	const isJs = isJsComment(trimmed);
+-	const isPy = isPythonComment(trimmed);
++	const isPy = isPythonComment(trimmed) && ![".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx", ".m", ".mm"].includes(ext);
+ 	if (!isJs && !isPy) return false;
+ 	const commentBody = getCommentBody(trimmed);
+ 	if (commentBody.length > MAX_TRIVIAL_COMMENT_LENGTH) return false;
+@@ -3401,7 +3401,7 @@
+ 	for (let i = 0; i < lines.length; i++) {
+ 		const trimmed = lines[i].trim();
+ 		const nextLine = i + 1 < lines.length ? lines[i + 1] : void 0;
+-		if (!isTrivialComment(trimmed, nextLine)) continue;
++		if (!isTrivialComment(trimmed, nextLine, ext)) continue;
+ 		if (isInMultiLineCommentRun(lines, i)) continue;
+ 		if (isDocCommentForDeclaration(lines, i, ext)) continue;
+ 		if (isToolingConfigFile(relativePath) && isLikelyConfigSectionLabel(trimmed, nextLine)) continue;
+--- a/dist/cli.js
++++ b/dist/cli.js
+@@ -7641,9 +7641,9 @@
+ 	if (trimmed.startsWith("#")) return trimmed.slice(1).trim();
+ 	return trimmed;
+ };
+-const isTrivialComment = (trimmed, nextLine) => {
++const isTrivialComment = (trimmed, nextLine, ext) => {
+ 	const isJs = isJsComment(trimmed);
+-	const isPy = isPythonComment(trimmed);
++	const isPy = isPythonComment(trimmed) && ![".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx", ".m", ".mm"].includes(ext);
+ 	if (!isJs && !isPy) return false;
+ 	const commentBody = getCommentBody(trimmed);
+ 	if (commentBody.length > MAX_TRIVIAL_COMMENT_LENGTH) return false;
+@@ -7698,7 +7698,7 @@
+ 	for (let i = 0; i < lines.length; i++) {
+ 		const trimmed = lines[i].trim();
+ 		const nextLine = i + 1 < lines.length ? lines[i + 1] : void 0;
+-		if (!isTrivialComment(trimmed, nextLine)) continue;
++		if (!isTrivialComment(trimmed, nextLine, ext)) continue;
+ 		if (isInMultiLineCommentRun(lines, i)) continue;
+ 		if (isDocCommentForDeclaration(lines, i, ext)) continue;
+ 		if (isToolingConfigFile(relativePath) && isLikelyConfigSectionLabel(trimmed, nextLine)) continue;
+--- a/dist/mcp.js
++++ b/dist/mcp.js
+@@ -1815,9 +1815,9 @@
+ 	if (trimmed.startsWith("#")) return trimmed.slice(1).trim();
+ 	return trimmed;
+ };
+-const isTrivialComment = (trimmed, nextLine) => {
++const isTrivialComment = (trimmed, nextLine, ext) => {
+ 	const isJs = isJsComment(trimmed);
+-	const isPy = isPythonComment(trimmed);
++	const isPy = isPythonComment(trimmed) && ![".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx", ".m", ".mm"].includes(ext);
+ 	if (!isJs && !isPy) return false;
+ 	const commentBody = getCommentBody(trimmed);
+ 	if (commentBody.length > MAX_TRIVIAL_COMMENT_LENGTH) return false;
+@@ -1872,7 +1872,7 @@
+ 	for (let i = 0; i < lines.length; i++) {
+ 		const trimmed = lines[i].trim();
+ 		const nextLine = i + 1 < lines.length ? lines[i + 1] : void 0;
+-		if (!isTrivialComment(trimmed, nextLine)) continue;
++		if (!isTrivialComment(trimmed, nextLine, ext)) continue;
+ 		if (isInMultiLineCommentRun(lines, i)) continue;
+ 		if (isDocCommentForDeclaration(lines, i, ext)) continue;
+ 		if (isToolingConfigFile(relativePath) && isLikelyConfigSectionLabel(trimmed, nextLine)) continue;

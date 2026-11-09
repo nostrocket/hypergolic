@@ -13,3 +13,4 @@ await build({
 });
 await writeFile(new URL('.test-fixtures/capabilities/index.html', root),
   `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; frame-src 'self' about:; connect-src 'none'"></head><body><script src="./host.js"></script></body></html>`);
+await import('./build-mesh-native-fixture.mjs');

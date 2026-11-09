@@ -66,7 +66,7 @@ async function openFixture(): Promise<TrustedIdentityOwner> {
   runtime = createRuntimeOwner(database, transition, loadNativeCapabilityPort(), {service: approvals, destinations: () => []},
     {sqlite: SQLite, native: loadNativePublishedTransferPort(), lookupRelays: () => ['wss://relay.example.org'],
       source: {query: async coordinate => {
-        if (coordinate.pubkey !== SIGNED_UPLOAD_EVENT.pubkey || coordinate.identifier !== 'signed-upload-lab') throw Error('Unknown local artifact');
+        if (coordinate.kind !== 35129 || coordinate.pubkey !== SIGNED_UPLOAD_EVENT.pubkey || coordinate.identifier !== 'signed-upload-lab') throw Error('Unknown local artifact');
         return [SIGNED_UPLOAD_EVENT];
       }, readHtml: async expectedHash => {
         if (expectedHash !== SIGNED_UPLOAD_EVENT.tags.find(tag => tag[0] === 'path')?.[2]) throw Error('Unknown local bytes');

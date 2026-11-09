@@ -3,26 +3,35 @@ import { publicKey, utf8Bytes } from '../storage/codec.ts';
 import { configure } from '../storage/schema.ts';
 import { fail, type RequestOptions, type SQLiteModule, type TrustedUser } from '../storage/ports.ts';
 import { assertVerifiedArtifact, MAX_MANIFEST_BYTES, verifyManifest, type VerifiedNappletArtifact, type VerifiedNappletManifest } from '../napplets/verified-artifact.ts';
-import { routingRole, routingText, stableConvention } from './routing-contract.ts';
+import { routingRole, routingText, stableConvention, type IntentContract } from './routing-contract.ts';
+import {isPublishedEventId,matchesPublishedAppKey,snapshotEventId} from '../napplets/published-identity.ts';
+import {verifiedPublicationIdentity} from '../napplets/verified-publication-identity.ts';
 
-export const ROUTING_DATABASE = 'hypergolic-routing-v1.db';
+const NAMED_ROUTING_DATABASE = 'hypergolic-routing-v1.db';
+export const ROUTING_DATABASE = 'hypergolic-routing-v2.db';
 export const CATALOG_LIMITS = Object.freeze({ perIdentity: 64, total: 256, bytes: 4 * 1024 * 1024 });
 const CATALOG = 'CREATE TABLE routing_catalog (user TEXT NOT NULL, publisher TEXT NOT NULL, app_id TEXT NOT NULL, event_id TEXT NOT NULL, signed_event TEXT NOT NULL CHECK (length(CAST(signed_event AS BLOB)) <= 65536), PRIMARY KEY (user, publisher, app_id)) WITHOUT ROWID';
 const DEFAULTS = 'CREATE TABLE routing_defaults (user TEXT NOT NULL, archetype TEXT NOT NULL, publisher TEXT NOT NULL, app_id TEXT NOT NULL, PRIMARY KEY (user, archetype), FOREIGN KEY (user, publisher, app_id) REFERENCES routing_catalog (user, publisher, app_id) ON DELETE CASCADE) WITHOUT ROWID';
-export type HandlerRole = Readonly<{ archetype: string; conventions: readonly string[] }>;
+export type HandlerRole = Readonly<{ archetype: string; conventions: readonly string[]; contracts?: readonly IntentContract[] }>;
 export type CatalogHandler = Readonly<{ publisher: string; appId: string; eventId: string; version: string; title: string; roles: readonly HandlerRole[]; manifest: VerifiedNappletManifest }>;
 export type HandlerPreference = Readonly<{ archetype: string; publisher: string; appId: string }>;
 export type CatalogSnapshot = Readonly<{ handlers: readonly CatalogHandler[]; defaults: readonly HandlerPreference[] }>;
+type HandlerKey = Readonly<{ publisher: string; appId: string }>;
+export type ReviewedDefaultImport = Readonly<{
+  archetype: string;
+  current: HandlerKey | null;
+  target: Readonly<HandlerKey & { eventId: string; version: string }> | null;
+}>;
 export interface RoutingCatalog {
   remember(owner: TrustedUser, artifact: VerifiedNappletArtifact, options?: RequestOptions): Promise<void>;
   list(owner: TrustedUser, options?: RequestOptions): Promise<CatalogSnapshot>;
+  inspect(owner: TrustedUser, options?: RequestOptions): Promise<CatalogSnapshot>;
   prefer(owner: TrustedUser, archetype: string, handler: Readonly<{ publisher: string; appId: string }> | null, options?: RequestOptions): Promise<void>;
+  importDefault(owner: TrustedUser, reviewed: ReviewedDefaultImport, options?: RequestOptions): Promise<void>;
   remove(owner: TrustedUser, handler: Readonly<{ publisher: string; appId: string }>, options?: RequestOptions): Promise<void>;
   close(): Promise<void>;
 }
-/** Role metadata is taken only from a verified manifest, never from a guest request. */
-function handlerFrom(manifest: VerifiedNappletManifest): CatalogHandler {
-  const appId = routingText(manifest.tags.find(tag => tag[0] === 'd')?.[1], 255);
+function legacyRoles(manifest: VerifiedNappletManifest): readonly HandlerRole[] {
   const roles = new Map<string, Set<string>>();
   for (const tag of manifest.tags) {
     if (tag[0] !== 'archetype') continue;
@@ -33,16 +42,61 @@ function handlerFrom(manifest: VerifiedNappletManifest): CatalogHandler {
     roles.set(archetype, conventions);
     if (roles.size > 16 || conventions.size > 16) return fail('QUOTA_EXCEEDED');
   }
+  return Object.freeze([...roles].map(([archetype, conventions]) => Object.freeze({ archetype, conventions: Object.freeze([...conventions]) })));
+}
+
+function modernRoles(manifest: VerifiedNappletManifest): readonly HandlerRole[] {
+  if (!manifest.requiredDomains.includes('intent') && !manifest.optionalDomains.includes('intent')) return [];
+  const roles = new Map<string, Map<string, IntentContract | null>>();
+  for (const tag of manifest.tags) {
+    if (tag[0] !== 'z' || tag.length !== 2) continue;
+    try {
+      const role = routingRole(tag[1]);
+      if (roles.size < 16 && !roles.has(role)) roles.set(role, new Map());
+    } catch { /* Unusable advertisements do not invalidate the manifest. */ }
+  }
+  for (const tag of manifest.tags) {
+    if (tag[0] !== 'i' || tag.length < 2 || tag.length > 18) continue;
+    try {
+      const convention = stableConvention(tag[1]);
+      const separator = convention.indexOf('/');
+      const contracts = roles.get(convention.slice('napplet:'.length, separator));
+      if (!contracts) continue;
+      routingRole(convention.slice(separator + 1));
+      const params = Object.freeze(tag.slice(2).map(param => routingText(param, 128)));
+      const existing = contracts.get(convention);
+      if (existing === undefined && contracts.size < 16) contracts.set(convention, Object.freeze({convention, params}));
+      else if (existing && JSON.stringify(existing.params) !== JSON.stringify(params)) contracts.set(convention, null);
+    } catch { /* Unusable advertisements do not invalidate the manifest. */ }
+  }
+  const result: HandlerRole[] = [];
+  for (const [archetype, byConvention] of roles) {
+    const contracts = Object.freeze([...byConvention.values()].filter(contract => contract !== null));
+    if (contracts.length) result.push(Object.freeze({archetype, contracts, conventions: Object.freeze(contracts.map(contract => contract.convention))}));
+  }
+  return Object.freeze(result);
+}
+
+/** Role metadata is taken only from a verified manifest, never from a guest request. */
+function handlerFrom(manifest: VerifiedNappletManifest): CatalogHandler {
+  const publication = verifiedPublicationIdentity(manifest);
+  const appId = routingText(publication.appId, 255);
+  const roles = manifest.format === 'nip-5d' ? modernRoles(manifest) : legacyRoles(manifest);
+  const title = publication.kind === 5129 ? publication.title : catalogNamedTitle(appId);
+  return Object.freeze({ publisher: manifest.pubkey, appId, eventId: manifest.eventId, version: manifest.versionId, title,
+    roles, manifest });
+}
+function catalogNamedTitle(appId: string): string {
   let title = '';
   for (const character of appId) {
     if (utf8Bytes(title + character) > 128) break;
     title += character;
   }
-  return Object.freeze({ publisher: manifest.pubkey, appId, eventId: manifest.eventId, version: manifest.versionId, title,
-    roles: Object.freeze([...roles].map(([archetype, conventions]) => Object.freeze({ archetype, conventions: Object.freeze([...conventions]) }))), manifest });
+  return title;
 }
 const signedEvent = (manifest: VerifiedNappletManifest) => JSON.stringify({ id: manifest.id, pubkey: manifest.pubkey, created_at: manifest.created_at, kind: manifest.kind, tags: manifest.tags, content: manifest.content, sig: manifest.sig });
 type Row = { publisher: string; app_id: string; event_id: string; signed_event: string };
+type DefaultRow = {archetype:string;publisher:string;app_id:string};
 const count = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 function identity(owner: TrustedUser): Readonly<{ user: string; active(): void }> {
   const user = publicKey(owner.user), assertActive = owner.assertActive;
@@ -51,6 +105,22 @@ function identity(owner: TrustedUser): Readonly<{ user: string; active(): void }
 }
 function key(value: Readonly<{ publisher: string; appId: string }>) {
   return { publisher: publicKey(value.publisher), appId: routingText(value.appId, 255) };
+}
+async function readDefault(io: Access, user: string, archetype: string): Promise<HandlerKey | null> {
+  // The left join returns a row even for an unset default. An omitted read cannot pass as absence.
+  const rows = await io.all<{ publisher: string | null; app_id: string | null }>(
+    'SELECT publisher, app_id FROM (SELECT 1) LEFT JOIN routing_defaults ON user = ? AND archetype = ?', user, archetype);
+  const row = rows[0];
+  if (rows.length !== 1 || !row) return fail('STORAGE_FAILURE');
+  if (row.publisher === null && row.app_id === null) return null;
+  if (typeof row.publisher !== 'string' || typeof row.app_id !== 'string') return fail('CORRUPT_STORAGE');
+  return {publisher: row.publisher, appId: row.app_id};
+}
+
+async function writeDefault(io: Access, user: string, archetype: string, selected: HandlerKey): Promise<void> {
+  if (await io.run('INSERT INTO routing_defaults (user, archetype, publisher, app_id) VALUES (?, ?, ?, ?) ON CONFLICT(user, archetype) DO UPDATE SET publisher = excluded.publisher, app_id = excluded.app_id', user, archetype, selected.publisher, selected.appId) !== 1) return fail('STORAGE_FAILURE');
+  const saved = await readDefault(io, user, archetype);
+  if (saved?.publisher !== selected.publisher || saved.appId !== selected.appId) return fail('STORAGE_FAILURE');
 }
 /** Await every outstanding statement before a transaction can commit or roll back. */
 async function completed<T>(requests: readonly Promise<T>[]): Promise<T[]> {
@@ -61,20 +131,43 @@ async function verifiedRow(row: Row, check: () => void): Promise<CatalogHandler 
   check();
   try {
     if (typeof row.signed_event !== 'string' || utf8Bytes(row.signed_event) > MAX_MANIFEST_BYTES) return fail('CORRUPT_STORAGE');
-    const manifest = await verifyManifest({kind: 35129, pubkey: publicKey(row.publisher), identifier: routingText(row.app_id, 255), relayHints: []}, JSON.parse(row.signed_event));
-    check(); if (manifest.eventId !== row.event_id) return fail('CORRUPT_STORAGE');
+    const pubkey = publicKey(row.publisher), appId = routingText(row.app_id,255), eventId = row.event_id;
+    if (!isPublishedEventId(eventId) || !matchesPublishedAppKey(appId,eventId)) return fail('CORRUPT_STORAGE');
+    const manifest = await verifyManifest(snapshotEventId(appId)
+      ? {kind:5129,pubkey,eventId}
+      : {kind:35129,pubkey,identifier:appId,relayHints:[]}, JSON.parse(row.signed_event));
+    check(); if (manifest.eventId !== eventId) return fail('CORRUPT_STORAGE');
     return handlerFrom(manifest);
   } catch {check(); return null;}
 }
-async function read(io: Access, user: string, check: () => void): Promise<CatalogSnapshot> {
+async function applyReviewedDefault(io: Access, user: string, check: () => void,
+  {archetype, current, target}: ReviewedDefaultImport): Promise<void> {
+  const saved = await readDefault(io, user, archetype);
+  if (saved?.publisher !== current?.publisher || saved?.appId !== current?.appId) return fail('REVOKED');
+  if (target === null) {
+    if (saved === null) return;
+    if (await io.run('DELETE FROM routing_defaults WHERE user = ? AND archetype = ?', user, archetype) !== 1 ||
+        await readDefault(io, user, archetype) !== null) return fail('STORAGE_FAILURE');
+    return;
+  }
+  const rows = await io.all<Row>('SELECT publisher, app_id, event_id, signed_event FROM routing_catalog WHERE user = ? AND publisher = ? AND app_id = ?', user, target.publisher, target.appId);
+  if (rows.length !== 1 || rows[0]!.event_id !== target.eventId) return fail('INVALID_INPUT');
+  const handler = await verifiedRow(rows[0]!, check);
+  if (handler?.publisher !== target.publisher || handler.appId !== target.appId || handler.version !== target.version ||
+      handler.manifest.format !== 'nip-5d' || !handler.roles.some(role => role.archetype === archetype)) return fail('INVALID_INPUT');
+  await writeDefault(io, user, archetype, target);
+}
+async function read(io: Access, user: string, check: () => void, repair = true): Promise<CatalogSnapshot> {
   const rows = await io.all<Row>('SELECT publisher, app_id, event_id, signed_event FROM routing_catalog WHERE user = ? ORDER BY publisher, app_id', user);
   if (rows.length > CATALOG_LIMITS.perIdentity) return fail('CORRUPT_STORAGE');
   const verified = await completed(rows.map(row => verifiedRow(row, check))); check();
   const handlers: CatalogHandler[] = [], damaged: Row[] = [];
   for (let index = 0; index < rows.length; index++) {const handler = verified[index]; if (handler) handlers.push(handler); else damaged.push(rows[index]!);}
-  const removed = await completed(damaged.map(row => io.run('DELETE FROM routing_catalog WHERE user = ? AND publisher = ? AND app_id = ?', user, row.publisher, row.app_id)));
-  if (removed.some(changes => changes !== 1)) return fail('STORAGE_FAILURE');
-  const rowsDefaults = await io.all<{archetype: string; publisher: string; app_id: string}>('SELECT archetype, publisher, app_id FROM routing_defaults WHERE user = ? ORDER BY archetype', user);
+  if (repair) {
+    const removed = await completed(damaged.map(row => io.run('DELETE FROM routing_catalog WHERE user = ? AND publisher = ? AND app_id = ?', user, row.publisher, row.app_id)));
+    if (removed.some(changes => changes !== 1)) return fail('STORAGE_FAILURE');
+  }
+  const rowsDefaults = await io.all<DefaultRow>('SELECT archetype, publisher, app_id FROM routing_defaults WHERE user = ? ORDER BY archetype', user);
   if (rowsDefaults.length > CATALOG_LIMITS.perIdentity * 16) return fail('CORRUPT_STORAGE');
   const defaults: HandlerPreference[] = [], invalid: string[] = [];
   for (const row of rowsDefaults) {
@@ -82,26 +175,68 @@ async function read(io: Access, user: string, check: () => void): Promise<Catalo
     if (!handler?.roles.some(role => role.archetype === row.archetype)) invalid.push(row.archetype);
     else defaults.push(Object.freeze({archetype: row.archetype, publisher: row.publisher, appId: row.app_id}));
   }
-  await completed(invalid.map(archetype => io.run('DELETE FROM routing_defaults WHERE user = ? AND archetype = ?', user, archetype)));
+  if (repair) await completed(invalid.map(archetype => io.run('DELETE FROM routing_defaults WHERE user = ? AND archetype = ?', user, archetype)));
   return Object.freeze({handlers: Object.freeze(handlers), defaults: Object.freeze(defaults)});
 }
+
+const SCHEMA_SQL = "SELECT type, name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY name";
+const DB_OPTIONS = {useNewConnection:true,enableChangeListener:false} as const;
+function exactSchema(objects: readonly Record<string,unknown>[]): boolean {
+  return objects.length === 2 && objects[0]!.name === 'routing_catalog' && objects[0]!.type === 'table' && objects[0]!.sql === CATALOG &&
+    objects[1]!.name === 'routing_defaults' && objects[1]!.type === 'table' && objects[1]!.sql === DEFAULTS;
+}
+
+/** Open the old catalog read-only and read one bounded, consistent snapshot. */
+async function copyNamedCatalog(sqlite: SQLiteModule, into: Access): Promise<void> {
+  const legacy = await sqlite.openDatabaseAsync(NAMED_ROUTING_DATABASE,DB_OPTIONS);
+  try {
+    await legacy.execAsync('PRAGMA query_only = ON');
+    await legacy.execAsync('PRAGMA busy_timeout = 1000');
+    await legacy.execAsync('BEGIN');
+    const versions = await legacy.getAllAsync<{user_version:number}>('PRAGMA user_version');
+    const objects = await legacy.getAllAsync<Record<string,unknown>>(SCHEMA_SQL);
+    if (versions.length !== 1) return fail('CORRUPT_STORAGE');
+    if (versions[0]!.user_version === 0 && objects.length === 0) return;
+    if (versions[0]!.user_version !== 1 || !exactSchema(objects)) return fail('CORRUPT_STORAGE');
+    const bounds = await legacy.getAllAsync<{rows:number;bytes:number;defaults:number}>(
+      'SELECT count(*) AS rows, COALESCE(sum(length(CAST(signed_event AS BLOB))),0) AS bytes, (SELECT count(*) FROM routing_defaults) AS defaults FROM routing_catalog');
+    const b = bounds[0];
+    if (bounds.length !== 1 || !b || !count(b.rows) || b.rows > CATALOG_LIMITS.total || !count(b.bytes) ||
+        b.bytes > CATALOG_LIMITS.bytes || !count(b.defaults) || b.defaults > CATALOG_LIMITS.total * 16) return fail('CORRUPT_STORAGE');
+    const rows = await legacy.getAllAsync<Row & {user:string}>(
+      'SELECT user,publisher,app_id,event_id,signed_event FROM routing_catalog WHERE length(CAST(user AS BLOB))=64 AND length(CAST(publisher AS BLOB))=64 AND length(CAST(event_id AS BLOB))=64 AND length(CAST(app_id AS BLOB)) BETWEEN 1 AND 255');
+    const defaults = await legacy.getAllAsync<DefaultRow & {user:string}>(
+      'SELECT user,archetype,publisher,app_id FROM routing_defaults WHERE length(CAST(user AS BLOB))=64 AND length(CAST(publisher AS BLOB))=64 AND length(CAST(archetype AS BLOB)) BETWEEN 1 AND 64 AND length(CAST(app_id AS BLOB)) BETWEEN 1 AND 255');
+    if (rows.length !== b.rows || defaults.length !== b.defaults || rows.some(row=>snapshotEventId(row.app_id))) return fail('CORRUPT_STORAGE');
+    for (const row of rows) if (await into.run('INSERT INTO routing_catalog (user,publisher,app_id,event_id,signed_event) VALUES (?,?,?,?,?)',
+      row.user,row.publisher,row.app_id,row.event_id,row.signed_event) !== 1) return fail('STORAGE_FAILURE');
+    for (const row of defaults) if (await into.run('INSERT INTO routing_defaults (user,archetype,publisher,app_id) VALUES (?,?,?,?)',
+      row.user,row.archetype,row.publisher,row.app_id) !== 1) return fail('STORAGE_FAILURE');
+  } finally {
+    try { if (await legacy.isInTransactionAsync()) await legacy.execAsync('ROLLBACK'); }
+    finally { await legacy.closeAsync(); }
+  }
+}
+
 /** App-owned catalog and explicit preferences; removal does not touch napplet data or artifacts. */
 export async function openRoutingCatalog(sqlite: SQLiteModule, platform: 'android' | 'ios'): Promise<RoutingCatalog> {
   if (platform !== 'android' && platform !== 'ios') return fail('INVALID_INPUT');
-  const db = await sqlite.openDatabaseAsync(ROUTING_DATABASE, { useNewConnection: true, enableChangeListener: false });
+  const db = await sqlite.openDatabaseAsync(ROUTING_DATABASE, DB_OPTIONS);
   const connection = createConnection(db);
   try {
     await configure(db, platform);
     await connection.transaction(() => connection.assertOpen(), async io => {
-      const statements = await completed([io.all<Record<string, unknown>>('PRAGMA user_version'), io.all<Record<string, unknown>>("SELECT type, name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY name")]);
+      const statements = await completed([io.all<Record<string,unknown>>('PRAGMA user_version'),io.all<Record<string,unknown>>(SCHEMA_SQL)]);
       const versions = statements[0]!;
       let objects = statements[1]!;
       if (versions.length !== 1) return fail('CORRUPT_STORAGE');
       if (versions[0]!.user_version === 0 && objects.length === 0) {
-        await io.run(CATALOG); await io.run(DEFAULTS); await io.run('PRAGMA user_version = 1');
-        objects = await io.all("SELECT type, name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY name");
-      } else if (versions[0]!.user_version !== 1) return fail('CORRUPT_STORAGE');
-      if (objects.length !== 2 || objects[0]!.name !== 'routing_catalog' || objects[0]!.type !== 'table' || objects[0]!.sql !== CATALOG || objects[1]!.name !== 'routing_defaults' || objects[1]!.type !== 'table' || objects[1]!.sql !== DEFAULTS) return fail('CORRUPT_STORAGE');
+        await io.run(CATALOG); await io.run(DEFAULTS);
+        await copyNamedCatalog(sqlite,io);
+        await io.run('PRAGMA user_version = 2');
+        objects = await io.all<Record<string,unknown>>(SCHEMA_SQL);
+      } else if (versions[0]!.user_version !== 2) return fail('CORRUPT_STORAGE');
+      if (!exactSchema(objects)) return fail('CORRUPT_STORAGE');
     });
   } catch (error) { await connection.abort(); throw error; }
   async function request<T>(owner: TrustedUser, options: RequestOptions | undefined, action: (io: Access, user: string, check: () => void) => Promise<T>): Promise<T> {
@@ -126,16 +261,24 @@ export async function openRoutingCatalog(sqlite: SQLiteModule, platform: 'androi
       });
     },
     list: (owner: TrustedUser, options?: RequestOptions) => request(owner, options, (io, user, check) => read(io, user, check)),
+    inspect: (owner: TrustedUser, options?: RequestOptions) => request(owner, options, (io, user, check) => read(io, user, check, false)),
     prefer: (owner: TrustedUser, archetypeInput: string, selected: Readonly<{ publisher: string; appId: string }> | null, options?: RequestOptions) => {
       const archetype = routingRole(archetypeInput), selectedKey = selected === null ? null : key(selected);
       return request(owner, options, async (io, user, check) => {
         if (selectedKey === null) { await io.run('DELETE FROM routing_defaults WHERE user = ? AND archetype = ?', user, archetype); return; }
         const snapshot = await read(io, user, check);
         if (!snapshot.handlers.some(handler => handler.publisher === selectedKey.publisher && handler.appId === selectedKey.appId && handler.roles.some(role => role.archetype === archetype))) return fail('INVALID_INPUT');
-        if (await io.run('INSERT INTO routing_defaults (user, archetype, publisher, app_id) VALUES (?, ?, ?, ?) ON CONFLICT(user, archetype) DO UPDATE SET publisher = excluded.publisher, app_id = excluded.app_id', user, archetype, selectedKey.publisher, selectedKey.appId) !== 1) return fail('STORAGE_FAILURE');
-        const saved = await io.all<{ publisher: string; app_id: string }>('SELECT publisher, app_id FROM routing_defaults WHERE user = ? AND archetype = ?', user, archetype);
-        if (saved.length !== 1 || saved[0]!.publisher !== selectedKey.publisher || saved[0]!.app_id !== selectedKey.appId) return fail('STORAGE_FAILURE');
+        await writeDefault(io, user, archetype, selectedKey);
       });
+    },
+    importDefault: async (owner: TrustedUser, reviewed: ReviewedDefaultImport, options?: RequestOptions) => {
+      const {current, target} = reviewed;
+      const captured: ReviewedDefaultImport = {
+        archetype: routingRole(reviewed.archetype),
+        current: current === null ? null : key(current),
+        target: target === null ? null : {...key(target), eventId: publicKey(target.eventId), version: publicKey(target.version)},
+      };
+      return request(owner, options, (io, user, check) => applyReviewedDefault(io, user, check, captured));
     },
     remove: (owner: TrustedUser, selected: Readonly<{ publisher: string; appId: string }>, options?: RequestOptions) => {
       const captured = key(selected);

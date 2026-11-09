@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { naddrEncode } from 'nostr-tools/nip19';
 import { finalizeEvent, getPublicKey } from 'nostr-tools/pure';
 import { loadPublishedArtifact, PublishedLoadError, type PublishedArtifactSource } from '../../src/napplets/loader.ts';
+import { createNativePublishedRelayLookup } from '../../src/napplets/native-published-relay.ts';
 
 const secret = Uint8Array.from([...new Uint8Array(31), 2]);
 const pubkey = getPublicKey(secret);
@@ -29,6 +30,7 @@ function options(events: readonly unknown[], blob: Uint8Array = html, signal = n
   const source: PublishedArtifactSource = {
     async query(coordinate, relays, pinned) {
       assert.equal(Object.hasOwn(coordinate, 'relayHints'), false);
+      assert.equal(coordinate.kind,35129);
       calls.push(`query:${coordinate.identifier}:${relays[0]}:${pinned ?? 'latest'}`);
       return events;
     },
@@ -56,7 +58,8 @@ test('selects newest verified replaceable manifest and pins its exact signed eve
 test('a bad selected blob never falls back to an older event', async () => {
   const events = [manifest(1_700_000_001), manifest(1_700_000_002)];
   const calls: string[] = [];
-  await assert.rejects(loadPublishedArtifact(link, options(events, new TextEncoder().encode('tampered'), undefined, calls)));
+  await assert.rejects(loadPublishedArtifact(link, options(events, new TextEncoder().encode('tampered'), undefined, calls)),
+    {code: 'PUBLISHED_HASH_MISMATCH'});
   assert.equal(calls.filter(call => call.startsWith('blob:')).length, 1);
 });
 
@@ -92,4 +95,183 @@ test('lookup destinations are selected and bounded, never inherited from the lin
     assertActive: () => undefined }), PublishedLoadError);
   await assert.rejects(loadPublishedArtifact(link, { source, lookupRelays: ['wss://localhost'], signal: new AbortController().signal,
     assertActive: () => undefined }), PublishedLoadError);
+});
+
+const modern = (created_at: number, tags: string[][] = []) => finalizeEvent({
+  kind: 35129, created_at, content: 'Modern named publication',
+  tags: [['d', 'loader-test'], ['x', htmlHash], ['server', 'https://blossom.example.org/'], ...tags],
+}, secret);
+
+test('discovery binds the latest eligible event across formats before fetching a blob', async () => {
+  const old = manifest(1_700_000_001);
+  const current = modern(1_700_000_002);
+  const calls: string[] = [];
+  const input = options([old, current], html, undefined, calls);
+  await assert.rejects(loadPublishedArtifact(link, {...input, expectedEventId: old.id}), {code: 'PUBLISHED_REVISION_CHANGED'});
+  assert.deepEqual(calls, ['query:loader-test:wss://relay.example.org:latest']);
+  const artifact = await loadPublishedArtifact(link, {...input, expectedEventId: current.id});
+  assert.equal(artifact.manifest.id, current.id);
+  assert.equal(artifact.manifest.format, 'nip-5d');
+  assert.equal(artifact.htmlHash, htmlHash);
+  assert.match(calls.at(-1)!, new RegExp('^blob:' + htmlHash));
+  assert.equal((await loadPublishedArtifact(link, options([old, current], html, undefined, [], old.id))).manifest.id, old.id);
+});
+
+test('Discover selects the newest signed revision when three healthy peers replicate eleven releases', async () => {
+  const events = Array.from({length: 11}, (_, index) => modern(1_700_000_001 + index));
+  const relays = ['wss://a.example.org', 'wss://b.example.org', 'wss://c.example.org'];
+  let nativeCalls = 0, blobReads = 0;
+  const lookup = createNativePublishedRelayLookup({
+    newInstanceId: randomUUID,
+    async queryPublishedRelay(_id, _relay, _wire, sub) {
+      nativeCalls++;
+      return [...events.map(event => JSON.stringify(['EVENT', sub, event])), JSON.stringify(['EOSE', sub])];
+    },
+    cancelPublishedRelay() {}, revokeAllPublishedRelay() {},
+  });
+  const input = {source: {query: lookup.query, async readHtml() {blobReads++; return html;}},
+    lookupRelays: relays, signal: new AbortController().signal, assertActive() {}};
+  assert.equal((await loadPublishedArtifact(link, {...input, expectedEventId: events.at(-1)!.id})).manifest.id, events.at(-1)!.id);
+  await assert.rejects(loadPublishedArtifact(link, {...input, expectedEventId: events[0]!.id}), {code: 'PUBLISHED_REVISION_CHANGED'});
+  assert.equal(nativeCalls, 6);
+  assert.equal(blobReads, 1);
+});
+
+test('an invalid replica with a matching ID cannot suppress a later valid signed manifest', async () => {
+  const valid = modern(1_700_000_001);
+  const invalid = {...valid, content: 'tampered without a new signature'};
+  const lookup = createNativePublishedRelayLookup({
+    newInstanceId: randomUUID,
+    async queryPublishedRelay(_id, relay, _wire, sub) {
+      return [JSON.stringify(['EVENT', sub, relay === lookupRelays[0] ? invalid : valid]), JSON.stringify(['EOSE', sub])];
+    },
+    cancelPublishedRelay() {}, revokeAllPublishedRelay() {},
+  });
+  const artifact = await loadPublishedArtifact(link, {source: {query: lookup.query, async readHtml() {return html;}},
+    lookupRelays: [...lookupRelays, 'wss://other.example.org'], expectedEventId: valid.id,
+    signal: new AbortController().signal, assertActive() {}});
+  assert.equal(artifact.manifest.id, valid.id);
+});
+
+test('only exact Discover requests use the normalized union of selected relay roles', async () => {
+  const displayed = modern(1_700_000_001);
+  const latest = modern(1_700_000_002);
+  const shared = 'wss://relay.example.org';
+  const networkOnly = 'wss://directory.example.org';
+  let blobReads = 0;
+  const queries: Array<{ relays: readonly string[]; discovery?: true }> = [];
+  const source: PublishedArtifactSource = {
+    async query(coordinate, relays, pinned, _signal, discovery) {
+      assert.deepEqual(coordinate, { kind: 35129, pubkey, identifier: 'loader-test' });
+      assert.equal(pinned, null);
+      queries.push({ relays, discovery });
+      return relays.includes(networkOnly) ? [displayed, latest] : [];
+    },
+    async readHtml() { blobReads++; return html; },
+  };
+  const options = { source, lookupRelays: [shared], signal: new AbortController().signal,
+    assertActive: () => undefined };
+  const discover = { ...options, networkRelays: ['wss://relay.example.org:443/', networkOnly] };
+  await assert.rejects(loadPublishedArtifact(link, options), { code: 'PUBLISHED_NOT_FOUND' });
+  await assert.rejects(loadPublishedArtifact(link, discover), { code: 'PUBLISHED_LOAD_FAILED' });
+  await assert.rejects(loadPublishedArtifact(link, { ...discover, expectedEventId: displayed.id }),
+    { code: 'PUBLISHED_REVISION_CHANGED' });
+  assert.equal(blobReads, 0);
+  const artifact = await loadPublishedArtifact(link, { ...discover, expectedEventId: latest.id });
+  assert.equal(artifact.manifest.id, latest.id);
+  assert.equal(blobReads, 1);
+  assert.deepEqual(queries, [
+    { relays: [shared], discovery: undefined },
+    { relays: [shared, networkOnly], discovery: true },
+    { relays: [shared, networkOnly], discovery: true },
+  ]);
+});
+
+test('Discover deadline candidates still need valid signatures and the exact newest event before HTML', async () => {
+  const displayed = manifest(1_700_000_001), latest = modern(1_700_000_002);
+  const network = 'wss://network.example.org';
+  for (const {events, code} of [
+    {events: [displayed], code: null},
+    {events: [{...displayed, sig: '0'.repeat(128)}], code: 'PUBLISHED_LOAD_FAILED'},
+    {events: [displayed, latest], code: 'PUBLISHED_REVISION_CHANGED'},
+    {events: [displayed, modern(displayed.created_at)], code: 'PUBLISHED_REVISION_CONFLICT'},
+  ]) {
+    let blobReads = 0;
+    const lookup = createNativePublishedRelayLookup({
+      newInstanceId: randomUUID,
+      queryPublishedRelay(_id, relay, _wire, sub) {
+        return relay === network ? Promise.resolve([
+          ...events.map(event => JSON.stringify(['EVENT', sub, event])), JSON.stringify(['EOSE', sub]),
+        ]) : new Promise(() => {});
+      },
+      cancelPublishedRelay() {},
+      revokeAllPublishedRelay() {},
+    }, 5);
+    const operation = loadPublishedArtifact(link, {
+      source: {query: lookup.query, async readHtml() {blobReads++; return html;}},
+      lookupRelays, networkRelays: [network], signal: new AbortController().signal,
+      expectedEventId: displayed.id, assertActive() {},
+    });
+    if (code) await assert.rejects(operation, {code});
+    else assert.equal((await operation).manifest.id, displayed.id);
+    assert.equal(blobReads, code ? 0 : 1);
+  }
+});
+
+test('Discover verifies a revision conflict across an early retry and a late initial reply', async () => {
+  const displayed = manifest(1_700_000_001), conflict = modern(displayed.created_at);
+  const emptyRelay = 'wss://empty.example.org', retryRelay = 'wss://retry.example.org';
+  const frames = (sub: string, event: unknown) => [JSON.stringify(['EVENT', sub, event]), JSON.stringify(['EOSE', sub])];
+  let completeInitial: (() => void) | undefined, retryAttempts = 0, blobReads = 0;
+  const lookup = createNativePublishedRelayLookup({
+    newInstanceId: randomUUID,
+    queryPublishedRelay(_id, relay, _wire, sub) {
+      if (relay === lookupRelays[0]) return new Promise(resolve => {completeInitial = () => resolve(frames(sub, displayed));});
+      if (relay === emptyRelay) return Promise.resolve([JSON.stringify(['EOSE', sub])]);
+      if (++retryAttempts === 1) return Promise.reject(Error('busy'));
+      completeInitial!();
+      return Promise.resolve(frames(sub, conflict));
+    },
+    cancelPublishedRelay() {},
+    revokeAllPublishedRelay() {},
+  }, 100);
+  await assert.rejects(loadPublishedArtifact(link, {
+    source: {query: lookup.query, async readHtml() {blobReads++; return html;}},
+    lookupRelays, networkRelays: [emptyRelay, retryRelay], signal: new AbortController().signal,
+    expectedEventId: displayed.id, assertActive() {},
+  }), {code: 'PUBLISHED_REVISION_CONFLICT'});
+  assert.equal(retryAttempts, 2);
+  assert.equal(blobReads, 0);
+});
+
+test('discovery separates empty results, authentic unsupported manifests and same-time conflicts', async () => {
+  const current = modern(1_700_000_001);
+  const conflicting = manifest(1_700_000_001);
+  const unsupported = modern(1_700_000_002, [['path', '/index.html', htmlHash]]);
+  for (const {events, code} of [
+    {events: [], code: 'PUBLISHED_NOT_FOUND'},
+    {events: [unsupported], code: 'PUBLISHED_UNSUPPORTED_MANIFEST'},
+    {events: [{...unsupported, sig: '0'.repeat(128)}], code: 'PUBLISHED_LOAD_FAILED'},
+    {events: [current, conflicting], code: 'PUBLISHED_REVISION_CONFLICT'},
+  ]) {
+    const calls: string[] = [];
+    await assert.rejects(loadPublishedArtifact(link, {...options(events, html, undefined, calls), expectedEventId: current.id}), {code});
+    assert.equal(calls.length, 1);
+  }
+});
+
+
+test('exact opening distinguishes relay failure, download failure and signed invalid HTML', async () => {
+  const badHtml = new TextEncoder().encode('<body>Missing the required HTML document envelope</body>');
+  const event = finalizeEvent({kind: 35129, created_at: 1_700_000_002, content: 'Invalid HTML',
+    tags: [['d', 'loader-test'], ['x', sha(badHtml)], ['server', 'https://blossom.example.org/']]}, secret);
+  const input = {...options([event], badHtml), expectedEventId: event.id};
+  await assert.rejects(loadPublishedArtifact(link, {...input, source: {
+    async query() {throw new Error('a configured relay did not finish');},
+    async readHtml() {assert.fail('failed lookup cannot start a download');},
+  }}), {code: 'PUBLISHED_LOOKUP_UNAVAILABLE'});
+  await assert.rejects(loadPublishedArtifact(link, {...input, source: {...input.source,
+    async readHtml() {throw new Error('the published server could not be reached');},
+  }}), {code: 'PUBLISHED_DOWNLOAD_UNAVAILABLE'});
+  await assert.rejects(loadPublishedArtifact(link, input), {code: 'PUBLISHED_INVALID_HTML'});
 });

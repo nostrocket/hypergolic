@@ -13,6 +13,12 @@ or otherwise accesses a device. It preserves generated packaging files by using
 a Gradle init script rather than rewriting them. Products use the existing local
 development signer; they are test builds, not production distribution artifacts.
 
+The init script keeps Release minification enabled. It adds a fixture-only
+`reflection.pro` to preserve the exact host and AndroidX WebKit members used by
+the separately compiled test APK. The rules retain the existing disabled
+`UPLOAD_NETWORK_PROOF` constant for the startup assertion. They grant no
+authority and make no change to the ordinary app's optimizer configuration.
+
 ## Prepared scope
 
 Seven cases require actual Android WebView callbacks and positive controls:
@@ -66,11 +72,15 @@ then use a fresh output directory outside the repository:
 python3 -B tests/native/android-boundary/build.py --output /tmp/android-boundary-build-01
 ```
 
-`expected-inputs.json` pins the reviewed 62 native/build/runtime inputs. A changed
+`expected-inputs.json` pins the reviewed 91 native/build/runtime inputs. A changed
 input requires review before an explicit rebaseline. The helper seals the full
 source snapshot, unchanged generated packaging, signed app/test APKs, exact runtime
 bytes, JavaScript bundle and Gradle log. It refuses an existing output directory
 and reports `compiled-not-executed`. Preserve every failed build and its log.
+The Media player, file handoff and parser are reviewed host inputs. The seven
+transport cases do not exercise native playback or protected Outbox/Common signing.
+The current inventory includes the Common plan/npub helpers and exact native
+source/template signing capture and the CVM host registration/transport dependencies; historical run inventories retain their original counts. The seven boundary cases do not exercise CVM approval, encryption, provider responses or foreground service lifetime; those need the dedicated CVM proofs and ordinary app acceptance. The inventory also includes the bounded live-MP3 transport, decoder and shared finite/live reservation. These hashes bind the compiled inputs; the seven transport cases do not establish live playback, stream framing or acoustic acceptance. The inventory also includes the shared application-data policy and canonical-JSON helpers. It binds their source but does not establish app-data consent, revision checks, publication or retry acceptance.
 
 The 9 October 2026 offline build compiles the signed ARM64 Release app and instrumentation APK with
 all inputs unchanged, exact runtime bytes and matching development certificates.

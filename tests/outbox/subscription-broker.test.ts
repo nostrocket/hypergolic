@@ -6,7 +6,7 @@ import {createOutboxSubscriptions} from '../../src/outbox/subscriptions.ts';
 import type {NativeRelayStreamPort} from '../../src/network/relay-subscriptions.ts';
 import type {NativeRelaySubscriptionPort} from '../../src/runtime/relay-subscription-broker.ts';
 import type {NativeRegistration} from '../../src/runtime/capability-protocol.ts';
-const registration:NativeRegistration={sessionId:'outbox',generation:'native-outbox',epoch:1,user:'1'.repeat(64),publisher:'2'.repeat(64),appId:'feed-lab',version:'3'.repeat(64),instanceId:'instance',fixture:'feed-lab',domains:['outbox','relay']};
+const registration:NativeRegistration={sessionId:'outbox',generation:'native-outbox',epoch:1,user:'1'.repeat(64),publisher:'2'.repeat(64),appId:'feed-lab',version:'3'.repeat(64),instanceId:'instance',fixture:'feed-lab',domains:['outbox']};
 const request=(subId='live')=>({type:'outbox.subscribe',id:'request-'+subId,subId,filters:{kinds:[1],limit:8},options:{limit:32,timeoutMs:1000}});
 const flush=(ms=10)=>new Promise(resolve=>setTimeout(resolve,ms));
 function harness(t:TestContext) {
@@ -22,9 +22,9 @@ function harness(t:TestContext) {
   const eose=()=>calls[0]!.frame(JSON.stringify(['EOSE',calls[0]!.sub]));
   return {broker,manager,native,rows,calls,messages,closed,admit,event,eose,lookups:()=>lookups,setCapacity(value:boolean){capacity=value;},setOwner(value:boolean){ownerActive=value;},setForeground(value:boolean){foreground=value;}};
 }
-test('Outbox one-use native capture requires exact identity, namespace and both grants before metadata or WSS',async t=> {
+test('Outbox one-use native capture requires exact identity, namespace and Outbox grant before metadata or WSS',async t=> {
   const h=harness(t);
-  for(const patch of [{user:'4'.repeat(64)},{epoch:2},{generation:'other'},{version:'5'.repeat(64)},{domains:['outbox']},{domains:['relay']}])h.admit(request(),{...registration,...patch});
+  for(const patch of [{user:'4'.repeat(64)},{epoch:2},{generation:'other'},{version:'5'.repeat(64)},{domains:['outbox','relay']},{domains:['relay']}])h.admit(request(),{...registration,...patch});
   await flush();assert.equal(h.lookups(),0);assert.equal(h.calls.length,0);
   const token=h.admit();await flush();assert.equal(h.calls[0]?.token,token);h.broker.dispatch(token);await flush();assert.equal(h.calls.length,1);
 });

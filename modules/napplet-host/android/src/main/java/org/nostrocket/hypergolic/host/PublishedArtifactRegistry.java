@@ -1,7 +1,9 @@
 package org.nostrocket.hypergolic.host;
 
 import java.nio.ByteBuffer;
-import java.nio.charset.CharacterCodingException;
+import java.nio.CharBuffer;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CoderResult;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -16,11 +18,47 @@ import java.util.function.LongSupplier;
 
 /** One-use, app-process-only handoff for bytes already verified by the trusted shell. */
 public final class PublishedArtifactRegistry {
-  public static final int MAX_HTML_BYTES = 2 * 1024 * 1024;
+  public static final int MAX_HTML_BYTES = 20 * 1024 * 1024;
+  static final int MAX_PENDING_BYTES = 32 * 1024 * 1024;
   public static final int MAX_PENDING = 4;
   public static final long MAX_LIFETIME_MS = 60_000L;
   private static final int MAX_SESSIONS = 64;
   private static final int HANDLE_BYTES = 32;
+  private static final String SNAPSHOT_PREFIX = " 5129:";
+
+  /** Immutable metadata from the trusted shell's exact-event verification. */
+  public static final class Snapshot {
+    public final String eventId;
+    public final String title;
+
+    private Snapshot(String eventId, String title) {
+      this.eventId = eventId;
+      this.title = title;
+    }
+
+    public static Snapshot create(String eventId, String title) {
+      if (!isLowerHex64(eventId) || title == null || title.isEmpty() ||
+          title.length() > 128 || title.getBytes(StandardCharsets.UTF_8).length > 128 ||
+          !title.equals(title.trim()) || title.contains("  ") ||
+          INVALID_TITLE.matcher(title).find()) return null;
+      return new Snapshot(eventId, title);
+    }
+
+    public String appKey() { return SNAPSHOT_PREFIX + eventId; }
+
+    public String requester(String publisher) {
+      return "Snapshot (kind 5129): " + title + "\nManifest event ID: " + eventId + "\nPublisher: " + publisher;
+    }
+
+    private static final java.util.regex.Pattern INVALID_TITLE = java.util.regex.Pattern.compile(
+        "[\\x{0}-\\x{1f}\\x{7f}-\\x{9f}\\x{a0}\\x{ad}\\x{61c}\\x{1680}\\x{2000}-\\x{200b}" +
+        "\\x{200e}\\x{200f}\\x{2028}-\\x{202f}\\x{205f}\\x{2060}\\x{2066}-\\x{206f}\\x{3000}\\x{d800}-\\x{dfff}\\x{feff}]");
+  }
+
+  private static boolean sameSnapshot(Snapshot staged, Snapshot claim) {
+    if (staged == null || claim == null) return staged == claim;
+    return staged.eventId.equals(claim.eventId) && staged.title.equals(claim.title);
+  }
 
   private static final class Entry {
     final String sessionId;
@@ -29,17 +67,19 @@ public final class PublishedArtifactRegistry {
     final String eventId;
     final String aggregateHash;
     final String htmlHash;
+    final Snapshot snapshot;
     final long expiresAt;
     final byte[] html;
 
     Entry(String sessionId, String publisher, String identifier, String eventId,
-        String aggregateHash, String htmlHash, long expiresAt, byte[] html) {
+        String aggregateHash, String htmlHash, Snapshot snapshot, long expiresAt, byte[] html) {
       this.sessionId = sessionId;
       this.publisher = publisher;
       this.identifier = identifier;
       this.eventId = eventId;
       this.aggregateHash = aggregateHash;
       this.htmlHash = htmlHash;
+      this.snapshot = snapshot;
       this.expiresAt = expiresAt;
       this.html = html;
     }
@@ -50,14 +90,17 @@ public final class PublishedArtifactRegistry {
   /** Private copy plus the native host generation to which a successful claim is bound. */
   public static final class ClaimedArtifact {
     private final String viewGeneration;
+    private final Snapshot snapshot;
     private byte[] html;
 
-    private ClaimedArtifact(String viewGeneration, byte[] html) {
+    private ClaimedArtifact(String viewGeneration, Snapshot snapshot, byte[] html) {
+      this.snapshot = snapshot;
       this.viewGeneration = viewGeneration;
       this.html = html;
     }
 
     public String getViewGeneration() { return viewGeneration; }
+    public Snapshot getSnapshot() { return snapshot; }
     /** Transfers the sole claimed byte buffer to its native view owner; the owner must clear it on teardown. */
     public synchronized byte[] takeHtmlBytes() {
       byte[] result = html;
@@ -105,20 +148,37 @@ public final class PublishedArtifactRegistry {
   /** Shared bounded-claim validation for admission and final staging. */
   static boolean validClaims(String publisherHex64, String identifier, String eventIdHex64,
       String aggregateHashHex64, String htmlHashHex64) {
-    return isLowerHex64(publisherHex64) && validIdentifier(identifier) && isLowerHex64(eventIdHex64) &&
+    return validClaims(publisherHex64, identifier, eventIdHex64, aggregateHashHex64, htmlHashHex64, null);
+  }
+
+  static boolean validClaims(String publisherHex64, String identifier, String eventIdHex64,
+      String aggregateHashHex64, String htmlHashHex64, Snapshot snapshot) {
+    boolean identityMatches = snapshot == null ? validIdentifier(identifier)
+        : snapshot.appKey().equals(identifier) && snapshot.eventId.equals(eventIdHex64);
+    return isLowerHex64(publisherHex64) && identityMatches && isLowerHex64(eventIdHex64) &&
         isLowerHex64(aggregateHashHex64) && isLowerHex64(htmlHashHex64);
   }
 
   /** Stages an immutable copy and returns an unpredictable opaque handle, or null on any invalid input. */
   public synchronized String stage(byte[] originalUtf8Bytes, String sessionId, String publisherHex64,
       String identifier, String eventIdHex64, String aggregateHashHex64, String htmlHashHex64) {
+    return stage(originalUtf8Bytes, sessionId, publisherHex64, identifier, eventIdHex64,
+        aggregateHashHex64, htmlHashHex64, null);
+  }
+
+  synchronized String stage(byte[] originalUtf8Bytes, String sessionId, String publisherHex64,
+      String identifier, String eventIdHex64, String aggregateHashHex64, String htmlHashHex64,
+      Snapshot snapshot) {
     long now = now();
     if (now < 0 || !activeSessions.contains(sessionId) ||
-        !validClaims(publisherHex64, identifier, eventIdHex64, aggregateHashHex64, htmlHashHex64) ||
+        !validClaims(publisherHex64, identifier, eventIdHex64, aggregateHashHex64, htmlHashHex64, snapshot) ||
         originalUtf8Bytes == null || originalUtf8Bytes.length < 1 ||
         originalUtf8Bytes.length > MAX_HTML_BYTES) return null;
     prune(now);
     if (pending.size() >= MAX_PENDING || now > Long.MAX_VALUE - MAX_LIFETIME_MS) return null;
+    int reserved = originalUtf8Bytes.length;
+    for (Entry entry : pending.values()) reserved += entry.html.length;
+    if (reserved > MAX_PENDING_BYTES) return null;
 
     byte[] privateCopy = originalUtf8Bytes.clone();
     if (!isStrictUtf8(privateCopy) || !constantTimeEquals(hex(sha256(privateCopy)), htmlHashHex64) ||
@@ -133,7 +193,7 @@ public final class PublishedArtifactRegistry {
       return null;
     }
     pending.put(handle, new Entry(sessionId, publisherHex64, identifier, eventIdHex64,
-        aggregateHashHex64, htmlHashHex64, now + MAX_LIFETIME_MS, privateCopy));
+        aggregateHashHex64, htmlHashHex64, snapshot, now + MAX_LIFETIME_MS, privateCopy));
     return handle;
   }
 
@@ -141,6 +201,13 @@ public final class PublishedArtifactRegistry {
   public synchronized ClaimedArtifact claim(String handle, String sessionId, String publisherHex64,
       String identifier, String eventIdHex64, String aggregateHashHex64, String htmlHashHex64,
       String viewGeneration) {
+    return claim(handle, sessionId, publisherHex64, identifier, eventIdHex64, aggregateHashHex64,
+        htmlHashHex64, null, viewGeneration);
+  }
+
+  synchronized ClaimedArtifact claim(String handle, String sessionId, String publisherHex64,
+      String identifier, String eventIdHex64, String aggregateHashHex64, String htmlHashHex64,
+      Snapshot snapshot, String viewGeneration) {
     long now = now();
     if (now < 0 || handle == null) return null;
     prune(now);
@@ -149,13 +216,14 @@ public final class PublishedArtifactRegistry {
     if (!activeSessions.contains(entry.sessionId) || !same(entry.sessionId, sessionId) ||
         !same(entry.publisher, publisherHex64) || !same(entry.identifier, identifier) ||
         !same(entry.eventId, eventIdHex64) || !same(entry.aggregateHash, aggregateHashHex64) ||
-        !same(entry.htmlHash, htmlHashHex64) || !isCanonicalUuid(viewGeneration)) {
+        !same(entry.htmlHash, htmlHashHex64) || !sameSnapshot(entry.snapshot, snapshot) ||
+        !isCanonicalUuid(viewGeneration)) {
       entry.clear();
       return null;
     }
     byte[] result = entry.html.clone();
     entry.clear();
-    return new ClaimedArtifact(viewGeneration, result);
+    return new ClaimedArtifact(viewGeneration, entry.snapshot, result);
   }
 
   /** Revokes every staged artifact and retires this session; callers may register it again later. */
@@ -248,11 +316,16 @@ public final class PublishedArtifactRegistry {
   }
 
   private static boolean isStrictUtf8(byte[] bytes) {
-    try {
-      StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
-          .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes));
-      return true;
-    } catch (CharacterCodingException e) { return false; }
+    CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
+        .onUnmappableCharacter(CodingErrorAction.REPORT);
+    ByteBuffer input = ByteBuffer.wrap(bytes);
+    CharBuffer output = CharBuffer.allocate(4096);
+    for (;;) {
+      CoderResult result = decoder.decode(input, output, true);
+      if (result.isError()) return false;
+      output.clear();
+      if (result.isUnderflow()) return decoder.flush(output).isUnderflow();
+    }
   }
 
   private static byte[] sha256(byte[] bytes) {

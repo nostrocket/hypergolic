@@ -27,12 +27,15 @@ struct VettedAddressCursor<Address> {
 /// HTTPS fetch over a numeric, vetted endpoint. URLSession cannot bind a DNS result
 /// before connecting, so this owner resolves first and never gives NWConnection a name.
 enum PublishedPinnedHTTPS {
-  private final class RecoveryResolutionSlots: @unchecked Sendable {
+  private final class ResolutionSlots: @unchecked Sendable {
     private let lock = NSLock(); private var count = 0
-    func acquire() -> Bool { lock.withLock { guard count < 2 else { return false }; count += 1; return true } }
+    private let limit: Int
+    init(_ limit: Int) { self.limit = limit }
+    func acquire() -> Bool { lock.withLock { guard count < limit else { return false }; count += 1; return true } }
     func release() { lock.withLock { count -= 1 } }
   }
-  private static let recoveryResolutionSlots = RecoveryResolutionSlots()
+  private static let recoveryResolutionSlots = ResolutionSlots(2)
+  private static let mediaResolutionSlots = ResolutionSlots(1)
   enum Failure: Error { case invalidURL, resolution, privateAddress, connection, cancelled }
 
   struct Request {
@@ -42,8 +45,10 @@ enum PublishedPinnedHTTPS {
     let target: String
     let resourceProfile: Bool
     let recoveryProfile: Bool
+    let artifactProfile: Bool
+    let liveMP3Profile: Bool
 
-    init(_ input: String, resourceProfile: Bool = false, recoveryProfile: Bool = false) throws {
+    init(_ input: String, resourceProfile: Bool = false, recoveryProfile: Bool = false, artifactProfile: Bool = false, liveMP3Profile: Bool = false) throws {
       guard input.utf8.count <= 8192, !input.contains("\\"),
             let components = URLComponents(string: input), components.scheme == "https",
             components.user == nil, components.password == nil, components.fragment == nil,
@@ -70,16 +75,18 @@ enum PublishedPinnedHTTPS {
       self.host = host
       self.port = UInt16(components.port ?? 443)
       self.target = target
-      guard !(resourceProfile && recoveryProfile) else { throw Failure.invalidURL }
+      guard [resourceProfile, recoveryProfile, artifactProfile, liveMP3Profile].filter({ $0 }).count <= 1 else { throw Failure.invalidURL }
       if recoveryProfile {
         guard components.query == nil, target.range(of: "^/[0-9a-f]{64}(\\.[A-Za-z0-9]{1,16})?$", options: .regularExpression) != nil else { throw Failure.invalidURL }
       }
-      self.resourceProfile = resourceProfile; self.recoveryProfile = recoveryProfile
+      self.resourceProfile = resourceProfile; self.recoveryProfile = recoveryProfile; self.artifactProfile = artifactProfile
+      self.liveMP3Profile = liveMP3Profile
     }
 
     var wire: Data {
       let authority = port == 443 ? host : "\(host):\(port)"
-      return Data("GET \(target) HTTP/1.1\r\nHost: \(authority)\r\nAccept: \((resourceProfile || recoveryProfile) ? "*/*" : "text/html")\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n".utf8)
+      let userAgent = liveMP3Profile ? "User-Agent: Hypergolic-LiveMP3/1.0 (https://github.com/nostrocket/hypergolic)\r\nIcy-MetaData: 0\r\n" : resourceProfile ? "User-Agent: Hypergolic-Resource/1.0 (https://github.com/nostrocket/hypergolic)\r\n" : ""
+      return Data("GET \(target) HTTP/1.1\r\nHost: \(authority)\r\nAccept: \(liveMP3Profile ? "audio/mpeg" : (resourceProfile || recoveryProfile) ? "*/*" : "text/html")\r\n\(userAgent)Accept-Encoding: identity\r\nConnection: close\r\n\r\n".utf8)
     }
   }
 
@@ -137,32 +144,59 @@ enum PublishedPinnedHTTPS {
     return operation
   }
 
-  /// Separate app-only fixed-hash recovery parser; published/resource policies are unchanged.
-  static func fetchRecovery(_ input: String, active: @escaping @Sendable () -> Bool,
+  /// The original URL names a signed hash. Redirects have a shared deadline and independently pinned hops.
+  static func fetchArtifact(_ input: String,
     completion: @escaping @Sendable (Result<PublishedHTTPResponse, Error>) -> Void) throws -> Operation {
-    let request = try Request(input, recoveryProfile: true)
-    let operation = try Operation(request: request, maximumBodyBytes: NativeUploadAuthority.maxBytes, timeout: 60, active: active, completion: completion)
-    operation.start(); return operation
-  }
-
-  /// Separate resource profile; ordinary published fetch keeps its 2 MiB parser and URL policy.
-  static func fetchResource(_ input: String,
-                            completion: @escaping @Sendable (Result<PublishedHTTPResponse, Error>) -> Void) throws -> Operation {
-    let request = try Request(input, resourceProfile: true)
-    let operation = try Operation(request: request, maximumBodyBytes: PublishedHTTPResponse.maximumResourceBodyBytes,
+    let request = try Request(input, artifactProfile: true)
+    guard request.target.range(of: "^/[0-9a-f]{64}$", options: .regularExpression) != nil else { throw Failure.invalidURL }
+    let operation = try Operation(request: request, maximumBodyBytes: PublishedHTTPResponse.maximumArtifactBodyBytes,
                                   timeout: 15, completion: completion)
     operation.start()
     return operation
   }
 
+  /// Separate app-only fixed-hash recovery parser; published/resource policies are unchanged.
+  static func fetchRecovery(_ input: String, active: @escaping @Sendable () -> Bool,
+    completion: @escaping @Sendable (Result<PublishedHTTPResponse, Error>) -> Void) throws -> Operation {
+    let request = try Request(input, recoveryProfile: true)
+    let operation = try Operation(request: request, maximumBodyBytes: PublishedHTTPResponse.maximumResourceBodyBytes, timeout: 60, active: active, completion: completion)
+    operation.start(); return operation
+  }
+
+  /// Separate resource profile; ordinary published fetch keeps its 2 MiB parser and URL policy.
+  static func fetchResource(_ input: String, active: @escaping @Sendable () -> Bool = {true},
+                            completion: @escaping @Sendable (Result<PublishedHTTPResponse, Error>) -> Void) throws -> Operation {
+    let request = try Request(input, resourceProfile: true)
+    let operation = try Operation(request: request, maximumBodyBytes: PublishedHTTPResponse.maximumResourceBodyBytes,
+                                  timeout: 15, active: active, completion: completion)
+    operation.start()
+    return operation
+  }
+
+  /// Trusted Media owns the directory, foreground lease, and staged file.
+  static func fetchMediaFile(_ input: String, sink: any PublishedHTTPFileSink, deadline: DispatchTime,
+      active: @escaping @Sendable () -> Bool, completion: @escaping @Sendable (Result<URL, Error>) -> Void) throws -> Operation {
+    let request = try Request(input, resourceProfile: true)
+    let operation = Operation(request: request, mediaFile: sink, deadline: deadline, active: active, completion: completion)
+    operation.start(); return operation
+  }
+
+  /// Requires a separately reviewed native live profile and native source Play before invocation.
+  static func streamLiveMP3(_ input: String, sink: any PublishedHTTPStreamSink, deadline: DispatchTime,
+      active: @escaping @Sendable () -> Bool, completion: @escaping @Sendable (Result<Void, Error>) -> Void) throws -> Operation {
+    let request = try Request(input, liveMP3Profile: true)
+    let operation = Operation(request: request, stream: sink, deadline: deadline, active: active, completion: completion)
+    operation.start(); return operation
+  }
+
 #if HYPERGOLIC_NETWORK_PROOF
   /// Host-only proof seam. Production builds never compile address or trust overrides.
   static func fetchForProof(_ input: String, maximumBodyBytes: Int, timeout: TimeInterval = 5,
-                            addresses: [Address], anchorDER: Data?, resolverForProof: (@Sendable (String) throws -> [Address])? = nil, recoveryProfile: Bool = false, active: @escaping @Sendable () -> Bool = {true},
+                            addresses: [Address], anchorDER: Data?, resolverForProof: (@Sendable (String) throws -> [Address])? = nil, recoveryProfile: Bool = false, artifactProfile: Bool = false, active: @escaping @Sendable () -> Bool = {true},
                             completion: @escaping @Sendable (Result<PublishedHTTPResponse, Error>) -> Void) throws -> Operation {
-    let request = try Request(input, recoveryProfile: recoveryProfile)
-    guard (1...(recoveryProfile ? PublishedHTTPResponse.maximumResourceBodyBytes : PublishedHTTPResponse.maximumBodyBytes)).contains(maximumBodyBytes),
-          timeout > 0, timeout <= 60, !addresses.isEmpty else { throw Failure.invalidURL }
+    let request = try Request(input, recoveryProfile: recoveryProfile, artifactProfile: artifactProfile)
+    guard PublishedHTTPResponse.validLimit(maximumBodyBytes, resource: false, upload: false,
+          recovery: recoveryProfile, artifact: artifactProfile), timeout > 0, timeout <= 60, !addresses.isEmpty else { throw Failure.invalidURL }
     let operation = try Operation(request: request, maximumBodyBytes: maximumBodyBytes,
                                   timeout: timeout, completion: completion)
     operation.setActiveForProof(active)
@@ -175,10 +209,15 @@ enum PublishedPinnedHTTPS {
 
   final class Operation: @unchecked Sendable {
     private var request: Request
-    private let timeout: TimeInterval
+    private enum Output { case response(PublishedHTTPResponse), file(URL), stream }
+    private let deadline: DispatchTime
     private let queue = DispatchQueue(label: "org.nostrocket.hypergolic.published-https")
-    private let completion: @Sendable (Result<PublishedHTTPResponse, Error>) -> Void
-    private var accumulator: PublishedHTTPResponseAccumulator
+    private let completion: @Sendable (Result<Output, Error>) -> Void
+    private var accumulator: PublishedHTTPResponseAccumulator?
+    private let mediaFile: (any PublishedHTTPFileSink)?
+    private var liveStream: (any PublishedHTTPStreamSink)?
+    private var idleTimer: DispatchSourceTimer?
+    private var mediaIdleDeadline = DispatchTime.distantFuture
     private let maximumBodyBytes: Int
     private let originalRequest: Request
     private var redirects = 0
@@ -199,9 +238,33 @@ enum PublishedPinnedHTTPS {
       self.request = request; self.originalRequest = request; self.active = active
       self.maximumBodyBytes = maximumBodyBytes
       self.visited.insert(request.source)
-      self.timeout = timeout
-      self.completion = completion
-      self.accumulator = try PublishedHTTPResponseAccumulator(maximumBodyBytes: maximumBodyBytes, resourceProfile: request.resourceProfile, recoveryProfile: request.recoveryProfile)
+      self.deadline = .now() + timeout
+      self.mediaFile = nil
+      self.completion = { result in
+        completion(result.flatMap { guard case .response(let value) = $0 else { return .failure(Failure.connection) }; return .success(value) })
+      }
+      self.accumulator = try PublishedHTTPResponseAccumulator(maximumBodyBytes: maximumBodyBytes, resourceProfile: request.resourceProfile, recoveryProfile: request.recoveryProfile, artifactProfile: request.artifactProfile)
+    }
+
+    fileprivate init(request: Request, mediaFile: any PublishedHTTPFileSink, deadline: DispatchTime, active: @escaping @Sendable () -> Bool,
+                     completion: @escaping @Sendable (Result<URL, Error>) -> Void) {
+      self.request = request; self.originalRequest = request; self.active = active
+      self.maximumBodyBytes = 0
+      self.visited.insert(request.source)
+      self.deadline = deadline
+      self.mediaFile = mediaFile
+      self.completion = { result in
+        completion(result.flatMap { guard case .file(let value) = $0 else { return .failure(Failure.connection) }; return .success(value) })
+      }
+    }
+
+    fileprivate init(request: Request, stream: any PublishedHTTPStreamSink, deadline: DispatchTime,
+        active: @escaping @Sendable () -> Bool, completion: @escaping @Sendable (Result<Void, Error>) -> Void) {
+      self.request=request;self.originalRequest=request;self.active=active;self.maximumBodyBytes=0;self.deadline=deadline
+      self.mediaFile=nil;self.liveStream=stream;self.visited.insert(request.source)
+      self.completion = { result in
+        completion(result.flatMap { guard case .stream = $0 else { return .failure(Failure.connection) };return .success(()) })
+      }
     }
 
 #if HYPERGOLIC_NETWORK_PROOF
@@ -213,7 +276,23 @@ enum PublishedPinnedHTTPS {
         timer.schedule(deadline: .now(), repeating: .milliseconds(25))
         timer.setEventHandler { [weak self] in guard let self, !self.ended else { return }; if !self.active() { self.finish(.failure(Failure.cancelled)) } }; timer.resume()
       }
-      queue.asyncAfter(deadline: .now() + timeout) { self.finish(.failure(Failure.connection)) }
+      if mediaFile != nil || liveStream != nil {
+        queue.asyncAfter(deadline: deadline) { [weak self] in self?.finish(.failure(Failure.connection)) }
+        queue.async { [self] in
+          guard !self.ended else { return }
+          let timer = DispatchSource.makeTimerSource(queue: self.queue)
+          timer.setEventHandler { [weak self] in
+            guard let self, .now() >= self.mediaIdleDeadline else { return }
+            self.finish(.failure(Failure.connection))
+          }
+          self.idleTimer = timer
+          self.armMediaIdleTimer()
+          timer.resume()
+          self.resolveCurrent()
+        }
+        return
+      }
+      queue.asyncAfter(deadline: deadline) { self.finish(.failure(Failure.connection)) }
 #if HYPERGOLIC_NETWORK_PROOF
       if let proofAddresses {
         queue.async {
@@ -229,8 +308,9 @@ enum PublishedPinnedHTTPS {
 
     private func resolveCurrent() {
       guard active() else { finish(.failure(Failure.cancelled)); return }
-      let recovery = request.recoveryProfile
-      guard !recovery || PublishedPinnedHTTPS.recoveryResolutionSlots.acquire() else { finish(.failure(Failure.resolution)); return }
+      let slots = mediaFile != nil || liveStream != nil ? PublishedPinnedHTTPS.mediaResolutionSlots
+        : request.recoveryProfile ? PublishedPinnedHTTPS.recoveryResolutionSlots : nil
+      guard slots?.acquire() ?? true else { finish(.failure(Failure.resolution)); return }
       let host = request.host
       DispatchQueue.global(qos: .utility).async {
         let result = Result {
@@ -239,7 +319,7 @@ enum PublishedPinnedHTTPS {
 #endif
           return try PublishedPinnedHTTPS.resolve(host)
         }
-        if recovery { PublishedPinnedHTTPS.recoveryResolutionSlots.release() }
+        slots?.release()
         self.queue.async {
           guard !self.ended else { return }
           switch result {
@@ -260,6 +340,8 @@ enum PublishedPinnedHTTPS {
       connection?.stateUpdateHandler = nil
       connection?.cancel()
       connection = nil
+      accumulator?.discard()
+      mediaFile?.discard()
       connect(address)
     }
 
@@ -299,6 +381,7 @@ enum PublishedPinnedHTTPS {
           guard self.active() else { self.finish(.failure(Failure.cancelled)); return }
           guard self.addresses?.markReady() == true else { return }
           connection.send(content: self.request.wire, completion: .contentProcessed { error in
+            guard !self.ended, self.connection === connection else { return }
             if error != nil { self.finish(.failure(Failure.connection)) }
             else { self.receive() }
           })
@@ -309,21 +392,47 @@ enum PublishedPinnedHTTPS {
       connection.start(queue: queue)
     }
 
+    private func armMediaIdleTimer() {
+      guard let seconds = liveStream?.idleSeconds ?? mediaFile?.idleSeconds else { return }
+      mediaIdleDeadline = .now() + .seconds(seconds)
+      idleTimer?.schedule(deadline: mediaIdleDeadline)
+    }
+
     private func receive() {
       guard !ended, let connection else { return }
       guard active() else { finish(.failure(Failure.cancelled)); return }
-      connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { data, _, complete, error in
-        guard !self.ended else { return }
+      connection.receive(minimumIncompleteLength: 1, maximumLength: liveStream?.maximumReadSize ?? 8192) { data, _, complete, error in
+        guard !self.ended, self.connection === connection else { return }
         guard self.active() else { self.finish(.failure(Failure.cancelled)); return }
         if error != nil { self.finish(.failure(Failure.connection)); return }
         do {
-          if let data { try self.accumulator.append(data) }
+          if let receiver = self.liveStream {
+            guard .now() < self.mediaIdleDeadline else { throw Failure.connection }
+            if let data, !data.isEmpty { self.armMediaIdleTimer();try receiver.append(data) }
+            if complete { try receiver.finish();self.finish(.success(.stream)) }
+            else if data?.isEmpty != false { self.finish(.failure(Failure.connection)) }
+            else { self.receive() }
+            return
+          }
+          if let receiver = self.mediaFile {
+            guard .now() < self.mediaIdleDeadline else { throw Failure.connection }
+            if let data, !data.isEmpty {
+              self.armMediaIdleTimer()
+              try receiver.append(data)
+            }
+            if complete { self.finish(.success(.file(try receiver.finish()))) }
+            else if data?.isEmpty != false || .now() >= self.mediaIdleDeadline { self.finish(.failure(Failure.connection)) }
+            else { self.receive() }
+            return
+          }
+          guard let accumulator = self.accumulator else { throw Failure.connection }
+          if let data { try accumulator.append(data) }
           if complete {
-            let response = try self.accumulator.finish()
+            let response = try accumulator.finish()
             // An alternate origin cannot prove absence at the saved provider.
             guard !self.request.recoveryProfile || response.status != 404 ||
               self.request.host == self.originalRequest.host && self.request.port == self.originalRequest.port else { throw Failure.invalidURL }
-            self.finish(.success(response))
+            self.finish(.success(.response(response)))
           }
           else if data == nil || data?.isEmpty == true { self.finish(.failure(Failure.connection)) }
           else { self.receive() }
@@ -336,29 +445,38 @@ enum PublishedPinnedHTTPS {
     }
 
     private func followRedirect(_ location: String) {
-      guard active(), request.resourceProfile || request.recoveryProfile, redirects < 2,
+      guard active(), request.resourceProfile || request.recoveryProfile || request.artifactProfile || request.liveMP3Profile,
+        redirects < (request.artifactProfile || request.liveMP3Profile ? 3 : 2),
         let base = URL(string: request.source), let url = URL(string: location, relativeTo: base)?.absoluteURL,
         !visited.contains(url.absoluteString) else { finish(.failure(PublishedHTTPResponse.Failure.resourcePolicy)); return }
       do {
-        let next = try Request(url.absoluteString, resourceProfile: request.resourceProfile, recoveryProfile: request.recoveryProfile)
+        let next = try Request(url.absoluteString, resourceProfile: request.resourceProfile, recoveryProfile: request.recoveryProfile, artifactProfile: request.artifactProfile, liveMP3Profile: request.liveMP3Profile)
         if request.recoveryProfile {
           let hash = originalRequest.target.dropFirst().prefix(64)
           guard next.target.dropFirst().prefix(64) == hash else { throw Failure.invalidURL }
         }
         connection?.stateUpdateHandler = nil;connection?.cancel();connection = nil
         redirects += 1;visited.insert(next.source);request = next
-        accumulator = try PublishedHTTPResponseAccumulator(maximumBodyBytes:maximumBodyBytes,resourceProfile:next.resourceProfile,recoveryProfile:next.recoveryProfile)
+        if let liveStream { try liveStream.resetResponse() }
+        else if mediaFile == nil {
+          accumulator = try PublishedHTTPResponseAccumulator(maximumBodyBytes:maximumBodyBytes,resourceProfile:next.resourceProfile,recoveryProfile:next.recoveryProfile,artifactProfile:next.artifactProfile)
+        } else { mediaFile?.discard() }
         addresses = nil
         resolveCurrent()
       } catch { finish(.failure(error)) }
     }
 
-    private func finish(_ result: Result<PublishedHTTPResponse, Error>) {
+    private func finish(_ result: Result<Output, Error>) {
       guard !ended else { return }
       ended = true; recoveryTimer?.cancel(); recoveryTimer = nil
+      idleTimer?.cancel(); idleTimer = nil
+      accumulator?.discard()
+      mediaFile?.discard()
+      if case .failure = result { liveStream?.cancel() }
       connection?.stateUpdateHandler = nil
       connection?.cancel()
       connection = nil
+      liveStream = nil
       completion(result)
     }
   }

@@ -6,10 +6,11 @@ import org.json.JSONObject
 
 /** Native-attested endpoint registration, revision fencing and bounded captured-recipient pushes. */
 internal object RoutingTransport {
+  const val PUBLISHED_OPEN = "hypergolic.publishedOpen"
   private val endpoints = RoutingEndpointRegistry()
   private val main = Handler(Looper.getMainLooper())
   private data class Row(val config: CapabilityConfiguration, var push: ((String) -> Unit)? = null,
-    var delivery: Long = 0, var acknowledged: Long = 0, val pending: MutableSet<Long> = mutableSetOf())
+    var delivery: Long = 0, val credits: RoutingPushCredits = RoutingPushCredits())
   private val rows = mutableMapOf<String, Row>()
   private var sink: ((String) -> Unit)? = null
   @Synchronized fun observeLifecycle(value: ((String) -> Unit)?) { sink = value }
@@ -17,23 +18,44 @@ internal object RoutingTransport {
     .put("revision", endpoints.revision()).put("available", endpoints.available()).put("ownerAvailable", endpoints.ownerAvailable()).put("foreground", endpoints.foreground()).toString()
   @Synchronized fun synchronizeOwner(user: String, epoch: Long, available: Boolean): Boolean {
     val before = endpoints.revision()
+    val replaced = user != endpoints.user() || epoch != endpoints.epoch()
     if (!endpoints.synchronizeOwner(user, epoch, available)) return false
-    if (before != endpoints.revision()) { rows.values.forEach { it.pending.clear() }; sink?.invoke(state()) }
+    if (before != endpoints.revision()) {
+      if (replaced || !available) {
+        val generations = rows.keys.toSet()
+        main.post { NativeFiniteVideo.revokeGenerations(generations); NativeLiveRadio.revokeGenerations(generations) }
+      }
+      if (replaced) rows.values.forEach { it.credits.clear() }
+      else resumeIntents()
+      sink?.invoke(state())
+    }
     return true
   }
   @Synchronized fun foreground(value: Boolean) {
     val before = endpoints.revision(); endpoints.foreground(value)
-    if (before != endpoints.revision()) { rows.values.forEach { it.pending.clear() }; sink?.invoke(state()) }
+    if (before != endpoints.revision()) { resumeIntents(); sink?.invoke(state()) }
   }
   @Synchronized fun register(generation: String, config: CapabilityConfiguration): Boolean {
-    if (config.grantedDomains.none { it == "intent" || it == "inc" || it == "notify" || it == "config" }) return true
-    if (!endpoints.register(generation, config.user, config.epoch, config.grantedDomains.contains("intent"), config.grantedDomains.contains("inc"), config.grantedDomains.contains("notify"), config.grantedDomains.contains("config"))) return false
+    val trackPublished = config.fixture == "published"
+    if (!trackPublished && !config.publishedOpen && config.grantedDomains.none { it == "intent" || it == "inc" || it == "notify" || it == "config" }) return true
+    if (!endpoints.register(generation, config.user, config.epoch, config.grantedDomains.contains("intent"), config.grantedDomains.contains("inc"),
+      config.grantedDomains.contains("notify"), config.grantedDomains.contains("config"), config.publishedOpen, trackPublished)) return false
     rows[generation] = Row(config); return true
   }
   @Synchronized fun ready(generation: String) { endpoints.ready(generation) }
   @Synchronized fun focus(generation: String, value: Boolean) { if (endpoints.focus(generation, value)) sink?.invoke(state()) }
   @Synchronized fun revoke(generation: String) { endpoints.revoke(generation); rows.remove(generation) }
-  @Synchronized fun mayReview(generation: String, revision: Long): Boolean = endpoints.matchesRevision(revision) && endpoints.mayReview(generation)
+  @Synchronized fun mediaRevision(generation: String): String? {
+    val config = rows[generation]?.config ?: return null
+    val revision = endpoints.revision()
+    if (config.fixture != "published" || "media" !in config.grantedDomains || !mayReview(generation, revision)) return null
+    return "$revision:${endpoints.reviewRevision(generation)}"
+  }
+  @Synchronized fun liveMediaRevision(generation: String): String? {
+    if (rows[generation]?.config?.mediaProfile != "finite-live-mp3-v1") return null
+    return mediaRevision(generation)?.let { "$it:finite-live-mp3-v1" }
+  }
+  @Synchronized fun mayReview(generation: String, revision: Long): Boolean = endpoints.matchesRevision(revision) && endpoints.mayReview(generation) && CapabilityTransport.leases.sessionActive(generation)
   @Synchronized fun reviewRevision(generation: String, revision: Long): Long = if (endpoints.matchesRevision(revision)) endpoints.reviewRevision(generation) else -1
   @Synchronized fun mayDeliver(generation: String, revision: Long, domain: String): Boolean =
     endpoints.matchesRevision(revision) && endpoints.mayDeliver(generation, domain) && CapabilityTransport.leases.sessionActive(generation)
@@ -43,37 +65,63 @@ internal object RoutingTransport {
     val id = wrapper?.opt("id") as? String
     val message = wrapper?.opt("message") as? JSONObject
     val type = message?.opt("type") as? String
-    val domain = if (type == "notify.__register") "notify" else if (type == "routing.__register") row?.config?.grantedDomains?.firstOrNull { it == "intent" || it == "inc" || it == "notify" || it == "config" } else type?.substringBefore('.')
+    val discovery = type == PUBLISHED_OPEN
+    val domain = if (discovery) "published-open" else if (type == "notify.__register") "notify" else if (type == "routing.__register") row?.config?.grantedDomains?.firstOrNull { it == "intent" || it == "inc" || it == "notify" || it == "config" } else type?.substringBefore('.')
     val revision = endpoints.revision()
+    val focusRevision = if (discovery) reviewRevision(generation, revision) else -1
     val valid = row != null && wrapper != null && wrapper.keys().asSequence().toSet() == setOf("type", "id", "message") &&
-      wrapper.opt("type") == "routing.call" && id != null && id.matches(Regex("[A-Za-z0-9_-]{1,128}")) && domain != null && mayDeliver(generation, revision, domain) &&
+      wrapper.opt("type") == "routing.call" && id != null && id.matches(Regex("[A-Za-z0-9_-]{1,128}")) && domain != null && (discovery || domain != "published-open") && mayDeliver(generation, revision, domain) &&
+      (!discovery || (focusRevision >= 0 && mayReview(generation, revision) && message!!.keys().asSequence().toSet() == setOf("type", "id", "address", "expectedEventId"))) &&
       ((type != "routing.__register" && type != "notify.__register") || message!!.keys().asSequence().toSet() == setOf("type"))
     if (!valid) { CapabilityTransport.leases.consumeSequence(generation, sequence); reply(null); return null }
     row!!.push = push
     wrapper!!.put("revision", revision)
-    return CapabilityTransport.admit(generation, sequence, row.config.request(wrapper.toString())) { response ->
+    if (discovery) wrapper.put("focusRevision", focusRevision)
+    val snapshot = row.config.request(wrapper.toString())
+    val respond: (String?) -> Unit = { response ->
       synchronized(this) { reply(if (mayDeliver(generation, revision, domain!!)) response else null) }
-    }.also { if (it == null) reply(null) }
+    }
+    return (if (discovery) CapabilityTransport.admitPublishedOpen(generation, sequence, snapshot, respond)
+      else CapabilityTransport.admit(generation, sequence, snapshot, respond)).also { if (it == null) reply(null) }
+  }
+  private fun resumeIntents() {
+    for ((generation, row) in rows) {
+      row.credits.pause()
+      if (endpoints.available()) row.credits.parkedIds().forEach { scheduleIntent(generation, row, it) }
+    }
+  }
+  private fun scheduleIntent(generation: String, row: Row, delivery: Long) {
+    main.post { synchronized(this) {
+      if (rows[generation] !== row || !mayDeliver(generation, endpoints.revision(), "intent")) return@synchronized
+      val push = row.push ?: return@synchronized
+      row.credits.takeParked(delivery)?.let(push)
+    } }
   }
   @Synchronized fun send(generation: String, revision: Long, raw: String): Boolean {
     val row = rows[generation] ?: return false
     val message = runCatching { UploadWire.objectValue(raw, 36 * 1024, maximumDepth = 40) }.getOrNull() ?: return false
     val type = message.opt("type") as? String ?: return false
     val domain = type.substringBefore('.')
-    if (type !in setOf("intent.changed", "inc.event", "inc.channel.opened", "inc.channel.event", "inc.channel.closed", "notify.action", "notify.clicked", "notify.dismissed", "notify.controls", "config.values", "config.schemaError") ||
-      !mayDeliver(generation, revision, domain) || row.push == null || row.pending.size >= 4 || row.delivery >= 9_007_199_254_740_991L) return false
-    val delivery = ++row.delivery; row.pending.add(delivery)
+    if (type !in setOf("intent.changed", "intent.deliver", "inc.event", "inc.channel.opened", "inc.channel.event", "inc.channel.closed", "notify.action", "notify.clicked", "notify.dismissed", "notify.controls", "config.values", "config.schemaError") ||
+      !mayDeliver(generation, revision, domain) || row.push == null || row.delivery >= 9_007_199_254_740_991L) return false
+    val delivery = row.delivery + 1
+    val retained = type == "intent.deliver"
     val envelope = JSONObject().put("type", "routing.event").put("sessionId", generation).put("delivery", delivery).put("response", raw).toString()
+    if (!row.credits.reserve(delivery, if (retained) envelope else null)) return false
+    row.delivery = delivery
+    if (retained) {
+      scheduleIntent(generation, row, delivery)
+      return true
+    }
     main.post { synchronized(this) {
-      if (rows[generation] === row && row.pending.contains(delivery) && mayDeliver(generation, revision, domain)) row.push?.invoke(envelope)
-      else row.pending.remove(delivery)
+      if (rows[generation] === row && row.credits.contains(delivery) && mayDeliver(generation, revision, domain)) row.push?.invoke(envelope)
+      else row.credits.release(delivery)
     } }
-    main.postDelayed({ synchronized(this) { row.pending.remove(delivery) } }, 25_000)
+    main.postDelayed({ synchronized(this) { row.credits.expire(delivery) } }, 25_000)
     return true
   }
   @Synchronized fun acknowledge(generation: String, delivery: Long) {
     val row = rows[generation] ?: return
-    if (delivery <= row.acknowledged || !row.pending.remove(delivery)) return
-    row.acknowledged = delivery
+    row.credits.acknowledge(delivery)
   }
 }

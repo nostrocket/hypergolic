@@ -1,19 +1,23 @@
 {
   "schema": 1,
   "productionSources": {
+    "modules/napplet-host/ios/NativeCanonicalJSON.swift": "782f7815be69c649958417bcd76c8a32c4780cbc0a930d41c00ef77af0d5ad7d",
+    "modules/napplet-host/ios/NativeAppDataPolicy.swift": "ba0ff6aa255ecc0135e76a3aa011cda3f2c73eb363a18f70177ddfd3224ec5fb",
     "modules/napplet-host/ios/NativeApprovalAuthority.swift": "25d1029dd7856be15e17cdd28db9314be8e7b85faba94c7d55a4eef711941ee6",
-    "modules/napplet-host/ios/CapabilityLeaseRegistry.swift": "d9776b85a2c1719f2d5164cedd81d97ef1a683d53a45ba33f1dc9f4925a86ba6",
-    "modules/napplet-host/ios/CapabilityTransport.swift": "c332c964e631c368f73affc696339b133bed398fe4ed705b0a8a9de24040a180",
-    "modules/napplet-host/ios/ApprovalTransport.swift": "e70edea8f712e017459e9652e4edcedeaedf7767e5452eea152875e966294d48",
-    "modules/napplet-host/ios/NativeOutboxPlan.swift": "9f05fb11a7df9cf9b2fa90d36c57403205d0e906bcc6f0e7f01432ea2be620af",
-    "modules/napplet-host/ios/PublishedRelayWebSocketClientFrames.swift": "8bc1af1653d83f2756f582f059d782fae16e1b2f69d4de36fbdebb755bedbed7"
+    "modules/napplet-host/ios/NativeOutboxPlan.swift": "ab218c96a04c61795714df526f425e4a7f323502bc16ef04ee9dadd454c0663e",
+    "modules/napplet-host/ios/NativeCommonPlan.swift": "25be204953dfeedd5575e5022e005148ce572e3ea4156863ad54cabe4c9eb672",
+    "modules/napplet-host/ios/NativeCommonNpub.swift": "d74c599eb1129b560e7ba23e9ab6eadb5c93efa6dc5cfb36660f5ccc608affad",
+    "modules/napplet-host/ios/PublishedRelayWebSocketClientFrames.swift": "8bc1af1653d83f2756f582f059d782fae16e1b2f69d4de36fbdebb755bedbed7",
+    "modules/napplet-host/ios/CapabilityLeaseRegistry.swift": "2aa8d9dac424df19f19081ca85ed8a1c2592f92c2c59b4a1464d42891caeaa64",
+    "modules/napplet-host/ios/CapabilityTransport.swift": "389c0f661f9db3aabf5d6ebb1a02373b744c8e269461e200dc69a4709a141df0",
+    "modules/napplet-host/ios/ApprovalTransport.swift": "d834ba1fcfb2f9fc3b898d60916e2b2afcd973f673fe7e81989d6b7262469f97"
   },
   "testSources": {
-    "Tests/ApprovalTransportTests.swift": "94c274c75fd4b09424850a299931a947cb392f70ad9946e5fedf412ee32d73bf"
+    "Tests/ApprovalTransportTests.swift": "6a64d1a467a545727410001bfafad0633901d9c04d3d9aa431a2974b1e43df47"
   },
   "harnessFiles": {
-    "README.md": "ddf01fe64bad9241d8726918f8d93d4357e40c2660029ce0d8888172adcdc31c",
+    "README.md": "79476da0c20abd3abdf511c1b50f94276a39ccafbbdabc770c7412b7848dad5a",
     "Package.swift.template": "42d7afbda818f2ffce5022f535b068fb1a54772d2e1f380211f77e0f22a6d1f0",
-    "runner.py": "d9fdbc029ece43400abf85cff402156bcc0d69abc8702948a623073e82b05c09"
+    "runner.py": "dc7cfe6cdaa7f22e2100102edaf687ab6e0f4aca6de4758c5a861147b1a8ac9a"
   }
 }

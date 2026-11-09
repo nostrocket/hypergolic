@@ -1,5 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { finalizeEvent } from 'nostr-tools/pure';
+import { loadEmbeddedTestArtifact } from '../../src/napplets/embedded-test-fixture.ts';
+import { descriptorForPublishedArtifact } from '../../src/napplets/published-host-input.ts';
+import { openShellDatabase } from '../../src/storage/database.ts';
+import { verifyArtifact, verifyManifest } from '../../src/napplets/verified-artifact.ts';
+import { isDiscoveryEntry } from '../../src/napplets/discovery-entry.ts';
 import { assertBundledWorkspace, assertWorkspaceAvailability, bundledDescriptor, resolveBundledSession, initialTestWorkspace } from '../../src/shell/fixtures.ts';
 import { emptyWorkspace, openNapplet, snapshotWorkspace, type NappletDescriptor } from '../../src/shell/workspace.ts';
 import { openWorkspaceController } from '../../src/storage/workspace-controller.ts';
@@ -22,6 +28,38 @@ test('source-aware availability accepts a strict published pin without resolving
     source: 'published', eventId: 'c'.repeat(64) };
   assert.doesNotThrow(() => assertWorkspaceAvailability({ ...emptyWorkspace(), sessions: [published] }));
   assert.throws(() => assertBundledWorkspace({ ...emptyWorkspace(), sessions: [published] }), /Unavailable saved napplet/);
+});
+
+test('a verified snapshot saves through workspace availability and restores the exact pin from disk', async t => {
+  const { database, sqlite } = await setup(t);
+  const { htmlHash, htmlBytes } = await loadEmbeddedTestArtifact();
+  const secret = new Uint8Array(32); secret[31] = 9;
+  const signed = finalizeEvent({ kind: 5129, created_at: 1_800_000_000, content: 'Snapshot workspace test',
+    tags: [['x', htmlHash], ['title', 'Snapshot']] }, secret);
+  const manifest = await verifyManifest({ kind: 5129, eventId: signed.id }, signed);
+  const artifact = await verifyArtifact(manifest, htmlBytes);
+  const descriptor = descriptorForPublishedArtifact(artifact, '58274370-ec8f-4058-a4cc-b63e7e75ca4b');
+  const owner = registration();
+  const binding = database.bindWorkspace(owner);
+  const controller = await openWorkspaceController(binding, initialTestWorkspace, assertWorkspaceAvailability);
+  const opened = openNapplet(controller.getSnapshot().workspace, descriptor);
+  controller.change(opened);
+  await controller.flush();
+  assert.equal(controller.getSnapshot().error, null);
+  assert.deepEqual((await binding.port.load())?.snapshot, snapshotWorkspace(opened));
+
+  await database.close();
+  const reopened = await openShellDatabase(sqlite, 'ios');
+  const restored = await openWorkspaceController(reopened.bindWorkspace(owner), () => { throw Error('do not reseed'); }, assertWorkspaceAvailability);
+  assert.deepEqual(restored.getSnapshot().workspace, opened);
+
+  const workspaceWith = (patch: Partial<NappletDescriptor>) => ({ ...opened, sessions: [{ ...descriptor, ...patch }] });
+  for (const patch of [
+    { eventId: 'f'.repeat(64) }, { eventId: undefined },
+    { appId: ' 5129:named-napplet' }, { appId: descriptor.appId + '\n' },
+    { appId: ' snapshot:' + artifact.manifest.eventId }, { source: 'bundled' as const },
+  ]) assert.throws(() => assertWorkspaceAvailability(workspaceWith(patch)), /Unavailable saved napplet/);
+  assert.doesNotThrow(() => assertWorkspaceAvailability(workspaceWith({ appId: '5129:' + artifact.manifest.eventId })));
 });
 
 test('published workspace descriptors reject changed pins, identity fields and unbounded metadata', () => {
@@ -57,4 +95,33 @@ test('the exact prior Support descriptor survives upgrade without reseeding or c
   }
   const other = {...bundledDescriptor('state-lab', 4), version: previous.version};
   assert.throws(() => resolveBundledSession(other), /Unavailable saved napplet/);
+});
+
+for (const version of [
+  '1360132bc9b4ea9a29ce5d4783ce04b862d776fbc214d2083186fb228267d7ed',
+  '6eb956ead5bc710d70c3511715bf1dab281314d4979ff4bd99d9d1785176655c',
+  'ec8f1cb8dddca04865f59105f86e6b9741e4e2d6c1f3cab586bcaf48645fae0a',
+  '54f25dd032cb8916b526f0a55888fdfd0fc9e685d622a112cd760424dc32c6ce',
+]) test(`the bundled Discover card at ${version.slice(0, 8)} restores under the current packaged authority`, async t => {
+  const {database} = await setup(t);
+  const instance = '58274370-ec8f-4058-a4cc-b63e7e75ca4b';
+  const previous: NappletDescriptor = {id: 'napplet-discovery-' + instance, title: 'Discover',
+    appId: 'napplet-discovery', publisher: 'bundled-unsigned-fixture', source: 'bundled', version};
+  const current = bundledDescriptor('napplet-discovery', 1, instance);
+  assert.notEqual(current.version, previous.version);
+  const original = openNapplet(initialTestWorkspace(), previous);
+  const binding = database.bindWorkspace(registration());
+  await binding.port.save(snapshotWorkspace(original), null);
+  const controller = await openWorkspaceController(binding, () => {throw Error('do not replace retained workspace');}, assertWorkspaceAvailability);
+  assert.deepEqual(controller.getSnapshot().workspace, original);
+  assert.deepEqual((await binding.port.load())?.snapshot, snapshotWorkspace(original));
+  assert.equal(isDiscoveryEntry(previous), true);
+  assert.deepEqual(resolveBundledSession(previous), resolveBundledSession(current));
+  assert.deepEqual(resolveBundledSession(previous).domains, ['relay', 'resource', 'theme']);
+
+  for (const patch of [{version:'a'.repeat(64)}, {publisher:'bundled-unsigned-peer'}, {appId:'state-lab'},
+    {source:'published' as const}, {eventId:'b'.repeat(64)}, {title:'Other'}]) {
+    assert.throws(() => resolveBundledSession({...previous,...patch}), /Unavailable saved napplet/);
+  }
+  assert.throws(() => resolveBundledSession({...bundledDescriptor('state-lab', 4),version:previous.version}), /Unavailable saved napplet/);
 });

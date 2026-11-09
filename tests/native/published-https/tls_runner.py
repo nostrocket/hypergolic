@@ -42,28 +42,31 @@ def serve(mode: str, key: Path, cert: Path, listener: socket.socket,
     context.load_cert_chain(certfile=str(cert), keyfile=str(key))
     listener.settimeout(8)
     try:
-        raw, _ = listener.accept()
-        observed.append("accepted")
-        raw.settimeout(4)
-        with context.wrap_socket(raw, server_side=True) as peer:
-            request = bytearray()
-            while b"\r\n\r\n" not in request and len(request) < 8192:
-                chunk = peer.recv(8192)
-                if not chunk:
+        paths = ["/" + "a" * 64, "/artifact-hop1", "/artifact-hop2", "/artifact-hop3"] if mode == "artifact-redirect" else ["/fixture"]
+        for index, path in enumerate(paths):
+            raw, _ = listener.accept()
+            observed.append("accepted")
+            raw.settimeout(4)
+            with context.wrap_socket(raw, server_side=True) as peer:
+                request = bytearray()
+                while b"\r\n\r\n" not in request and len(request) < 8192:
+                    chunk = peer.recv(8192)
+                    if not chunk:
+                        return
+                    request.extend(chunk)
+                if not request.startswith(f"GET {path} HTTP/1.1\r\n".encode()) or b"Host: blossom.example.net:" not in request:
+                    errors.append("unexpected request")
+                observed.append("request")
+                if mode == "cancel":
+                    time.sleep(0.8)
                     return
-                request.extend(chunk)
-            if not request.startswith(b"GET /fixture HTTP/1.1\r\n") or b"Host: blossom.example.net:" not in request:
-                errors.append("unexpected request")
-            observed.append("request")
-            if mode == "cancel":
-                time.sleep(0.8)
-                return
-            response = (
-                b"HTTP/1.1 302 Found\r\nLocation: https://other.example.org/\r\nContent-Length: 0\r\n\r\n"
-                if mode == "redirect" else
-                b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nproof"
-            )
-            peer.sendall(response)
+                if index + 1 < len(paths):
+                    response = f"HTTP/1.1 302 Found\r\nLocation: {paths[index + 1]}\r\nContent-Length: 0\r\n\r\n".encode()
+                elif mode == "redirect":
+                    response = b"HTTP/1.1 302 Found\r\nLocation: https://other.example.org/\r\nContent-Length: 0\r\n\r\n"
+                else:
+                    response = b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nproof"
+                peer.sendall(response)
     except (ConnectionError, OSError, ssl.SSLError) as error:
         if mode not in {"untrusted", "wrong-host", "cancel"}:
             errors.append(str(error))
@@ -93,12 +96,11 @@ def main() -> None:
             ])
         subprocess.run([
             *compiler, "-module-cache-path", str(output / "swift-modules"), "-o", str(binary),
-            *(str(NATIVE / source) for source in ["NativeUploadAuthority.swift", "UploadFileProfile.swift", "UploadPngMetadata.swift", "UploadPngProfile.swift"]),
             str(NATIVE / "PublicAddressPolicy.swift"),
             str(NATIVE / "PublishedHTTPResponse.swift"),
             str(NATIVE / "PublishedPinnedHTTPS.swift"), str(PROOF),
         ], cwd=ROOT, env=compiler_environment, check=True)
-        for mode in ("valid", "failover", "untrusted", "wrong-host", "redirect", "cancel", "mixed-dns"):
+        for mode in ("valid", "failover", "untrusted", "wrong-host", "redirect", "cancel", "mixed-dns", "artifact-redirect"):
             key, cert, anchor = (
                 (wrong_key, wrong_cert, wrong_der) if mode == "wrong-host"
                 else (valid_key, valid_cert, valid_der)
@@ -123,6 +125,8 @@ def main() -> None:
             if thread.is_alive() or errors:
                 raise AssertionError(f"{mode}: server did not finish cleanly: {errors}")
             expected = ["accepted"] if mode in {"untrusted", "wrong-host"} else ["accepted", "request"]
+            if mode == "artifact-redirect":
+                expected *= 4
             if observed != expected:
                 raise AssertionError(f"{mode}: expected {expected}, observed {observed}")
 

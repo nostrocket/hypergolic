@@ -1,0 +1,5 @@
+# Selected local vault lease
+
+Compile the production Android `hypergolic-signer-core` Release Kotlin and Java targets, then run `python3 tests/native/signer-core/local-vault-lease/run.py --output <fresh-private-directory>` from the repository root. The runner uses the pinned JDK, cached JSON dependencies, Xcode Swift compiler, and production signer C library. Keep receipts and build products outside the repository.
+
+The two proofs exercise the real vault owners and typed Mesh adapters. Android uses the production vault file, host AES-GCM, actual JNI/C keys and the existing durability suite's explicit Android service doubles. Swift uses the production actor, real encrypted records, and in-memory Keychain and file ports. Unused Swift transport entry points trap if reached. The proofs cover persisted metadata, local-only eligibility, rejected and uncertain mutations, preserved signer pauses, stale checks under concurrency and retirement. The full platform module compilation separately checks the production runtime bindings. There is no app build, network traffic, device activity or OS-backed key storage evidence in this host proof.

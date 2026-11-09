@@ -54,6 +54,64 @@ test('user edits including empty role lists persist and restore defaults is expl
   assert.deepEqual((await openRelaySettings(storage)).getSettings(), defaults);
 });
 
+test('previously saved default membership and order survive the new default seed', async () => {
+  const storage = new MemoryStorage();
+  const networkRelays = ['wss://relay.damus.io', 'wss://nos.lol', 'wss://bucket.coracle.social'];
+  const lookupRelays = ['wss://lookup.example.org'];
+  storage.values.set(RELAY_SETTINGS_STORAGE_KEY, JSON.stringify({schemaVersion: 1, networkRelays, lookupRelays}));
+  const service = await openRelaySettings(storage);
+  assert.deepEqual(service.getSettings(), {networkRelays, lookupRelays});
+  assert.equal(storage.writes, 0);
+  await service.restoreDefaults('network');
+  assert.deepEqual(service.getSettings(), {networkRelays: defaults.networkRelays, lookupRelays});
+});
+
+test('moving a Network relay uses its current position and preserves both role memberships on reopen', async () => {
+  const storage = new MemoryStorage();
+  const service = await openRelaySettings(storage);
+  const added = 'wss://relay.example.org';
+  await service.addRelay('network', added);
+  await service.addRelay('lookup', 'wss://lookup.example.org');
+  const before = service.getSettings();
+  const [first, second, third] = defaults.networkRelays;
+  await Promise.all([service.moveNetworkRelay('wss://RELAY.EXAMPLE.ORG:443/', 'up'), service.moveNetworkRelay(added, 'up')]);
+  assert.deepEqual(service.getSettings().networkRelays, [first, added, second, third]);
+  await service.moveNetworkRelay(added, 'down');
+  const after = (await openRelaySettings(storage)).getSettings();
+  assert.deepEqual(after.networkRelays, [first, second, added, third]);
+  assert.deepEqual(new Set(after.networkRelays), new Set(before.networkRelays));
+  assert.deepEqual(after.lookupRelays, before.lookupRelays);
+});
+
+test('invalid, missing and boundary Network moves leave the stored list unchanged', async () => {
+  const storage = new MemoryStorage();
+  const service = await openRelaySettings(storage);
+  const before = service.getSettings();
+  const [first, , last] = before.networkRelays;
+  const prior = storage.values.get(RELAY_SETTINGS_STORAGE_KEY);
+  expectCode(() => service.moveNetworkRelay('ws://relay.example.org', 'up'), 'INVALID_RELAY_URL');
+  expectCode(() => service.moveNetworkRelay(first!, 'sideways' as never), 'INVALID_RELAY_MOVE');
+  await assert.rejects(service.moveNetworkRelay(before.lookupRelays[0]!, 'up'), {code: 'INVALID_RELAY_MOVE'});
+  await service.moveNetworkRelay(first!, 'up');
+  await service.moveNetworkRelay(last!, 'down');
+  assert.deepEqual(service.getSettings(), before);
+  assert.equal(storage.values.get(RELAY_SETTINGS_STORAGE_KEY), prior);
+  assert.equal(storage.writes, 1);
+});
+
+test('a failed Network move is not published in memory and the next move can persist', async () => {
+  const storage = new MemoryStorage();
+  const service = await openRelaySettings(storage);
+  const before = service.getSettings(), setItem = storage.setItem.bind(storage);
+  storage.setItem = async () => {throw new Error('write failed');};
+  await assert.rejects(service.moveNetworkRelay(before.networkRelays[1]!, 'up'), /write failed/);
+  assert.deepEqual(service.getSettings(), before);
+  storage.setItem = setItem;
+  await service.moveNetworkRelay(before.networkRelays[1]!, 'up');
+  assert.deepEqual((await openRelaySettings(storage)).getSettings().networkRelays,
+    [before.networkRelays[1], before.networkRelays[0], before.networkRelays[2]]);
+});
+
 test('accepts public wss DNS names and rejects unsafe or noncanonical URL classes', async () => {
   const service = await openRelaySettings(new MemoryStorage());
   await service.addRelay('lookup', 'wss://relay.example.org:443/path');

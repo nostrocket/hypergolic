@@ -3,6 +3,7 @@ package org.nostrocket.hypergolic.host;
 import org.nostrocket.hypergolic.host.PublishedRelayWssIo.DeadlineInput;
 import org.nostrocket.hypergolic.host.PublishedRelayWssIo.AbortMonitor;
 import org.nostrocket.hypergolic.host.PublishedRelayResponseClassifier.ResponseCollector;
+import org.nostrocket.hypergolic.host.PublishedRelayResponseClassifier.ResponseProfile;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -59,6 +60,7 @@ public final class PublishedRelayWssQuery {
         InetAddress::getAllByName, DNS, defaultFactory(), HttpsURLConnection.getDefaultHostnameVerifier());
   }
 
+  interface TimedRead extends PublishedHttpsTransport.Cancellation { int timeoutMs(); }
   @FunctionalInterface interface SendAction { void run() throws IOException; }
   interface PublicationControl extends PublishedHttpsTransport.Cancellation {
     default void attach(Socket socket) throws IOException {}
@@ -82,7 +84,9 @@ public final class PublishedRelayWssQuery {
     try { requestFrame = PublishedRelayWebSocketClientFrames.textReq(request); }
     catch (IllegalArgumentException invalid) { throw new IOException("Invalid bounded relay request", invalid); }
 
-    Deadline deadline = Deadline.start();
+    int timeoutMs = cancellation instanceof TimedRead ? ((TimedRead) cancellation).timeoutMs() : TOTAL_TIMEOUT_MS;
+    if (timeoutMs < 1 || timeoutMs > TOTAL_TIMEOUT_MS) throw new IOException("Invalid relay deadline");
+    Deadline deadline = Deadline.start(timeoutMs);
     AbortMonitor abort = new AbortMonitor(cancellation, deadline);
     try {
       InetAddress[] addresses = resolve(relay.host, deadline, abort, resolver, executor);
@@ -356,7 +360,10 @@ public final class PublishedRelayWssQuery {
   private static IOException invalidUrl() { return new IOException("Only credential-free public WSS DNS relay URLs are supported"); }
   public enum TextKind { EVENT, OTHER, EOSE }
   /** Classification is made only after the caller structurally validates JSON and subscription id. */
-  public interface TextStopPolicy { TextKind classify(String completeText) throws IOException; }
+  public interface TextStopPolicy {
+    TextKind classify(String completeText) throws IOException;
+    default ResponseProfile profile() { return ResponseProfile.STANDARD; }
+  }
 
   static final class RelayUrl {
     final String host;
@@ -372,12 +379,13 @@ public final class PublishedRelayWssQuery {
     volatile long expiresAt;
     volatile boolean persistent;
     private final LongSupplier nowNanos;
-    private Deadline() { nowNanos = System::nanoTime; expiresAt = nowNanos.getAsLong() + TOTAL_TIMEOUT_MS * 1_000_000L; }
+    private Deadline(int timeoutMs) { nowNanos = System::nanoTime; expiresAt = nowNanos.getAsLong() + timeoutMs * 1_000_000L; }
     private Deadline(long absoluteElapsedMs, LongSupplier elapsedClock) {
       nowNanos = () -> TimeUnit.MILLISECONDS.toNanos(elapsedClock.getAsLong());
       expiresAt = TimeUnit.MILLISECONDS.toNanos(absoluteElapsedMs);
     }
-    static Deadline start() { return new Deadline(); }
+    static Deadline start() { return new Deadline(TOTAL_TIMEOUT_MS); }
+    static Deadline start(int timeoutMs) { return new Deadline(timeoutMs); }
     static Deadline atElapsed(long absoluteElapsedMs, LongSupplier elapsedClock) {
       if (absoluteElapsedMs <= 0 || elapsedClock == null) throw new IllegalArgumentException("Invalid relay deadline");
       return new Deadline(absoluteElapsedMs, elapsedClock);

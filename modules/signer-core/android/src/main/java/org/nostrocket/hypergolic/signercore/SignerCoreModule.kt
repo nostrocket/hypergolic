@@ -36,6 +36,23 @@ class SignerCoreModule : Module() {
   private val handoffs by lazy { NativeHandoffController(appContext, ::active) }
   private var androidSigners: NativeAndroidSignerActions? = null
   private val completedSignings = NativeCompletedSignings()
+  private val publicVerification = NativePublicVerification()
+  private val cvmSessions: NativeCvmSessions by lazy { NativeCvmSessions(object : NativeCvmSessions.Events {
+    override fun message(session: String, payload: String) {
+      main.post {
+        if (cvmSessions.mayDeliver(session)) {
+          val row = JSONObject(payload)
+          val refs = row.getJSONArray("references")
+          val event = mutableMapOf<String, Any>("session" to session, "message" to row.getString("message"),
+            "eventId" to row.getString("eventId"), "references" to (0 until refs.length()).map { refs.getString(it) })
+          if (row.has("paymentInteraction")) event["paymentInteraction"] = row.getString("paymentInteraction")
+          sendEvent("onCvmMessage", event)
+        }
+      }
+    }
+    override fun closed(session: String, error: String) { main.post { sendEvent("onCvmClosed", mapOf("session" to session, "error" to error)) } }
+  }, ::active) }
+
 
   private class Signing(val kind: String, val token: String, val core: NativeSignerCore, val epoch: Long,
     val remote: NativeRemoteBinding? = null, val android: NativeAndroidSignerBinding? = null) {
@@ -44,6 +61,13 @@ class SignerCoreModule : Module() {
     @Volatile var androidDispatched = false
   }
   @Volatile private var signing: Signing? = null
+  private val localVaultLeaseProvider = java.util.function.Supplier {
+    synchronized(session.lock) {
+      val epoch = session.epoch
+      session.require(epoch, ::active)
+      vaultOwned().localLease(appContext, epoch) { session.localLeaseCurrent(epoch, ::active) }
+    }
+  }
 
   private fun active(): Boolean = NativeIdentityOwnerAccess.owns(appContext) &&
     appContext.runtime.reactContext?.lifecycleState == LifecycleState.RESUMED
@@ -161,6 +185,7 @@ class SignerCoreModule : Module() {
   private fun revoke(background: Boolean) {
     val cleanup = synchronized(session.lock) {
       session.invalidate(background)
+      vault?.retireLocalLeases()
       clearImportTimer()
       if (background) vault?.close() else runCatching { vault?.cancelImports(appContext) }
       val current = signing.also { signing = null }
@@ -210,6 +235,10 @@ class SignerCoreModule : Module() {
   private fun retire() = revoke(true)
 
   private fun background() {
+    synchronized(session.lock) {
+      // A protected-signer handoff may preserve the signer epoch across a pause.
+      session.suspendLocalLeases(vault)
+    }
     if (!handoffs.background()) { retire(); return }
     val cleanup = synchronized(session.lock) {
       val identityActions = actions
@@ -231,6 +260,7 @@ class SignerCoreModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("HypergolicSignerCore")
+    Events("onCvmMessage", "onCvmClosed")
 
     Function("activateEphemeralSigner") { action {
       if (appContext.runtime.reactContext?.isOnJSQueueThread != true || !active()) throw NativeSignerCore.Denied()
@@ -283,6 +313,7 @@ class SignerCoreModule : Module() {
     Function("activateNativeVault") { vaultAction {
       if (appContext.runtime.reactContext?.isOnJSQueueThread != true) throw NativeVault.Error("AUTHORIZATION_DENIED")
       session.activate(::active)
+      NativeLocalVaultLease.install(localVaultLeaseProvider)
       actions?.foreground(true)
       true
     } }
@@ -357,6 +388,28 @@ class SignerCoreModule : Module() {
           result
         }
       } }
+      }
+    } }
+
+    AsyncFunction("addNativePublicIdentityAsync") Coroutine { pubkey: String, vaultId: String, value: Double -> vaultAction {
+      val records = synchronized(session.lock) { vaultOwned() }
+      mutationAction(records) {
+        withContext(Dispatchers.Main.immediate) { exclusiveAction { current ->
+          val expected = revision(value)
+          synchronized(session.lock) { records.assertRevision(appContext, vaultId, expected) }
+          if (!NativeSigningKey.validPublicKey(pubkey)) throw NativeVault.Error("AUTHORIZATION_DENIED")
+          val activity = appContext.currentActivity ?: throw NativeVault.Error("AUTHORIZATION_DENIED")
+          val accepted = confirmation.confirm(activity, "Use public identity?",
+            "Public key:\n$pubkey\n\nRead public data as this account. No private key or signing method is added. Open napplets restart and pending requests are cancelled.", "Use public identity") {
+            active() && session.activated && session.epoch == current
+          }
+          if (!accepted) throw NativeVault.Error("AUTHORIZATION_DENIED")
+          actions?.cancel()
+          synchronized(session.lock) {
+            session.require(current, ::active)
+            vaultOwned().addPublicIdentity(appContext, pubkey, vaultId, expected)
+          }
+        } }
       }
     } }
 
@@ -724,16 +777,41 @@ class SignerCoreModule : Module() {
       }
     } }
 
+    AsyncFunction("verifyPublicSignatures") Coroutine { operationId: String, tuples: String, timeoutMs: Double ->
+      val job = publicVerification.begin(operationId, tuples, timeoutMs, ::active)
+      try { withContext(Dispatchers.Default) { publicVerification.run(job) }.also { publicVerification.delivery(job) } }
+      finally { publicVerification.abandon(job) }
+    }
+    AsyncFunction("openCvmSession") Coroutine { permit: String ->
+      claimedOwner(); if (!active()) throw NativeSignerCore.Denied()
+      cvmSessions.foreground(true)
+      withContext(Dispatchers.Default) { cvmSessions.open(permit) }
+    }
+    AsyncFunction("prepareCvmMessage") Coroutine { session: String, permit: String, purpose: String, message: String, replyTo: String? ->
+      claimedOwner(); if (!active()) throw NativeSignerCore.Denied()
+      withContext(Dispatchers.IO) { cvmSessions.prepare(session, permit, purpose, message, replyTo).get() }
+    }
+    AsyncFunction("commitCvmMessage") Coroutine { session: String, plan: String ->
+      claimedOwner(); if (!active()) throw NativeSignerCore.Denied()
+      withContext(Dispatchers.IO) { cvmSessions.commit(session, plan).get(); Unit }
+    }
+    AsyncFunction("closeCvmSession") { session: String -> claimedOwner(); cvmSessions.close(session) }
+
+    Function("cancelPublicSignatures") { operationId: String -> publicVerification.cancel(operationId) }
+
     OnActivityEntersForeground {
+      session.resumeLocalLeases()
+      publicVerification.foreground(true)
+      cvmSessions.foreground(active())
       androidSigners?.foreground(true)
       handoffs.foreground()
     }
-    OnActivityEntersBackground { background(); androidSigners?.foreground(false) }
-    OnUserLeavesActivity { background() }
+    OnActivityEntersBackground { cvmSessions.foreground(false); publicVerification.foreground(false); background(); androidSigners?.foreground(false) }
+    OnUserLeavesActivity { cvmSessions.foreground(false); publicVerification.foreground(false); background() }
     OnActivityResult { activity, result ->
       androidSigners?.result(activity, result.requestCode, result.resultCode, result.data)
     }
-    OnActivityDestroys { retire() }
-    OnDestroy { retire() }
+    OnActivityDestroys { cvmSessions.close(); publicVerification.close(); retire() }
+    OnDestroy { cvmSessions.close(); publicVerification.close(); retire() }
   }
 }

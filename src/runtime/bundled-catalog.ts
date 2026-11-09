@@ -1,5 +1,8 @@
-/** Reviewed unsigned test artifacts. These records confer no remote publisher trust. */
+import { DISCOVERY_BUNDLE } from './discovery-bundle.ts';
+
+/** Reviewed packaged artifacts. These records confer no remote publisher trust. */
 export const BUNDLED_FIXTURES = Object.freeze({
+  'napplet-discovery': DISCOVERY_BUNDLE,
   'close-lab': Object.freeze({title: 'Close Lab', appId: 'close-lab', sha256: 'b57c0dd6a86e9254c268cb72b26c5a8cd43db07906953cac2b959fb4ecb13a91', aggregateHash: '4bbc33b8f202b1ae603bf8aa0f5a37acb68470519a58bd0cfeb071b626dc280a', domains: Object.freeze(['theme'])}),
   'nap-support': Object.freeze({title: 'NAP Support', appId: 'nap-support',
     sha256: '08b31ee2e9e8a7bb9b0f9eb324d55ed52981a138161ff4031cc976440dd02719', aggregateHash: 'a03b45352c3123bca712ecdd4f4ee659694b9299a10aa7d1478e0f14dcd8e66c', domains: Object.freeze(['link', 'theme'])}),

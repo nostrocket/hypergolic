@@ -3,10 +3,13 @@ package org.nostrocket.hypergolic.host
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Insets
 import android.net.Uri
 import android.net.http.SslError
+import android.os.Build
 import android.os.Message
 import android.view.View
+import android.view.WindowInsets
 import android.view.inputmethod.InputMethodManager
 import android.webkit.*
 import androidx.webkit.WebViewAssetLoader
@@ -39,6 +42,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
   @Volatile private var ready = false
   @Volatile private var disposed = false
   @Volatile private var active = false
+  private var inputBlocked = false
   private var expectedUrl: String? = null
   private var closeCheckId: String? = null
   private var closeCheckDeadline = 0L
@@ -46,6 +50,16 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
   private var closeUnsafeUntil = 0L
   private var pickerFaultProof: String? = null
   private val webView = WebView(context)
+  private val finiteVideo = NativeFiniteVideo(this, generation, { RoutingTransport.mediaRevision(generation) }) {
+    live && ready && loaded && !disposed && active && mediaForeground &&
+      published != null && configuration?.grantedDomains?.contains("media") == true && webView.url == expectedUrl
+  }
+  private val liveRadio = NativeLiveRadio(this, generation, { configuration?.mediaProfile }, { configuration?.snapshot },
+    { RoutingTransport.liveMediaRevision(generation) }) {
+    live && ready && loaded && !disposed && active && mediaForeground &&
+      published != null && configuration?.grantedDomains?.contains("media") == true && webView.url == expectedUrl
+  }
+  private val imeLocation = IntArray(2)
   private val assetLoader = WebViewAssetLoader.Builder()
     .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context)).build()
 
@@ -152,6 +166,10 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
               .put("eventId", claims.eventId).put("version", claims.version)
               .put("htmlHash", claims.htmlHash).put("domains", JSONArray(configuration?.grantedDomains ?: listOf("theme")))
               .put("done", chunk.done)
+            claims.snapshot?.let { result.put("snapshot", it.toWire()) }
+            configuration?.legacyReadOnly?.let { result.put("legacyReadOnly", JSONObject(it.metadata)) }
+            configuration?.appData?.let { result.put("appData", JSONObject(it)) }
+            if (configuration?.publishedOpen == true) result.put("publishedOpen", true)
             reply.postMessage(result.toString())
             return@addWebMessageListener
           }
@@ -174,13 +192,53 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
             }
             return@addWebMessageListener
           }
+          if (data.optString("type") == "cvm") {
+            if (!ready || published == null || configuration?.cvmProfile != "free-foreground-v1" ||
+                data.keys().asSequence().toSet() != setOf("type", "sessionId", "sequence", "message")) return@addWebMessageListener
+            val sequence = data.opt("sequence")
+            if ((sequence !is Int && sequence !is Long) || !CapabilityTransport.leases.consumeSequence(generation, (sequence as Number).toLong())) return@addWebMessageListener
+            val carrier = data.opt("message") as? String ?: return@addWebMessageListener
+            val capturedSequence = sequence.toLong()
+            val token = CvmTransport.receive(generation, carrier, { response ->
+              if (live && !disposed && view === webView && view.url == expectedUrl) reply.postMessage(
+                JSONObject().put("type","cvm.response").put("sessionId",generation).put("sequence",capturedSequence).put("response",response ?: JSONObject.NULL).toString())
+            }, { event ->
+              if (live && !disposed && view === webView && view.url == expectedUrl) reply.postMessage(
+                JSONObject().put("type","cvm.event").put("sessionId",generation).put("message",event).toString())
+            })
+            if (token != null && live && !disposed) onHostEvent(mapOf("type" to "capability", "lane" to "cvm", "sessionId" to (configuration?.sessionId ?: ""), "generation" to generation, "token" to token))
+            return@addWebMessageListener
+          }
+          if (data.optString("type") == "media") {
+            if (!ready || published == null || configuration?.grantedDomains?.contains("media") != true ||
+                data.keys().asSequence().toSet() != setOf("type", "sessionId", "sequence", "message")) return@addWebMessageListener
+            val sequence = data.opt("sequence")
+            if ((sequence !is Int && sequence !is Long) || !CapabilityTransport.leases.consumeSequence(generation, (sequence as Number).toLong())) return@addWebMessageListener
+            if (!UploadJsonBounds.accepts(text, 32 * 1024)) return@addWebMessageListener
+            val request = data.optJSONObject("message") ?: return@addWebMessageListener
+            val deliver: (JSONObject) -> Unit = { event ->
+              if (live && !disposed && view === webView && view.url == expectedUrl) {
+                reply.postMessage(JSONObject().put("type", "media.event").put("sessionId", generation).put("message", event).toString())
+              }
+            }
+            val creating = request.opt("type") == "media.session.create"
+            val radio = request.opt("live") == true
+            if (creating && ((radio && finiteVideo.hasSession()) || (!radio && liveRadio.hasSession()))) {
+              (request.opt("id") as? String)?.takeIf { it.matches(Regex("[!-~]{1,128}")) }?.let { id ->
+                deliver(JSONObject().put("type", "media.session.create.result").put("id", id).put("error", "Close this source's video or radio player before creating another."))
+              }
+            } else if (radio || liveRadio.ownsSession(request.opt("sessionId") as? String)) liveRadio.receive(request, deliver)
+            else finiteVideo.receive(request, deliver)
+            return@addWebMessageListener
+          }
           if (data.optString("type") == "capability") {
+            val responseSequence = data.optLong("sequence")
             receiveCapability(data, { envelope ->
               if (live && !disposed && view === webView && view.url == expectedUrl) reply.postMessage(envelope)
             }) { response ->
               if (live && !disposed && view === webView && view.url == expectedUrl) {
                 val result = JSONObject().put("type", "capability.result").put("sessionId", generation)
-                  .put("sequence", data.getLong("sequence")).put("response", response ?: JSONObject.NULL)
+                  .put("sequence", responseSequence).put("response", response ?: JSONObject.NULL)
                 reply.postMessage(result.toString())
               }
             }
@@ -198,6 +256,64 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
       }
     }
     addView(webView)
+    webView.setOnFocusChangeListener { _, _ -> refreshImeViewport() }
+  }
+
+  override fun onApplyWindowInsets(insets: WindowInsets): WindowInsets {
+    val margin = dockedImeMargin(insets)
+    setImeViewportMargin(margin)
+    // Forward hide updates and preserve every inset other than the docked IME we handle here.
+    val forwarded = if (margin > 0 && Build.VERSION.SDK_INT >= 30) {
+      val type = WindowInsets.Type.ime()
+      val ime = insets.getInsets(type)
+      WindowInsets.Builder(insets).setInsets(type, Insets.of(ime.left, ime.top, ime.right, 0)).build()
+    } else insets
+    return super.onApplyWindowInsets(forwarded)
+  }
+
+  override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+    super.onLayout(changed, left, top, right, bottom)
+    if (changed) refreshImeViewport()
+    finiteVideo.layout(); liveRadio.layout()
+  }
+
+  override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+    super.onWindowFocusChanged(hasWindowFocus)
+    refreshImeViewport()
+  }
+
+  override fun onAttachedToWindow() {
+    super.onAttachedToWindow()
+    refreshImeViewport()
+  }
+
+  override fun onDetachedFromWindow() {
+    super.onDetachedFromWindow()
+    if (!disposed) setImeViewportMargin(0)
+  }
+
+  private fun refreshImeViewport() {
+    if (Build.VERSION.SDK_INT >= 30 && isAttachedToWindow && !disposed &&
+      setImeViewportMargin(dockedImeMargin(rootWindowInsets))) requestApplyInsets()
+  }
+
+  private fun dockedImeMargin(insets: WindowInsets?): Int {
+    if (Build.VERSION.SDK_INT < 30 || !isAttachedToWindow || disposed || !active ||
+      !hasWindowFocus() || !webView.hasFocus() || insets == null || !insets.isVisible(WindowInsets.Type.ime())) return 0
+    val activity = appContext.currentActivity ?: return 0
+    if (activity.window.decorView !== rootView) return 0
+    getLocationInWindow(imeLocation)
+    return DockedImeViewport.overlap(activity.windowManager.currentWindowMetrics.bounds.height(),
+      insets.getInsets(WindowInsets.Type.ime()).bottom, imeLocation[1] + height - paddingBottom,
+      height - paddingTop - paddingBottom)
+  }
+
+  private fun setImeViewportMargin(margin: Int): Boolean {
+    val params = webView.layoutParams as? LayoutParams ?: return false
+    if (params.bottomMargin == margin) return false
+    params.bottomMargin = margin
+    webView.layoutParams = params
+    return true
   }
 
   fun setCloseCheck(raw: String) {
@@ -225,15 +341,34 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     onHostEvent(mapOf("type" to "close-check", "sessionId" to (sessionId ?: ""), "generation" to generation, "id" to id, "state" to guarded))
   }
 
+  fun setInputBlocked(blocked: Boolean) {
+    if (disposed || inputBlocked == blocked) return
+    inputBlocked = blocked
+    if (blocked) {
+      val token = webView.windowToken
+      webView.clearFocus()
+      (context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
+        ?.hideSoftInputFromWindow(token, 0)
+    }
+    updateInputActivity()
+  }
+  private fun updateInputActivity() {
+    if (!disposed && loaded) {
+      val allowed = active && !inputBlocked && mediaForeground
+      webView.evaluateJavascript("window.__hypergolicInputActive?.($allowed)", null)
+    }
+  }
+
   fun setActive(active: Boolean) {
     if (disposed || this.active == active) return
     this.active = active
+    refreshImeViewport()
     if (!active) SelectedFilePicker.revoke(generation)
-    updateMediaPlayback()
     ApprovalTransport.focus(generation, active)
     UploadTransport.focus(generation, active)
     RoutingTransport.focus(generation, active)
     LinkTransport.focus(generation, active)
+    updateMediaPlayback()
     webView.importantForAccessibility = if (active) View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
       else View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
     if (active || !webView.hasFocus()) return
@@ -245,6 +380,8 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
 
   private fun updateMediaPlayback() {
     if (disposed) return
+    finiteVideo.focusChanged(); liveRadio.focusChanged()
+    updateInputActivity()
     val playingAllowed = active && mediaForeground
     if (loaded) webView.evaluateJavascript("window.__hypergolicMediaActive?.($playingAllowed)", null)
     // Loaded foreground views also render the live overview. Focus gates media and
@@ -301,7 +438,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
   private data class PublishedClaims(
     val sessionId: String, val publisher: String, val appId: String, val eventId: String,
     val version: String, val htmlHash: String, val handle: String,
-    val configuration: CapabilityConfiguration?
+    val snapshot: PublishedArtifactRegistry.Snapshot?, val configuration: CapabilityConfiguration?
   )
 
   fun startPublishedArtifact(raw: String) {
@@ -317,9 +454,10 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     }
     val claimed = PublishedArtifactTransfer.INSTANCE.claimForHost(
       claims.handle, claims.sessionId, claims.publisher, claims.appId, claims.eventId,
-      claims.version, claims.htmlHash, generation)
-    val bytes = claimed?.takeHtmlBytes()
-    if (bytes == null) { fail("artifact-claim-failed"); return }
+      claims.version, claims.htmlHash, claims.snapshot, generation)
+      ?: run { fail("artifact-claim-failed"); return }
+    val bytes = claimed.takeHtmlBytes() ?: run { fail("artifact-claim-failed"); return }
+    publishedReader = PublishedArtifactReadOwner(bytes)
     val config = claims.configuration
     if (config != null) {
       if (!CapabilityTransport.leases.register(generation)) { fail("capability-unavailable"); return }
@@ -327,15 +465,15 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
       if (!RoutingTransport.register(generation, config)) { fail("routing-unavailable"); return }
       if (!LinkTransport.register(generation, config)) { fail("link-unavailable"); return }
       if (!UploadTransport.register(generation, config)) { fail("upload-unavailable"); return }
+      if (!CvmTransport.register(generation, config)) { fail("cvm-unavailable"); return }
       configuration = config
       ApprovalTransport.focus(generation, active)
     UploadTransport.focus(generation, active)
     RoutingTransport.focus(generation, active)
     LinkTransport.focus(generation, active)
     }
-    published = claims
+    published = claims.copy(snapshot = claimed.snapshot)
     publishedSource = raw
-    publishedReader = PublishedArtifactReadOwner(bytes)
     live = true
     expectedUrl = "$ORIGIN/assets/runtime/index.html?sessionId=$generation&source=published"
     webView.loadUrl(expectedUrl!!)
@@ -343,26 +481,31 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
   }
 
   private fun parsePublishedClaims(raw: String): PublishedClaims? {
-    if (raw.toByteArray(Charsets.UTF_8).size > 2048) return null
+    if (raw.toByteArray(Charsets.UTF_8).size > 12 * 1024) return null
     return try {
       val data = JSONObject(raw)
       val required = setOf("sessionId", "publisher", "appId", "eventId", "version", "htmlHash", "handle")
       val names = data.keys().asSequence().toSet()
-      if (names != required && names != required + "configuration") return null
+      if (!names.containsAll(required) || (names - required - setOf("configuration", "snapshot")).isNotEmpty()) return null
       val values = listOf("sessionId", "publisher", "appId", "eventId", "version", "htmlHash", "handle")
         .map { data.get(it) as? String ?: return null }
       val session = values[0]
+      val snapshot = if (data.has("snapshot")) {
+        parseSnapshotMetadata(data.getJSONObject("snapshot")) ?: return null
+      } else null
       if (!session.matches(Regex("[A-Za-z0-9_-]{1,80}")) ||
-          !PublishedArtifactRegistry.validClaims(values[1], values[2], values[3], values[4], values[5]) ||
+          !PublishedArtifactRegistry.validClaims(values[1], values[2], values[3], values[4], values[5], snapshot) ||
           !values[6].matches(Regex("[0-9a-f]{64}"))) return null
       val config = if (names.contains("configuration")) {
         val rawConfig = data.get("configuration") as? String ?: return null
-        val parsed = CapabilityConfiguration(rawConfig, generation, allowPublished = true)
+        val parsed = CapabilityConfiguration(rawConfig, generation, allowPublished = true, expectedSnapshot = snapshot?.toWire())
         if (!PublishedCapabilityBinding.matches(parsed.fixture, parsed.sessionId,
             parsed.publisher, parsed.appId, parsed.version, session, values[1], values[2], values[4])) return null
+        if (parsed.legacyReadOnly?.matches(values[3], values[5]) == false) return null
         parsed
       } else null
-      PublishedClaims(session, values[1], values[2], values[3], values[4], values[5], values[6], config)
+      if (snapshot != null && config == null) return null
+      PublishedClaims(session, values[1], values[2], values[3], values[4], values[5], values[6], snapshot, config)
     } catch (_: Exception) { null }
   }
 
@@ -396,17 +539,40 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     val request = runCatching { UploadWire.objectValue(message, CapabilityLeaseRegistry.MAX_BYTES) }.getOrNull() ?: return
     val subId = request.opt("subId") as? String ?: return
     val id = request.opt("id") as? String ?: return
-    val outbox = request.optString("type") == "outbox.subscribe"
-    if (!config.allowsRelay || (if (outbox) !config.grantedDomains.contains("outbox") else request.optString("type") != "relay.subscribe") ||
+    val type = request.optString("type")
+    val outbox = type == "outbox.subscribe"
+    val legacy = type == "legacy.subscribe" && published != null && config.legacyReadOnly?.allowsSubscribe(request) == true
+    if ((!legacy && ((!outbox && type != "relay.subscribe") || !config.allowsRelayOperation(type))) ||
       subId.isEmpty() || subId.toByteArray(Charsets.UTF_8).size > 128 || subId.any { it.code < 32 || it.code == 127 } ||
       id.isEmpty() || id.toByteArray(Charsets.UTF_8).size > 128 || message.toByteArray(Charsets.UTF_8).size > 16 * 1024) return
     val token = RelaySubscriptionTransport.admit(generation, sequence, config.request(message), subId, push, outbox) ?: return
-    onHostEvent(mapOf("type" to "capability", "lane" to (if (outbox) "outbox-subscription" else "subscription"), "sessionId" to config.sessionId, "generation" to generation, "token" to token))
+    onHostEvent(mapOf("type" to "capability", "lane" to (if (legacy) "legacy-subscription" else if (outbox) "outbox-subscription" else "subscription"), "sessionId" to config.sessionId, "generation" to generation, "token" to token))
+  }
+
+  private fun mayDeferCapability(request: JSONObject?, config: CapabilityConfiguration): Boolean {
+    if (request == null) return false
+    val type = request.opt("type") as? String ?: return false
+    val id = request.opt("id") as? String ?: return false
+    if (id.isEmpty() || id.toByteArray(Charsets.UTF_8).size > 128) return false
+    return when (type) {
+      "identity.getPublicKey", "identity.getProfile", "identity.getRelays", "identity.getFollows", "identity.getBadges" ->
+        "identity" in config.grantedDomains && request.length() == 2
+      "common.getProfile" -> "common" in config.grantedDomains &&
+        request.length() == 3 &&
+        (request.opt("target") as? String)?.let { it.toByteArray(Charsets.UTF_8).size in 1..5000 } == true
+      "common.follows" -> "common" in config.grantedDomains && request.length() == 2
+      "relay.query" -> config.allowsRelay
+      "outbox.query", "outbox.getEvent", "outbox.resolveRelays" -> "outbox" in config.grantedDomains
+      "storage.get", "storage.keys", "storage.set", "storage.remove" -> "storage" in config.grantedDomains
+      else -> false
+    }
   }
 
   private fun receiveCapability(data: JSONObject, push: (String) -> Unit, replyRaw: (String?) -> Unit) {
     val config = configuration ?: return
-    if (!ready || data.keys().asSequence().toSet() != setOf("type", "sessionId", "sequence", "message")) return
+    val deferred = data.opt("deferred") == true
+    val fields = setOf("type", "sessionId", "sequence", "message")
+    if (!ready || data.keys().asSequence().toSet() != (if (deferred) fields + "deferred" else fields)) return
     val number = data.get("sequence")
     if ((number !is Int && number !is Long) || data.get("message") !is String) return
     val sequence = (number as Number).toLong()
@@ -419,9 +585,35 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     else closeUnsafeUntil = now + 660000
     val reply: (String?) -> Unit = { response -> pendingNativeReplies.remove(operation); replyRaw(response) }
     val request = runCatching { UploadWire.objectValue(message, CapabilityLeaseRegistry.MAX_BYTES, maximumDepth = 40) }.getOrNull()
+    if (request?.optString("type")?.startsWith("legacy.") == true) {
+      val image = config.legacyReadOnly?.allowsImage(request) == true
+      if (deferred || published == null || (!image && config.legacyReadOnly?.allowsClose(request) != true)) { CapabilityTransport.leases.consumeSequence(generation, sequence); reply(null); return }
+      val token = CapabilityTransport.admit(generation, sequence, config.request(message), reply) ?: run { reply(null); return }
+      onHostEvent(mapOf("type" to "capability", "lane" to if(image) "legacy-image" else "legacy", "sessionId" to config.sessionId, "generation" to generation, "token" to token))
+      return
+    }
+    if (config.legacyReadOnly != null) { CapabilityTransport.leases.consumeSequence(generation, sequence); reply(null); return }
+    if (deferred) {
+      if (!mayDeferCapability(request, config) || !UploadJsonBounds.accepts(message, CapabilityLeaseRegistry.MAX_BYTES)) {
+        CapabilityTransport.leases.consumeSequence(generation, sequence)
+        reply(null)
+        return
+      }
+      CapabilityTransport.enqueue(generation, sequence, config.request(message), reply) { token ->
+        if (live && !disposed) onHostEvent(mapOf("type" to "capability", "sessionId" to config.sessionId, "generation" to generation, "token" to token))
+      }
+      return
+    }
     if (request?.optString("type") == "routing.call") {
       val token = RoutingTransport.receive(generation, sequence, message, push, reply) ?: return
-      onHostEvent(mapOf("type" to "capability", "lane" to (if (request.optJSONObject("message")?.optString("type")?.startsWith("notify.") == true) "presentation" else if (request.optJSONObject("message")?.optString("type")?.startsWith("config.") == true) "configuration" else "routing"), "sessionId" to config.sessionId, "generation" to generation, "token" to token))
+      val type = request.optJSONObject("message")?.optString("type")
+      val lane = when {
+        type == RoutingTransport.PUBLISHED_OPEN -> "published-open"
+        type?.startsWith("notify.") == true -> "presentation"
+        type?.startsWith("config.") == true -> "configuration"
+        else -> "routing"
+      }
+      onHostEvent(mapOf("type" to "capability", "lane" to lane, "sessionId" to config.sessionId, "generation" to generation, "token" to token))
       return
     }
     if (!UploadJsonBounds.accepts(message, CapabilityLeaseRegistry.MAX_BYTES)) { reply(null); return }
@@ -437,10 +629,10 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
       })
       return
     }
-    if (request != null && request.optString("type") in listOf("relay.publish", "outbox.publish")) {
+    if (request != null && (request.optString("type") in listOf("relay.publish", "outbox.publish") || config.allowsCommonSocial(request.optString("type")))) {
       if (!CapabilityTransport.leases.consumeSequence(generation, sequence)) { reply(null); return }
       val id = request.opt("id") as? String
-      if (!config.allowsRelay || (request.optString("type") == "outbox.publish" && "outbox" !in config.grantedDomains) || id == null || id.isEmpty() || id.toByteArray(Charsets.UTF_8).size > 128) { reply(null); return }
+      if (!(config.allowsRelayOperation(request.optString("type")) || config.allowsCommonSocial(request.optString("type"))) || id == null || id.isEmpty() || id.toByteArray(Charsets.UTF_8).size > 128) { reply(null); return }
       val approval = ApprovalTransport.admit(generation, config.request(message), id, reply)
       if (approval == null) { reply(null); return }
       onHostEvent(mapOf("type" to "capability", "lane" to "approval", "sessionId" to config.sessionId, "generation" to generation, "token" to approval))
@@ -469,6 +661,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     if (configuration != null && !RoutingTransport.register(generation, configuration!!)) { fail("routing-unavailable"); return }
     if (configuration != null && !LinkTransport.register(generation, configuration!!)) { fail("link-unavailable"); return }
     configuration?.let { if (!UploadTransport.register(generation, it)) { fail("upload-unavailable"); return } }
+    configuration?.let { if (!CvmTransport.register(generation, it)) { fail("cvm-unavailable"); return } }
     UploadTransport.focus(generation, active)
     RoutingTransport.focus(generation, active)
     LinkTransport.focus(generation, active)
@@ -494,6 +687,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     publishedReader?.clear()
     SelectedFilePicker.revoke(generation)
     UploadTransport.revoke(generation)
+    CvmTransport.revoke(generation)
     LinkTransport.revoke(generation)
     ApprovalTransport.revoke(generation)
     CapabilityTransport.leases.revoke(generation)
@@ -503,6 +697,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
   fun destroySession() {
     if (disposed) return
     disposed = true
+    finiteVideo.retire(); liveRadio.dispose()
     closeCheckId = null
     pendingNativeReplies.clear()
     live = false
@@ -511,6 +706,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     synchronized(publishedViews) { publishedViews.remove(this) }
     SelectedFilePicker.revoke(generation)
     UploadTransport.revoke(generation)
+    CvmTransport.revoke(generation)
     LinkTransport.revoke(generation)
     ApprovalTransport.revoke(generation)
     CapabilityTransport.revoke(generation)
@@ -518,6 +714,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
       WebViewCompat.removeWebMessageListener(webView, "HypergolicHost")
     }
     webView.stopLoading()
+    webView.onFocusChangeListener = null
     removeView(webView)
     webView.destroy()
   }

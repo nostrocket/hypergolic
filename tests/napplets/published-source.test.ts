@@ -160,8 +160,26 @@ test('reads exactly the signed SHA-256 path over manual-redirect HTTPS with stre
 
   await assert.rejects(source.readHtml('AB'.repeat(32), ['https://blossom.example.org/'], 128, new AbortController().signal));
   await assert.rejects(source.readHtml(HASH, [], 128, new AbortController().signal));
-  await assert.rejects(source.readHtml(HASH, Array(MAX_BLOSSOM_SERVERS + 1).fill('https://blossom.example.org/'), 128, new AbortController().signal));
   await assert.rejects(source.readHtml(HASH, ['http://blossom.example.org/'], 128, new AbortController().signal));
+});
+
+test('accepts a longer signed mirror list while preserving the request bound', async () => {
+  const hints = Array.from({ length: MAX_BLOSSOM_SERVERS + 2 }, (_, index) => `https://mirror${index}.example.org/`);
+  const reached: string[] = [];
+  const available = createPublishedArtifactSource({ createRelayPool: unusedPool, fetchPublicHttps: async url => {
+    reached.push(url);
+    return new Response(BODY, { status: 200 });
+  } });
+  assert.deepEqual(await available.readHtml(HASH, hints, 128, new AbortController().signal), BODY);
+  assert.deepEqual(reached, [`${hints[0]}${HASH}`]);
+
+  reached.length = 0;
+  const bounded = createPublishedArtifactSource({ createRelayPool: unusedPool, fetchPublicHttps: async url => {
+    reached.push(url);
+    return new Response(reached.length > MAX_BLOSSOM_SERVERS ? BODY : 'unavailable', { status: 200 });
+  } });
+  await assert.rejects(bounded.readHtml(HASH, hints, 128, new AbortController().signal));
+  assert.deepEqual(reached, hints.slice(0, MAX_BLOSSOM_SERVERS).map(hint => `${hint}${HASH}`));
 });
 
 test('rejects redirects, oversized declared or streamed bodies, and bodies with no enforceable bound', async () => {
@@ -193,6 +211,11 @@ test('tries the next signed server hint after an HTTP failure or content-address
   const bytes = await source.readHtml(HASH, ['not a URL', 'https://first.example.org/', 'https://second.example.net/'], 128, new AbortController().signal);
   assert.deepEqual(bytes, BODY);
   assert.deepEqual(attempts, [`https://first.example.org/${HASH}`, `https://second.example.net/${HASH}`]);
+
+  const unavailable = createPublishedArtifactSource({fetchPublicHttps: async url => url.includes('first')
+    ? new Response('wrong bytes', {status: 200}) : new Response(null, {status: 503}), createRelayPool: unusedPool});
+  await assert.rejects(unavailable.readHtml(HASH, ['https://first.example.org/', 'https://second.example.net/'], 128,
+    new AbortController().signal), {name: 'NappletHashMismatchError'});
 });
 
 test('passes cancellation and enforces the Blossom request timeout', async () => {
@@ -215,6 +238,24 @@ test('passes cancellation and enforces the Blossom request timeout', async () =>
   const pending = aborting.readHtml(HASH, ['https://blossom.example.org/'], 10, controller.signal);
   controller.abort();
   await assert.rejects(pending);
+});
+
+test('generic Blossom keeps its 15 second default', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let signal: AbortSignal | undefined;
+  const source = createPublishedArtifactSource({
+    createRelayPool: unusedPool,
+    fetchPublicHttps: (_url, init) => new Promise((_resolve, reject) => {
+      signal = init.signal;
+      signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+    }),
+  });
+  const rejected = assert.rejects(source.readHtml(HASH, ['https://blossom.example.org/'], 128, new AbortController().signal));
+  t.mock.timers.tick(14_999);
+  assert.equal(signal?.aborted, false);
+  t.mock.timers.tick(1);
+  await rejected;
+  assert.equal(signal?.aborted, true);
 });
 
 test('requires a relay port that declares raw-frame bounds and public-IP pinning', async () => {

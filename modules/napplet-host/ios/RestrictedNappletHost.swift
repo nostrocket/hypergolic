@@ -24,6 +24,8 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
   private var deadline: DispatchWorkItem?
   private var live = false
   private var closeCheckId: String?
+  private var zoomResetSequence = 0
+  private var zoomResetInterruptedAt: TimeInterval = 0
   private var closeCheckDeadline: TimeInterval = 0
   private var pendingNativeReplies: [String: TimeInterval] = [:]
   private var closeUnsafeUntil: TimeInterval = 0
@@ -36,6 +38,26 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
 #endif
   // A newly mounted hidden host cannot claim focus before the trusted active prop.
   private var active = false
+  private var inputBlocked = false
+  private lazy var finiteVideo: NativeFiniteVideo = {
+    let generation = self.generation
+    return NativeFiniteVideo(host:self, generation:generation, permit:{ RoutingTransport.shared.mediaRevision(generation) }) { [weak self] in
+      guard let self else { return false }
+      return self.live && self.ready && self.loaded && !self.disposed && self.active && self.publishedSource != nil &&
+        self.configuration?.domains.contains("media") == true && self.webView?.url == self.expectedURL &&
+        UIApplication.shared.applicationState == .active
+    }
+  }()
+  private lazy var liveRadio: NativeLiveRadio = {
+    let generation = self.generation
+    return NativeLiveRadio(host:self,generation:generation,profile:{ [weak self] in self?.configuration?.mediaProfile },scope:{ [weak self] in self?.configuration?.snapshot },
+      permit:{ RoutingTransport.shared.liveMediaRevision(generation) }) { [weak self] in
+      guard let self else { return false }
+      return self.live && self.ready && self.loaded && !self.disposed && self.active && self.publishedSource != nil &&
+        self.configuration?.domains.contains("media") == true && UIApplication.shared.applicationState == .active && self.webView?.url == self.expectedURL
+    }
+  }()
+
   private lazy var selectedFilePicker = SelectedFilePicker(live: { [weak self] in self?.maySelectFile() == true })
   private func maySelectFile() -> Bool {
     live && ready && loaded && !disposed && active && configuration?.domains.contains("upload") == true && UploadTransport.leases.isRegistered(generation)
@@ -56,6 +78,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
   override func layoutSubviews() {
     super.layoutSubviews()
     webView?.frame = bounds
+    finiteVideo.layout();liveRadio.layout()
   }
 
   override func willMove(toSuperview newSuperview: UIView?) {
@@ -79,6 +102,22 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     view.evaluateJavaScript(script, completionHandler: nil)
   }
 
+  func setZoomReset(_ raw: String) {
+    guard let request = NativeZoomReset.accept(raw, sessionId: sessionId, generation: generation,
+      lastSequence: &zoomResetSequence, interruptedAt: zoomResetInterruptedAt) else { return }
+    let ok = resetZoom(request.sessionId, generation: request.generation)
+    onEvent?(["type": "zoom-reset", "sessionId": request.sessionId, "generation": request.generation,
+      "sequence": request.sequence, "ok": ok])
+  }
+
+  private func resetZoom(_ sessionId: String, generation: String) -> Bool {
+    guard let view = webView else { return false }
+    return NativeZoomReset.reset(view, sessionId: sessionId, generation: generation, context: .init(
+      sessionId: self.sessionId, generation: self.generation, expectedURL: expectedURL,
+      live: live, ready: ready, loaded: loaded, disposed: disposed, active: active,
+      foreground: UIApplication.shared.applicationState == .active))
+  }
+
   private func receiveCloseCheck(_ value: [String: Any]) {
     guard ready, UIApplication.shared.applicationState == .active,
       Set(value.keys) == ["type", "sessionId", "id", "state"],
@@ -92,21 +131,38 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     onEvent?(["type": "close-check", "sessionId": sessionId ?? "", "generation": generation, "id": id, "state": guarded])
   }
 
+  func setInputBlocked(_ blocked: Bool) {
+    guard inputBlocked != blocked else { return }
+    inputBlocked = blocked
+    if blocked { webView?.endEditing(true) }
+    updateInputActivity()
+  }
+  private func updateInputActivity(foreground: Bool? = nil) {
+    guard loaded, !disposed, let view = webView else { return }
+    let allowed = active && !inputBlocked && (foreground ?? (UIApplication.shared.applicationState == .active))
+    view.evaluateJavaScript("window.__hypergolicInputActive?.(\(allowed))", completionHandler: nil)
+  }
+
   func setActive(_ isActive: Bool) {
     guard active != isActive else { return }
     active = isActive
-    if !isActive {selectedFilePicker.cancel()}
-    updateMediaPlayback()
+    if !isActive {zoomResetInterruptedAt = ProcessInfo.processInfo.systemUptime; selectedFilePicker.cancel()}
     if configuration != nil { ApprovalTransport.setFocused(generation, active: isActive); UploadTransport.focus(generation, active: isActive); LinkTransport.focus(generation, isActive); RoutingTransport.shared.focus(generation, isActive) }
+    updateMediaPlayback()
     // Dismiss only this retained view's editor; keep its loaded document and position.
     if !isActive { webView?.endEditing(true) }
   }
 
-  @objc private func mediaBackground() { closeCheckId = nil; selectedFilePicker.background(); updateMediaPlayback(foreground: false) }
+  @objc private func mediaBackground() {
+    zoomResetInterruptedAt = ProcessInfo.processInfo.systemUptime
+    closeCheckId = nil; selectedFilePicker.background(); updateMediaPlayback(foreground: false)
+  }
   @objc private func mediaForeground() { updateMediaPlayback(foreground: true) }
   private func updateMediaPlayback(foreground: Bool? = nil) {
     guard let view = webView, !disposed else { return }
     let allowed = active && (foreground ?? (UIApplication.shared.applicationState == .active))
+    finiteVideo.focusChanged(visible: allowed);liveRadio.focusChanged(visible: allowed)
+    updateInputActivity(foreground: foreground)
     if loaded { view.evaluateJavaScript("window.__hypergolicMediaActive?.(\(allowed))", completionHandler: nil) }
     if !allowed { view.setAllMediaPlaybackSuspended(true, completionHandler: nil) }
     else {
@@ -185,10 +241,11 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     guard let input = PublishedArtifactHostInput(raw) else { fail("invalid-published-artifact"); return }
     let publishedConfiguration: CapabilityConfiguration?
     if let rawConfiguration = input.configuration {
-      guard let parsed = try? CapabilityConfiguration(rawConfiguration, generation: generation),
+      guard let parsed = try? CapabilityConfiguration(rawConfiguration, generation: generation, expectedSnapshot: input.claims.snapshot?.wire),
         parsed.matchesPublishedClaims(sessionId: input.claims.sessionId,
           publisher: input.claims.publisher, appId: input.claims.identifier,
-          version: input.claims.aggregateHash) else {
+          version: input.claims.aggregateHash),
+        parsed.legacyReadOnly?.matches(event: input.claims.eventId, hash: input.claims.htmlHash) != false else {
         fail("invalid-published-configuration"); return
       }
       publishedConfiguration = parsed
@@ -203,8 +260,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     }
     configuration = publishedConfiguration
     configurationSource = input.configuration
-    publishedReader = PublishedArtifactReadOwner(claimed: claimed,
-      domains: publishedConfiguration?.domains ?? ["theme"])
+    publishedReader = PublishedArtifactReadOwner(claimed: claimed, domains: publishedConfiguration?.domains ?? ["theme"], publishedOpen: publishedConfiguration?.publishedOpen == true, appData: publishedConfiguration?.appData, legacyReadOnly: publishedConfiguration?.legacyReadOnly?.metadata)
     publishedSource = raw
     // Loaded verified read views survive suspension. Native stream/approval/transfer
     // owners independently stop network work and sensitive authority on inactivity.
@@ -424,6 +480,14 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
       reply(nil, nil)
       return
     }
+    if value["type"] as? String == "media" {
+      receiveFiniteVideo(value, text: text)
+      reply(nil, nil)
+      return
+    }
+    if value["type"] as? String == "cvm" {
+      receiveCvm(value, reply: reply); return
+    }
     if value["type"] as? String == "capability" {
       receiveCapability(value, reply: reply)
       return
@@ -489,14 +553,14 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     RelaySubscriptionTransport.shared.acknowledge(generation, streamSequence: stream, delivery: delivery)
   }
   private func receiveSubscription(_ value: [String: Any]) {
-    guard ready, let configuration, configuration.domains.contains("relay"),
+    guard ready, let configuration,
       Set(value.keys) == Set(["type", "sessionId", "sequence", "message"]),
       let counter = streamInteger(value["sequence"]),
       CapabilityTransport.leases.consumeSequence(generation, sequence: counter),
       let message = value["message"] as? String, message.utf8.count <= 16 * 1024,
       let request = try? JSONSerialization.jsonObject(with: Data(message.utf8)) as? [String: Any],
       let type = request["type"] as? String,
-      (type == "relay.subscribe" || (type == "outbox.subscribe" && configuration.domains.contains("outbox"))), let subId = request["subId"] as? String,
+      ((type == "legacy.subscribe" && publishedSource != nil && configuration.legacyReadOnly?.allowsSubscribe(request) == true) || ((type == "relay.subscribe" || type == "outbox.subscribe") && configuration.allowsRelayOperation(type))), let subId = request["subId"] as? String,
       (1...128).contains(subId.utf8.count), !subId.utf8.contains(where: { $0 < 32 || $0 == 127 }),
       let id = request["id"] as? String, (1...128).contains(id.utf8.count),
       let snapshot = try? configuration.request(message), let capturedView = webView, let capturedURL = expectedURL else { return }
@@ -510,14 +574,87 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
           if case .failure = result { self?.fail("renderer-stopped") }
         }
       }) else { return }
-    onEvent?(["type": "capability", "lane": type == "outbox.subscribe" ? "outbox-subscription" : "subscription", "sessionId": configuration.sessionId,
+    onEvent?(["type": "capability", "lane": type == "legacy.subscribe" ? "legacy-subscription" : type == "outbox.subscribe" ? "outbox-subscription" : "subscription", "sessionId": configuration.sessionId,
       "generation": generation, "token": token])
+  }
+
+  private func receiveCvm(_ value: [String: Any], reply: @escaping @MainActor @Sendable (Any?, String?) -> Void) {
+    guard ready, publishedSource != nil, let configuration, configuration.cvmProfile == "free-foreground-v1",
+      configuration.domains.contains("cvm"), Set(value.keys) == ["type","sessionId","sequence","message"],
+      let sequence = streamInteger(value["sequence"]), let message = value["message"] as? String,
+      CapabilityTransport.leases.consumeSequence(generation, sequence: sequence),
+      let capturedView = webView, let capturedURL = expectedURL else { reply(nil, "CVM request denied"); return }
+    let deliver: @MainActor @Sendable (String?) -> Void = { [weak self, weak capturedView] response in
+      guard let self, let capturedView, self.live, !self.disposed, self.webView === capturedView,
+        capturedView.url?.absoluteString == capturedURL.absoluteString else { reply(nil, "Session unavailable"); return }
+      let result: [String: Any] = ["type":"cvm.response","sessionId":self.generation,"sequence":sequence,"response":response as Any? ?? NSNull()]
+      guard let data = try? JSONSerialization.data(withJSONObject: result) else { reply(nil,"CVM request denied"); return }
+      reply(String(decoding:data,as:UTF8.self),nil)
+    }
+    let token = CvmTransport.shared.receive(generation, config: configuration, raw: message, push: { [weak self, weak capturedView] response in
+      guard let self, let capturedView, self.live, !self.disposed, self.webView === capturedView,
+        capturedView.url?.absoluteString == capturedURL.absoluteString else { return }
+      let envelope: [String: Any] = ["type":"cvm.event","sessionId":self.generation,"message":response]
+      guard let data = try? JSONSerialization.data(withJSONObject:envelope) else { return }
+      let script = "window.postMessage({type:'hypergolic.native-response',message:" + self.jsString(String(decoding:data,as:UTF8.self)) + "}, '*')"
+      capturedView.evaluateJavaScript(script,in:nil,in:self.bridgeWorld) { [weak self] result in if case .failure = result { self?.fail("renderer-stopped") } }
+    }, reply: deliver)
+    guard let token else { deliver(nil); return }
+    if !token.isEmpty { onEvent?(["type":"capability","lane":"cvm","sessionId":configuration.sessionId,"generation":generation,"token":token]) }
+  }
+
+  private func receiveFiniteVideo(_ value: [String: Any], text: String) {
+    guard ready, publishedSource != nil, configuration?.domains.contains("media") == true,
+      Set(value.keys) == ["type", "sessionId", "sequence", "message"],
+      let sequence = value["sequence"] as? NSNumber, CFGetTypeID(sequence) != CFBooleanGetTypeID(),
+      sequence.doubleValue.isFinite, sequence.doubleValue >= 1, sequence.doubleValue <= 9_007_199_254_740_991,
+      sequence.doubleValue.rounded(.towardZero) == sequence.doubleValue,
+      CapabilityTransport.leases.consumeSequence(generation, sequence: sequence.uint64Value),
+      UploadWire.boundedJSON(text, limit: 32 * 1024),
+      let request = value["message"] as? [String: Any], let capturedView = webView, let capturedURL = expectedURL else { return }
+    let deliver: ([String:Any]) -> Void = { [weak self, weak capturedView] message in
+      guard let self, let capturedView, self.live, !self.disposed, self.webView === capturedView,
+        capturedView.url?.absoluteString == capturedURL.absoluteString,
+        let data = try? JSONSerialization.data(withJSONObject: ["type":"media.event", "sessionId":self.generation, "message":message]) else { return }
+      let script = "window.postMessage({type:'hypergolic.native-response',message:" + self.jsString(String(decoding:data, as:UTF8.self)) + "}, '*')"
+      capturedView.evaluateJavaScript(script, in:nil, in:self.bridgeWorld) { [weak self] result in
+        if case .failure = result { self?.fail("renderer-stopped") }
+      }
+    }
+    let creating = request["type"] as? String == "media.session.create",radio = request["live"] as? Bool == true
+    if creating && ((radio && finiteVideo.hasSession) || (!radio && liveRadio.hasSession)) {
+      if let id=request["id"] as? String,id.range(of:"^[!-~]{1,128}$",options:.regularExpression) != nil {
+        deliver(["type":"media.session.create.result","id":id,"error":"Close this source's video or radio player before creating another."])
+      }
+    } else if radio || liveRadio.ownsSession(request["sessionId"] as? String) { liveRadio.receive(request,push:deliver) }
+    else { finiteVideo.receive(request,push:deliver) }
+  }
+
+  private func mayDeferCapability(_ message: String, configuration: CapabilityConfiguration) -> Bool {
+    guard let request = try? UploadWire.object(message, limit: CapabilityLeaseRegistry.maxBytes, maximumDepth: 40),
+      let type = request["type"] as? String, let id = request["id"] as? String, (1...128).contains(id.utf8.count) else { return false }
+    switch type {
+    case "identity.getPublicKey", "identity.getProfile", "identity.getRelays", "identity.getFollows", "identity.getBadges":
+      return configuration.domains.contains("identity") && request.count == 2
+    case "common.getProfile":
+      return configuration.domains.contains("common") &&
+        request.count == 3 &&
+        (request["target"] as? String).map { (1...5000).contains($0.utf8.count) } == true
+    case "common.follows": return configuration.domains.contains("common") && request.count == 2
+    case "relay.query": return configuration.domains.contains("relay")
+    case "outbox.query", "outbox.getEvent", "outbox.resolveRelays": return configuration.domains.contains("outbox")
+    case "storage.get", "storage.keys", "storage.set", "storage.remove": return configuration.domains.contains("storage")
+    default: return false
+    }
   }
 
   private func receiveCapability(_ value: [String: Any],
       reply: @escaping @MainActor @Sendable (Any?, String?) -> Void) {
+    let marker = value["deferred"] as? NSNumber
+    let deferred = marker.map { CFGetTypeID($0) == CFBooleanGetTypeID() && $0.boolValue } ?? false
+    let fields: Set<String> = ["type", "sessionId", "sequence", "message"]
     guard ready, let configuration,
-      Set(value.keys) == Set(["type", "sessionId", "sequence", "message"]),
+      Set(value.keys) == (deferred ? fields.union(["deferred"]) : fields),
       let sequence = value["sequence"] as? NSNumber, CFGetTypeID(sequence) != CFBooleanGetTypeID(),
       sequence.doubleValue.isFinite, sequence.doubleValue >= 1, sequence.doubleValue <= 9_007_199_254_740_991,
       sequence.doubleValue.rounded(.towardZero) == sequence.doubleValue,
@@ -538,6 +675,29 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
       guard let bytes = try? JSONSerialization.data(withJSONObject: result) else { reply(nil, "Capability rejected"); return }
       reply(String(decoding: bytes, as: UTF8.self), nil)
     }
+    if let request = try? UploadWire.object(message, limit: 16 * 1024), let type = request["type"] as? String, type.hasPrefix("legacy.") {
+      let image = configuration.legacyReadOnly?.allowsImage(request) == true
+      guard !deferred, publishedSource != nil, (image || configuration.legacyReadOnly?.allowsClose(request) == true),
+        let token = CapabilityTransport.admit(generation, sequence: counter, snapshot: snapshot, reply: respond) else {
+        _ = CapabilityTransport.leases.consumeSequence(generation, sequence: counter); respond(nil); return
+      }
+      onEvent?(["type": "capability", "lane": image ? "legacy-image" : "legacy", "sessionId": configuration.sessionId, "generation": generation, "token": token])
+      return
+    }
+    if configuration.legacyReadOnly != nil { _ = CapabilityTransport.leases.consumeSequence(generation, sequence: counter); respond(nil); return }
+    if deferred {
+      guard mayDeferCapability(message, configuration: configuration) else {
+        _ = CapabilityTransport.leases.consumeSequence(generation, sequence: counter)
+        respond(nil)
+        return
+      }
+      let session = configuration.sessionId
+      CapabilityTransport.enqueue(generation, sequence: counter, snapshot: snapshot, reply: respond) { [weak self] token in
+        guard let self, self.live, !self.disposed else { return }
+        self.onEvent?(["type": "capability", "sessionId": session, "generation": self.generation, "token": token])
+      }
+      return
+    }
     if let request = try? UploadWire.object(message, limit: 36 * 1024, maximumDepth: 40), request["type"] as? String == "routing.call" {
       guard let capturedView = webView, let capturedURL = expectedURL,
         let token = RoutingTransport.shared.receive(generation, sequence: counter, raw: message,
@@ -549,7 +709,15 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
               if case .failure = result { self?.fail("renderer-stopped") }
             }
           }, reply: respond) else { return }
-      onEvent?(["type": "capability", "lane": ((request["message"] as? [String: Any])?["type"] as? String)?.hasPrefix("notify.") == true ? "presentation" : ((request["message"] as? [String: Any])?["type"] as? String)?.hasPrefix("config.") == true ? "configuration" : "routing", "sessionId": configuration.sessionId, "generation": generation, "token": token])
+      let type = (request["message"] as? [String: Any])?["type"] as? String
+      let lane: String
+      switch type {
+      case RoutingTransportRegistry.publishedOpen: lane = "published-open"
+      case let type? where type.hasPrefix("notify."): lane = "presentation"
+      case let type? where type.hasPrefix("config."): lane = "configuration"
+      default: lane = "routing"
+      }
+      onEvent?(["type": "capability", "lane": lane, "sessionId": configuration.sessionId, "generation": generation, "token": token])
       return
     }
     if let request = try? UploadWire.object(message, limit: 16 * 1024), request["type"] as? String == "link.open" {
@@ -579,8 +747,8 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     let approval = configuration.approvalWireId(message)
     if approval.recognized {
       guard CapabilityTransport.leases.consumeSequence(generation, sequence: counter),
-        let token = ApprovalTransport.admit(generation, snapshot: snapshot,
-          wireId: approval.wireId, reply: respond) else { respond(nil); return }
+        let wireId = approval.wireId,
+        let token = ApprovalTransport.admit(generation, snapshot: snapshot, wireId: wireId, reply: respond) else { respond(nil); return }
       onEvent?(["type": "capability", "sessionId": configuration.sessionId,
         "generation": generation, "token": token, "lane": "approval"])
       return
@@ -601,6 +769,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
   private func fail(_ code: String) {
     guard !disposed else { return }
     live = false
+    CvmTransport.shared.revoke(generation)
     UploadTransport.revoke(generation)
     LinkTransport.revoke(generation)
     ApprovalTransport.revoke(generation)
@@ -612,6 +781,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
   func destroySession() {
     guard !disposed else { return }
     disposed = true
+    finiteVideo.retire();liveRadio.dispose()
     closeCheckId = nil
     pendingNativeReplies.removeAll()
     selectedFilePicker.cancel()
@@ -620,6 +790,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     live = false
     publishedReader?.clear()
     publishedReader = nil
+    CvmTransport.shared.revoke(generation)
     UploadTransport.revoke(generation)
     LinkTransport.revoke(generation)
     ApprovalTransport.revoke(generation)

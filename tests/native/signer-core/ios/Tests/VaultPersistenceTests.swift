@@ -66,6 +66,34 @@ private func scalar(_ byte: UInt8) -> Data { var value = Data(count: 32); value[
 
 final class SignerCoreTests: XCTestCase, @unchecked Sendable {
   override func tearDown() { print("VAULT_PERSISTENCE_ASSERTIONS=\(assertionCount.withLock { let count = $0; $0 = 0; return count })"); super.tearDown() }
+  func testPublicIdentityHasNoSigningAuthorityPersistsAndPreservesOriginalKey() async throws {
+    let ports = Ports(), permit = Permit(), core = NativeVaultCore(testingStorage: storage(ports))
+    let first = try snapshot(await core.open(authority: permit, current: { permit.current() }))
+    let publicKey = "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9", revocations = Mutex(0)
+    await denied { _ = try await core.addPublicIdentity(pubkey: String(repeating: "0", count: 64), vaultID: first.id, revision: 1,
+      authority: permit, current: { permit.current() }) }
+    check(ports.writes == 1)
+    let added = try snapshot(await core.addPublicIdentity(pubkey: publicKey, vaultID: first.id, revision: 1, authority: permit,
+      current: { permit.current() }, revokePending: { revocations.withLock { $0 += 1 } }))
+    check(added.selected == publicKey && added.count == 2 && added.revision == 2 && revocations.withLock { $0 == 1 })
+    let cold = NativeVaultCore(testingStorage: storage(ports))
+    check(try snapshot(await cold.open(authority: permit, current: { permit.current() })).selected == publicKey)
+    let methods = try JSONSerialization.jsonObject(with: Data(await cold.methods(pubkey: publicKey, vaultID: first.id, revision: 2,
+      current: { permit.current() }).utf8)) as! [String: Any]
+    check(methods["selectedMethod"] is NSNull && (methods["methods"] as! [Any]).isEmpty)
+    let event = try ExactSignerEvent(json: "{\"pubkey\":\"\(publicKey)\",\"created_at\":1,\"kind\":1,\"tags\":[],\"content\":\"public account denial\"}", expectedPubkey: publicKey)
+    await denied { _ = try await cold.sign(event: event, vaultID: first.id, revision: 2, current: { permit.current() },
+      dispatch: { _ in XCTFail("Public account must not dispatch signing") }) }
+    await denied { _ = try await cold.backupSecret(pubkey: publicKey, vaultID: first.id, revision: 2, current: { permit.current() }) }
+    await denied { _ = try await cold.addPublicIdentity(pubkey: publicKey, vaultID: first.id, revision: 2, authority: permit, current: { permit.current() }) }
+    check(ports.writes == 2)
+    let restored = try snapshot(await cold.select(pubkey: first.selected, vaultID: first.id, revision: 2, authority: permit,
+      current: { permit.current() }, revokePending: { revocations.withLock { $0 += 1 } }))
+    check(restored.selected == first.selected && restored.revision == 3 && revocations.withLock { $0 == 2 })
+    await denied { _ = try await cold.methods(pubkey: publicKey, vaultID: first.id, revision: 2, current: { permit.current() }) }
+    var retained = try await cold.backupSecret(pubkey: first.selected, vaultID: first.id, revision: 3, current: { permit.current() })
+    defer { retained.resetBytes(in: 0..<retained.count) }; check(retained.count == 32)
+  }
   func testGeneratedRecordColdOpenAndPublicInventory() async throws {
     let ports = Ports(), permit = Permit(), core = NativeVaultCore(testingStorage: storage(ports))
     let first = try await core.open(authority: permit, current: { permit.current() })

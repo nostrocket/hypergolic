@@ -5,7 +5,48 @@ import java.util.Arrays;
 public final class UploadFileProof {
   private static int checks;
   private static void check(boolean value) {checks++; if (!value) throw new AssertionError("Attachment check " + checks);}
+  private static void htmlProof() {
+    var utf8 = java.nio.charset.StandardCharsets.UTF_8;
+    byte[] bytes = "<!doctype html><html><body>Local selection</body></html>".getBytes(utf8);
+    for (String text : new String[] {new String(bytes, utf8), "\uFEFF \n<!DOCTYPE\tHTML >\n<title>Local</title>", "\uFEFF \t\r\n<!DOCTYPE\tHTML \r\n>"}) {
+      var prepared = UploadFileProfile.prepare(text.getBytes(utf8));
+      check(prepared != null && prepared.mimeType().equals("text/html"));
+      check(prepared.metadataPolicy().equals("attachment-unchanged"));
+      check(Arrays.equals(prepared.bytes(), text.getBytes(utf8)));
+    }
+    byte[] limit = new byte[1024 * 1024]; Arrays.fill(limit, (byte)' ');
+    byte[] prefix = "<!doctype html>".getBytes(utf8); System.arraycopy(prefix, 0, limit, 0, prefix.length);
+    check(UploadFileProfile.prepare(limit).mimeType().equals("text/html"));
+    byte[] oversized = Arrays.copyOf(limit, limit.length + 1); oversized[limit.length] = ' ';
+    check(UploadFileProfile.prepare(oversized) == null);
+    for (String text : new String[] {"<html><body>No doctype</body></html>", "<svg/>", "\uFEFF<svg/>",
+        "<?xml version=\"1.0\"?><html/>", "<!doctype svg><svg/>", "<!doctype htmlx><html/>",
+        "<!doctype html PUBLIC \"unselected\"><html/>", "<!doctype html>\u0000", "<!doctype html>\u007f",
+        "<!doc\uFEFFtype html>", " \uFEFF<!doctype html>", "\uFEFF\uFEFF<!doctype html>", "<!doctype\fhtml>"}) {
+      check(UploadFileProfile.prepare(text.getBytes(utf8)) == null);
+    }
+    byte[] invalidUtf8 = Arrays.copyOf(bytes, bytes.length + 2); invalidUtf8[bytes.length] = (byte)0xc3; invalidUtf8[bytes.length + 1] = 0x28;
+    check(UploadFileProfile.prepare(invalidUtf8) == null);
+    for (boolean revoke : new boolean[] {false, true}) {
+      var owner = new NativeUploadAuthority(() -> 1000); var session = owner.register("html", "a".repeat(64));
+      owner.setForeground(true); owner.focus(session);
+      var request = owner.admit(session, bytes.length, "https://files.example.com", "image/png");
+      check(request != null && owner.append(request, 0, bytes));
+      var review = owner.sealPreparedFile(request); check(review != null);
+      check(review.mimeType.equals("text/html") && review.size == bytes.length);
+      check(review.sha256.equals("8e5a049a49491dbce8fb9f1e3b14856de88eefda52522e061079cd0ab49aa50b"));
+      check(Arrays.equals(owner.preview(request, review), bytes));
+      owner.focus(null); check(owner.approve(request, review) == null); owner.focus(session);
+      var grant = owner.approve(request, review); check(grant != null);
+      check(owner.dispatch(grant) == null && !owner.claimTransfer(grant));
+      check(owner.claimSigning(grant) == review); check(owner.dispatch(grant) == null);
+      check(owner.claimTransfer(grant));
+      if (revoke) {owner.setForeground(false); check(!owner.isApproved(grant)); check(owner.dispatch(grant) == null);}
+      else {check(Arrays.equals(owner.dispatch(grant), bytes)); check(owner.dispatch(grant) == null);}
+    }
+  }
   public static void main(String[] args) throws Exception {
+    htmlProof();
     Path root = Path.of(args[0]); String[][] cases = {{"wav","audio/wav"},{"mp4","video/mp4"},{"pdf","application/pdf"},{"zip","application/zip"},{"txt","text/plain"}};
     for (String[] item : cases) {
       byte[] bytes = Files.readAllBytes(root.resolve("fixture." + item[0])), original = bytes.clone();

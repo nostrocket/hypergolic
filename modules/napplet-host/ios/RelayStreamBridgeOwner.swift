@@ -18,6 +18,7 @@ final class RelayStreamBridgeOwner: @unchecked Sendable {
   private struct Row {
     let token: String
     let emit: Emit
+    var history: LegacyReadOnlyContext.HistoryBudget?
     var operation: PublishedRelayWebSocketQuery.Operation?
     var sequence: UInt64 = 0
     var resume: (@Sendable () -> Void)?
@@ -43,10 +44,15 @@ final class RelayStreamBridgeOwner: @unchecked Sendable {
       let value = try? JSONSerialization.jsonObject(with: Data(request.utf8)) as? [Any], value.count >= 3,
       value[0] as? String == "REQ", value[1] as? String == subId,
       value.dropFirst(2).allSatisfy({ $0 is [String: Any] }) else { return false }
+    guard LegacyReadOnlyContext.permitsWire(RelaySubscriptionTransport.shared.registry.capturedSnapshot(token), url: url, wire: request, subId: subId) else { return false }
+    guard let snapshot = RelaySubscriptionTransport.shared.registry.capturedSnapshot(token),
+      let row = try? JSONSerialization.jsonObject(with: Data(snapshot.utf8)) as? [String: Any],
+      let registration = row["registration"] as? [String: Any] else { return false }
+    let legacy = registration["legacyReadOnly"] != nil
     let admitted = lock.withLock { () -> Bool in
       guard foreground, !consumed.contains(id), consumed.count < 65_536, rows.count < 16, rows.values.filter({ $0.token == token }).count < RelaySubscriptionTransport.shared.registry.connectionLimit(token),
         RelaySubscriptionTransport.shared.registry.isActive(token) else { return false }
-      consumed.insert(id); rows[id] = Row(token: token, emit: emit); return true
+      consumed.insert(id); rows[id] = Row(token: token, emit: emit, history: legacy ? LegacyReadOnlyContext.HistoryBudget() : nil); return true
     }
     guard admitted else { return false }
     do {
@@ -64,10 +70,14 @@ final class RelayStreamBridgeOwner: @unchecked Sendable {
     let delivery: (Emit, UInt64)? = lock.withLock {
       guard foreground, var row = rows[id], RelaySubscriptionTransport.shared.registry.isActive(row.token),
         row.resume == nil, row.sequence < 9_007_199_254_740_991 else { return nil }
+      if var history = row.history {
+        guard history.receive(text) else { return nil }
+        row.history = history
+      }
       row.sequence += 1; row.resume = resume; row.acknowledged = false; rows[id] = row
       return (row.emit, row.sequence)
     }
-    guard let delivery else { cancel(id); return }
+    guard let delivery else { failed(id); return }
     delivery.0(.frame(id, delivery.1, text))
     DispatchQueue.global().asyncAfter(deadline: .now() + 25) { [weak self] in
       guard let self else { return }

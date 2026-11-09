@@ -9,9 +9,12 @@ The genuine SDK sends `relay.subscribe` with original `id`, caller `subId`,
 filters and optional relay. Replies are canonical `relay.event` with
 `result: {event}`, `relay.eose`, and terminal `relay.closed`; `relay.close`
 preserves its original caller ID. There is no public subscribe/close result ACK.
-EOSE completes stored history while later matching events continue. Fresh
-seven-field hash/signature/filter checks run before app delivery and again at the
-captured runtime recipient. Encrypted kinds 4 and 1059 are explicitly unsupported.
+EOSE completes stored history while later matching events continue. A zero-limit
+filter starts matching live events only after its relay connection sends EOSE.
+The coordinator supplies that phase privately to the runtime because other relays
+may still be sending stored history. The runtime omits the phase from the guest
+reply. Fresh seven-field hash/signature/filter checks run at both boundaries.
+Encrypted kinds 4 and 1059 are explicitly unsupported.
 
 ## Authority and bounds
 
@@ -23,19 +26,44 @@ foreground/generation checks remain authoritative at the final renderer push;
 JavaScript ownership checks add the runtime identity and workspace binding.
 A close or revocation invalidates intent and delivery revisions before cancelling.
 
-The process allows eight subscriptions, two per session, two trusted relays per
-subscription and 64 session coordinators. Filters retain the bounded core query
-profile. Connections use fresh native UUIDs and host-created relay subscription
+The process allows eight subscriptions and 64 session coordinators. A session can
+hold three raw Relay streams, or two total streams when any stream uses Outbox.
+Raw Relay uses the first two saved Network relays when the guest leaves the relay unspecified. Change their priority under Settings → Relays → Network. The native socket budget stays at 16 for the process. Filters retain the bounded core query
+profile. A valid request for more stored events uses the existing limit of 32
+per filter. Connections use fresh native UUIDs and host-created relay subscription
 IDs; caller IDs cannot reopen closed intent. Trusted Network destinations are
 snapshotted at admission; a scoped guest relay must already be trusted.
 
-Event size is bounded to 64 KiB, raw text to 66 KiB, native frame delivery to one
+When the three raw slots are occupied, the runtime can hold up to three more
+explicitly scoped raw starts for four seconds. Waiting starts hold no native
+token and open no connection. A trusted terminal reply releases a slot, and
+the runtime acknowledges it before dispatching the next waiting start. The
+broker reports a policy denial only through its exact accepted native token.
+Guest close, renderer teardown, or the original deadline removes the waiting
+start. Unscoped and mixed Outbox streams keep their immediate quota behavior.
+
+Serialized event size includes escaped content and tags and is bounded to 64 KiB.
+The shared raw WSS frame ceiling is 66,560 bytes. Native frame delivery stays at one
 unacknowledged frame per connection and renderer delivery to four messages/256
 KiB per token. Native rolling wire bounds are 64 frames and 2 MiB per second.
 The coordinator retains 1,024 recent event IDs and at most five consecutive failed
 reconnect attempts with delays 1/2/4/8/16 seconds. Renderer acknowledgements use
 the shared native sequence and exact monotonic per-stream delivery number.
 Feed Lab retains 32 displayed rows and an editable draft. It renders text safely.
+
+Malformed, invalidly signed, mismatching or excessive input quarantines that
+connection for the current foreground interval. Other peers continue delivering
+verified events. If every peer is exhausted or quarantined, the logical stream
+closes. Transport failures retain the bounded retry policy; quarantine does not
+retry until a fresh foreground connection interval.
+
+All streams have a 15-second initial deadline (Outbox may select a shorter one).
+At that deadline, pending peers stop. Aggregate EOSE requires an actual EOSE from
+at least one peer; it indicates completion of available stored history, not full
+relay coverage. Without any peer EOSE the stream closes with a timeout, even if
+some verified events arrived. Background cancels the deadline and foreground
+starts a fresh one. Terminal CLOSED is distinct from EOSE; an SDK or guest must
+handle termination separately to clear its own loading state.
 
 ## Confirmed lifecycle
 

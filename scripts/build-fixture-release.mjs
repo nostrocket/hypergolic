@@ -5,7 +5,7 @@ import {BUNDLED_FIXTURES} from '../src/runtime/bundled-catalog.ts';
 const root = new URL('../', import.meta.url), artifacts = {};
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 for (const [id, expected] of Object.entries(BUNDLED_FIXTURES)) {
-  if (id === 'nap-support' || id === 'approval-lab-v1' || id === 'approval-lab-v2' || id === 'approval-lab-v3' || id === 'feed-lab-v1') continue;
+  if (id === 'napplet-discovery' || id === 'nap-support' || id === 'approval-lab-v1' || id === 'approval-lab-v2' || id === 'approval-lab-v3' || id === 'feed-lab-v1') continue;
   const bytes = await readFile(new URL(`runtime/fixtures/${id}.html`, root));
   const html = new TextDecoder('utf-8', {fatal: true}).decode(bytes);
   const manifest = JSON.parse(await readFile(new URL(`runtime/fixtures/${id}-manifest.json`, root)));

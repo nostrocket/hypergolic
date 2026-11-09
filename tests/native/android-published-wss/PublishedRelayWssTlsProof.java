@@ -27,6 +27,7 @@ import javax.net.ssl.SSLSocketFactory;
 /** Loopback TLS relay proof of the actual Android WSS handshake and bounded query. */
 public final class PublishedRelayWssTlsProof {
   private static final String REQUEST = "[\"REQ\",\"sub-1\",{}]";
+  private static final String SEARCH_REQUEST = "[\"REQ\",\"sub-1\",{\"kinds\":[31237],\"limit\":32,\"search\":\"café jazz\"}]";
   private static final InetAddress LOOPBACK;
   private static int checks;
 
@@ -47,10 +48,11 @@ public final class PublishedRelayWssTlsProof {
         });
     try {
       acceptsVerifiedRelayAndRetriesVettedAddress(serverContext, trusted, dns);
+      PublishedRelayResponseClassifier.validateRequest(SEARCH_REQUEST, "sub-1");
       try (LocalRelay relay = new LocalRelay(serverContext, Mode.AUTH_ANNOUNCEMENT)) {
         equal(Arrays.asList("[\"AUTH\",\"first\"]", "[\"AUTH\",\"rotated\"]", "[\"EOSE\",\"sub-1\"]"),
             query(relay, "relay.example.org", null, ignored -> new InetAddress[] {LOOPBACK}, dns, trusted));
-        equal(REQUEST, relay.clientRequest);
+        equal(SEARCH_REQUEST, relay.clientRequest);
         equal(1, relay.accepted);
       }
       rejectsUntrustedCertificate(serverContext, dns);
@@ -60,6 +62,16 @@ public final class PublishedRelayWssTlsProof {
       rejectsBadUpgrade(serverContext, trusted, dns);
       rejectsOversizedFrame(serverContext, trusted, dns);
       cancelsAfterUpgrade(serverContext, trusted, dns);
+      try (LocalRelay relay = new LocalRelay(serverContext, Mode.HOLD_RESPONSE)) {
+        PublishedRelayWssQuery.TimedRead deadline = new PublishedRelayWssQuery.TimedRead() {
+          @Override public boolean isCancelled() { return false; }
+          @Override public int timeoutMs() { return 1_000; }
+        };
+        long started = System.nanoTime();
+        throwsIo(() -> query(relay,"relay.example.org",deadline,ignored -> new InetAddress[] {LOOPBACK},dns,trusted));
+        check(relay.requestArrived.getCount() == 0);
+        check(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started) < 2_500);
+      }
     } finally {
       dns.shutdownNow();
       check(dns.awaitTermination(2, TimeUnit.SECONDS));
@@ -173,7 +185,7 @@ public final class PublishedRelayWssTlsProof {
       @Override public boolean isAllowedAddress(InetAddress value) { return value.isLoopbackAddress(); }
     };
     return PublishedRelayWssQuery.queryWithTransport("wss://" + host + ":" + relay.port() + "/nostr",
-        REQUEST, proofPolicy, cancellation,
+        relay.mode == Mode.AUTH_ANNOUNCEMENT ? SEARCH_REQUEST : REQUEST, proofPolicy, cancellation,
         text -> relay.mode == Mode.AUTH_ANNOUNCEMENT ? new PublishedRelayResponseClassifier("sub-1").classify(text) :
             "event".equals(text) ? PublishedRelayWssQuery.TextKind.EVENT :
             "eose".equals(text) ? PublishedRelayWssQuery.TextKind.EOSE : PublishedRelayWssQuery.TextKind.OTHER,

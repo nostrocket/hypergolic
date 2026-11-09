@@ -1,0 +1,33 @@
+{
+  "kind": 35129,
+  "content": "Find published Napplets and open them in your workspace.",
+  "tags": [
+    [
+      "d",
+      "napplet-discovery"
+    ],
+    [
+      "title",
+      "Discover"
+    ],
+    [
+      "path",
+      "/index.html",
+      "74051ed5602ab68d07d88b32ab8e0cbbf5623e1749a393d03e3730e132e7a8ec"
+    ],
+    [
+      "x",
+      "ac40811acb447f037d84830c5a6da6a39212d8fc38385adeec03aec6aa876ccb",
+      "aggregate"
+    ],
+    [
+      "requires",
+      "relay"
+    ],
+    [
+      "requires",
+      "resource"
+    ]
+  ],
+  "aggregateHash": "ac40811acb447f037d84830c5a6da6a39212d8fc38385adeec03aec6aa876ccb"
+}

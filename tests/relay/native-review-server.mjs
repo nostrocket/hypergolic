@@ -7,9 +7,9 @@ import { getEventHash, verifyEvent } from 'nostr-tools/pure';
 
 const EXPECTED_PUBKEY = 'c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5';
 const RELAYS = Object.freeze({
-  '/relay.damus.io': 'wss://relay.damus.io/',
+  '/relay.ditto.pub': 'wss://relay.ditto.pub/',
   '/nos.lol': 'wss://nos.lol/',
-  '/bucket.coracle.social': 'wss://bucket.coracle.social/',
+  '/relay.damus.io': 'wss://relay.damus.io/',
 });
 const MODES = new Set(['accept', 'reject', 'auth-required', 'close-after-send', 'hold-upgrade']);
 const args = process.argv.slice(2);

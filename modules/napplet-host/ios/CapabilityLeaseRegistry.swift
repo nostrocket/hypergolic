@@ -4,6 +4,8 @@ import Foundation
 /// no UIKit/WebKit reference or user key is stored here.
 final class CapabilityLeaseRegistry: @unchecked Sendable {
   static let maxBytes = 2 * 1024 * 1024
+  private static let maxWaiting = 16
+  private static let maxWaitingPerSession = 8
   private struct Session { var sequence: UInt64 = 0 }
   private struct Request {
     let generation: String
@@ -11,10 +13,16 @@ final class CapabilityLeaseRegistry: @unchecked Sendable {
     let expires: ContinuousClock.Instant
     var claimed = false
   }
+  private struct Waiting {
+    let token: String
+    let request: Request
+    let bytes: Int
+  }
   private let lock = NSLock()
   private let now: @Sendable () -> ContinuousClock.Instant
   private var sessions: [String: Session] = [:]
   private var requests: [String: Request] = [:]
+  private var waiting: [Waiting] = []
   private var foreground = true
 
   /// Background permanently invalidates pending work, retaining loaded sessions and replay counters.
@@ -22,8 +30,9 @@ final class CapabilityLeaseRegistry: @unchecked Sendable {
     lock.withLock {
       foreground = value
       guard !value else { return [] }
-      let revoked = Array(requests.keys)
+      let revoked = Array(requests.keys) + waiting.map(\.token)
       requests.removeAll()
+      waiting.removeAll()
       return revoked
     }
   }
@@ -44,6 +53,7 @@ final class CapabilityLeaseRegistry: @unchecked Sendable {
     lock.withLock {
       sessions.removeValue(forKey: generation)
       requests = requests.filter { $0.value.generation != generation }
+      waiting.removeAll { $0.request.generation == generation }
     }
   }
   /// Consumes the next transport sequence without creating an ordinary 25-second lease.
@@ -52,16 +62,55 @@ final class CapabilityLeaseRegistry: @unchecked Sendable {
     lock.withLock { consumeSequenceLocked(generation, sequence: sequence) }
   }
   /// Snapshot is complete JSON constructed by the host from native registration and the original serialized request.
-  func admit(_ generation: String, sequence: UInt64, snapshot: String) -> String? {
+  func admit(_ generation: String, sequence: UInt64, snapshot: String, publishedOpen: Bool = false) -> String? {
     lock.withLock {
       prune()
       guard consumeSequenceLocked(generation, sequence: sequence) else { return nil }
-      guard foreground, snapshot.utf8.count <= Self.maxBytes, requests.count < 8,
-        requests.values.filter({ $0.generation == generation }).count < 4 else { return nil }
+      guard foreground, snapshot.utf8.count <= Self.maxBytes, canAdmit(generation) else { return nil }
       let token = UUID().uuidString.lowercased()
-      requests[token] = Request(generation: generation, snapshot: snapshot, expires: now().advanced(by: .seconds(25)))
+      requests[token] = Request(generation: generation, snapshot: snapshot, expires: now().advanced(by: .seconds(publishedOpen ? 120 : 25)))
       return token
     }
+  }
+  /// A waiting ID cannot be taken or authorize an effect before promotion.
+  func enqueue(_ generation: String, sequence: UInt64, snapshot: String) -> String? {
+    lock.withLock {
+      prune()
+      guard consumeSequenceLocked(generation, sequence: sequence), foreground,
+        waiting.count < Self.maxWaiting,
+        waiting.filter({ $0.request.generation == generation }).count < Self.maxWaitingPerSession else { return nil }
+      let bytes = snapshot.utf8.count
+      guard bytes <= Self.maxBytes - waiting.reduce(0, { $0 + $1.bytes }) else { return nil }
+      let token = UUID().uuidString.lowercased()
+      let request = Request(generation: generation, snapshot: snapshot, expires: now().advanced(by: .seconds(25)))
+      waiting.append(Waiting(token: token, request: request, bytes: bytes))
+      return token
+    }
+  }
+  func promote() -> [String] {
+    lock.withLock {
+      prune()
+      guard foreground else { return [] }
+      var promoted: [String] = []
+      var remaining: [Waiting] = []
+      for entry in waiting {
+        if canAdmit(entry.request.generation) {
+          requests[entry.token] = entry.request
+          promoted.append(entry.token)
+        } else { remaining.append(entry) }
+      }
+      waiting = remaining
+      return promoted
+    }
+  }
+  func retained(_ token: String) -> Bool {
+    lock.withLock {
+      prune()
+      return requests[token] != nil || waiting.contains { $0.token == token }
+    }
+  }
+  private func canAdmit(_ generation: String) -> Bool {
+    requests.count < 8 && requests.values.filter { $0.generation == generation }.count < 4
   }
   private func consumeSequenceLocked(_ generation: String, sequence: UInt64) -> Bool {
     guard var session = sessions[generation], sequence > 0,
@@ -106,5 +155,6 @@ final class CapabilityLeaseRegistry: @unchecked Sendable {
   private func prune() {
     let current = now()
     requests = requests.filter { current < $0.value.expires && sessions[$0.value.generation] != nil }
+    waiting.removeAll { current >= $0.request.expires || sessions[$0.request.generation] == nil }
   }
 }

@@ -496,6 +496,33 @@ public final class VaultProofActivity extends Activity {
     vault = new NativeVault(owner, this); denied(() -> vault.open(owner));
     resetFixture(); Arrays.fill(original, (byte)0); Arrays.fill(damaged, (byte)0);
   }
+  private void publicIdentityCases() throws Exception {
+    resetFixture(); vault = new NativeVault(owner, this);
+    JSONObject before = json(vault.open(owner)); String retained = before.getString("selectedPubkey");
+    String publicKey = "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9";
+    denied(() -> vault.addPublicIdentity(owner, "00".repeat(32), id(before), revision(before)));
+    check(snapshot().toString().equals(before.toString()));
+    JSONObject added = json(vault.addPublicIdentity(owner, publicKey, id(before), revision(before)));
+    check(added.getLong("revision") == revision(before) + 1);
+    check(added.getString("selectedPubkey").equals(publicKey));
+    check(added.getJSONArray("identities").getJSONObject(0).toString().equals(before.getJSONArray("identities").getJSONObject(0).toString()));
+    check(added.getJSONArray("identities").getJSONObject(1).getString("origin").equals("public"));
+    JSONObject methods = json(vault.methods(owner, publicKey, id(added), revision(added)));
+    check(methods.isNull("selectedMethod") && methods.getJSONArray("methods").length() == 0);
+    long writes = vault.committedWrites();
+    denied(() -> vault.signingKey(owner, publicKey, id(added), revision(added)));
+    denied(() -> vault.remoteSigning(owner, publicKey, id(added), revision(added)));
+    denied(() -> vault.androidSigning(owner, publicKey, id(added), revision(added)));
+    denied(() -> vault.backupScalar(owner, publicKey, id(added), revision(added)));
+    denied(() -> vault.addPublicIdentity(owner, publicKey, id(added), revision(added)));
+    check(vault.committedWrites() == writes);
+    vault.close(); vault = new NativeVault(owner, this);
+    check(json(vault.open(owner)).toString().equals(added.toString()));
+    JSONObject restored = json(vault.select(owner, retained, id(added), revision(added)));
+    denied(() -> vault.signingKey(owner, publicKey, id(added), revision(added)));
+    try (NativeSigningKey key = vault.signingKey(owner, retained, id(restored), revision(restored))) { check(key.publicKey().equals(retained)); }
+    resetFixture();
+  }
   private void cold() throws Exception {
     JSONObject expected = new JSONObject(new String(Files.readAllBytes(new File(getFilesDir(), "restart.json").toPath()), StandardCharsets.UTF_8));
     long[] clock = {100}; vault = new NativeVault(owner, this, () -> clock[0]);
@@ -511,7 +538,7 @@ public final class VaultProofActivity extends Activity {
         try {
           check(signed != null); check(new JSONObject(signed).getString("pubkey").equals(key));
           denied(() -> reviewCore.approveOnce(owner, review)); reviewCore.close();
-          fileCases(); replyCancellationCases(); methodCases(); legacyFormatCases(); methodReplyCancellationCases(); refreshCases(); androidSignerStorageCases(); assertions += NativeAndroidSignerModelProof.run(this);
+          fileCases(); replyCancellationCases(); methodCases(); legacyFormatCases(); methodReplyCancellationCases(); refreshCases(); androidSignerStorageCases(); publicIdentityCases(); assertions += NativeAndroidSignerModelProof.run(this);
           write("result.json", new JSONObject().put("status", "passed").put("assertions", assertions)
             .put("unsignedEvent", publicEvent).put("signedEvent", new JSONObject(signed)));
           ((TextView)findViewById(android.R.id.text1)).setText("Native encrypted restart, import, corruption and cancellation checks passed.");

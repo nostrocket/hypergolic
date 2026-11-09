@@ -12,6 +12,7 @@ export interface IdentityVaultPort {
   cancelImportPreparation?(): void;
   cancelImport(candidate: NativeImportCandidate): void;
   commitImport(candidate: NativeImportCandidate): Promise<VaultSnapshot>;
+  addPublicIdentity?(pubkey: string): Promise<VaultSnapshot>;
   select(pubkey: string): Promise<VaultSnapshot>;
   getSigningMethods(pubkey: string): Promise<SigningMethodsSnapshot>;
   prepareRemoteConnection(): Promise<NativeRemoteCandidate | null>;
@@ -61,7 +62,7 @@ export function captureNativeVaultSnapshot(raw: string): VaultSnapshot {
     const entry = object(item, ['pubkey', 'addedAt', 'origin', 'status']);
     if (typeof entry.pubkey !== 'string' || entry.pubkey.length !== 64 || !keyPattern.test(entry.pubkey) ||
         !Number.isSafeInteger(entry.addedAt) || (entry.addedAt as number) < 0 ||
-        (entry.origin !== 'generated' && entry.origin !== 'imported' && entry.origin !== 'connected') || entry.status !== 'active') throw new VaultError('CORRUPT_METADATA');
+        (entry.origin !== 'generated' && entry.origin !== 'imported' && entry.origin !== 'connected' && entry.origin !== 'public') || entry.status !== 'active') throw new VaultError('CORRUPT_METADATA');
     return Object.freeze({ pubkey: entry.pubkey, addedAt: entry.addedAt as number, origin: entry.origin, status: entry.status });
   });
   if (new Set(identities.map(item => item.pubkey)).size !== identities.length ||
@@ -131,6 +132,20 @@ export class NativeIdentityVault implements IdentityVaultPort {
       const before = this.getSnapshot();
       const next = this.accept(await this.module.commitNativeImportAsync(candidate.handle, before.vaultId, before.revision), before);
       if (next.selectedPubkey !== candidate.pubkey) throw new VaultError('CORRUPT_METADATA');
+      return next;
+    });
+  }
+  addPublicIdentity(pubkey: string): Promise<VaultSnapshot> {
+    return this.operation(async () => {
+      const before = this.getSnapshot();
+      if (!keyPattern.test(pubkey) || before.identities.some(identity => identity.pubkey === pubkey)) denied();
+      const next = this.accept(await this.module.addNativePublicIdentityAsync(pubkey, before.vaultId, before.revision), before);
+      if (next.selectedPubkey !== pubkey || next.revision !== before.revision + 1 ||
+          next.identities.length !== before.identities.length + 1 ||
+          next.identities.find(identity => identity.pubkey === pubkey)?.origin !== 'public' ||
+          before.identities.some(identity => JSON.stringify(next.identities.find(item => item.pubkey === identity.pubkey)) !== JSON.stringify(identity))) {
+        throw new VaultError('CORRUPT_METADATA');
+      }
       return next;
     });
   }

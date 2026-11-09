@@ -22,6 +22,7 @@ class NappletHostModule : Module() {
       val foreground = appContext.runtime.reactContext?.lifecycleState == LifecycleState.RESUMED
       SelectedFilePicker.foreground(foreground)
       UploadTransport.foreground(foreground)
+      CvmTransport.foreground(foreground)
       FixtureReleaseTransport.foreground(foreground)
       CapabilityTransport.foreground(foreground)
       NappletHostView.setMediaForeground(foreground)
@@ -34,6 +35,7 @@ class NappletHostModule : Module() {
     OnActivityEntersForeground {
       SelectedFilePicker.foreground(true)
       UploadTransport.foreground(true)
+      CvmTransport.foreground(true)
       FixtureReleaseTransport.foreground(true)
       CapabilityTransport.foreground(true)
       NappletHostView.setMediaForeground(true)
@@ -46,6 +48,7 @@ class NappletHostModule : Module() {
     OnActivityEntersBackground {
       SelectedFilePicker.foreground(false)
       UploadTransport.foreground(false)
+      CvmTransport.foreground(false)
       FixtureReleaseTransport.foreground(false)
       CapabilityTransport.foreground(false)
       NappletHostView.setMediaForeground(false)
@@ -62,6 +65,7 @@ class NappletHostModule : Module() {
       SelectedFilePicker.cancel()
       SelectedFilePicker.foreground(false)
       UploadTransport.foreground(false)
+      CvmTransport.foreground(false)
       FixtureReleaseTransport.foreground(false)
       CapabilityTransport.foreground(false)
       NappletHostView.setMediaForeground(false)
@@ -77,6 +81,7 @@ class NappletHostModule : Module() {
       SelectedFilePicker.cancel()
       SelectedFilePicker.foreground(false)
       UploadTransport.foreground(false)
+      CvmTransport.foreground(false)
       FixtureReleaseTransport.foreground(false)
       CapabilityTransport.foreground(false)
       NappletHostView.setMediaForeground(false)
@@ -91,6 +96,7 @@ class NappletHostModule : Module() {
       UploadTransport.observeProgress(null)
       SelectedFilePicker.foreground(false)
       UploadTransport.foreground(false)
+      CvmTransport.foreground(false)
       FixtureReleaseTransport.foreground(false)
       CapabilityTransport.foreground(false)
       RelaySubscriptionTransport.foreground(false)
@@ -133,7 +139,7 @@ class NappletHostModule : Module() {
       catch (error: kotlinx.coroutines.CancellationException) { UploadTransport.cancel(token); throw error }
     }
     AsyncFunction("fetchResourceHttps") Coroutine { token: String, operationId: String, url: String ->
-      val generation = ResourceCapability.admission(token)
+      val generation = ResourceCapability.admission(token, url)
       val job = currentCoroutineContext()[Job]
       withContext(Dispatchers.IO) {
         val result = org.json.JSONObject()
@@ -159,6 +165,16 @@ class NappletHostModule : Module() {
         Base64.encodeToString(bytes, Base64.NO_WRAP)
       }
     }
+    AsyncFunction("fetchPublishedArtifactHttps") Coroutine { operationId: String, url: String ->
+      val job = currentCoroutineContext()[Job]
+      withContext(Dispatchers.IO) {
+        PublishedHttpsRequestOwner.INSTANCE.fetchArtifact(operationId, url) { job?.isActive == true }
+      }
+    }
+    Function("readPublishedArtifactHttpsChunk") { operationId: String, offset: Int ->
+      try { Base64.encodeToString(PublishedHttpsRequestOwner.INSTANCE.readArtifactChunk(operationId, offset), Base64.NO_WRAP) }
+      catch (_: java.io.IOException) { null }
+    }
     Function("cancelPublishedHttps") { operationId: String ->
       PublishedHttpsRequestOwner.INSTANCE.cancel(operationId)
     }
@@ -173,6 +189,19 @@ class NappletHostModule : Module() {
         }
       }
     }
+    AsyncFunction("queryOutboxRelay") Coroutine { token: String, operationId: String, url: String,
+      requestText: String, subscriptionId: String, timeoutMs: Double ->
+      if (!timeoutMs.isFinite() || timeoutMs < 1 || timeoutMs > PublishedRelayWssQuery.TOTAL_TIMEOUT_MS ||
+        timeoutMs % 1.0 != 0.0) throw java.io.IOException("Invalid relay deadline")
+      val leases = CapabilityTransport.leases
+      if (!OutboxQueryCapability.admits(leases, token)) throw java.io.IOException("Inactive Outbox query")
+      val job = currentCoroutineContext()[Job]
+      withContext(Dispatchers.IO) {
+        PublishedRelayWssRequestOwner.INSTANCE.queryOutbox(operationId, url, requestText, subscriptionId, timeoutMs.toInt()) {
+          job?.isActive == true && leases.isActive(token)
+        }
+      }
+    }
     Function("cancelPublishedRelay") { operationId: String ->
       PublishedRelayWssRequestOwner.INSTANCE.cancel(operationId)
     }
@@ -184,6 +213,11 @@ class NappletHostModule : Module() {
       eventId: String, aggregateHash: String, htmlHash: String, byteLength: Int ->
       PublishedArtifactTransfer.INSTANCE.beginPublishedArtifact(
         sessionId, publisher, identifier, eventId, aggregateHash, htmlHash, byteLength)
+    }
+    Function("beginPublishedSnapshot") { sessionId: String, publisher: String, eventId: String,
+      verifiedTitle: String, aggregateHash: String, htmlHash: String, byteLength: Int ->
+      PublishedArtifactTransfer.INSTANCE.beginPublishedSnapshot(
+        sessionId, publisher, eventId, verifiedTitle, aggregateHash, htmlHash, byteLength)
     }
     Function("appendPublishedArtifact") { uploadId: String, sequence: Int, base64Chunk: String ->
       PublishedArtifactTransfer.INSTANCE.appendPublishedArtifact(uploadId, sequence, base64Chunk)
@@ -202,6 +236,9 @@ class NappletHostModule : Module() {
     }
     Function("takeApproval") { token: String -> ApprovalTransport.leases.take(token) }
     Function("prepareApprovalSigning") { token: String, snapshot: String -> NativeSigningSourceFacade.prepareApproval(token,snapshot) }
+    Function("prepareCommonApproval") { token:String,plan:String -> ApprovalTransport.prepareCommon(token,plan) }
+    Function("completeCommonNoop") { token:String,plan:String -> ApprovalTransport.completeCommonNoop(token,plan) }
+    Function("failCommonApproval") { token:String,error:String -> ApprovalTransport.failCommon(token,error) }
     Function("prepareOutboxApproval") { token: String, plan: String -> ApprovalTransport.prepareOutbox(token, plan) }
     Function("failOutboxApproval") { token: String, error: String -> ApprovalTransport.failOutbox(token, error) }
     AsyncFunction("publishOutboxApproval") Coroutine { token: String, group: String, event: String, relay: String ->
@@ -236,7 +273,15 @@ class NappletHostModule : Module() {
     Function("closeSubscription") { token: String -> RelaySubscriptionTransport.close(token) }
     Function("synchronizeRoutingOwner") { user: String, epoch: Long, available: Boolean ->
       require(RoutingTransport.synchronizeOwner(user, epoch, available)) { "Routing owner unavailable" }
+      CvmTransport.synchronizeOwner(user, epoch, available)
     }
+    Function("synchronizeCvmRelays") { relays: List<String> -> CvmTransport.synchronizeRelays(relays) }
+    Function("isCvmSourceCurrent") { generation: String, sourceRevision: String -> CvmTransport.current(generation,sourceRevision) }
+    Function("takeCvmRequest") { token: String -> CvmTransport.take(token) }
+    Function("approveCvmRequest") { token: String -> CvmTransport.approve(token) }
+    Function("rejectCvmRequest") { token: String -> CvmTransport.reject(token) }
+    Function("finishCvmRequest") { token: String, response: String? -> CvmTransport.finish(token,response) }
+    Function("sendCvmEvent") { generation: String, sourceRevision: String, requestToken: String, response: String -> CvmTransport.send(generation,sourceRevision,requestToken,response) }
     Function("routingState") { RoutingTransport.state() }
     Function("mayReviewRouting") { generation: String, revision: Long -> RoutingTransport.mayReview(generation, revision) }
     Function("routingReviewRevision") { generation: String, revision: Long -> RoutingTransport.reviewRevision(generation, revision) }
@@ -255,6 +300,7 @@ class NappletHostModule : Module() {
       Prop("sessionId") { view: NappletHostView, id: String -> view.startSession(id) }
       Prop("closeCheck") { view: NappletHostView, raw: String -> view.setCloseCheck(raw) }
       Prop("active") { view: NappletHostView, active: Boolean -> view.setActive(active) }
+      Prop("inputBlocked") { view: NappletHostView, blocked: Boolean -> view.setInputBlocked(blocked) }
       OnViewDestroys { view: NappletHostView -> view.destroySession() }
     }
     View(ShellGestureRegionView::class) {

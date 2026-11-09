@@ -1,3 +1,4 @@
+import {glyphFile,glyphStack,glyph,tile} from './resource-pbf-fixtures.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { randomUUID } from 'node:crypto';
@@ -51,6 +52,21 @@ test('bulk adapter preserves exact order, canonical per-item errors and complete
     assert.equal(items.some(item=>'transfer' in item),false);
   } finally {h.finish();}
 });
+test('modern resource requests do not grant a missing resource capability', async () => {
+  const service = createResourceService({
+    https: async () => assert.fail('A request without the resource grant reached HTTPS'),
+    servers: () => ['https://assets.public.org'],
+    sha256: async () => '',
+  });
+  const broker = createResourceBroker({service, transfers: createResourceTransfers(randomUUID)},
+    {registration: {...registration, domains: ['theme']}, assertActive() {}});
+  try {
+    assert.equal(await broker.dispatch({type: 'resource.bytes', id: 'single',
+      url: `blossom:${'a'.repeat(64)}.png`, servers: ['https://assets.public.org']}, authority), null);
+    assert.equal(await broker.dispatch({type: 'resource.bytesMany', id: 'batch',
+      requests: [{url: 'https://assets.public.org/image.png'}]}, authority), null);
+  } finally { broker.revoke(); }
+});
 test('private handles cannot cross realms, skip a cursor or survive root cancel',()=>{
   const pool=createResourceTransfers(randomUUID); const a=pool.bind(()=>{}),b=pool.bind(()=>{});
   try {
@@ -98,4 +114,17 @@ test('cancel during a private read drops all later success/error deliveries',asy
   const run=adapter({message:{type:'resource.bytes',id:'root',url:'https://assets.public.org/a'},send:reply=>{replies.push(reply);}});
   await started;await adapter({message:{type:'resource.cancel',id:'root'},send:reply=>{replies.push(reply);}});
   release({type:'resource.__chunk.result',id:'unused',base64:'aGVsbG8='});await run;assert.deepEqual(replies,[]);
+});
+
+test('specific map PBF bytes survive app classification and trusted runtime reclassification exactly',async()=>{
+  const large=glyphFile([glyphStack([glyph(65,512,512,Array((512+6)**2).fill(0))])]);
+  assert(large.length>RESOURCE_LIMITS.chunkBytes);
+  for(const[body,mime]of [[large,'application/x-protobuf'],[glyphFile([glyphStack(undefined,'x'.repeat(37))]),'application/x-protobuf'],[tile(),'application/vnd.mapbox-vector-tile']]as const){
+    const h=harness(body),replies:Readonly<Record<string,unknown>>[]=[];
+    try{
+      await h.adapter({message:{type:'resource.bytes',id:'map',url:'https://assets.public.org/map'},send:reply=>{replies.push(reply);}});
+      assert.equal(replies.length,1);const reply=replies[0]!;assert.equal(reply.mime,mime);assert(reply.blob instanceof Blob);
+      assert.deepEqual(new Uint8Array(await reply.blob.arrayBuffer()),body);assert.equal(reply.blob.type,mime);
+    }finally{h.finish();}
+  }
 });

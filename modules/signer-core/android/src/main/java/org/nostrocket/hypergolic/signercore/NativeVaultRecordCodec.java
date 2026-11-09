@@ -129,7 +129,7 @@ final class NativeVaultRecordCodec {
         String expected = NativeEvent.hex(publicKey);
         long added = input.readLong();
         int origin = input.readUnsignedByte();
-        if (!NativeSigningKey.validPublicKey(expected) || added < 0 || added > MAX_REVISION || origin > 2 ||
+        if (!NativeSigningKey.validPublicKey(expected) || added < 0 || added > MAX_REVISION || origin > 3 ||
             result.records.stream().anyMatch(value -> value.pubkey.equals(expected))) throw new Exception();
         int method = magic == LEGACY_MAGIC ? LOCAL : input.readUnsignedByte();
         if (magic == LEGACY_MAGIC || readBoolean(input)) {

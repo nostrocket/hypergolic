@@ -64,7 +64,7 @@ export const NAP_CATALOGUE = Object.freeze([
     "status": "Draft",
     "description": "Keyboard forwarding and action keybindings",
     "source": "https://github.com/napplet/naps/pull/9",
-    "revision": "cecb64257e0ac29926bb746832a477c553ab307c"
+    "revision": "8869a4cf77b023f4b049f47c546910a0280dc1a6"
   },
   {
     "domain": "media",
@@ -72,7 +72,7 @@ export const NAP_CATALOGUE = Object.freeze([
     "status": "Draft",
     "description": "Media session control and playback",
     "source": "https://github.com/napplet/naps/pull/10",
-    "revision": "2b2d29e90c30b994bf5035a65b57e5fe7f08a9a2"
+    "revision": "7806f438530251fce5129f8e6239d6b642278759"
   },
   {
     "domain": "notify",

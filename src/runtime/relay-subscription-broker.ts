@@ -1,5 +1,5 @@
 import {decodeNativeRegistration,decodeNativeRequest,type NativeRegistration} from './capability-protocol.ts';
-import {parseRelaySubscribe,parseRelayClose} from '../network/relay-subscription-contract.ts';
+import {parseRelaySubscribe,parseRelayClose,type RelaySubscribeRequest} from '../network/relay-subscription-contract.ts';
 import {createRelaySubscriptions} from '../network/relay-subscriptions.ts';
 
 /** Immutable native admission and final native delivery authority remain app-only. */
@@ -19,11 +19,14 @@ export function createRelaySubscriptionBroker(native:NativeRelaySubscriptionPort
   const tokens=new Map<string,string>();
   let disposed=false,watcher:ReturnType<typeof setInterval>|null=null;
   const active=()=>{if(disposed)throw new Error('Relay owner revoked');owner.assertActive();};
+  function forget(subId:string) {
+    tokens.delete(subId);
+    if(tokens.size===0&&watcher!==null){clearInterval(watcher);watcher=null;}
+  }
   const stop=(subId:string)=> {
     const token=tokens.get(subId);if(!token)return;
-    tokens.delete(subId);native.close(token);
+    forget(subId);native.close(token);
     try{session.close({type:'relay.close',id:'host-close',subId});}catch{revoke();}
-    if(tokens.size===0&&watcher!==null){clearInterval(watcher);watcher=null;}
   };
   function revoke() {
     if(disposed)return;disposed=true;
@@ -34,33 +37,42 @@ export function createRelaySubscriptionBroker(native:NativeRelaySubscriptionPort
     revoke,
     close(input:unknown){active();const request=parseRelayClose(input);stop(request.subId);},
     dispatch(token:string) {
-      let accepted=false;
+      let handled=false, request:RelaySubscribeRequest|undefined;
       try {
         active();const raw=native.take(token);if(raw===null)return;
         const captured=decodeNativeRequest(raw);
         if(JSON.stringify(captured.registration)!==expected)throw new Error('Native owner mismatch');
-        const request=parseRelaySubscribe(captured.request);
-        if(tokens.has(request.subId)||!native.accept(token))throw new Error('Native stream unavailable');
-        active();tokens.set(request.subId,token);
-        session.subscribe(request,message=> {
+        const selected=parseRelaySubscribe(captured.request);
+        request=selected;
+        if(tokens.has(selected.subId)||!native.accept(token))throw new Error('Native stream unavailable');
+        active();tokens.set(selected.subId,token);
+        session.subscribe(selected,message=> {
           try {
             active();if(!native.isActive(token))throw new Error('Native stream revoked');
             if(!native.mayDeliver(token))return 'paused';
             const delivered=native.send(token,JSON.stringify(message));
-            if(message.type==='relay.closed') {
-              tokens.delete(request.subId);
-              if(tokens.size===0&&watcher!==null){clearInterval(watcher);watcher=null;}
-            }
+            if(message.type==='relay.closed') forget(selected.subId);
             return delivered;
-          }catch{stop(request.subId);return false;}
+          }catch{stop(selected.subId);return false;}
         },token);
-        accepted=true;
+        handled=true;
         if(tokens.size>0&&watcher===null)watcher=setInterval(()=> {
           try{active();for(const [subId,current] of tokens)if(!native.isActive(current))stop(subId);}
           catch{revoke();}
         },25);
-      }catch{/* A rejected native admission never acquires an SDK recipient. */}
-      finally{if(!accepted)try{native.close(token);for(const [subId,current] of tokens)if(current===token)stop(subId);}catch{revoke();}}
+      }catch{
+        // Only an exact, accepted native token can report a rejected stream start.
+        if(request&&tokens.get(request.subId)===token) {
+          try {
+            active();
+            const terminal={type:'relay.closed',subId:request.subId,reason:'relay subscription unavailable'};
+            handled=native.isActive(token)&&native.mayDeliver(token)&&native.send(token,JSON.stringify(terminal))===true;
+            if(handled)forget(request.subId); // Native transport retains this terminal until ACK.
+          }catch{/* Revoked or undeliverable recipients have no terminal push. */}
+        }
+      }finally{if(!handled)try{
+        if(request&&tokens.get(request.subId)===token)stop(request.subId);else native.close(token);
+      }catch{revoke();}}
     },
   });
 }

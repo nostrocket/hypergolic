@@ -10,10 +10,10 @@ final class CapabilityLifecycle: @unchecked Sendable {
   init() {
     let center = NotificationCenter.default
     for name in [UIApplication.willResignActiveNotification, UIApplication.didEnterBackgroundNotification] {
-      observers.append(center.addObserver(forName: name, object: nil, queue: nil) { _ in CapabilityTransport.foreground(false) })
+      observers.append(center.addObserver(forName: name, object: nil, queue: nil) { _ in CapabilityTransport.foreground(false); CvmTransport.shared.foreground(false) })
     }
-    observers.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: nil) { _ in CapabilityTransport.foreground(true) })
-    Task { @MainActor in CapabilityTransport.foreground(UIApplication.shared.applicationState == .active) }
+    observers.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: nil) { _ in CapabilityTransport.foreground(true); CvmTransport.shared.foreground(true) })
+    Task { @MainActor in let active = UIApplication.shared.applicationState == .active; CapabilityTransport.foreground(active); CvmTransport.shared.foreground(active) }
   }
   deinit { for observer in observers { NotificationCenter.default.removeObserver(observer) } }
 }
@@ -28,15 +28,26 @@ struct CapabilityConfiguration {
   let sessionId: String
   let fixture: String
   let domains: Set<String>
+  let appData:String?
+  let mediaProfile:String?
+  let commonProfile:String?
+  let cvmProfile:String?
+  let legacyReadOnly:LegacyReadOnlyContext?
+  let publishedOpen: Bool
   let publisher: String
   let appId: String
   let version: String
-  init(_ raw: String, generation: String) throws {
+  init(_ raw: String, generation: String, expectedSnapshot: [String: Any]? = nil) throws {
     enum Invalid: Error { case configuration }
     guard raw.utf8.count <= 8192, let bytes = raw.data(using: .utf8),
       var value = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
-      Set(value.keys) == Set(["sessionId", "epoch", "user", "publisher", "appId", "version", "instanceId", "fixture", "domains"])
+      Set(value.keys).subtracting(["publishedOpen","commonProfile","cvmProfile","mediaProfile","appData","legacyReadOnly","snapshot"]) == Set(["sessionId", "epoch", "user", "publisher", "appId", "version", "instanceId", "fixture", "domains"])
       else { throw Invalid.configuration }
+    let open = value.removeValue(forKey: "publishedOpen")
+    if let open {
+      guard let flag = open as? NSNumber, CFGetTypeID(flag) == CFBooleanGetTypeID(), flag.boolValue,
+        value["fixture"] as? String == "published" else { throw Invalid.configuration }
+    }
     for name in ["sessionId", "instanceId", "fixture"] {
       guard let text = value[name] as? String, text.range(of: "^[A-Za-z0-9_-]{1,80}$", options: .regularExpression) != nil else { throw Invalid.configuration }
     }
@@ -51,9 +62,19 @@ struct CapabilityConfiguration {
       epoch.doubleValue.rounded(.towardZero) == epoch.doubleValue,
       let domains = value["domains"] as? [String], domains.count == Set(domains).count,
       let fixture = value["fixture"] as? String, let sessionId = value["sessionId"] as? String else { throw Invalid.configuration }
+    guard appId.hasPrefix(" 5129:") == (expectedSnapshot != nil) else { throw Invalid.configuration }
+    if let expectedSnapshot {
+      guard fixture == "published", open == nil, value["appData"] == nil, value["legacyReadOnly"] == nil,
+        let supplied = value["snapshot"] as? [String: Any],
+        try JSONSerialization.data(withJSONObject: supplied, options: .sortedKeys)
+          == JSONSerialization.data(withJSONObject: expectedSnapshot, options: .sortedKeys)
+        else { throw Invalid.configuration }
+      value["snapshot"] = expectedSnapshot
+    } else if value["snapshot"] != nil { throw Invalid.configuration }
     let expected: Set<String>
     switch fixture {
     case "ux-lab", "close-lab": expected = ["theme"]
+    case "napplet-discovery": expected = ["relay", "resource", "theme"]
     case "state-lab", "state-lab-peer": expected = ["identity", "storage", "theme"]
     case "approval-lab", "approval-lab-v1", "approval-lab-v2", "approval-lab-v3": expected = ["identity", "relay", "theme"]
     case "upload-lab", "upload-queue-lab": expected = ["upload", "theme"]
@@ -64,23 +85,41 @@ struct CapabilityConfiguration {
     case "feed-lab": expected = Set(domains).contains("outbox") ? ["identity", "outbox", "relay", "theme"] : ["identity", "relay", "theme"]
     case "published":
       expected = Set(domains)
-      let supported: Set<String> = ["identity", "storage", "theme", "relay", "resource", "upload", "link", "intent", "inc", "notify", "config", "outbox"]
+      let supported: Set<String> = ["identity", "storage", "theme", "relay", "resource", "upload", "link", "intent", "inc", "notify", "config", "outbox", "keys", "media", "common", "cvm"]
       guard domains.count <= supported.count, expected.isSubset(of: supported) else {
         throw Invalid.configuration
       }
     default: throw Invalid.configuration
     }
     if fixture != "published" && Set(domains) != expected { throw Invalid.configuration }
+    if let profile = value["mediaProfile"] {
+      guard profile as? String == "finite-live-mp3-v1", fixture == "published", expected.contains("media") else { throw Invalid.configuration }
+    }
+    self.mediaProfile = value["mediaProfile"] as? String
     value["generation"] = generation
     self.snapshot = String(decoding: try JSONSerialization.data(withJSONObject: value), as: UTF8.self)
     self.user = value["user"] as! String
     self.epoch = epoch.uint64Value
     self.sessionId = sessionId
     self.fixture = fixture
+    if let profile=value["commonProfile"]{
+      guard profile as? String=="social-v1",fixture=="published",expected.contains("common"),expected.contains("identity"),!expected.isDisjoint(with:["relay","outbox"]) else{throw Invalid.configuration}
+      self.commonProfile="social-v1"
+    }else{self.commonProfile=nil}
+    if let profile=value["cvmProfile"] {
+      guard profile as? String == "free-foreground-v1", fixture == "published", expected.contains("cvm") else { throw Invalid.configuration }
+      self.cvmProfile = "free-foreground-v1"
+    } else { self.cvmProfile = nil }
+    if let profile = value["legacyReadOnly"] {
+      guard let fields = profile as? [String: Any] else { throw Invalid.configuration }
+      self.legacyReadOnly = try LegacyReadOnlyContext(fields, publisher: publisher, appId: appId, version: version, fixture: fixture, domains: expected)
+    } else { self.legacyReadOnly = nil }
     self.domains = expected
+    self.publishedOpen = (fixture == "napplet-discovery" && appId == "napplet-discovery") || open != nil
     self.publisher = publisher
     self.appId = appId
     self.version = version
+    self.appData = try value["appData"].map { try NativeAppDataPolicy.capture($0,publisher:publisher,appId:appId,fixture:fixture,domains:expected) }
   }
 
   func matchesPublishedClaims(sessionId claimSession: String, publisher claimPublisher: String,
@@ -92,13 +131,21 @@ struct CapabilityConfiguration {
     let value = ["registration": try JSONSerialization.jsonObject(with: Data(snapshot.utf8)), "request": message] as [String: Any]
     return String(decoding: try JSONSerialization.data(withJSONObject: value), as: UTF8.self)
   }
+  func allowsCommonSocial(_ type:String)->Bool{commonProfile=="social-v1" && ["common.follow","common.unfollow","common.react","common.report"].contains(type)}
+  func allowsRelayOperation(_ type: String) -> Bool {
+    switch type {
+    case "relay.subscribe", "relay.publish": domains.contains("relay")
+    case "outbox.subscribe", "outbox.publish": domains.contains("outbox")
+    default: false
+    }
+  }
   /// Recognition is deliberately narrow. Event validation and signing remain outside this transport.
   func approvalWireId(_ message: String) -> (recognized: Bool, wireId: String?) {
-    guard domains.contains("relay"), let data = message.data(using: .utf8),
+    guard let data = message.data(using: .utf8),
       let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
       let type = value["type"] as? String,
-      type == "relay.publish" || (type == "outbox.publish" && domains.contains("outbox")) else { return (false, nil) }
-    guard let id = value["id"] as? String, (1...128).contains(id.utf8.count) else { return (true, nil) }
+      type == "relay.publish" || type == "outbox.publish" || allowsCommonSocial(type) else { return (false, nil) }
+    guard allowsRelayOperation(type) || allowsCommonSocial(type), let id = value["id"] as? String, (1...128).contains(id.utf8.count) else { return (true, nil) }
     return (true, id)
   }
 }
@@ -107,6 +154,19 @@ struct CapabilityConfiguration {
 @MainActor
 enum CapabilityTransport {
   nonisolated static let leases = CapabilityLeaseRegistry()
+  nonisolated static func outboxAdmitted(_ token: String, leases: CapabilityLeaseRegistry) -> Bool {
+    guard let snapshot = leases.borrowedSnapshot(token),
+      let row = try? JSONSerialization.jsonObject(with: Data(snapshot.utf8)) as? [String: Any],
+      let registration = row["registration"] as? [String: Any],
+      let domains = registration["domains"] as? [String], domains.contains("outbox"),
+      let raw = row["request"] as? String,
+      let request = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any],
+      let type = request["type"] as? String,
+      ["outbox.query", "outbox.getEvent"].contains(type) || type == "common.getProfile" && domains.contains("common")
+    else { return false }
+    return leases.isActive(token)
+  }
+
   // UIKit lifecycle and app-owned services are exercised by native app tests.
   #if canImport(UIKit)
   nonisolated static let lifecycle = CapabilityLifecycle()
@@ -123,26 +183,47 @@ enum CapabilityTransport {
     let generation: String
     let access: IdentityListAccess.Ticket?
     let reply: @MainActor @Sendable (String?) -> Void
+    var dispatch: (@MainActor @Sendable (String) -> Void)? = nil
   }
   private static var pending: [String: Pending] = [:]
-  static func admit(_ generation: String, sequence: UInt64, snapshot: String,
-                    reply: @escaping @MainActor @Sendable (String?) -> Void) -> String? {
-    guard let token = leases.admit(generation, sequence: sequence, snapshot: snapshot) else { return nil }
-    let access: IdentityListAccess.Ticket?
-    do {access = try IdentityListAccess.shared.captureJSON(snapshot)} catch {_ = leases.finish(token); return nil}
-    pending[token] = Pending(generation: generation, access: access, reply: reply)
-    DispatchQueue.main.asyncAfter(deadline: .now() + 25) {
-      // ContinuousClock in the registry, not this cleanup timer, controls expiry during sleep.
-      if !leases.isActive(token) { pending.removeValue(forKey: token)?.reply(nil) }
+  static func enqueue(_ generation: String, sequence: UInt64, snapshot: String,
+                      reply: @escaping @MainActor @Sendable (String?) -> Void,
+                      dispatch: @escaping @MainActor @Sendable (String) -> Void) {
+    guard let token = leases.enqueue(generation, sequence: sequence, snapshot: snapshot) else { reply(nil); return }
+    remember(token, Pending(generation: generation, access: nil, reply: reply, dispatch: dispatch), lifetime: 25)
+    drain()
+  }
+  private static func drain() {
+    for token in leases.promote() {
+      guard let dispatch = pending[token]?.dispatch else { continue }
+      pending[token]?.dispatch = nil
+      if leases.retained(token) { dispatch(token) }
     }
+  }
+  static func admit(_ generation: String, sequence: UInt64, snapshot: String, publishedOpen: Bool = false,
+                    reply: @escaping @MainActor @Sendable (String?) -> Void) -> String? {
+    guard let token = leases.admit(generation, sequence: sequence, snapshot: snapshot, publishedOpen: publishedOpen) else { return nil }
+    let access: IdentityListAccess.Ticket?
+    do {access = try IdentityListAccess.shared.captureJSON(snapshot)} catch {_ = leases.finish(token); drain(); return nil}
+    remember(token, Pending(generation: generation, access: access, reply: reply), lifetime: publishedOpen ? 120 : 25)
     return token
+  }
+  private static func remember(_ token: String, _ request: Pending, lifetime: Double) {
+    pending[token] = request
+    DispatchQueue.main.asyncAfter(deadline: .now() + lifetime) {
+      // ContinuousClock in the registry, not this cleanup timer, controls expiry during sleep.
+      if !leases.retained(token) { pending.removeValue(forKey: token)?.reply(nil) }
+      drain()
+    }
   }
   nonisolated static func finish(_ token: String, response: String?) {
     let bounded = response.flatMap { $0.utf8.count <= CapabilityLeaseRegistry.maxBytes ? $0 : nil }
     Task { @MainActor in
       let admitted = leases.finish(token)
-      guard let request = pending.removeValue(forKey: token) else { return }
-      request.reply(admitted && leases.sessionActive(request.generation) && IdentityListAccess.shared.permits(request.access) ? bounded : nil)
+      if let request = pending.removeValue(forKey: token) {
+        request.reply(admitted && leases.sessionActive(request.generation) && IdentityListAccess.shared.permits(request.access) ? bounded : nil)
+      }
+      drain()
     }
   }
   static func revoke(_ generation: String) {
@@ -153,6 +234,7 @@ enum CapabilityTransport {
     for token in pending.filter({ $0.value.generation == generation }).keys {
       pending.removeValue(forKey: token)?.reply(nil)
     }
+    drain()
   }
   #endif
 }

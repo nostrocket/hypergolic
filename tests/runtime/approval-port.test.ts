@@ -65,3 +65,67 @@ test('failed native snapshot binding stops before review approval or signing', a
   await assert.rejects(service.approve(service.getSnapshot().current!.id), /APPROVAL_DENIED/);
   assert(calls.some(row => row[0] === 'cancel'));
 });
+
+
+const commonRegistration={...registration,fixture:'published',domains:['common','identity','relay'],commonProfile:'social-v1'};
+test('malformed Common take preserves captured native token for cancel+finish if failure reporting throws',()=>{
+  const {port,native,calls}=setup(JSON.stringify({registration:commonRegistration,request:JSON.stringify({type:'common.follow',id:'wire',pubkeys:[]})}));
+  native.failCommonApproval=(token)=>{calls.push(['fail-common',token]);throw Error('native module failed');};
+  assert.equal(port.take('owned-common'),null);assert.deepEqual(calls.slice(-3),[['fail-common','owned-common'],['cancel','owned-common'],['finish','owned-common',null]]);
+});
+test('Common failure reporting throws only after captured native cancellation+finish and lease token release',()=>{
+  const {port,native,calls}=setup(JSON.stringify({registration:commonRegistration,request:JSON.stringify({type:'common.report',id:'wire',target:{type:'pubkey',pubkey:'4'.repeat(64)},reason:'spam',text:''})}));
+  native.failCommonApproval=(token)=>{calls.push(['fail-common',token]);throw Error('native module failed');};
+  const taken=port.take('owned-common');assert(taken);assert.throws(()=>port.failCommon!(taken.lease,'invalid-target'),/native module failed/);
+  assert.deepEqual(calls.slice(-3),[['fail-common','owned-common'],['cancel','owned-common'],['finish','owned-common',null]]);assert.throws(()=>port.isLive(taken.lease));
+});
+
+
+function setupOutbox() {
+  return setup(JSON.stringify({
+    registration: { ...registration, fixture: 'published', domains: ['identity', 'outbox'] },
+    request: JSON.stringify({ ...request, type: 'outbox.publish' }),
+  }));
+}
+for (const reporter of ['throws', 'missing'] as const) {
+  for (const cleanup of ['succeeds', 'cancel-throws', 'finish-throws', 'both-throw'] as const) {
+    test(`Outbox ${reporter} reporter attempts both captured-token cleanup calls (${cleanup})`, () => {
+      const { port, native, calls } = setupOutbox();
+      const reportFailure = Error('report failed'), cancelFailure = Error('cancel failed'), finishFailure = Error('finish failed');
+      native.failOutboxApproval = reporter === 'missing' ? undefined : token => {
+        calls.push(['fail-outbox', token]); throw reportFailure;
+      };
+      const taken = port.take('owned-outbox'); assert(taken);
+      const assertCaptured = () => assert.deepEqual(port.signingSource!(taken.lease), { kind: 'approval', token: 'owned-outbox' });
+      native.cancelApproval = token => {
+        assertCaptured(); calls.push(['cancel', token]);
+        if (cleanup === 'cancel-throws' || cleanup === 'both-throw') throw cancelFailure;
+      };
+      native.finishApproval = (token, response) => {
+        assertCaptured(); calls.push(['finish', token, response]);
+        if (cleanup === 'finish-throws' || cleanup === 'both-throw') throw finishFailure;
+      };
+      const fail = () => port.failOutbox!(taken.lease, 'planning-failed');
+      const expected = reporter === 'throws' ? reportFailure : cleanup === 'cancel-throws' || cleanup === 'both-throw'
+        ? cancelFailure : cleanup === 'finish-throws' ? finishFailure : null;
+      if (expected) assert.throws(fail, error => error === expected); else assert.doesNotThrow(fail);
+      assert.deepEqual(calls.slice(1), [
+        ...(reporter === 'throws' ? [['fail-outbox', 'owned-outbox']] : []),
+        ['cancel', 'owned-outbox'], ['finish', 'owned-outbox', null],
+      ]);
+      const completed = calls.length;
+      assert.throws(() => port.isLive(taken.lease), /APPROVAL_DENIED/);
+      assert.throws(fail, /APPROVAL_DENIED/);
+      assert.equal(calls.length, completed, 'consumed lease cannot retry, approve, sign, or publish');
+    });
+  }
+}
+test('successful Outbox failure reporter consumes lease without duplicate cleanup', () => {
+  const { port, native, calls } = setupOutbox();
+  native.failOutboxApproval = (token, error) => { calls.push(['fail-outbox', token, error]); };
+  const taken = port.take('owned-outbox'); assert(taken);
+  port.failOutbox!(taken.lease, 'planning-failed');
+  assert.deepEqual(calls.slice(1), [['fail-outbox', 'owned-outbox', 'planning-failed']]);
+  assert.throws(() => port.failOutbox!(taken.lease, 'planning-failed'), /APPROVAL_DENIED/);
+  assert.equal(calls.length, 2);
+});

@@ -1,6 +1,8 @@
 import { TrustedBand } from '../shell/TrustedBand';
 import type { CloseCheckEvent } from '../shell/close-check';
-import { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState, type Ref } from 'react';
+import {useNativeZoomTarget} from './useNativeZoomTarget';
+import type {NativeZoomReply, ZoomResetRegistration} from '../shell/zoom-reset';
 import { requireNativeView } from 'expo';
 import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, View, type NativeSyntheticEvent, type ViewProps } from 'react-native';
 import { ShellPressable as Pressable } from '../shell/ShellPressable';
@@ -14,16 +16,21 @@ export type HostEvent = { type: 'ready'; sessionId: string; generation?: string 
 interface Props extends ViewProps {
   session: NappletDescriptor;
   closeCheck?: string;
+  onZoomTarget?: ZoomResetRegistration;
   active?: boolean;
+  inputBlocked?: boolean;
   onHostEvent: (event: NativeSyntheticEvent<HostEvent>) => void;
 }
-type NativeEvent = HostEvent | NativeCapabilityEvent;
+type NativeEvent = HostEvent | NativeCapabilityEvent | NativeZoomReply;
 interface NativeProps extends ViewProps {
+  ref?: Ref<object>;
+  zoomReset?: string;
   sessionId?: string;
   closeCheck?: string;
   configuration?: string;
   publishedArtifact?: string;
   active?: boolean;
+  inputBlocked?: boolean;
   onHostEvent: (event: NativeSyntheticEvent<NativeEvent>) => void;
 }
 const NativeHost = (Platform.OS === 'android' || Platform.OS === 'ios') ? requireNativeView<NativeProps>('HypergolicNappletHost') : null;
@@ -33,22 +40,26 @@ export function NappletHost(props: Props) {
   return props.session.source === 'published' ? <PublishedNappletHost {...props} /> : <BundledNappletHost {...props} />;
 }
 
-function BundledNappletHost({ session, onHostEvent, ...props }: Props) {
+function BundledNappletHost({ session, onHostEvent, onZoomTarget, ...props }: Props) {
+  const {zoomRef, zoomReady, clearZoomTarget, zoomReply, zoomNativeProps} = useNativeZoomTarget(session.id, props.active === true, onZoomTarget);
   const runtime = useContext(RuntimeContext);
   const [binding] = useState(() => runtime?.open(session) ?? null);
   useEffect(() => () => binding?.revoke(), [binding]);
   const receive = useCallback((event: NativeSyntheticEvent<NativeEvent>) => {
     const message = event.nativeEvent;
     if (message.sessionId !== session.id) return;
+    if (zoomReply(message)) return;
     if (message.type === 'capability') { binding?.receive(message); return; }
-    if (message.type === 'error') binding?.revoke();
+    if (message.type === 'ready' && message.generation) zoomReady(message.generation);
+    if (message.type === 'error') {clearZoomTarget(); binding?.revoke();}
     onHostEvent(event as NativeSyntheticEvent<HostEvent>);
-  }, [binding, onHostEvent, session.id]);
+  }, [binding, onHostEvent, session.id, zoomReady, clearZoomTarget, zoomReply]);
   if (NativeHost === null) return <Text>Napplet execution is available in the Android and iOS builds.</Text>;
-  return <NativeHost {...props} {...(binding ? { configuration: binding.configuration } : { sessionId: session.id })} onHostEvent={receive} />;
+  return <NativeHost {...props} {...zoomNativeProps} ref={zoomRef} {...(binding ? { configuration: binding.configuration } : { sessionId: session.id })} onHostEvent={receive} />;
 }
 
-function PublishedNappletHost({ session, onHostEvent, ...props }: Props) {
+function PublishedNappletHost({ session, onHostEvent, onZoomTarget, ...props }: Props) {
+  const {zoomRef, zoomReady, clearZoomTarget, zoomReply, zoomNativeProps} = useNativeZoomTarget(session.id, props.active === true, onZoomTarget);
   const { styles, colors } = useShellStyles(createStyles);
   const runtime = useContext(RuntimeContext);
   const [pinned] = useState(() => session);
@@ -86,13 +97,17 @@ function PublishedNappletHost({ session, onHostEvent, ...props }: Props) {
   const receive = useCallback((event: NativeSyntheticEvent<NativeEvent>) => {
     const message = event.nativeEvent;
     if (message.sessionId !== session.id || !binding) return;
+    if (zoomReply(message)) return;
     if (message.type === 'capability') { binding.receive(message); return; }
-    if (message.type === 'error') { binding.revoke(); setError(true); }
+    if (message.type === 'ready' && message.generation) {
+      try { binding.ready(message.generation); zoomReady(message.generation); } catch { /* A stale mount cannot satisfy readiness. */ }
+    }
+    if (message.type === 'error') { clearZoomTarget(); binding.revoke(); setError(true); }
     onHostEvent(event as NativeSyntheticEvent<HostEvent>);
-  }, [binding, onHostEvent, session.id]);
+  }, [binding, onHostEvent, session.id, zoomReady, clearZoomTarget, zoomReply]);
   if (NativeHost === null) return <Text>Napplet execution is available in the Android and iOS builds.</Text>;
   return <View style={[props.style, styles.container]}>
-    {binding && !error ? <NativeHost {...props} style={styles.fill} active={props.active} publishedArtifact={binding.publishedArtifact} onHostEvent={receive} /> :
+    {binding && !error ? <NativeHost {...props} {...zoomNativeProps} ref={zoomRef} style={styles.fill} active={props.active} publishedArtifact={binding.publishedArtifact} onHostEvent={receive} /> :
       <View style={styles.center}>{error || !runtime ? <><Text accessibilityRole="header" style={styles.heading}>Unable to open</Text><Text style={styles.detail}>The saved version could not be opened. You can try again or return to your napplets.</Text>
         <Pressable accessibilityRole="button" testID={`published-retry-${session.id}`} onPress={() => { setBinding(null); setError(false); setAttempt(value => value + 1); }} style={styles.action}><Text style={styles.actionText}>Try again</Text></Pressable></> :
         <><ActivityIndicator color={colors.accent} /><Text accessibilityLiveRegion="polite" style={styles.heading}>Opening napplet…</Text><Text style={styles.detail}>Checking the saved version and its access.</Text></>}</View>}
@@ -100,8 +115,12 @@ function PublishedNappletHost({ session, onHostEvent, ...props }: Props) {
       <TrustedBand label="Napplet access" /><ScrollView contentContainerStyle={styles.reviewContent}><Text accessibilityRole="header" style={styles.heading}>Open this napplet?</Text>
       <Text style={styles.detail}>Publisher</Text><Text selectable style={styles.claim}>{review.publisher}</Text>
       <Text style={styles.detail}>Napplet</Text><Text selectable style={styles.claim}>{review.appId}</Text>
-      {review.domains.includes('upload') && <Text style={styles.detail}>Files you select become readable by this napplet. Every upload needs separate approval of the file, identity and server.</Text>}
+      {(review.domains.includes('upload') || review.optionalDomains.includes('upload')) && <Text style={styles.detail}>Files you select become readable by this napplet. Every upload needs separate approval of the file, identity and server.</Text>}
       <Text style={styles.detail}>Access: {review.domains.length ? review.domains.join(', ') : 'none'}</Text>
+      {review.optionalDomains.length > 0 && <Text style={styles.detail}>Optional access: {review.optionalDomains.join(', ')}</Text>}
+      {review.unsupportedOptionalDomains.length > 0 && <Text style={styles.detail}>Unavailable optional access: {review.unsupportedOptionalDomains.join(', ')}</Text>}
+      {(review.domains.includes('keys') || review.optionalDomains.includes('keys')) &&
+        <Text style={styles.detail}>Keys lets this napplet use hardware shortcuts while it has focus.</Text>}
       {review.unsupportedDomains.length > 0 && <Text accessibilityLiveRegion="polite" style={styles.detail}>Unavailable: {review.unsupportedDomains.join(', ')}. This napplet can open, but features using these capabilities will not work. They will not be granted.</Text>}
       <Pressable accessibilityRole="button" testID={`published-approve-${session.id}`} onPress={() => decide(true)} style={styles.action}><Text style={styles.actionText}>Allow and open</Text></Pressable>
       <Pressable accessibilityRole="button" testID={`published-reject-${session.id}`} onPress={() => decide(false)} style={styles.secondary}><Text style={styles.secondaryText}>Cancel</Text></Pressable></ScrollView>

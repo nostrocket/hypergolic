@@ -1,9 +1,12 @@
 import { assertVerifiedArtifact, MAX_HTML_BYTES, type VerifiedNappletArtifact } from './verified-artifact.ts';
+import {verifiedPublicationIdentity} from './verified-publication-identity.ts';
 
 /** App-only Expo module surface. The WebView and napplet never receive this port. */
 export interface NativePublishedTransferPort {
   registerPublishedSession(sessionId: string): boolean;
   beginPublishedArtifact(sessionId: string, publisher: string, identifier: string, eventId: string,
+    aggregateHash: string, htmlHash: string, byteLength: number): string | null;
+  beginPublishedSnapshot?(sessionId: string, publisher: string, eventId: string, title: string,
     aggregateHash: string, htmlHash: string, byteLength: number): string | null;
   appendPublishedArtifact(uploadId: string, sequence: number, base64Chunk: string): boolean;
   finishPublishedArtifact(uploadId: string): string | null;
@@ -52,16 +55,18 @@ export async function stageVerifiedArtifact(artifactInput: unknown, sessionId: s
   assertVerifiedArtifact(artifactInput);
   const artifact: VerifiedNappletArtifact = artifactInput;
   if (!SESSION.test(sessionId)) throw new PublishedTransferError();
-  const identifier = artifact.manifest.tags.find(tag => tag[0] === 'd')?.[1];
-  if (!identifier) throw new PublishedTransferError();
+  const publication = verifiedPublicationIdentity(artifact.manifest);
   const bytes = artifact.htmlBytes;
   if (bytes.length < 1 || bytes.length > MAX_HTML_BYTES) throw new PublishedTransferError();
   let uploadId: string | null = null;
   let handle: string | null = null;
   try {
     active(signal, assertActive);
-    uploadId = port.beginPublishedArtifact(sessionId, artifact.manifest.pubkey, identifier,
-      artifact.manifest.eventId, artifact.aggregateHash, artifact.htmlHash, bytes.length);
+    uploadId = publication.kind === 5129
+      ? port.beginPublishedSnapshot?.(sessionId,artifact.manifest.pubkey,artifact.manifest.eventId,publication.title,
+        artifact.aggregateHash,artifact.htmlHash,bytes.length) ?? null
+      : port.beginPublishedArtifact(sessionId,artifact.manifest.pubkey,publication.appId,
+        artifact.manifest.eventId,artifact.aggregateHash,artifact.htmlHash,bytes.length);
     if (!uploadId) throw new PublishedTransferError();
     for (let offset = 0, sequence = 0; offset < bytes.length; offset += TRANSFER_CHUNK_BYTES, sequence++) {
       active(signal, assertActive);

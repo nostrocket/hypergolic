@@ -1,7 +1,16 @@
 diff --git a/dist/index.d.ts b/dist/index.d.ts
-index cbbc6af8b2e2bd23e3c77e05544fbd26edc6db7e..97f7d36d98957580533848f39a1d1d335d71f664 100644
+index cbbc6af..7f057e4 100644
 --- a/dist/index.d.ts
 +++ b/dist/index.d.ts
+@@ -567,7 +567,7 @@ interface ServiceRuntimeContext {
+      * @param message - Runtime-originated NIP-5D envelope.
+      * @returns `true` only when the message was delivered to the adapter.
+      */
+-    sendToEligibleNapplet(windowId: string, message: NappletMessage): boolean;
++    sendToEligibleNapplet(windowId: string, message: NappletMessage, forwardIntent?: (message: NappletMessage) => boolean): boolean;
+ }
+ /**
+  * Handler for service-specific messages from napplets.
 @@ -680,9 +680,38 @@ interface RuntimeConfigOverrides {
   * const runtime = createRuntime(hooks);
   * ```
@@ -49,7 +58,7 @@ index cbbc6af8b2e2bd23e3c77e05544fbd26edc6db7e..97f7d36d98957580533848f39a1d1d33
 -export { type AclCheckEvent, type AclChecker, type AclEntryExternal, type AclMutation, type AclMutationObserver, type AclPersistence, type AclStateContainer, type AuthAdapter, type CacheAdapter, type CompatibilityReport, type ConfigAdapter, type ConsentHandler, type ConsentRequest, type CryptoAdapter, type DmAdapter, type EnforceConfig, type EnforceResult, type EventBuffer, type FirewallEvent, type FirewallPersistence, type FirewallStateContainer, type GuidPersistence, type HashVerifierAdapter, type HotkeyAdapter, type IdentityResolver, type ManifestCache, type ManifestCacheEntry, type ManifestPersistence, type NapEnforceConfig, type NappKeyEntry, type NappKeyRegistry, type PendingUpdate, type PendingUpdateNotifier, RING_BUFFER_SIZE, type RelayConfigAdapter, type RelayEventCarrier, type RelayEventResult, type RelayEventSidecar, type RelayPoolAdapter, type RelaySubscriptionHandle, type ReplayDetector, type Runtime, type RuntimeAdapter, type RuntimeConfigOverrides, type SendToNapplet, type ServiceDescriptor, type ServiceHandler, type ServiceInfo, type ServiceRegistry, type ServiceRuntimeContext, type SessionEntry, type SessionRegistry, type ShellSecretPersistence, type Signer, type StatePersistence, type SubscriptionEntry, type VerificationCacheEntry, type WindowManagerAdapter, cleanupNappState, createAclState, createEnforceGate, createEventBuffer, createFirewallState, createManifestCache, createNapEnforceGate, createNappKeyRegistry, createRelayEventResult, createRelayEventResultWithHints, createReplayDetector, createRuntime, createSessionRegistry, formatDenialReason, handleStorageNap, matchesAnyFilter, matchesFilter, notifyServiceWindowDestroyed, relayEventResultFromCarrier, routeServiceMessage };
 +export { type HostOperationEnvelope, type HostOperation, type HostOperationContext, type HostOperationOverride, type AclCheckEvent, type AclChecker, type AclEntryExternal, type AclMutation, type AclMutationObserver, type AclPersistence, type AclStateContainer, type AuthAdapter, type CacheAdapter, type CompatibilityReport, type ConfigAdapter, type ConsentHandler, type ConsentRequest, type CryptoAdapter, type DmAdapter, type EnforceConfig, type EnforceResult, type EventBuffer, type FirewallEvent, type FirewallPersistence, type FirewallStateContainer, type GuidPersistence, type HashVerifierAdapter, type HotkeyAdapter, type IdentityResolver, type ManifestCache, type ManifestCacheEntry, type ManifestPersistence, type NapEnforceConfig, type NappKeyEntry, type NappKeyRegistry, type PendingUpdate, type PendingUpdateNotifier, RING_BUFFER_SIZE, type RelayConfigAdapter, type RelayEventCarrier, type RelayEventResult, type RelayEventSidecar, type RelayPoolAdapter, type RelaySubscriptionHandle, type ReplayDetector, type Runtime, type RuntimeAdapter, type RuntimeConfigOverrides, type SendToNapplet, type ServiceDescriptor, type ServiceHandler, type ServiceInfo, type ServiceRegistry, type ServiceRuntimeContext, type SessionEntry, type SessionRegistry, type ShellSecretPersistence, type Signer, type StatePersistence, type SubscriptionEntry, type VerificationCacheEntry, type WindowManagerAdapter, cleanupNappState, createAclState, createEnforceGate, createEventBuffer, createFirewallState, createManifestCache, createNapEnforceGate, createNappKeyRegistry, createRelayEventResult, createRelayEventResultWithHints, createReplayDetector, createRuntime, createSessionRegistry, formatDenialReason, handleStorageNap, matchesAnyFilter, matchesFilter, notifyServiceWindowDestroyed, relayEventResultFromCarrier, routeServiceMessage };
 diff --git a/dist/index.js b/dist/index.js
-index 5e968b83b4df972b40e2f90953fdb6893459acbf..5007c45482f5de3340dc7f65e236e5f02a7203f8 100644
+index 5e968b8..817f01a 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -1842,6 +1842,75 @@ function buildObservation(envelope, windowId, senderCap, sessionRegistry, getFoc
@@ -156,7 +165,16 @@ index 5e968b83b4df972b40e2f90953fdb6893459acbf..5007c45482f5de3340dc7f65e236e5f0
      dispatchNapEnvelope(windowId, envelope);
    };
  }
-@@ -1981,7 +2053,14 @@ function createRuntimeInstance(context) {
+@@ -1973,7 +2045,7 @@ function createRuntimeInstance(context) {
+       const entry = sessionRegistry.getEntryByWindowId(windowId);
+       return !!entry && aclState.check("", entry.dTag, entry.aggregateHash, capability);
+     },
+-    sendToEligibleNapplet(windowId, message) {
++    sendToEligibleNapplet(windowId, message, forwardIntent) {
+       const entry = sessionRegistry.getEntryByWindowId(windowId);
+       if (!entry || typeof message.type !== "string") return false;
+       const dotIndex = message.type.indexOf(".");
+@@ -1981,11 +2053,20 @@ function createRuntimeInstance(context) {
        const domain = message.type.slice(0, dotIndex);
        try {
          if (isDomainAllowed && !isDomainAllowed(windowId, domain)) return false;
@@ -168,7 +186,13 @@ index 5e968b83b4df972b40e2f90953fdb6893459acbf..5007c45482f5de3340dc7f65e236e5f0
 +          && (getHostOperation(hooks, "inc.subscribe") || getHostOperation(hooks, "inc.channel.open"));
 +        const nativeNotifyPush = ["notify.controls", "notify.action", "notify.clicked", "notify.dismissed"].includes(message.type)
 +          && getHostOperation(hooks, "notify.send");
-+        const recipientCap = mappedRecipientCap ?? (nativeIncPush ? "relay:read" : nativeNotifyPush ? "notify:send" : null);
++        const nativeIntentPush = message.type === "intent.deliver" && getHostOperation(hooks, "intent.invoke");
++        const recipientCap = mappedRecipientCap ?? (nativeIncPush ? "relay:read" : nativeNotifyPush ? "notify:send" : nativeIntentPush ? "intent:read" : null);
          if (!recipientCap) return false;
          if (!aclState.check("", entry.dTag, entry.aggregateHash, recipientCap)) {
            return false;
+         }
++        if (forwardIntent) return Boolean(nativeIntentPush && forwardIntent(message));
+         sendToNapplet(windowId, message);
+         return true;
+       } catch {

@@ -12,11 +12,25 @@ actor NativeVaultCore {
   static let shared = NativeVaultCore()
   private var storage: NativeSignerVaultStorage?
   private var busy = false
+  private var localLeases: [NativeLocalVaultLease] = []
   private let testingExchange: NativeNip46Client.Exchange?
   init() { testingExchange = nil }
   init(testingStorage: NativeSignerVaultStorage, testingExchange: NativeNip46Client.Exchange? = nil) {
     storage = testingStorage
     self.testingExchange = testingExchange
+  }
+  private func retireLocalLeases() {
+    for lease in localLeases { lease.retire() }; localLeases.removeAll()
+  }
+  func localLease(runtimeEpoch: UInt64, current: @escaping @Sendable () -> Bool) async throws -> NativeLocalVaultLease {
+    try begin(); defer { busy=false }
+    localLeases.removeAll { !$0.isCurrent }
+    guard current(), localLeases.count<16 else { throw NativeVaultFailure.stale }
+    var (record, _) = try await readRecord(try store()); defer { record.clear() }
+    guard current(), let selected=record.identities.first(where: { $0.pubkey==record.selectedPubkey }),
+      selected.selectedMethod == .local, selected.secret != nil else { throw NativeVaultFailure.localKeyUnavailable }
+    let lease=NativeLocalVaultLease(account:record.selectedPubkey,vaultId:record.vaultId,revision:record.revision,epoch:runtimeEpoch,current:current)
+    localLeases.append(lease); return lease
   }
   private func store() throws -> NativeSignerVaultStorage {
     if let storage { return storage }
@@ -24,17 +38,21 @@ actor NativeVaultCore {
   }
   private func begin() throws { guard !busy else { throw NativeVaultFailure.busy }; busy = true }
   private func readRecord(_ store: NativeSignerVaultStorage) async throws -> (NativeVaultRecord, Data) {
-    guard var loaded = try await store.read() else { throw NativeVaultFailure.recovery }
-    defer { loaded.plaintext.resetBytes(in: 0..<loaded.plaintext.count) }
-    var record = try NativeVaultRecord.decode(loaded.plaintext)
-    guard record.vaultId == loaded.vaultID else { record.clear(); throw NativeVaultFailure.corrupt }
-    return (record, Data(SHA256.hash(data: loaded.plaintext)))
+    do {
+      guard var loaded = try await store.read() else { throw NativeVaultFailure.recovery }
+      defer { loaded.plaintext.resetBytes(in: 0..<loaded.plaintext.count) }
+      var record = try NativeVaultRecord.decode(loaded.plaintext)
+      guard record.vaultId == loaded.vaultID else { record.clear(); throw NativeVaultFailure.corrupt }
+      return (record, Data(SHA256.hash(data: loaded.plaintext)))
+    } catch { retireLocalLeases(); throw error }
   }
   private func persist(_ record: NativeVaultRecord, digest: Data, store: NativeSignerVaultStorage, authority: any NativeSignerStorageAuthority) async throws {
+    retireLocalLeases()
     var payload = try record.encoded(); defer { payload.resetBytes(in: 0..<payload.count) }
     try await store.replace(vaultID: record.vaultId, expectedPlaintextDigest: digest, plaintext: payload, authority: authority)
   }
   func open(authority: any NativeSignerStorageAuthority, current: @Sendable () -> Bool) async throws -> String {
+    retireLocalLeases()
     try begin(); defer { busy = false }
     guard current() else { throw NativeVaultFailure.stale }
     let store = try store()
@@ -75,6 +93,7 @@ actor NativeVaultCore {
     guard current() else { throw NativeVaultFailure.stale }; return record.selectedPubkey
   }
   func commitImport(key: NativeVaultKey, vaultID: String, revision: UInt64, authority: any NativeSignerStorageAuthority, current: @Sendable () -> Bool, revokePending: @Sendable () -> Void = {}) async throws -> String {
+    retireLocalLeases()
     try begin(); defer { busy = false }
     let store = try store()
     var (record, digest) = try await readRecord(store); defer { record.clear() }
@@ -106,7 +125,22 @@ actor NativeVaultCore {
     guard committed.revision == record.revision, committed.selectedPubkey == pubkey else { throw NativeVaultFailure.readback }
     return try committed.publicSnapshot()
   }
+  func addPublicIdentity(pubkey: String, vaultID: String, revision: UInt64, authority: any NativeSignerStorageAuthority,
+    current: @Sendable () -> Bool, revokePending: @Sendable () -> Void = {}) async throws -> String {
+    retireLocalLeases()
+    try begin(); defer { busy = false }
+    let store = try store(); var (record, digest) = try await readRecord(store); defer { record.clear() }
+    try record.assertExpected(vaultID: vaultID, revision: revision)
+    guard current(), NativeVaultRecord.isPoint(pubkey), !record.identities.contains(where: { $0.pubkey == pubkey }) else { throw NativeVaultFailure.denied }
+    guard record.identities.count < 16 else { throw NativeVaultFailure.limitReached }
+    let now = Date().timeIntervalSince1970 * 1000
+    guard now >= 0, now <= Double(NativeVaultRecord.maximumRevision) else { throw NativeVaultFailure.storage }
+    record.identities.append(.init(pubkey: pubkey, addedAt: UInt64(now), origin: .public, secret: nil, selectedMethod: nil))
+    record.selectedPubkey = pubkey; try record.advance()
+    return try await finishMethodMutation(record, digest: digest, store: store, authority: authority, current: current, revokePending: revokePending)
+  }
   func select(pubkey: String, vaultID: String, revision: UInt64, authority: any NativeSignerStorageAuthority, current: @Sendable () -> Bool, revokePending: @Sendable () -> Void = {}) async throws -> String {
+    retireLocalLeases()
     try begin(); defer { busy = false }
     let store = try store(); var (record, digest) = try await readRecord(store); defer { record.clear() }
     try record.assertExpected(vaultID: vaultID, revision: revision)
@@ -134,6 +168,7 @@ actor NativeVaultCore {
   func selectMethod(pubkey: String, method: NativeSigningMethod, vaultID: String, revision: UInt64,
     authority: any NativeSignerStorageAuthority, current: @Sendable () -> Bool,
     revokePending: @Sendable () -> Void) async throws -> String {
+    retireLocalLeases()
     try begin(); defer { busy = false }
     let store = try store(); var (record, digest) = try await readRecord(store); defer { record.clear() }
     try record.assertExpected(vaultID: vaultID, revision: revision)
@@ -150,6 +185,7 @@ actor NativeVaultCore {
   func disconnectRemote(pubkey: String, vaultID: String, revision: UInt64,
     authority: any NativeSignerStorageAuthority, current: @Sendable () -> Bool,
     revokePending: @Sendable () -> Void) async throws -> String {
+    retireLocalLeases()
     try begin(); defer { busy = false }
     let store = try store(); var (record, digest) = try await readRecord(store); defer { record.clear() }
     try record.assertExpected(vaultID: vaultID, revision: revision)
@@ -163,6 +199,7 @@ actor NativeVaultCore {
   func deleteLocalKey(pubkey: String, vaultID: String, revision: UInt64,
     authority: any NativeSignerStorageAuthority, current: @Sendable () -> Bool,
     revokePending: @Sendable () -> Void) async throws -> String {
+    retireLocalLeases()
     try begin(); defer { busy = false }
     let store = try store(); var (record, digest) = try await readRecord(store); defer { record.clear() }
     try record.assertExpected(vaultID: vaultID, revision: revision)
@@ -176,6 +213,7 @@ actor NativeVaultCore {
   func commitRemote(pubkey: String, peerPubkey: String, relays: [String], clientKey: NativeVaultKey,
     vaultID: String, revision: UInt64, authority: any NativeSignerStorageAuthority,
     current: @Sendable () -> Bool, revokePending: @Sendable () -> Void) async throws -> String {
+    retireLocalLeases()
     try begin(); defer { busy = false }
     let store = try store(); var (record, digest) = try await readRecord(store); defer { record.clear() }
     try record.assertExpected(vaultID: vaultID, revision: revision)
@@ -211,6 +249,7 @@ actor NativeVaultCore {
   func commitRemoteRefresh(pubkey: String, peerPubkey: String, relays: [String], clientKey: NativeVaultKey,
     vaultID: String, revision: UInt64, authority: any NativeSignerStorageAuthority,
     current: @Sendable () -> Bool, revokePending: @Sendable () -> Void) async throws -> String {
+    retireLocalLeases()
     try begin(); defer { busy = false }
     let store = try store(); var (record, digest) = try await readRecord(store); defer { record.clear() }
     try record.assertExpected(vaultID: vaultID, revision: revision)
@@ -248,6 +287,7 @@ actor NativeVaultCore {
     return secret.copy()
   }
   func delete(pubkey: String, vaultID: String, revision: UInt64, authority: any NativeSignerStorageAuthority, current: @Sendable () -> Bool) async throws -> String {
+    retireLocalLeases()
     try begin(); defer { busy = false }
     let store = try store(); var (record, digest) = try await readRecord(store); defer { record.clear() }
     try record.assertExpected(vaultID: vaultID, revision: revision)

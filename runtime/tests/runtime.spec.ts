@@ -208,7 +208,7 @@ test('opaque frame has no native bridge, parent DOM or browser storage access', 
   expect(await page.locator('#napplet').getAttribute('sandbox')).toBe('allow-scripts');
 });
 
-test('CSP blocks direct fetch, socket, worker, image, script and top navigation', async ({ page }) => {
+test('CSP blocks direct fetch, socket, data worker, image, script and top navigation', async ({ page }) => {
   const frame = await open(page);
   const external: string[] = [];
   await page.route('https://example.invalid/**', route => { external.push(route.request().url()); return route.abort(); });
@@ -221,11 +221,9 @@ test('CSP blocks direct fetch, socket, worker, image, script and top navigation'
     denied.socket = await new Promise<boolean>(resolve => {
       try { const socket = new WebSocket('wss://example.invalid/socket'); socket.onopen = () => { socket.close(); resolve(false); }; socket.onerror = () => resolve(true); } catch { resolve(true); }
     });
-    const blob = URL.createObjectURL(new Blob(['postMessage(1)'], { type: 'text/javascript' }));
     denied.worker = await new Promise<boolean>(resolve => {
-      try { const worker = new Worker(blob); worker.onmessage = () => { worker.terminate(); resolve(false); }; worker.onerror = event => { event.preventDefault(); worker.terminate(); resolve(true); }; } catch { resolve(true); }
+      try { const worker = new Worker('data:text/javascript,postMessage(1)'); worker.onmessage = () => { worker.terminate(); resolve(false); }; worker.onerror = event => { event.preventDefault(); worker.terminate(); resolve(true); }; } catch { resolve(true); }
     });
-    URL.revokeObjectURL(blob);
     denied.image = await new Promise<boolean>(resolve => { const image = new Image(); image.onload = () => resolve(false); image.onerror = () => resolve(true); image.src = 'https://example.invalid/image'; });
     denied.script = await new Promise<boolean>(resolve => { const script = document.createElement('script'); script.onload = () => resolve(false); script.onerror = () => resolve(true); script.src = 'https://example.invalid/script.js'; document.head.append(script); });
     try { top!.location.href = 'https://example.invalid/top'; denied.top = false; } catch { denied.top = true; }
@@ -282,15 +280,30 @@ test('runtime digest mismatch fails before fixture code runs', async ({ page }) 
 });
 
 
+test('pagehide releases the mounted guest document even when its frame is still referenced', async ({ page }) => {
+  const guest = await open(page, 'closed');
+  const frame = await guest.frameElement();
+  expect(await frame.getAttribute('srcdoc')).toContain('<!doctype html>');
+  await page.evaluate(() => {
+    window.dispatchEvent(new PageTransitionEvent('pagehide'));
+    window.dispatchEvent(new PageTransitionEvent('pagehide'));
+  });
+  await expect(page.locator('#napplet')).toHaveCount(0);
+  expect(await frame.evaluate(element => element.hasAttribute('srcdoc'))).toBe(false);
+  expect(await diagnostics(page)).toEqual([{type: 'ready', sessionId: 'closed'}]);
+});
+
 test('document navigation ends the generation and removes the bound napplet', async ({ page }) => {
-  const frame = await open(page, 'navigated');
-  await frame.evaluate(() => { location.href = 'about:blank'; });
+  const guest = await open(page, 'navigated');
+  const frame = await guest.frameElement();
+  await guest.evaluate(() => { location.href = 'about:blank'; });
   await expect.poll(() => diagnostics(page)).toEqual([
     { type: 'ready', sessionId: 'navigated' },
     { type: 'error', sessionId: 'navigated', code: 'frame-navigation' },
   ]);
   await expect(page.locator('#napplet')).toHaveCount(0);
   await expect(page.getByRole('alert')).toBeVisible();
+  expect(await frame.evaluate(element => element.hasAttribute('srcdoc'))).toBe(false);
 });
 
 

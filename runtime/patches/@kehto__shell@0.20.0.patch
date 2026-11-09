@@ -1,32 +1,7 @@
-diff --git a/dist/index.d.ts b/dist/index.d.ts
-index 0ec36f0a861a096c6391bdae988ba8243bb3f021..a6bdd59f250582b9bf37cac8704465fc35a222f8 100644
---- a/dist/index.d.ts
-+++ b/dist/index.d.ts
-@@ -350,6 +350,8 @@ interface ShellEnvironment {
-  * ```
-  */
- interface ShellAdapter {
-+    /** Whole-operation host hooks, forwarded without changing existing service semantics. */
-+    operationOverrides?: RuntimeAdapter['operationOverrides'];
-     relayPool: RelayPoolHooks;
-     relayConfig: RelayConfigHooks;
-     windowManager: WindowManagerHooks;
-@@ -599,6 +601,10 @@ interface NappletNamespacePreludeOptions {
-      * Mandatory `shell` is injected even when omitted here.
-      */
-     domains: readonly string[];
-+    /** Host-only per-operation deadlines in milliseconds; omitted operations remain 30000.
-+     * Values must be safe integers from 1 through 2147483647. Never a napplet wire field.
-+     */
-+    requestTimeoutsMs?: Readonly<Record<string, number>>;
- }
- /**
-  * Render the host-owned NIP-5D bootstrap that exposes available NAP domains
 diff --git a/dist/index.js b/dist/index.js
-index 523bcf16686659726604376dea98363a06f86049..f7618d8add1c51ec77f9baa68f395d5499ff4623 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -312,6 +312,7 @@ function adaptHooks(shellHooks, deps) {
+@@ -312,6 +312,7 @@
      onAclCheck: shellHooks.onAclCheck,
      onHashMismatch: shellHooks.onHashMismatch,
      services: shellHooks.services,
@@ -34,7 +9,59 @@ index 523bcf16686659726604376dea98363a06f86049..f7618d8add1c51ec77f9baa68f395d54
      getConfigOverrides: shellHooks.getConfigOverrides
    };
  }
-@@ -1032,6 +1033,7 @@ function isServiceDomainLive(hooks, domain) {
+@@ -397,7 +398,8 @@
+     const entry = registry.get(win);
+     if (!entry) return;
+     entry.environment = Object.freeze({
+-      capabilities: Object.freeze({ domains: Object.freeze([...environment.capabilities.domains]) }),
++      capabilities: Object.freeze({ domains: Object.freeze([...environment.capabilities.domains]),
++        ...(eligibleAppData(environment.capabilities.appData, environment.capabilities.domains) ? {appData: eligibleAppData(environment.capabilities.appData, environment.capabilities.domains)} : {}) }),
+       services: Object.freeze([...environment.services])
+     });
+   },
+@@ -1002,13 +1004,30 @@
+   "count",
+   "fs"
+ ];
++// Selected host policy extension; this public hint never authorizes an operation.
++function snapshotAppData(value) {
++  if (value === undefined || value === null) return undefined;
++  const fields = ["profile", "scope", "maxContentBytes", "relays", "defaultRelays"];
++  if (typeof value !== "object" || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) throw new TypeError("Invalid app-data host policy");
++  const own = Object.getOwnPropertyDescriptors(value);
++  if (Reflect.ownKeys(value).length !== fields.length || fields.some(key => !own[key] || !("value" in own[key]))) throw new TypeError("Invalid app-data host policy");
++  const row = Object.fromEntries(fields.map(key => [key, own[key].value]));
++  if (row.profile !== "soy.app-data/1" || typeof row.scope !== "string" || !/^[a-f0-9]{64}$/.test(row.scope) || row.maxContentBytes !== 3072 || !Array.isArray(row.relays) || row.relays.length < 1 || row.relays.length > 8 || !Array.isArray(row.defaultRelays) || row.defaultRelays.length !== 1) throw new TypeError("Invalid app-data host policy");
++  const relays = Array.from(row.relays);
++  if (relays.some(url => typeof url !== "string" || url.length > 256 || !url.startsWith("wss://")) || new Set(relays).size !== relays.length || row.defaultRelays[0] !== relays[0]) throw new TypeError("Invalid app-data host policy");
++  return Object.freeze({ profile: row.profile, scope: row.scope, maxContentBytes: row.maxContentBytes, relays: Object.freeze(relays), defaultRelays: Object.freeze([relays[0]]) });
++}
++function eligibleAppData(value, domains) {
++  return (domains.includes("outbox") || domains.includes("relay")) && domains.includes("identity") ? snapshotAppData(value) : undefined;
++}
+ function buildShellCapabilities(hooks) {
+   const disabled = new Set(hooks.capabilities?.disabledDomains ?? []);
+   const domains = RUNTIME_NATIVE_DOMAINS.filter((domain) => !disabled.has(domain));
+   for (const domain of SERVICE_ONLY_DOMAINS) {
+     if (!disabled.has(domain) && isServiceDomainLive(hooks, domain)) domains.push(domain);
+   }
+-  return Object.freeze({ domains: freezeList(domains) });
++  return Object.freeze({ domains: freezeList(domains),
++    ...(eligibleAppData(hooks.capabilities?.appData, domains) ? {appData: eligibleAppData(hooks.capabilities.appData, domains)} : {}) });
+ }
+ function resolveShellEnvironment(hooks, identity) {
+   const capabilities = buildShellCapabilities(hooks);
+@@ -1021,7 +1040,8 @@
+   const granted = hooks.capabilities?.resolveEnvironment?.(identity, available) ?? available;
+   return Object.freeze({
+     capabilities: Object.freeze({
+-      domains: freezeList(intersectInOrder(available.domains, granted.domains))
++      domains: freezeList(intersectInOrder(available.domains, granted.domains)),
++      ...(eligibleAppData(capabilities.appData, intersectInOrder(available.domains, granted.domains)) ? {appData: eligibleAppData(capabilities.appData, intersectInOrder(available.domains, granted.domains))} : {})
+     }),
+     services: freezeList(intersectInOrder(available.services, granted.services))
+   });
+@@ -1032,6 +1052,7 @@
      case "outbox":
        return Boolean(hooks.relayPool);
      case "upload":
@@ -42,7 +69,7 @@ index 523bcf16686659726604376dea98363a06f86049..f7618d8add1c51ec77f9baa68f395d54
        return hooks.upload?.getUploader() !== null && hooks.upload?.getUploader() !== void 0;
      case "intent":
        return hooks.intent?.isAvailable() === true;
-@@ -1265,7 +1267,15 @@ function scriptJson(value) {
+@@ -1265,7 +1286,15 @@
  }
  function renderNappletNamespacePrelude(options) {
    const domains = uniqueBareDomains(["shell", ...options.domains]);
@@ -55,18 +82,20 @@ index 523bcf16686659726604376dea98363a06f86049..f7618d8add1c51ec77f9baa68f395d54
 +    }
 +    requestTimeoutsMs[operation] = timeout;
 +  }
-+  return `<script data-kehto-nip5d-injection>(${nappletNamespacePrelude.toString()})(${scriptJson(domains)},${scriptJson(requestTimeoutsMs)});</script>`;
++  return `<script data-kehto-nip5d-injection>(${nappletNamespacePrelude.toString()})(${scriptJson(domains)},${scriptJson(requestTimeoutsMs)},(${snapshotAppData.toString()})(${scriptJson(eligibleAppData(options.appData, domains) ?? null)}));</script>`;
  }
  function injectNappletNamespacePrelude(html, options) {
    const prelude = renderNappletNamespacePrelude(options);
-@@ -1281,13 +1291,18 @@ function injectNappletNamespacePrelude(html, options) {
+@@ -1281,13 +1310,20 @@
    }
    return `${prelude}${html}`;
  }
 -function nappletNamespacePrelude(domains) {
-+function nappletNamespacePrelude(domains, requestTimeoutsMs = {}) {
++function nappletNamespacePrelude(domains, requestTimeoutsMs = {}, appData) {
    const target = window;
    const allowed = new Set(domains);
++  const policyJSON = JSON.stringify(appData);
++  const policyStringify = JSON.stringify.bind(JSON);
    const requestTimeoutMs = 3e4;
    function id() {
 -    if (target.crypto?.randomUUID) return target.crypto.randomUUID();
@@ -81,7 +110,16 @@ index 523bcf16686659726604376dea98363a06f86049..f7618d8add1c51ec77f9baa68f395d54
    }
    function post(message) {
      target.parent.postMessage(message, "*");
-@@ -1326,7 +1341,7 @@ function nappletNamespacePrelude(domains) {
+@@ -1304,7 +1340,7 @@
+     const outbound = { ...message, id: requestId };
+     return new Promise((resolve, reject) => {
+       const off = listen((event) => {
+-        if (!isParentMessage(event)) return;
++        if (!isParentMessage(event) || resultType === "keys.registerAction.result" && !event.isTrusted) return;
+         const incoming = event.data;
+         if (typeof incoming !== "object" || incoming === null) return;
+         const msg = incoming;
+@@ -1326,7 +1362,7 @@
        const timer = setTimeout(() => {
          off();
          reject(new Error(`${message.type} timed out`));
@@ -90,7 +128,107 @@ index 523bcf16686659726604376dea98363a06f86049..f7618d8add1c51ec77f9baa68f395d54
        post(outbound);
      });
    }
-@@ -2047,7 +2062,7 @@ function nappletNamespacePrelude(domains) {
+@@ -1418,7 +1454,8 @@
+       const domains2 = freezeStrings(rawDomains);
+       const services = freezeStrings(Array.isArray(message.services) ? message.services : []);
+       environment = Object.freeze({
+-        capabilities: Object.freeze({ domains: domains2 }),
++        capabilities: Object.freeze({ domains: domains2,
++          ...(appData && policyStringify(rawCapabilities.appData) === policyJSON ? {appData} : {}) }),
+         services
+       });
+       off();
+@@ -1813,6 +1850,17 @@
+     "submit"
+   ]);
+   let keysSmartForwardingInstalled = false;
++  let keysInputActive = false;
++  let protectedKeys;
++  const keysDom = allowed.has("keys") ? {
++    apply: Reflect.apply,
++    getPath: target.Event.prototype.composedPath,
++    getFocus: Object.getOwnPropertyDescriptor(target.Document.prototype, "activeElement").get,
++    getBody: Object.getOwnPropertyDescriptor(target.Document.prototype, "body").get,
++    matches: target.Element.prototype.matches,
++    canvasWidth: Object.getOwnPropertyDescriptor(target.HTMLCanvasElement.prototype, "width").get,
++    buttonType: Object.getOwnPropertyDescriptor(target.HTMLButtonElement.prototype, "type").get
++  } : null;
+   function normalizeKeyName(key) {
+     if (typeof key !== "string") return "";
+     return key.length === 1 ? key.toUpperCase() : key;
+@@ -1821,6 +1869,7 @@
+     return `${value.ctrl}|${value.alt}|${value.shift}|${value.meta}|${normalizeKeyName(value.key)}`;
+   }
+   function bindingComboKey(binding) {
++    if (binding === " ") return keyComboKey({ ctrl: false, alt: false, shift: false, meta: false, key: binding });
+     if (typeof binding !== "string" || binding.trim() === "") return null;
+     const parts = binding.split("+");
+     const key = parts.pop()?.trim();
+@@ -1904,24 +1953,48 @@
+     if (keysSmartForwardingInstalled) return;
+     keysSmartForwardingInstalled = true;
+     listen((event) => {
+-      if (!isParentMessage(event)) return;
++      if (!event.isTrusted || !isParentMessage(event)) return;
+       const msg = event.data;
++      if (msg?.type === "hypergolic.private.media-active") keysInputActive = msg.inputActive === true;
+       if (typeof msg === "object" && msg !== null && msg.type === "keys.bindings") {
+         replaceKeyBindings(msg.bindings);
+       }
+     });
+     const documentLike = target.document;
++    if (!keysDom) return;
++    const { apply, getPath, getFocus, getBody, matches, canvasWidth, buttonType } = keysDom;
++    function hasNativeBrand(origin, getter) {
++      try {
++        apply(getter, origin, []);
++        return true;
++      } catch {
++        return false;
++      }
++    }
++    function isKeySurface(origin) {
++      if (origin !== apply(getFocus, documentLike, [])) return false;
++      const body = apply(getBody, documentLike, []);
++      if (origin === body) return body !== null && !apply(matches, body, [":focus"]);
++      // Canvas and button cannot host author shadow roots. Use their native brands.
++      return hasNativeBrand(origin, canvasWidth) || hasNativeBrand(origin, buttonType);
++    }
+     const listenerTarget = typeof documentLike?.addEventListener === "function" ? documentLike : target;
+     if (typeof listenerTarget.addEventListener !== "function") return;
+     listenerTarget.addEventListener("keydown", (event) => {
+       const keyEvent = event;
+-      if (keyEvent.isComposing) return;
+-      if (typeof keyEvent.key === "string" && modifierKeys.has(keyEvent.key)) return;
+-      if (isTextEntryTarget(keyEvent.target ?? documentLike?.activeElement)) return;
++      if (!keysInputActive || !keyEvent.isTrusted || !documentLike?.hasFocus() || documentLike.hidden ||
++          keyEvent.isComposing || keyEvent.keyCode === 229 || keyEvent.repeat || keyEvent.defaultPrevented ||
++          keyEvent.ctrlKey || keyEvent.altKey || keyEvent.shiftKey || keyEvent.metaKey) return;
++      if (typeof keyEvent.key === "string" && (modifierKeys.has(keyEvent.key) || reservedKeyNames.has(keyEvent.key))) return;
++      const path = apply(getPath, keyEvent, []);
++      if (!isKeySurface(path[0])) return;
++      if (path.some((node) => isTextEntryTarget(node) ||
++          node instanceof Element && node.matches('input,textarea,select,[role="textbox"],[role="combobox"]'))) return;
++      if (keyEvent.key === " " && path.some((node) =>
++          node instanceof Element && node.matches('button,summary,[role="button"],[role="checkbox"],[role="switch"]'))) return;
+       const combo = eventComboKey(keyEvent);
+       const actionId = combo ? keyBindingActions.get(combo) : void 0;
+-      const isReserved = typeof keyEvent.key === "string" && reservedKeyNames.has(keyEvent.key);
+-      if (actionId && !isReserved) {
++      if (actionId) {
+         keyEvent.preventDefault?.();
+         notifyKeyAction(actionId);
+         return;
+@@ -1958,7 +2031,7 @@
+         }
+         callbacks.add(callback);
+         const off = listen((event) => {
+-          if (!isParentMessage(event)) return;
++          if (!event.isTrusted || !isParentMessage(event) || !keysInputActive || !target.document?.hasFocus()) return;
+           const msg = event.data;
+           if (typeof msg === "object" && msg !== null && msg.type === "keys.action" && msg.actionId === actionId) callback();
+         });
+@@ -2047,7 +2120,7 @@
          const off = listen((event) => {
            if (!isParentMessage(event)) return;
            const msg = event.data;
@@ -99,7 +237,7 @@ index 523bcf16686659726604376dea98363a06f86049..f7618d8add1c51ec77f9baa68f395d54
          });
          fire({ type: "config.subscribe" });
          return subscriptionHandle(() => {
-@@ -2071,18 +2086,36 @@ function nappletNamespacePrelude(domains) {
+@@ -2071,18 +2144,42 @@
    }
    function makeResource() {
      const objectUrls = /* @__PURE__ */ new Set();
@@ -119,12 +257,18 @@ index 523bcf16686659726604376dea98363a06f86049..f7618d8add1c51ec77f9baa68f395d54
 +      });
 +      return Promise.race([work, cancelled]).finally(() => signal.removeEventListener("abort", abort));
 +    }
-+    const bytes = (url, options) => resourceRequest("resource.bytes", { url }, (msg) => msg.blob, options);
++    const bytes = (url, options) => {
++      const fields = options?.servers === void 0 ? { url } : { url, servers: options.servers };
++      return resourceRequest("resource.bytes", fields, (msg) => msg.blob, options);
++    };
      return {
        info: () => request({ type: "resource.info" }, "resource.info.result", (msg) => msg.info),
        bytes,
 -      bytesMany: (urls) => request({ type: "resource.bytesMany", urls }, "resource.bytesMany.result", (msg) => Array.isArray(msg.items) ? msg.items : []),
-+      bytesMany: (urls, options) => resourceRequest("resource.bytesMany", { urls }, (msg) => Array.isArray(msg.items) ? msg.items : [], options),
++      bytesMany: (items, options) => {
++        const fields = typeof items?.[0] === "string" ? { urls: items } : { requests: items };
++        return resourceRequest("resource.bytesMany", fields, (msg) => Array.isArray(msg.items) ? msg.items : [], options);
++      },
        bytesAsObjectURL(url) {
          let objectUrl = "";
 +        let revoked = false;
@@ -138,7 +282,7 @@ index 523bcf16686659726604376dea98363a06f86049..f7618d8add1c51ec77f9baa68f395d54
              if (objectUrl) {
                URL.revokeObjectURL(objectUrl);
                objectUrls.delete(objectUrl);
-@@ -2090,14 +2123,17 @@ function nappletNamespacePrelude(domains) {
+@@ -2090,14 +2187,17 @@
              }
            }
          };
@@ -157,7 +301,110 @@ index 523bcf16686659726604376dea98363a06f86049..f7618d8add1c51ec77f9baa68f395d54
          for (const url of objectUrls) URL.revokeObjectURL(url);
          objectUrls.clear();
        }
-@@ -2367,7 +2403,10 @@ function nappletNamespacePrelude(domains) {
+@@ -2265,25 +2365,85 @@
+         ...Object.keys(sanitizedBehavior).length === 0 ? {} : { behavior: sanitizedBehavior }
+       };
+     };
+-    const invoke = (value) => {
+-      const normalized = normalizeRequest(value);
+-      return request(
+-        {
+-          type: "intent.invoke",
+-          request: normalized
+-        },
+-        "intent.invoke.result",
+-        (msg) => fieldOrThrow(msg, "result", "intent.invoke.result missing result")
+-      );
+-    };
++    const fromUri = (uri, options = {}) => {
++      if (!options || typeof options !== "object" || Array.isArray(options) ||
++          Object.keys(options).some((key) => !["payload", "handler", "behavior"].includes(key))) {
++        throw new TypeError("Invalid intent options");
++      }
++      if (uri.length > 512 || uri.includes("#")) throw new TypeError("Invalid intent URI");
++      const queryAt = uri.indexOf("?");
++      const convention = queryAt < 0 ? uri : uri.slice(0, queryAt);
++      const match = /^napplet:([a-z0-9][a-z0-9-]{0,63})\/([a-z0-9][a-z0-9-]{0,63})$/.exec(convention);
++      if (!match || match[0] !== convention) throw new TypeError("Invalid intent convention");
++      const result = { ...options, archetype: match[1], action: match[2], convention };
++      if (queryAt < 0) return result;
++      if (hasOwn(options, "payload")) throw new TypeError("Intent query and explicit payload cannot be combined");
++      const fields = new Map();
++      for (const pair of uri.slice(queryAt + 1).split("&")) {
++        const equals = pair.indexOf("=");
++        if (equals < 1) throw new TypeError("Invalid intent query");
++        const name = decodeURIComponent(pair.slice(0, equals));
++        if (fields.has(name)) throw new TypeError("Duplicate intent query name");
++        fields.set(name, decodeURIComponent(pair.slice(equals + 1)));
++      }
++      return { ...result, payload: Object.fromEntries(fields) };
++    };
++    const deliveryHandlers = new Set();
++    const pendingDeliveries = new Map();
++    const storeDelivery = pendingDeliveries.set.bind(pendingDeliveries);
++    const eachDelivery = pendingDeliveries.forEach.bind(pendingDeliveries);
++    const dropDelivery = pendingDeliveries.delete.bind(pendingDeliveries);
++    const notify = (handler, delivery) => {
++      try { handler(delivery); } catch { /* Other subscriptions still receive their delivery. */ }
++    };
++    const channel = new MessageChannel();
++    const consume = channel.port1.postMessage.bind(channel.port1);
++    const readData = Function.call.bind(Object.getOwnPropertyDescriptor(MessageEvent.prototype, "data").get);
++    channel.port1.onmessage = (event) => {
++      const { receipt, message } = readData(event);
++      const delivery = Object.freeze(message.delivery);
++      if (deliveryHandlers.size === 0) {
++        storeDelivery(receipt, delivery);
++        return;
++      }
++      for (const handler of [...deliveryHandlers]) notify(handler, delivery);
++      consume(receipt);
++    };
++    target.parent.postMessage({ type: "hypergolic.intent.delivery-port" }, "*", [channel.port2]);
++    const invokeRequest = (value, modern) => request(
++      { type: "intent.invoke", request: normalizeRequest(value) },
++      "intent.invoke.result",
++      (msg) => {
++        const result = fieldOrThrow(msg, "result", "intent.invoke.result missing result");
++        if (!modern) return result;
++        if (!result.ok) return { ok: false, error: result.error };
++        const { archetype, action, convention, handler } = result;
++        return { ok: true, archetype, action, convention, handler };
++      }
++    );
++    const invoke = (value, options) => typeof value === "string"
++      ? invokeRequest(fromUri(value, options), true) : invokeRequest(value, false);
+     return {
+       invoke,
+-      open: (archetype, payload, opts) => invoke({
+-        archetype,
+-        action: "open",
+-        ...payload === void 0 ? {} : { payload },
+-        ...opts
+-      }),
++      open: (archetype, payload, opts) => {
++        if (typeof archetype === "string" && archetype.startsWith("napplet:")) {
++          const request2 = fromUri(archetype, payload);
++          if (request2.action !== "open" || opts !== void 0) throw new TypeError("Invalid intent.open arguments");
++          return invokeRequest(request2, true);
++        }
++        return invoke({ archetype, action: "open", ...payload === void 0 ? {} : { payload }, ...opts });
++      },
++      onDelivery(callback) {
++        if (typeof callback !== "function" || deliveryHandlers.size >= 32) throw new TypeError("Invalid intent subscription");
++        const handler = (delivery) => callback(delivery);
++        deliveryHandlers.add(handler);
++        eachDelivery((delivery, receipt) => {
++          dropDelivery(receipt);
++          notify(handler, delivery);
++          consume(receipt);
++        });
++        return subscriptionHandle(() => deliveryHandlers.delete(handler));
++      },
+       available: (archetype) => request(
+         { type: "intent.available", archetype },
+         "intent.available.result",
+@@ -2367,7 +2527,10 @@
        open: (url, options) => request(
          { type: "link.open", url, ...options ? { options } : {} },
          "link.open.result",
@@ -169,3 +416,96 @@ index 523bcf16686659726604376dea98363a06f86049..f7618d8add1c51ec77f9baa68f395d54
          { rejectOnError: false }
        )
      };
+@@ -2396,7 +2559,12 @@
+       encodeNip19: (input) => req("common.encodeNip19", { input }),
+       decodeNip19: (value) => req("common.decodeNip19", { value }),
+       getProfile: (targetValue) => req("common.getProfile", { target: targetValue }),
+-      follows: () => req("common.follows", {}),
++      follows: () => req("common.follows", {}).then((result) => {
++        if (result.ok !== true || !Array.isArray(result.pubkeys)) {
++          throw new Error(typeof result.error === "string" ? result.error : "Common follows unavailable");
++        }
++        return result.pubkeys;
++      }),
+       follow: (...pubkeys) => req("common.follow", { pubkeys }),
+       unfollow: (...pubkeys) => req("common.unfollow", { pubkeys }),
+       react: (targetEventId, reaction, customEmojiHref) => req("common.react", {
+@@ -2479,7 +2647,7 @@
+     return intent;
+   }
+   function isProtectedDomain(domain) {
+-    return domain === "shell" || domain === "inc" || domain === "identity" || domain === "theme" || domain === "intent";
++    return domain === "shell" || domain === "inc" || domain === "identity" || domain === "theme" || domain === "intent" || domain === "keys";
+   }
+   function makeDomain(domain, existing) {
+     if (domain === "shell") return shell;
+@@ -2487,14 +2655,13 @@
+     if (domain === "identity") return makeProtectedIdentity();
+     if (domain === "theme") return makeProtectedTheme();
+     if (domain === "intent") return makeProtectedIntent();
++    if (domain === "keys") return protectedKeys ??= Object.freeze(makeKeys());
+     if (existing && typeof existing === "object" && Object.keys(existing).length > 0) return existing;
+     switch (domain) {
+       case "relay":
+         return makeRelay();
+       case "storage":
+         return makeStorage();
+-      case "keys":
+-        return makeKeys();
+       case "media":
+         return makeMedia();
+       case "notify":
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -241,7 +241,16 @@
+  * temporarily suppress domains to simulate smaller or policy-constrained shell
+  * environments while still using the production shell-ready path.
+  */
++/** Selected soy.app-data/1 host-policy hint; grants and publication review remain independent. */
++interface ShellAppDataPolicy {
++    readonly profile: 'soy.app-data/1';
++    readonly scope: string;
++    readonly maxContentBytes: 3072;
++    readonly relays: readonly string[];
++    readonly defaultRelays: readonly string[];
++}
+ interface CapabilityHooks {
++    readonly appData?: ShellAppDataPolicy;
+     /** Bare capability domains to remove from the delivered environment. */
+     readonly disabledDomains?: readonly string[];
+     /**
+@@ -325,6 +334,7 @@
+  * `shell.supports(domain)` locally from this snapshot after `shell.init`.
+  */
+ interface ShellCapabilities {
++    readonly appData?: ShellAppDataPolicy;
+     /** Immutable bare domain names the shell offers to this napplet. */
+     readonly domains: readonly string[];
+ }
+@@ -350,6 +360,8 @@
+  * ```
+  */
+ interface ShellAdapter {
++    /** Whole-operation host hooks, forwarded without changing existing service semantics. */
++    operationOverrides?: RuntimeAdapter['operationOverrides'];
+     relayPool: RelayPoolHooks;
+     relayConfig: RelayConfigHooks;
+     windowManager: WindowManagerHooks;
+@@ -594,11 +606,16 @@
+  * ```
+  */
+ interface NappletNamespacePreludeOptions {
++    readonly appData?: ShellAppDataPolicy;
+     /**
+      * Optional bare NAP domain names the shell exposes to this napplet.
+      * Mandatory `shell` is injected even when omitted here.
+      */
+     domains: readonly string[];
++    /** Host-only per-operation deadlines in milliseconds; omitted operations remain 30000.
++     * Values must be safe integers from 1 through 2147483647. Never a napplet wire field.
++     */
++    requestTimeoutsMs?: Readonly<Record<string, number>>;
+ }
+ /**
+  * Render the host-owned NIP-5D bootstrap that exposes available NAP domains

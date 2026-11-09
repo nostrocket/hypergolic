@@ -10,11 +10,12 @@ import {IdentityListSettings} from './IdentityListSettings';
 import { UploadSettings } from './UploadSettings';
 import { ResourceSettings } from './ResourceSettings';
 import { useCallback, useEffect, useEffectEvent, useState, useSyncExternalStore } from 'react';
-import { ActivityIndicator, AppState, ScrollView, StyleSheet, Text, View, type AppStateStatus } from 'react-native';
+import { ActivityIndicator, AppState, ScrollView, StyleSheet, Text, TextInput, View, type AppStateStatus } from 'react-native';
 import { ShellPressable as Pressable } from './ShellPressable';
 import type { SettingsActions } from './Shell';
 import type { IdentityChange, IdentitySession, IdentityTransition } from '../security/identity-transition';
 import type { IdentitySettingsActions } from '../security/native-identity-actions';
+import { parsePublicIdentity } from '../security/public-identity';
 import { VaultError } from '../security/identity-vault-model';
 import { isSignerFailureCode, signerFailureMessage } from '../security/signing-methods';
 import { useIdentityOwner } from './IdentityOwnerContext';
@@ -56,6 +57,31 @@ function ImportIdentity({ transition, onClose }: { transition: IdentityTransitio
     {error !== '' && <Text testID="identity-import-error" accessibilityLiveRegion="polite" style={styles.detail}>{error}</Text>}
     {busy ? <ActivityIndicator color={colors.accent} /> : <Action title="Enter secret key" testID="identity-import-review" onPress={review} />}
     <Action title="Cancel" testID="identity-import-cancel" onPress={() => { transition.cancelImportPreparation(); onClose(); }} subdued />
+  </View>;
+}
+function PublicIdentity({ transition, onClose }: { transition: IdentityTransition; onClose(): void }) {
+  const { styles } = useShellStyles(createStyles);
+  const [input, setInput] = useState('');
+  const [error, setError] = useState('');
+  const review = () => {
+    let pubkey: string;
+    try { pubkey = parsePublicIdentity(input); }
+    catch { setError('Enter a valid npub or 64-character public key.'); return; }
+    if (transition.getSnapshot().session.vault.identities.some(identity => identity.pubkey === pubkey)) {
+      setError('This identity is already saved. Choose it from Saved identities.'); return;
+    }
+    try { transition.preparePublicIdentity(pubkey); onClose(); }
+    catch { setError('This public profile could not be opened. Try again.'); }
+  };
+  return <View style={styles.group}>
+    <Text accessibilityRole="header" style={styles.title}>Read-only public profile</Text>
+    <Text style={styles.detail}>Enter an npub or public key to read public data as that account. This adds no private key or signing method. Signing and publishing are unavailable.</Text>
+    <TextInput accessibilityLabel="Public key or npub" testID="identity-public-key" style={styles.input}
+      value={input} onChangeText={setInput} autoCapitalize="none" autoCorrect={false} maxLength={128}
+      placeholder="npub or public key" />
+    {error !== '' && <Text testID="identity-public-error" accessibilityLiveRegion="polite" style={styles.detail}>{error}</Text>}
+    <Action title="Review public profile" testID="identity-public-review" onPress={review} />
+    <Action title="Cancel" testID="identity-public-cancel" onPress={onClose} subdued />
   </View>;
 }
 function ConfirmIdentity({ pending, transition, npub }: { pending: IdentityChange; transition: IdentityTransition; npub: string }) {
@@ -110,22 +136,6 @@ function failureMessage(failure: ReturnType<IdentityTransition['getSnapshot']>['
   if (failure === 'DELETION_PENDING') return 'Deletion is paused. Authenticate again to finish removing the identity.';
   return 'The identity change was not accepted. Your current identity and open napplets are unchanged.';
 }
-function PublishedNappletSettings({ available, openPublished, publishedSessions, checkPublishedUpdate }: {
-  available: boolean;
-  openPublished: SettingsActions['openPublished'];
-  publishedSessions: SettingsActions['publishedSessions'];
-  checkPublishedUpdate: SettingsActions['checkPublishedUpdate'];
-}) {
-  const { styles } = useShellStyles(createStyles);
-  if (!available) return null;
-  return <>
-    <OpenPublishedNapplet open={openPublished} />
-    {publishedSessions.length > 0 && <>
-      <Text accessibilityRole="header" style={styles.title}>Published napplet updates</Text>
-      {publishedSessions.map(session => <UpdatePublishedNapplet key={session.id} session={session} check={checkPublishedUpdate} />)}
-    </>}
-  </>;
-}
 function SavedIdentities({session, transition, format, canDelete, onDelete}: {
   session: IdentitySession; transition: IdentityTransition; format(pubkey: string): string;
   canDelete: boolean; onDelete(pubkey: string): void;
@@ -146,22 +156,29 @@ function SavedIdentities({session, transition, format, canDelete, onDelete}: {
       </View>)}
   </>;
 }
-function SettingsHome({session, onBackup, onCloseBackup, onDelete, onImport, onSignedLab, openBundledTest, openStateLab, openPublished, publishedSessions, checkPublishedUpdate}: Omit<SettingsActions, 'closeSettings'> & {
-  session: IdentitySession; onBackup(): void; onCloseBackup(): void; onDelete(pubkey: string): void; onImport(): void; onSignedLab(): void;
+function SettingsHome({session, onBackup, onCloseBackup, onDelete, onImport, onPublic, onSignedLab, openDiscovery, openBundledTest, openStateLab, openPublished, publishedSessions, checkPublishedUpdate}: Omit<SettingsActions, 'closeSettings'> & {
+  session: IdentitySession; onBackup(): void; onCloseBackup(): void; onDelete(pubkey: string): void; onImport(): void; onPublic(): void; onSignedLab(): void;
 }) {
   const { styles } = useShellStyles(createStyles);
   const {transition, formatNpub, runtime, actions, relaySettings, resourceSettings, uploadSettings, listAccess, routing, notificationSettings, fixturePublisher} = useIdentityOwner();
+  const publishedCount = publishedSessions.length;
   return <>
       <View style={styles.currentIdentity}><Text style={styles.identityLabel}>Your identity</Text>
         <Text selectable testID="settings-full-npub" style={styles.npub}>{formatNpub(session.vault.selectedPubkey)}</Text>
       </View>
-      <PublishedNappletSettings available={Boolean(runtime)} openPublished={openPublished} publishedSessions={publishedSessions} checkPublishedUpdate={checkPublishedUpdate} />
+      {runtime && openDiscovery && <Action title="Discover napplets" testID="settings-open-discovery" onPress={openDiscovery} />}
+      {runtime && <OpenPublishedNapplet open={openPublished} />}
       <View style={styles.sections}>
+      {runtime && publishedCount > 0 && <SettingsSection title="Published napplet updates"
+        detail={`${publishedCount} ${publishedCount === 1 ? 'napplet' : 'napplets'} in this workspace`} id="published-updates">
+        {publishedSessions.map(session => <UpdatePublishedNapplet key={session.id} session={session} check={checkPublishedUpdate} />)}
+      </SettingsSection>}
       <SettingsSection title="Identity" detail="Accounts, signing methods and backup" id="identity">
       <SignerSettings transition={transition} session={session} actions={actions} format={formatNpub}
         onBackup={onBackup} onCloseBackup={onCloseBackup} />
       <SavedIdentities session={session} transition={transition} format={formatNpub} canDelete={Boolean(actions)}
         onDelete={onDelete} />
+      <Action title="Read-only public profile" testID="settings-public-identity" onPress={onPublic} />
       <Action title="Import identity" testID="settings-import-identity" onPress={onImport} />
       </SettingsSection>
       <SettingsSection title="Connections" detail="Relays, downloads and file uploads" id="connections">
@@ -199,11 +216,12 @@ function SettingsHome({session, onBackup, onCloseBackup, onDelete, onImport, onS
       </View>
   </>;
 }
-export function IdentitySettings({ openBundledTest, openStateLab, openPublished, publishedSessions, checkPublishedUpdate }: SettingsActions) {
+export function IdentitySettings({ openDiscovery, openBundledTest, openStateLab, openPublished, publishedSessions, checkPublishedUpdate }: SettingsActions) {
   const { styles, colors } = useShellStyles(createStyles);
   const { transition, formatNpub, actions } = useIdentityOwner();
   const state = useSyncExternalStore(transition.subscribe, transition.getSnapshot);
   const [importing, setImporting] = useState(false);
+  const [publicEntry, setPublicEntry] = useState(false);
   const [deletion, setDeletion] = useState<DeletionReview | null>(null);
   const [backupReview, setBackupReview] = useState(false);
   const [signedLab, setSignedLab] = useState(false);
@@ -251,10 +269,10 @@ export function IdentitySettings({ openBundledTest, openStateLab, openPublished,
   </ScrollView>;
   return <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
     {state.failure && <Text testID="identity-change-error" accessibilityLiveRegion="polite" style={styles.detail}>{failureMessage(state.failure)}</Text>}
-    {importing ? <ImportIdentity transition={transition} onClose={closeImport} /> : <>
+    {publicEntry ? <PublicIdentity transition={transition} onClose={() => setPublicEntry(false)} /> : importing ? <ImportIdentity transition={transition} onClose={closeImport} /> : <>
       <SettingsHome session={state.session} onBackup={() => setBackupReview(true)} onCloseBackup={() => setBackupReview(false)}
-        onDelete={pubkey => setDeletion(Object.freeze({pubkey, session: state.session}))} onImport={() => setImporting(true)} onSignedLab={() => setSignedLab(true)}
-        openBundledTest={openBundledTest} openStateLab={openStateLab} openPublished={openPublished} publishedSessions={publishedSessions} checkPublishedUpdate={checkPublishedUpdate} />
+        onDelete={pubkey => setDeletion(Object.freeze({pubkey, session: state.session}))} onImport={() => setImporting(true)} onPublic={() => setPublicEntry(true)} onSignedLab={() => setSignedLab(true)}
+        openDiscovery={openDiscovery} openBundledTest={openBundledTest} openStateLab={openStateLab} openPublished={openPublished} publishedSessions={publishedSessions} checkPublishedUpdate={checkPublishedUpdate} />
     </>}
 
   </ScrollView>;

@@ -3,11 +3,14 @@ package org.nostrocket.hypergolic.host
 import org.json.JSONObject
 
 /** Trusted React Native configuration. No field is accepted from a napplet request. */
-internal class CapabilityConfiguration(raw: String, generation: String, allowPublished: Boolean = false) {
+internal class CapabilityConfiguration(
+  raw: String, generation: String, allowPublished: Boolean = false, expectedSnapshot: JSONObject? = null
+) {
   val snapshot: String
   val sessionId: String
   val fixture: String
   val allowsUpload: Boolean
+  val publishedOpen: Boolean
   val user: String
   val epoch: Long
   val allowsRelay: Boolean
@@ -15,11 +18,23 @@ internal class CapabilityConfiguration(raw: String, generation: String, allowPub
   val appId: String
   val version: String
   val grantedDomains: List<String>
+  val appData: String?
+  val mediaProfile: String?
+  val commonProfile: String?
+  val cvmProfile: String?
+  val legacyReadOnly: LegacyReadOnlyContext?
   init {
     require(raw.toByteArray(Charsets.UTF_8).size <= 8192)
     val value = JSONObject(raw)
     val names = setOf("sessionId", "epoch", "user", "publisher", "appId", "version", "instanceId", "fixture", "domains")
-    require(value.keys().asSequence().toSet() == names)
+    val open = value.has("publishedOpen")
+    val common = value.has("commonProfile")
+    val cvm = value.has("cvmProfile")
+    val media=value.has("mediaProfile")
+    val data=value.has("appData")
+    val legacy=value.has("legacyReadOnly")
+    require(value.keys().asSequence().toSet() == names + (if(legacy)setOf("legacyReadOnly") else emptySet()) + (if(open)setOf("publishedOpen") else emptySet()) + (if(common)setOf("commonProfile") else emptySet()) + (if(cvm)setOf("cvmProfile") else emptySet()) + (if(media)setOf("mediaProfile") else emptySet()) + (if(data)setOf("appData") else emptySet()) + (if(expectedSnapshot != null)setOf("snapshot") else emptySet()))
+    require(!open || value.remove("publishedOpen") == true)
     fun string(name: String): String = (value.get(name) as? String) ?: error("Invalid configuration")
     for (name in listOf("sessionId", "instanceId", "fixture")) require(string(name).matches(Regex("[A-Za-z0-9_-]{1,80}")))
     for (name in listOf("user", "publisher", "version")) require(string(name).matches(Regex("[0-9a-f]{64}")))
@@ -32,6 +47,7 @@ internal class CapabilityConfiguration(raw: String, generation: String, allowPub
     fixture = string("fixture")
     val expected = when (fixture) {
       "ux-lab", "close-lab" -> setOf("theme")
+      "napplet-discovery" -> setOf("relay", "resource", "theme")
       "state-lab", "state-lab-peer" -> setOf("identity", "storage", "theme")
       "approval-lab", "approval-lab-v1", "approval-lab-v2", "approval-lab-v3" -> setOf("identity", "relay", "theme")
       "upload-lab", "upload-queue-lab" -> setOf("upload", "theme")
@@ -53,13 +69,36 @@ internal class CapabilityConfiguration(raw: String, generation: String, allowPub
     allowsUpload = "upload" in granted
     allowsRelay = "relay" in granted
     grantedDomains = granted.sorted()
+    mediaProfile = if(media) string("mediaProfile").also { require(it=="finite-live-mp3-v1"&&fixture=="published"&&"media" in granted) } else null
+    commonProfile = if(common) string("commonProfile").also { require(it=="social-v1"&&fixture=="published"&&granted.containsAll(listOf("common","identity"))&&granted.any { domain->domain=="relay"||domain=="outbox" }) } else null
+    cvmProfile = if(cvm) string("cvmProfile").also { require(it=="free-foreground-v1"&&fixture=="published"&&"cvm" in granted) } else null
+    require(("cvm" in granted) == (cvmProfile != null))
     sessionId = string("sessionId")
     publisher = string("publisher")
     appId = string("appId")
+    require(appId.startsWith(" 5129:") == (expectedSnapshot != null))
+    if (expectedSnapshot != null) {
+      require(allowPublished && fixture == "published" && !open && !data && !legacy)
+      val supplied = value.getJSONObject("snapshot")
+      val keys = expectedSnapshot.keys().asSequence().toSet()
+      require(supplied.keys().asSequence().toSet() == keys && keys.all { supplied.get(it) == expectedSnapshot.get(it) })
+      value.put("snapshot", expectedSnapshot)
+    }
+    require(!open || (allowPublished && fixture == "published"))
+    publishedOpen = (fixture == "napplet-discovery" && appId == "napplet-discovery") || open
     version = string("version")
+    legacyReadOnly = if(legacy) LegacyReadOnlyContext(value.getJSONObject("legacyReadOnly"), publisher, appId, version, fixture, grantedDomains) else null
+    appData = if(data) NativeAppDataPolicy.capture(value.get("appData"),publisher,appId,fixture,grantedDomains) else null
     value.put("generation", generation)
     snapshot = value.toString()
   }
+  fun allowsCommonSocial(type:String):Boolean=commonProfile=="social-v1"&&type in setOf("common.follow","common.unfollow","common.react","common.report")
+  fun allowsRelayOperation(type: String): Boolean = when (type) {
+    "relay.subscribe", "relay.publish" -> "relay" in grantedDomains
+    "outbox.subscribe", "outbox.publish" -> "outbox" in grantedDomains
+    else -> false
+  }
+
   fun request(message: String): String = JSONObject().put("registration", JSONObject(snapshot))
     .put("request", message).toString()
 }

@@ -1,5 +1,8 @@
+import {publishedAppLabel} from '../napplets/published-identity';
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {AppState, FlatList, Modal, StyleSheet, Text, View} from 'react-native';
+import {AppState, FlatList, StyleSheet, Text, View} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ShellModal as Modal } from './ShellModal';
 import { ShellPressable as Pressable } from './ShellPressable';
 import type {NotificationSettingsService} from '../presentation/notify-settings';
 import type {NotifyPermission} from '../presentation/notify-permissions';
@@ -8,11 +11,12 @@ import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 function PermissionRow({permission, busy, revoke}: {permission: NotifyPermission; busy: boolean; revoke(permission: NotifyPermission): void}) {
   const { styles } = useShellStyles(createStyles);
   const press = useCallback(() => revoke(permission), [permission, revoke]);
-  return <View style={styles.permission}><Text style={styles.title}>{permission.appId}</Text><Text selectable style={styles.publisher}>{formatNpub(permission.publisher)}</Text><Text style={styles.detail}>{permission.channel || 'General notifications'}</Text>
-    <Pressable testID={'notify-revoke-' + permission.appId + '-' + (permission.channel || 'general')} accessibilityRole="button" disabled={busy} accessibilityState={{disabled: busy}} onPress={press} style={styles.button}><Text style={styles.action}>Revoke notification permission</Text></Pressable></View>;
+  return <View style={styles.permission}><Text style={styles.title}>{publishedAppLabel(permission.appId)}</Text><Text selectable style={styles.publisher}>{formatNpub(permission.publisher)}</Text><Text style={styles.detail}>{permission.channel || 'General notifications'}</Text>
+    <Pressable testID={'notify-revoke-' + publishedAppLabel(permission.appId) + '-' + (permission.channel || 'general')} accessibilityRole="button" disabled={busy} accessibilityState={{disabled: busy}} onPress={press} style={styles.button}><Text style={styles.action}>Revoke notification permission</Text></Pressable></View>;
 }
 export function NotificationSettings({service}: {service: NotificationSettingsService}) {
   const { styles } = useShellStyles(createStyles);
+  const insets = useSafeAreaInsets();
   const [state, setState] = useState<{rows: readonly NotifyPermission[]; busy: boolean; status: string}>({rows: [], busy: true, status: ''});
   const pending = useRef<AbortController | null>(null), [opened, setOpened] = useState(false);
   useEffect(() => {
@@ -35,7 +39,7 @@ export function NotificationSettings({service}: {service: NotificationSettingsSe
   return <View style={styles.group}><Text accessibilityRole="header" style={styles.heading}>Notification permissions</Text>
     <Text style={styles.detail}>Permissions apply only to this identity, publisher, napplet and exact channel. Revoking clears its current alerts and badge. A later request needs fresh approval.</Text>
     <Pressable testID="notify-permissions-open" accessibilityRole="button" onPress={() => setOpened(true)} style={styles.button}><Text style={styles.action}>Manage notification permissions ({state.rows.length})</Text></Pressable>
-    <Modal visible={opened} transparent animationType="fade" onRequestClose={() => setOpened(false)}><View style={styles.backdrop}><FlatList data={state.rows} contentContainerStyle={styles.sheet} keyExtractor={row => JSON.stringify([row.publisher, row.appId, row.channel])}
+    <Modal visible={opened} transparent animationType="fade" onRequestClose={() => setOpened(false)}><View style={[styles.backdrop, {paddingLeft: insets.left, paddingRight: insets.right}]}><FlatList data={state.rows} contentContainerStyle={styles.sheet} keyExtractor={row => JSON.stringify([row.publisher, row.appId, row.channel])}
       ListHeaderComponent={<Text accessibilityRole="header" style={styles.heading}>Notification permissions</Text>}
       ListFooterComponent={<View style={styles.group}>{state.status !== '' && <Text testID="notify-settings-status" accessibilityLiveRegion="polite" style={styles.detail}>{state.status}</Text>}<Pressable testID="notify-permissions-close" accessibilityRole="button" onPress={() => setOpened(false)} style={styles.button}><Text style={styles.action}>Done</Text></Pressable></View>}
       ListEmptyComponent={!state.busy ? <Text testID="notify-permissions-empty" style={styles.detail}>No saved notification permissions for this identity.</Text> : undefined}

@@ -4,11 +4,80 @@ Implementation through Outbox is complete; final CAP-12/CAP-14 acceptance remain
 
 ## Selected contract and policy
 
-[NAP-OUTBOX PR32](https://github.com/napplet/naps/blob/4589a8f9a16d8aa29b3740e2b3b0cdca11e0976e/naps/NAP-OUTBOX.md) is pinned to `4589a8f9a16d8aa29b3740e2b3b0cdca11e0976e`; [NIP-65](https://github.com/nostr-protocol/nips/blob/0046368a747c5c25ae2bec28bae0e537744c8f10/65.md)/NIP-01 to `0046368a747c5c25ae2bec28bae0e537744c8f10`. This is a selected draft profile, not full stable-domain conformance.
+[NAP-OUTBOX PR32](https://github.com/napplet/naps/blob/8865f73d52a4864afee145f28d26520476273927/naps/NAP-OUTBOX.md) is pinned to `8865f73d52a4864afee145f28d26520476273927`; [NIP-65](https://github.com/nostr-protocol/nips/blob/0046368a747c5c25ae2bec28bae0e537744c8f10/65.md)/NIP-01 to `0046368a747c5c25ae2bec28bae0e537744c8f10`. This is a selected draft profile, not full stable-domain conformance.
 
-Original SDK getEvent/query/resolveRelays/subscribe/close/publish use the trusted native host. Outbox requires both outbox and relay grants. Lookup relays discover verified signed kind10002 lists; data reads use author write relays and required recipient publication uses inbox read relays. Replacement winners follow NIP-01, including lowest lexical ID for equal timestamps. Signature/filter checks apply to stored and network data. Private/local/insecure destinations remain denied by the existing native DNS/TLS/public-WSS policy.
+Original SDK getEvent/query/resolveRelays/subscribe/close/publish use the trusted native host. The Outbox grant covers this API. The draft’s Relay dependency supplies the wire type for event results. Raw Relay operations require a separate Relay grant. Lookup relays discover verified signed kind10002 lists; data reads use author write relays and required recipient publication uses inbox read relays. Replacement winners follow NIP-01, including lowest lexical ID for equal timestamps. Signature/filter checks apply to stored and network data. Private/local/insecure destinations remain denied by the existing native DNS/TLS/public-WSS policy.
 
-The identity-specific persistent list cache is fresh for 24 hours after a successful verified lookup. Reads may retain verified stale data for up to seven days while refreshing. Missing/failed discovery or authorless reads use bounded Network fallback and validated hints, reporting incomplete results truthfully. Publication refreshes expired metadata before review and refuses stale required routing. Missing own usable metadata permits labelled Network fallback; missing required inbox metadata blocks before review/signing.
+The identity-specific persistent list cache is fresh for 24 hours after a successful verified lookup. Reads may retain verified stale data for up to seven days while refreshing. Missing/failed discovery and authorless reads use bounded Network fallback and validated hints. An authorless query that reaches matching EOSE at every selected relay can complete within that selected scope. A fresh complete lookup or fresh negative cache with no NIP-65 list can use configured fallback without being marked incomplete solely for that absence. The plan retains `source: fallback` and `missingAuthors`; completion describes the selected fallback scope, not global event absence. Unresolved or incomplete metadata, stale or invalid lists, explicit signed lists without write routes, omitted author routes, failed peers and host truncation still report incomplete results. Write diagnostics and required publication routing are unchanged. One-shot queries default to 200 events and cap larger requests at 200. Subscription backfill still defaults to and caps at 32. A one-shot query that fills the event cap when the caller requested more reports a potentially incomplete result. Publication refreshes expired metadata before review and refuses stale required routing. Missing own usable metadata permits labelled Network fallback; missing required inbox metadata blocks before review/signing.
+
+One-shot Outbox queries accept up to 32 NIP-01 filters within the existing native
+8 KiB REQ and result limits. Raw Relay queries and live subscriptions keep their
+four-filter limit. A wide Outbox query keeps each filter's own limit and uses
+one REQ per selected data relay. Its batched author-list discovery uses at most
+half the remaining time inside the same 15-second total deadline. Missing batch
+results are not cached as absent. When the complete signed read relay union
+would exceed 16 destinations, configured Network relays and validated hints
+leave room for whole author relay sets that fit. Omitted author routes make the
+result incomplete. Verified NIP-65 metadata retains up to 64 unique normalized
+relays and their signed roles. If an author's applicable write set alone
+exceeds 16, Outbox query and getEvent preserve hints, whole author sets and
+existing fallback routes first. Remaining slots prefer signed matches in
+configured Network order, then the signed relay order. The result is incomplete
+and the plan records authors whose routes were omitted, including when no
+events were found. Live subscriptions, relay resolution, Common and publication
+still require their applicable route sets to fit the existing destination cap.
+Packs with more than 32 per-member filters still exceed
+this profile. A single-author one-shot read budgets up to half of its remaining
+deadline for route discovery and leaves the original remainder for data. A slow
+Lookup peer can leave the verified author metadata incomplete. The shell uses any verified route already
+found or the existing Network fallback. A timeout does not cache an absent list.
+Data peers run serially. Each nonlast peer gets at most half the remaining
+total deadline, and the last peer gets the remaining time, capped by the
+existing native ten-second maximum. The next peer starts after the prior
+native promise settles. Later tail peers remain best-effort under the original
+deadline. No new destinations or connection slots are added.
+
+One-shot reads and subscription route planning share two admitted app work
+slots. A FIFO queue holds at most eight waiting operations across that service;
+this accommodates small accepted startup bursts without raising active work,
+per-session broker limits or native connection limits. Queue overflow retains
+the canonical `relay timeout` result. The original request deadline starts
+before waiting, including the subscription's remaining planning budget. Exact
+caller authority, cancellation and absolute expiry are checked at promotion
+and immediately before work. Close/background cancels queued subscription
+revisions; returning creates fresh planning work rather than reviving them.
+A cancelled caller returns promptly, but its admitted app work retains its
+slot until that work settles. Nested resolvers can settle cancellation before a
+raw native carrier finishes unwinding; native owners still govern actual
+connection reservations. The app work count is not a socket-count guarantee.
+This admission stage neither retries nor replays a request.
+
+Only an active native claim for an exact Outbox query or getEvent can use
+the one-shot transport budget of 200 events and 256 text frames per relay.
+Signed result events remain limited to 512 KiB, with a 2 MiB ceiling on
+native response bytes per relay. Structured reads select each filter's newest
+matching events, including deterministic timestamp/ID ties, before applying
+aggregate event and byte budgets. Discarding rows outside the requested filter
+limits does not itself make those selected results incomplete. Required output
+that exceeds a host budget, failed or invalid peer batches, and deadlines still
+remain incomplete or fail as appropriate. Ranked search retains the selected
+peer's order.
+Advisory relay hints use a separate 256 KiB
+budget. Excess hints are omitted so they cannot crowd out signed events. It uses the existing shared native connection
+slots and deadlines. Raw Relay, catalog reads, author-list discovery
+and live subscriptions retain their existing budgets.
+
+One-shot Outbox also accepts a [NIP-50 search filter](https://github.com/nostr-protocol/nips/blob/0046368a747c5c25ae2bec28bae0e537744c8f10/50.md)
+with one nonblank search string of up to 1 KiB and one explicit policy-allowed
+WSS relay hint. The shell sends the term only to that relay. It preserves that
+relay's relevance order and keeps the leading results within the existing REQ,
+event, byte and deadline limits. It verifies signatures, event hashes and all
+structured filter conditions independently. Text relevance is supplied by the
+relay, and callers should choose a relay with advertised NIP-50 support.
+The existing 16-destination route union is checked before narrowing to the
+nominated relay. With 16 configured Network relays, use one of them as the
+search hint. A distinct seventeenth relay fails before dispatch.
+Raw Relay and subscriptions use structured filters only.
 
 ## Review, publication and receipts
 
@@ -31,7 +100,7 @@ WSS upgrade permits repeated unconsumed metadata after syntax/size checks; criti
 
 ## Published admission
 
-Outbox is in the reviewed published-domain set under support profile `hypergolic-native-2026-10-13-v1`. Remembered narrower grants require fresh review; denial preserves the old grant. Outbox-only admission can load but acquires no Relay authority: usable SDK Outbox requires both grants. Exact operation-specific native review remains mandatory. Injected URL authority parameters, stale source/generation and wrong publisher/app/version/account epoch fail closed. Existing signed-list redistribution remains the documented draft extension.
+Declaration sets containing Outbox use a revised support identity that also reflects other capabilities declared in that set. A fresh open or update requires renewed review before adding independent Outbox authority. An exact old grant that already included Relay can be reused if all effective access is unchanged. An exact saved pin can reopen under its earlier grant. It retains Outbox only when that grant also included Relay. Declining renewal preserves the prior grant and pin. Exact operation-specific native review remains mandatory. Injected URL authority parameters, stale source/generation and wrong publisher/app/version/account epoch fail closed. Existing signed-list redistribution remains the documented draft extension.
 
 Local and selected external methods use the same exact approval binding; [external signing](external-signing.md) defines method choice, explicit Resume, cancellation and uncertain outcomes. Production protected iOS identity is unavailable on Simulator; never substitute a fixture signer and call that production proof.
 

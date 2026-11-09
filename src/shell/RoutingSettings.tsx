@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, StyleSheet, Text, View } from 'react-native';
 import { ShellPressable as Pressable } from './ShellPressable';
+import { PublicPreferenceImport } from './PublicPreferenceImport';
 import type { CatalogHandler, CatalogSnapshot } from '../routing/routing-catalog';
 import type { RoutingSettingsService } from '../routing/routing-settings';
 import { formatNpub } from '../security/public-identity';
@@ -28,25 +29,46 @@ export function RoutingSettings({service}: {service: RoutingSettingsService}) {
   const { styles } = useShellStyles(createStyles);
   const [state, setState] = useState<{snapshot: CatalogSnapshot | null; busy: boolean; status: string}>({snapshot: null, busy: true, status: ''});
   const pending = useRef<AbortController | null>(null);
+  const [importing, setImporting] = useState<RoutingSettingsService | null>(null);
+  const importOwner = useRef<RoutingSettingsService | null>(null);
+  const finishImport = useCallback((snapshot?: CatalogSnapshot | null) => {
+    if (importOwner.current !== service) return;
+    importOwner.current = null;
+    setImporting(null);
+    if (snapshot) setState({snapshot, busy: false, status: 'Default handler saved from a published choice.'});
+    else if (snapshot === null) setState(previous => ({...previous, status: 'Default handler saved. Reopen Settings to refresh the list.'}));
+  }, [service]);
+  function reserveImport() {
+    if (state.busy || !state.snapshot || pending.current || importOwner.current === service) return false;
+    importOwner.current = service;
+    setImporting(service);
+    return true;
+  }
   useEffect(() => {
     let mounted = true;
     function refresh() {
       pending.current?.abort(); const controller = new AbortController(); pending.current = controller;
-      void service.list({signal: controller.signal}).then(snapshot => {if (mounted && !controller.signal.aborted) setState({snapshot, busy: false, status: ''});}).catch(() => {if (mounted && !controller.signal.aborted) setState({snapshot: null, busy: false, status: 'Saved handlers are unavailable.'});});
+      void service.list({signal: controller.signal})
+        .then(snapshot => {if (mounted && !controller.signal.aborted) setState({snapshot, busy: false, status: ''});})
+        .catch(() => {if (mounted && !controller.signal.aborted) setState({snapshot: null, busy: false, status: 'Saved handlers are unavailable.'});})
+        .finally(() => {if (pending.current === controller) pending.current = null;});
     }
     refresh(); const subscription = AppState.addEventListener('change', next => {if (next === 'active') refresh(); else pending.current?.abort();});
     return () => {mounted = false; pending.current?.abort(); subscription.remove();};
   }, [service]);
   async function update(action: (signal: AbortSignal) => Promise<CatalogSnapshot>, status: string) {
-    if (state.busy || !state.snapshot) return;
-    pending.current?.abort(); const controller = new AbortController(); pending.current = controller; setState(previous => ({...previous, busy: true, status: ''}));
+    if (state.busy || !state.snapshot || pending.current || importOwner.current === service) return;
+    const controller = new AbortController(); pending.current = controller; setState(previous => ({...previous, busy: true, status: ''}));
     try {const snapshot = await action(controller.signal); if (!controller.signal.aborted) setState({snapshot, busy: false, status});}
     catch {if (!controller.signal.aborted) setState(previous => ({...previous, busy: false, status: 'The change could not be completed. Reopen Settings to check saved handlers.'}));}
+    finally {if (pending.current === controller) pending.current = null;}
   }
   return <View style={styles.group}><Text accessibilityRole="header" style={styles.heading}>Saved handlers</Text>
     <Text style={styles.detail}>Verified napplets you have opened are saved for this identity. Defaults still need approval for every dispatch. Removing a registration also clears its defaults; saved napplet data remains. Opening it again restores its registration.</Text>
+    {service.publicPreferences && <PublicPreferenceImport service={service.publicPreferences}
+      disabled={state.busy || !state.snapshot || importing === service} reserve={reserveImport} finish={finishImport} />}
     {state.snapshot?.handlers.length === 0 && <Text testID="routing-empty" style={styles.detail}>No saved handlers for this identity.</Text>}
-    {state.snapshot?.handlers.map(handler => <Handler key={handler.publisher + ':' + handler.appId} handler={handler} snapshot={state.snapshot!} busy={state.busy}
+    {state.snapshot?.handlers.map(handler => <Handler key={handler.publisher + ':' + handler.appId} handler={handler} snapshot={state.snapshot!} busy={state.busy || importing === service}
       prefer={(role, value) => {void update(signal => service.prefer(role, value, {signal}), value ? 'Default handler saved.' : 'Default cleared.');}}
       remove={value => {void update(signal => service.remove(value, {signal}), 'Registration removed. Saved data remains.');}} />)}
     {state.status !== '' && <Text testID="routing-settings-status" accessibilityLiveRegion="polite" style={styles.detail}>{state.status}</Text>}

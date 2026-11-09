@@ -18,3 +18,19 @@ xcrun swiftc -swift-version 6 -warnings-as-errors -parse-as-library modules/napp
 
 See [native admission evidence](../../../docs/native-capabilities.md) for the real
 SQLite broker tests and separately executed WKWebView checks.
+
+## Native deferred-read selectors
+
+With JDK 17 on `PATH`, Xcode selected, and the existing `.tools/gradle-home`
+dependency cache populated, run:
+
+```sh
+python3 -B tests/native/capability-lease/defer_selector.py
+```
+
+This uses the same cached Kotlin 2.1.20 and JSON artifacts as the published
+capability parser proof. It extracts the actual Android and iOS view selector
+methods unchanged and compiles them with the production configuration parsers.
+Each platform checks 32 read/grant, publication/subscription/control and invalid-ID
+cases. These are host compiler checks; they do not instantiate a WebView or
+exercise an Expo bridge or device.

@@ -1,3 +1,4 @@
+import {publishedAppLabel} from '../napplets/published-identity';
 import {useState, useSyncExternalStore} from 'react';
 import { StyleSheet, Text, View} from 'react-native';
 import { ShellPressable as Pressable } from './ShellPressable';
@@ -17,9 +18,9 @@ function Available({service, user}: {service: IdentityListAccess; user: string})
     <Text style={styles.text}>Remembered access to public mutes and categorized lists for the selected identity.</Text>
     {grants.length === 0 && <Text style={styles.text}>No remembered public list access.</Text>}
     {grants.map(grant => <View key={JSON.stringify([grant.publisher, grant.appId])} style={styles.row}>
-      <Text selectable style={styles.text}>{grant.appId}</Text><Text selectable style={styles.mono}>{formatNpub(grant.publisher)}</Text>
+      <Text selectable style={styles.text}>{publishedAppLabel(grant.appId)}</Text><Text selectable style={styles.mono}>{formatNpub(grant.publisher)}</Text>
       {state.denied.some(value => value.publisher === grant.publisher && value.appId === grant.appId && value.user === grant.user) && <Text style={styles.text}>Access is denied in this session. Retry to save revocation.</Text>}
-      <Pressable accessibilityRole="button" accessibilityLabel={'Revoke public lists for ' + grant.appId} accessibilityState={{disabled: state.busy}} disabled={state.busy} style={styles.button} onPress={() => {
+      <Pressable accessibilityRole="button" accessibilityLabel={'Revoke public lists for ' + publishedAppLabel(grant.appId)} accessibilityState={{disabled: state.busy}} disabled={state.busy} style={styles.button} onPress={() => {
         setFailure(''); void service.revoke(grant).catch(() => setFailure('Public list revocation could not be completed.'));
       }}><Text style={styles.action}>Revoke public list access</Text></Pressable>
     </View>)}

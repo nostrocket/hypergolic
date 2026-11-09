@@ -6,6 +6,7 @@ struct PublishedHTTPResponse {
   static let maximumHeaderBytes = 16 * 1024
   static let maximumFramingBytes = 64 * 1024
   static let maximumBodyBytes = 2 * 1024 * 1024
+  static let maximumArtifactBodyBytes = 20 * 1024 * 1024
   static let maximumUploadBodyBytes = 32 * 1024
   static let maximumResourceBodyBytes = 10 * 1024 * 1024
 
@@ -15,36 +16,22 @@ struct PublishedHTTPResponse {
   let headers: [String: String]
   let body: Data
 
-  static func parse(_ wire: Data, maximumBodyBytes: Int = maximumBodyBytes, resourceProfile: Bool = false, uploadProfile: Bool = false, recoveryProfile: Bool = false) throws -> PublishedHTTPResponse {
-    guard !(resourceProfile && (uploadProfile || recoveryProfile)), !(uploadProfile && recoveryProfile), !uploadProfile || maximumBodyBytes <= Self.maximumUploadBodyBytes,
-          (1...((resourceProfile || recoveryProfile) ? Self.maximumResourceBodyBytes : Self.maximumBodyBytes)).contains(maximumBodyBytes),
+  static func validLimit(_ bytes: Int, resource: Bool, upload: Bool, recovery: Bool, artifact: Bool) -> Bool {
+    guard [resource, upload, recovery, artifact].filter({ $0 }).count <= 1 else { return false }
+    if upload { return (1...maximumUploadBodyBytes).contains(bytes) }
+    if resource || recovery { return (1...maximumResourceBodyBytes).contains(bytes) }
+    return (1...(artifact ? maximumArtifactBodyBytes : maximumBodyBytes)).contains(bytes)
+  }
+
+  static func parse(_ wire: Data, maximumBodyBytes: Int = maximumBodyBytes, resourceProfile: Bool = false,
+                    uploadProfile: Bool = false, recoveryProfile: Bool = false, artifactProfile: Bool = false) throws -> PublishedHTTPResponse {
+    guard validLimit(maximumBodyBytes, resource: resourceProfile, upload: uploadProfile, recovery: recoveryProfile, artifact: artifactProfile),
           wire.count <= maximumBodyBytes + maximumHeaderBytes + maximumFramingBytes else { throw Failure.tooLarge }
     let separator = Data([13, 10, 13, 10])
     guard let boundary = wire.range(of: separator), boundary.lowerBound <= maximumHeaderBytes else { throw Failure.invalidResponse }
-    let rawHead = wire.prefix(upTo: boundary.lowerBound)
-    guard rawHead.allSatisfy({ $0 >= 32 && $0 <= 126 || $0 == 13 || $0 == 10 }),
-          let head = String(data: rawHead, encoding: .ascii) else { throw Failure.invalidResponse }
-    let lines = head.components(separatedBy: "\r\n")
-    guard let statusLine = lines.first, statusLine.hasPrefix("HTTP/1.1 "),
-          statusLine.count >= 12, let status = Int(statusLine.dropFirst(9).prefix(3)),
-          (statusLine.count == 12 || statusLine[statusLine.index(statusLine.startIndex, offsetBy: 12)] == " "),
-          statusLine.dropFirst(12).allSatisfy({ $0 == " " || $0.isASCII && !$0.isNewline }),
-          lines.dropFirst().allSatisfy({ !$0.isEmpty && !$0.hasPrefix(" ") && !$0.hasPrefix("\t") })
-    else { throw Failure.invalidResponse }
-    let singular = Set(["content-length", "transfer-encoding", "content-encoding", "location", "connection"])
-    var headers: [String: String] = [:]
-    for line in lines.dropFirst() {
-      guard let colon = line.firstIndex(of: ":") else { throw Failure.invalidResponse }
-      let name = String(line[..<colon]).lowercased()
-      let value = String(line[line.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
-      guard !name.isEmpty, name.utf8.allSatisfy({ byte in
-        (byte >= 97 && byte <= 122) || (byte >= 48 && byte <= 57) || byte == 45
-      }), (!headers.keys.contains(name) || (resourceProfile || uploadProfile || recoveryProfile) && !singular.contains(name)), !value.contains("\r"), !value.contains("\n")
-      else { throw Failure.invalidResponse }
-      // Resource headers never enter the SDK; repeated informational values have no authority.
-      if headers[name] == nil { headers[name] = value }
-    }
-    if resourceProfile && [301,302,303,307,308].contains(status) {
+    let (status, headers) = try parseHead(wire.prefix(upTo: boundary.lowerBound),
+      allowsRepeatedInformational: resourceProfile || uploadProfile || recoveryProfile || artifactProfile)
+    if (resourceProfile || artifactProfile) && [301,302,303,307,308].contains(status) {
       guard let location = headers["location"], !location.isEmpty, location.utf8.count <= 8192 else { throw Failure.resourcePolicy }
       throw Failure.resourceRedirect(location)
     }
@@ -57,7 +44,7 @@ struct PublishedHTTPResponse {
       if resourceProfile { throw Failure.resourceStatus(status) }
       throw Failure.invalidResponse
     }
-    guard !headers.keys.contains("content-encoding") || recoveryProfile && headers["content-encoding"]?.lowercased() == "identity",
+    guard !headers.keys.contains("content-encoding") || (recoveryProfile || artifactProfile) && headers["content-encoding"]?.lowercased() == "identity",
           !headers.keys.contains("location"),
           !headers.keys.contains("connection") || headers["connection"]?.lowercased() == "close" || headers["connection"]?.lowercased() == "keep-alive"
     else { throw resourceProfile ? Failure.resourcePolicy : Failure.invalidResponse }
@@ -80,6 +67,32 @@ struct PublishedHTTPResponse {
     }
     let body = try decodeChunked(Data(payload), limit: maximumBodyBytes)
     return try complete(body)
+  }
+
+  static func parseHead(_ rawHead: Data, allowsRepeatedInformational: Bool) throws -> (Int, [String: String]) {
+    guard rawHead.allSatisfy({ $0 >= 32 && $0 <= 126 || $0 == 13 || $0 == 10 }),
+          let head = String(data: rawHead, encoding: .ascii) else { throw Failure.invalidResponse }
+    let lines = head.components(separatedBy: "\r\n")
+    guard let statusLine = lines.first, statusLine.hasPrefix("HTTP/1.1 "),
+          statusLine.count >= 12, let status = Int(statusLine.dropFirst(9).prefix(3)),
+          (statusLine.count == 12 || statusLine[statusLine.index(statusLine.startIndex, offsetBy: 12)] == " "),
+          statusLine.dropFirst(12).allSatisfy({ $0 == " " || $0.isASCII && !$0.isNewline }),
+          lines.dropFirst().allSatisfy({ !$0.isEmpty && !$0.hasPrefix(" ") && !$0.hasPrefix("\t") })
+    else { throw Failure.invalidResponse }
+    let singular = Set(["content-length", "transfer-encoding", "content-encoding", "location", "connection"])
+    var headers: [String: String] = [:]
+    for line in lines.dropFirst() {
+      guard let colon = line.firstIndex(of: ":") else { throw Failure.invalidResponse }
+      let name = String(line[..<colon]).lowercased()
+      let value = String(line[line.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+      guard !name.isEmpty, name.utf8.allSatisfy({ byte in
+        (byte >= 97 && byte <= 122) || (byte >= 48 && byte <= 57) || byte == 45
+      }), (!headers.keys.contains(name) || allowsRepeatedInformational && !singular.contains(name)), !value.contains("\r"), !value.contains("\n")
+      else { throw Failure.invalidResponse }
+      // Resource headers never enter the SDK; repeated informational values have no authority.
+      if headers[name] == nil { headers[name] = value }
+    }
+    return (status, headers)
   }
 
   private static func decodeChunked(_ payload: Data, limit: Int) throws -> Data {
@@ -119,16 +132,19 @@ final class PublishedHTTPResponseAccumulator {
   private let resourceProfile: Bool
   private let uploadProfile: Bool
   private let recoveryProfile: Bool
+  private let artifactProfile: Bool
 
-  init(maximumBodyBytes: Int, resourceProfile: Bool = false, uploadProfile: Bool = false, recoveryProfile: Bool = false) throws {
-    guard !(resourceProfile && (uploadProfile || recoveryProfile)), !(uploadProfile && recoveryProfile), !uploadProfile || maximumBodyBytes <= PublishedHTTPResponse.maximumUploadBodyBytes,
-          (1...((resourceProfile || recoveryProfile) ? PublishedHTTPResponse.maximumResourceBodyBytes : PublishedHTTPResponse.maximumBodyBytes)).contains(maximumBodyBytes) else {
+  init(maximumBodyBytes: Int, resourceProfile: Bool = false, uploadProfile: Bool = false,
+       recoveryProfile: Bool = false, artifactProfile: Bool = false) throws {
+    guard PublishedHTTPResponse.validLimit(maximumBodyBytes, resource: resourceProfile, upload: uploadProfile,
+          recovery: recoveryProfile, artifact: artifactProfile) else {
       throw PublishedHTTPResponse.Failure.tooLarge
     }
     self.maximumBodyBytes = maximumBodyBytes
     self.resourceProfile = resourceProfile
     self.uploadProfile = uploadProfile
     self.recoveryProfile = recoveryProfile
+    self.artifactProfile = artifactProfile
   }
 
   func append(_ chunk: Data) throws {
@@ -139,16 +155,37 @@ final class PublishedHTTPResponseAccumulator {
     if let boundary = wire.range(of: separator) {
       guard boundary.lowerBound <= PublishedHTTPResponse.maximumHeaderBytes else { throw PublishedHTTPResponse.Failure.tooLarge }
       if wire.count >= 12, let status = Int(String(decoding: wire[9..<12], as: UTF8.self)),
-        (resourceProfile && status != 200 || recoveryProfile && [301,302,303,307,308].contains(status)) {
-        _ = try PublishedHTTPResponse.parse(wire, maximumBodyBytes: maximumBodyBytes, resourceProfile: resourceProfile, uploadProfile: uploadProfile, recoveryProfile: recoveryProfile)
+        ((resourceProfile || artifactProfile) && status != 200 || recoveryProfile && [301,302,303,307,308].contains(status)) {
+        _ = try PublishedHTTPResponse.parse(wire, maximumBodyBytes: maximumBodyBytes, resourceProfile: resourceProfile, uploadProfile: uploadProfile, recoveryProfile: recoveryProfile, artifactProfile: artifactProfile)
       }
     } else if wire.count > PublishedHTTPResponse.maximumHeaderBytes + separator.count {
       throw PublishedHTTPResponse.Failure.tooLarge
     }
   }
 
+  func discard() { wire.removeAll(keepingCapacity: false) }
+
   func finish() throws -> PublishedHTTPResponse {
-    defer { wire.removeAll(keepingCapacity: false) }
-    return try PublishedHTTPResponse.parse(wire, maximumBodyBytes: maximumBodyBytes, resourceProfile: resourceProfile, uploadProfile: uploadProfile, recoveryProfile: recoveryProfile)
+    defer { discard() }
+    return try PublishedHTTPResponse.parse(wire, maximumBodyBytes: maximumBodyBytes, resourceProfile: resourceProfile, uploadProfile: uploadProfile, recoveryProfile: recoveryProfile, artifactProfile: artifactProfile)
   }
+}
+
+
+/// A private sink for pinned HTTPS owners that stage files without buffering their bodies.
+protocol PublishedHTTPFileSink: AnyObject {
+  var idleSeconds: Int { get }
+  func append(_ chunk: Data) throws
+  func finish() throws -> URL
+  func discard()
+}
+
+/// Independent byte-stream receiver. The decoder receives payload bytes, never a URL.
+protocol PublishedHTTPStreamSink: AnyObject {
+  var idleSeconds: Int { get }
+  var maximumReadSize: Int { get }
+  func append(_ chunk: Data) throws
+  func finish() throws
+  func resetResponse() throws
+  func cancel()
 }
