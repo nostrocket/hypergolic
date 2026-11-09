@@ -1,6 +1,7 @@
 import {publishedAppLabel} from '../napplets/published-identity';
 import { TrustedBand } from './TrustedBand';
-import {useCallback, useEffect, useMemo, useState, useSyncExternalStore} from 'react';
+import {WorkspaceFullscreenContext} from './WorkspaceFullscreen';
+import {useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore} from 'react';
 import {AppState, FlatList, ScrollView, StyleSheet, Text, View} from 'react-native';
 import { ShellModal as Modal } from './ShellModal';
 import { ShellPressable as Pressable } from './ShellPressable';
@@ -35,6 +36,7 @@ function NotificationPermission({review, service}: {review: NotifyReview; servic
 type CentreEntry = Readonly<{kind: 'card'; card: NotificationCard}> | Readonly<{kind: 'badge'; badge: NotificationBadge}>;
 export function Notifications({service, blocked}: {service: NotifyBroker; blocked: boolean}) {
   const { styles } = useShellStyles(createStyles);
+  const fullscreen = useContext(WorkspaceFullscreenContext);
   const snapshot = useSyncExternalStore(service.subscribe, service.getSnapshot), [opened, setOpened] = useState(false), insets = useSafeAreaInsets();
   useEffect(() => {
     const timer = setInterval(() => service.refresh(), 250), listener = AppState.addEventListener('change', state => {if (state !== 'active') setOpened(false); service.refresh();});
@@ -43,7 +45,7 @@ export function Notifications({service, blocked}: {service: NotifyBroker; blocke
   const entries = useMemo<readonly CentreEntry[]>(() => [...snapshot.cards.map(card => ({kind: 'card' as const, card})), ...snapshot.attributedBadges.map(badge => ({kind: 'badge' as const, badge}))], [snapshot.cards, snapshot.attributedBadges]);
   const renderEntry = useCallback(({item}: {item: CentreEntry}) => item.kind === 'card' ? <NotificationContent card={item.card} service={service}/> : <View testID={'notify-badge-' + publishedAppLabel(item.badge.origin.appId)} style={styles.card}><Text style={styles.title}>{publishedAppLabel(item.badge.origin.appId)}</Text><Text style={styles.publisher}>{formatNpub(item.badge.origin.publisher)}</Text><Text style={styles.text}>Badge count: {item.badge.count}</Text></View>, [service, styles]);
   if (blocked) return null;
-  const toast = !opened && !snapshot.review ? snapshot.toast : undefined;
+  const toast = !fullscreen && !opened && !snapshot.review ? snapshot.toast : undefined;
   const badge = Object.values(snapshot.badges).reduce((sum, count) => sum + count, 0);
   return <>
     {toast && <View testID="notify-toast" style={styles.toast}><View style={styles.card}>
@@ -51,7 +53,7 @@ export function Notifications({service, blocked}: {service: NotifyBroker; blocke
       <Text numberOfLines={1} style={styles.title}>{toast.title}</Text>{toast.body !== '' && <Text numberOfLines={2} style={styles.text}>{toast.body}</Text>}
       <Button id="notify-toast-open" label="View notification" onPress={() => setOpened(true)}/>
     </View></View>}
-    {(snapshot.cards.length > 0 || badge > 0) && !snapshot.review && <View style={styles.launcher}><Button id="notify-centre-open" label={'Notifications (' + snapshot.cards.length + '), badges ' + badge} onPress={() => setOpened(true)}/></View>}
+    {!fullscreen && (snapshot.cards.length > 0 || badge > 0) && !snapshot.review && <View style={styles.launcher}><Button id="notify-centre-open" label={'Notifications (' + snapshot.cards.length + '), badges ' + badge} onPress={() => setOpened(true)}/></View>}
     <Modal visible={opened && !snapshot.review} transparent animationType="fade" onRequestClose={() => setOpened(false)}><View style={[styles.shade, {paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right}]}><FlatList
       data={entries}
       keyExtractor={item => item.kind === 'card' ? 'card-' + item.card.id : 'badge-' + item.badge.origin.generation}

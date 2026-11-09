@@ -3,7 +3,7 @@ import { AccessibilityInfo, Keyboard, type ViewInstance } from 'react-native';
 import type { NappletDescriptor } from './workspace';
 
 interface Availability {
-  blocked: boolean; dragging: boolean;
+  blocked: boolean; fullscreen: boolean; dragging: boolean;
   busy: Readonly<{ current: boolean }>;
   closeChecks: { isPending(): boolean };
 }
@@ -12,7 +12,8 @@ interface Availability {
 export function useWorkspaceMenu(focused: NappletDescriptor | undefined, overview: boolean, availability: Availability) {
   const [id, setId] = useState<string | null>(null);
   const anchor = useRef<ViewInstance>(null);
-  const session = !overview && focused?.id === id ? focused : undefined;
+  const canShow = !overview && !availability.fullscreen;
+  const session = canShow && focused?.id === id ? focused : undefined;
   const visible = session !== undefined;
   if (id !== null && !visible) setId(null);
   const dismiss = useCallback(() => {
@@ -23,7 +24,7 @@ export function useWorkspaceMenu(focused: NappletDescriptor | undefined, overvie
     });
   }, []);
   const open = () => {
-    if (availability.blocked || availability.busy.current || availability.dragging || availability.closeChecks.isPending() || !focused || overview) return;
+    if (availability.blocked || availability.busy.current || availability.dragging || availability.closeChecks.isPending() || !focused || !canShow) return;
     Keyboard.dismiss();
     setId(focused.id);
   };

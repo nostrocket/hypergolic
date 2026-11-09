@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { workspaceSessionActivity, isHostActivityBlocked } from './workspace-activity.ts';
+import { workspaceSessionActivity, isHostActivityBlocked, isWorkspaceFullscreen } from './workspace-activity.ts';
 
 const focused = {focused: true, overview: false, busy: false, interactive: true, checkingClose: false,
   blocked: false, hostActivityBlocked: false};
@@ -27,4 +27,16 @@ test('real shell blockers obscure the host independently of review input occlusi
   assert.equal(isHostActivityBlocked(false, false), false);
   assert.equal(isHostActivityBlocked(true, false), true);
   assert.equal(isHostActivityBlocked(false, true), true);
+});
+
+test('fullscreen follows the native window only while a napplet is focused outside overview', () => {
+  const portrait = {width: 390, height: 844};
+  const landscape = {width: 844, height: 390};
+  const focused = {focusedId: 'discover', overview: false};
+  assert.equal(isWorkspaceFullscreen(focused, portrait), false);
+  assert.equal(isWorkspaceFullscreen(focused, landscape), true);
+  assert.equal(isWorkspaceFullscreen({...focused, overview: true}, landscape), false);
+  assert.equal(isWorkspaceFullscreen({focusedId: null, overview: false}, landscape), false);
+  assert.equal(isWorkspaceFullscreen(focused, {width: 844, height: 0}), false);
+  assert.equal(isWorkspaceFullscreen(focused, {width: 390, height: 390}), false);
 });

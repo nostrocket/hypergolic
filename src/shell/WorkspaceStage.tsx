@@ -13,6 +13,7 @@ import { runtimeStatus } from './runtime-status';
 import type {ZoomResetRegistration} from './zoom-reset';
 
 interface LiveProps {
+  gutter: number;
   session: NappletDescriptor;
   closeCheck: string;
   index: number;
@@ -29,7 +30,7 @@ interface LiveProps {
   onZoomTarget: ZoomResetRegistration;
   onHostEvent?: (event: HostEvent) => void;
 }
-const LiveSession = memo(function LiveSession({ session, closeCheck, index, size, rect, progress, position, scrollY, swipeY, swipeId, active, inputBlocked, raised, onZoomTarget, onHostEvent }: LiveProps) {
+const LiveSession = memo(function LiveSession({ gutter, session, closeCheck, index, size, rect, progress, position, scrollY, swipeY, swipeId, active, inputBlocked, raised, onZoomTarget, onHostEvent }: LiveProps) {
   const { styles } = useShellStyles(createStyles);
   // A keyed session starts when first focused and stays mounted until close or identity change.
   const [loaded, setLoaded] = useState(raised);
@@ -55,7 +56,7 @@ const LiveSession = memo(function LiveSession({ session, closeCheck, index, size
   return (
     <Animated.View collapsable={false} pointerEvents={active && !inputBlocked ? 'auto' : 'none'} importantForAccessibility={active && !inputBlocked ? 'auto' : 'no-hide-descendants'} accessibilityElementsHidden={!active || inputBlocked}
       style={[styles.live, { width, height, zIndex: raised ? 2 : 1 }, movement]}>
-      {loaded ? <NappletHost onZoomTarget={onZoomTarget} closeCheck={closeCheck} active={active} inputBlocked={inputBlocked} session={session} onHostEvent={onNativeEvent} style={styles.host} />
+      {loaded ? <NappletHost onZoomTarget={onZoomTarget} closeCheck={closeCheck} active={active} inputBlocked={inputBlocked} session={session} onHostEvent={onNativeEvent} style={[styles.host, {marginHorizontal: gutter}]} />
         : <View style={styles.unloaded}><Text style={styles.reopen}>Open to load</Text></View>}
       <Text testID={`runtime-status-${session.id}`} importantForAccessibility={active ? 'auto' : 'no-hide-descendants'} accessibilityElementsHidden={!active} accessibilityLiveRegion={active ? 'polite' : 'none'} style={[styles.runtimeStatus, loaded && status === 'Runtime connected' && styles.connected]}>{loaded ? status : 'Not loaded'}</Text>
     </Animated.View>
@@ -63,6 +64,7 @@ const LiveSession = memo(function LiveSession({ session, closeCheck, index, size
 });
 
 interface StageProps {
+  fullscreen: boolean;
   onZoomTarget: ZoomResetRegistration;
   workspace: Workspace;
   closeCheck: CloseCheckRequest | null;
@@ -85,21 +87,21 @@ interface StageProps {
   onHandleEnd: (side: HandleSide, result: 'overview' | 'switch' | 'cancel') => void;
 }
 
-export const WorkspaceStage = forwardRef<OverviewHandle, StageProps>(function WorkspaceStage({ onZoomTarget, workspace, closeCheck, progress, position, scrollY, swipeY, swipeId, busy, blocked, hostActivityBlocked = blocked, interactive, pending, onHostEvent, onFocus, onClose, onOpen, onDragEnd, onHandleStart, onHandleEnd }, ref) {
+export const WorkspaceStage = forwardRef<OverviewHandle, StageProps>(function WorkspaceStage({ fullscreen, onZoomTarget, workspace, closeCheck, progress, position, scrollY, swipeY, swipeId, busy, blocked, hostActivityBlocked = blocked, interactive, pending, onHostEvent, onFocus, onClose, onOpen, onDragEnd, onHandleStart, onHandleEnd }, ref) {
   const { styles } = useShellStyles(createStyles);
   const [size, setSize] = useState<Size>({ width: 0, height: 0 });
   const [measured, setMeasured] = useState<Record<string, CardMeasurement>>({});
   const { fontScale } = useWindowDimensions();
   const geometry = useMemo(() => overviewGeometry(size, workspace.sessions.length, fontScale), [fontScale, size, workspace.sessions.length]);
   const disabled = busy || blocked;
-  return <View style={styles.stage} testID="shell-stage" onLayout={({ nativeEvent }) => {
+  return <View style={[styles.stage, !fullscreen && styles.stageMargin]} testID="shell-stage" onLayout={({ nativeEvent }) => {
     const { width, height } = nativeEvent.layout;
     // A transient zero-sized stage (IME/rotation) must not unmount live sessions.
     if (width <= 0 || height <= 0) return;
     setSize(previous => previous.width === width && previous.height === height ? previous : { width, height });
   }}>
     {size.width > 0 && size.height > 0 && <>
-      {workspace.sessions.map((session, index) => <LiveSession key={session.id} onZoomTarget={onZoomTarget} session={session} closeCheck={closeCheck?.sessionId === session.id ? JSON.stringify({id: closeCheck.id, generation: closeCheck.generation}) : ''} index={index} size={size} rect={resolveCardRect(geometry.cards[index], measured[session.id])}
+      {workspace.sessions.map((session, index) => <LiveSession key={session.id} gutter={fullscreen ? 0 : HANDLE_GUTTER} onZoomTarget={onZoomTarget} session={session} closeCheck={closeCheck?.sessionId === session.id ? JSON.stringify({id: closeCheck.id, generation: closeCheck.generation}) : ''} index={index} size={size} rect={resolveCardRect(geometry.cards[index], measured[session.id])}
         progress={progress} position={position} scrollY={scrollY} swipeY={swipeY} swipeId={swipeId} {...workspaceSessionActivity({focused: workspace.focusedId === session.id, overview: workspace.overview, busy, interactive, blocked, checkingClose: closeCheck !== null, hostActivityBlocked})}
         raised={workspace.focusedId === session.id} onHostEvent={onHostEvent} />)}
       <Overview ref={ref} sessions={workspace.sessions} geometry={geometry} size={size} visible={workspace.overview} busy={disabled} focusedId={workspace.focusedId}
@@ -111,16 +113,17 @@ export const WorkspaceStage = forwardRef<OverviewHandle, StageProps>(function Wo
             && prior.actual.width === measurement.actual.width && prior.actual.height === measurement.actual.height
             ? previous : { ...previous, [id]: measurement };
         })} />
-      <Handles width={size.width} position={position} index={Math.max(0, workspace.sessions.findIndex(session => session.id === workspace.focusedId))} count={workspace.sessions.length} top={clamp(size.height * 0.62, 40, Math.max(40, size.height - 104))} disabled={workspace.overview || disabled}
+      <Handles width={size.width} position={position} index={Math.max(0, workspace.sessions.findIndex(session => session.id === workspace.focusedId))} count={workspace.sessions.length} top={clamp(size.height * 0.62, 40, Math.max(40, size.height - 104))} disabled={fullscreen || workspace.overview || disabled}
         canPrevious={adjacentNapplet(workspace, -1) !== null} canNext={adjacentNapplet(workspace, 1) !== null}
         onStart={onHandleStart} onEnd={onHandleEnd} />
     </>}
   </View>;
 });
 const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.create({
-  stage: { flex: 1, marginHorizontal: 6, marginBottom: 2, borderRadius: 0, overflow: 'hidden' },
+  stage: { flex: 1, overflow: 'hidden' },
+  stageMargin: { marginHorizontal: 6, marginBottom: 2 },
   live: { position: 'absolute', left: 0, top: 0, overflow: 'hidden', backgroundColor: colors.background },
-  host: { flex: 1, marginHorizontal: HANDLE_GUTTER },
+  host: { flex: 1 },
   unloaded: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   reopen: { fontFamily: fonts.body, color: colors.muted, fontSize: 22 },
   connected: { position: 'absolute', height: 0, width: 0, paddingVertical: 0, opacity: 0 },
