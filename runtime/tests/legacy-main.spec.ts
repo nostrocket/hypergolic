@@ -5,6 +5,8 @@ import {createHash} from 'node:crypto';
 import {finalizeEvent} from 'nostr-tools/pure';
 import {naddrEncode} from 'nostr-tools/nip19';
 import {prepareLegacyFixtures} from '../tools/prepare-legacy-fixtures.mjs';
+const heldImageUrl = 'https://assets.example.com/held-test.png';
+const replacementImageUrl = 'https://assets.example.com/held-replacement.png';
 const generation = '12345678-1234-4234-8234-123456789abc';
 const publisher = 'c2f1ab4e6a577dd8980b57e15986ed92830b95a94f374192235563532b5cac20';
 const pins = {
@@ -29,7 +31,7 @@ async function open(page:Page,appId:keyof typeof pins,mode:Mode='legacy',event=a
   expect(createHash('sha256').update(bytes).digest('hex')).toBe(pin.htmlHash);
   await page.route('**/assets/runtime/index.html?*',route=>route.fulfill({contentType:'text/html',body:document}));
   await page.route('**/assets/runtime/host.js',route=>route.fulfill({contentType:'text/javascript',body:host}));
-  await page.addInitScript(({generation,html,appId,pin,publisher,mode,event})=>{
+  await page.addInitScript(({generation,html,appId,pin,publisher,mode,event,heldImageUrl,replacementImageUrl})=>{
     if(window!==window.top)return;
     const bytes=Uint8Array.from(atob(html),c=>c.charCodeAt(0)),listeners=new Set<(event:{data:string})=>void>();
     const transfers=new Map<string,string>();let transferSequence=0;
@@ -53,7 +55,9 @@ async function open(page:Page,appId:keyof typeof pins,mode:Mode='legacy',event=a
           const base64=mode==='image-wide'?canvas.toDataURL('image/png').split(',')[1]!:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4ZkAAAAASUVORK5CYII=';
           transfers.set(handle,base64);
           const reply=()=>state.reply({type:'capability.result',sessionId:generation,sequence:message.sequence,response:JSON.stringify({type:request.type+'.result',id:request.id,transfer:{handle,mime:'image/png',length:atob(base64).length}})});
-          if(mode==='image-hold')state.imageReplies.push(reply);else queueMicrotask(reply);
+          if (mode === 'image-hold' && (request.url === heldImageUrl || request.url === replacementImageUrl)) {
+            state.imageReplies.push({id:request.id,url:request.url,handle,reply});
+          } else queueMicrotask(reply);
         }else if(request.type==='legacy.image.__chunk'){
           const base64=transfers.get(request.handle);transfers.delete(request.handle);
           queueMicrotask(()=>state.reply({type:'capability.result',sessionId:generation,sequence:message.sequence,response:JSON.stringify({type:request.type+'.result',id:request.id,base64})}));
@@ -70,7 +74,7 @@ async function open(page:Page,appId:keyof typeof pins,mode:Mode='legacy',event=a
         });
       }
     }}});
-  },{generation,html:bytes.toString('base64'),appId,pin,publisher,mode,event});
+  },{generation,html:bytes.toString('base64'),appId,pin,publisher,mode,event,heldImageUrl,replacementImageUrl});
   await page.goto(`/assets/runtime/index.html?sessionId=${generation}&source=published`);
   return page.locator('#napplet').contentFrame();
 }
@@ -182,23 +186,74 @@ test('image failure from a replaced source never triggers the original guest fal
   await expect.poll(()=>image.getAttribute('src')).not.toBe(oldURL);
   expect(await image.getAttribute('src')).toMatch(/^blob:/);
 });
-test('removed image cancels native work and drops late byte handles without attachment',async({page})=>{
-  const frame=await open(page,'recipe-cards','image-hold');
-  await expect.poll(()=>page.evaluate(()=>(window as any).__legacyMain.imageReplies.length)).toBe(1);
-  await frame.locator('img').first().evaluate(image=>{(window as any).removedImage=image;image.remove();});
-  await expect.poll(()=>page.evaluate(()=>(window as any).__legacyMain.wire.some((message:any)=>message.type==='capability'&&JSON.parse(message.message).type==='legacy.image.cancel'))).toBe(true);
-  await page.evaluate(()=>(window as any).__legacyMain.imageReplies[0]());
-  await expect.poll(()=>frame.locator('body').evaluate(()=>(window as any).removedImage.getAttribute('src'))).toBeNull();
-  expect(await page.evaluate(()=>(window as any).__legacyMain.wire.some((message:any)=>message.type==='capability'&&JSON.parse(message.message).type==='legacy.image.__chunk'))).toBe(false);
+async function heldImageRequest(page: Page, url: string) {
+  const read = () => page.evaluate(url => {
+    const item = (window as any).__legacyMain.imageReplies.find((entry: {url: string}) => entry.url === url);
+    return item ? {id: item.id as string, handle: item.handle as string} : null;
+  }, url);
+  await expect.poll(read).not.toBeNull();
+  return (await read())!;
+}
+
+async function openHeldImage(page: Page) {
+  const frame = await open(page, 'recipe-cards', 'image-hold');
+  const image = frame.locator('img').first();
+  await expect(image).toHaveJSProperty('naturalWidth', 1);
+  await image.evaluate((element, url) => {
+    element.id = 'held-test-image';
+    (element as HTMLImageElement).src = url;
+  }, heldImageUrl);
+  return {frame, image: frame.locator('#held-test-image'), request: await heldImageRequest(page, heldImageUrl)};
+}
+
+async function waitForImageCancellation(page: Page, id: string) {
+  await expect.poll(() => page.evaluate(id => (window as any).__legacyMain.wire.some((message: any) => {
+    if (message.type !== 'capability') return false;
+    const request = JSON.parse(message.message);
+    return request.type === 'legacy.image.cancel' && request.id === id;
+  }), id)).toBe(true);
+}
+
+test('removed image cancels native work and drops late byte handles without attachment', async ({page}) => {
+  const {frame, image, request} = await openHeldImage(page);
+  const originalSource = await image.evaluate(element => {
+    (window as any).removedImage = element;
+    const source = element.getAttribute('src');
+    element.remove();
+    return source;
+  });
+  await waitForImageCancellation(page, request.id);
+  await page.evaluate(async id => {
+    (window as any).__legacyMain.imageReplies.find((entry: {id: string}) => entry.id === id).reply();
+    await new Promise(requestAnimationFrame);
+  }, request.id);
+  expect(await frame.locator('body').evaluate(() => {
+    const image = (window as any).removedImage as HTMLImageElement;
+    return {connected: image.isConnected, source: image.getAttribute('src')};
+  })).toEqual({connected: false, source: originalSource});
+  expect(await imageChunks(page, [request.handle])).toEqual([]);
 });
-test('replaced image source cancels old work and only consumes the current byte handle',async({page})=>{
-  const frame=await open(page,'recipe-cards','image-hold');
-  await expect.poll(()=>page.evaluate(()=>(window as any).__legacyMain.imageReplies.length)).toBe(1);
-  await frame.locator('img').first().evaluate(image=>{(image as HTMLImageElement).src='https://assets.example.com/new.png';});
-  await expect.poll(()=>page.evaluate(()=>(window as any).__legacyMain.imageReplies.length)).toBe(2);
-  await page.evaluate(()=>{const state=(window as any).__legacyMain;state.imageReplies[0]();state.imageReplies[1]();});
-  await expect(frame.locator('img').first()).toHaveJSProperty('naturalWidth',1);
-  expect(await page.evaluate(()=>(window as any).__legacyMain.wire.filter((message:any)=>message.type==='capability'&&JSON.parse(message.message).type==='legacy.image.__chunk').length)).toBe(1);
+
+async function imageChunks(page: Page, handles: string[]) {
+  return page.evaluate(handles => (window as any).__legacyMain.wire
+    .filter((message: any) => message.type === 'capability')
+    .map((message: any) => JSON.parse(message.message))
+    .filter((request: any) => request.type === 'legacy.image.__chunk' && handles.includes(request.handle))
+    .map((request: any) => request.handle), handles);
+}
+
+test('replaced image source cancels old work and only consumes the current byte handle', async ({page}) => {
+  const {image, request} = await openHeldImage(page);
+  await image.evaluate((element, url) => { (element as HTMLImageElement).src = url; }, replacementImageUrl);
+  await waitForImageCancellation(page, request.id);
+  const replacement = await heldImageRequest(page, replacementImageUrl);
+  await page.evaluate(ids => {
+    for (const id of ids) {
+      (window as any).__legacyMain.imageReplies.find((entry: {id: string}) => entry.id === id).reply();
+    }
+  }, [request.id, replacement.id]);
+  await expect(image).toHaveJSProperty('naturalWidth', 1);
+  expect(await imageChunks(page, [request.handle, replacement.handle])).toEqual([replacement.handle]);
 });
 test('removing a rendered image releases its Blob URL',async({page})=>{
   await page.addInitScript(()=>{const revoke=URL.revokeObjectURL.bind(URL);(window as any).releasedImageURLs=[];URL.revokeObjectURL=(url:string)=>{(window as any).releasedImageURLs.push(url);revoke(url);};});
