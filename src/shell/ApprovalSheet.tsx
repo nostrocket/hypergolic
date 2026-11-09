@@ -5,6 +5,7 @@ import { AccessibilityInfo, ScrollView, StyleSheet, Text, View, useWindowDimensi
 import { ShellModal as Modal } from './ShellModal';
 import { ShellPressable as Pressable } from './ShellPressable';
 import { formatNpub } from '../security/public-identity.ts';
+import {snapshotEventId} from '../napplets/published-identity';
 import type { ApprovalItem } from '../security/approval-service.ts';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -72,6 +73,7 @@ function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismis
   const landscape = width > height;
   const publisherNpub = formatNpub(item.origin.publisher);
   const identityNpub = formatNpub(item.event.selectedPubkey);
+  const manifestEventId = snapshotEventId(item.origin.appId);
   const record = item.appData?.record;
   const dismiss = () => { if (!busy) onDismiss(item.id); };
   return <Modal visible transparent animationType="none" onRequestClose={dismiss} onShow={() => {
@@ -91,6 +93,7 @@ function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismis
           <View style={styles.divider} />
           <Text style={styles.label}>Requesting napplet</Text>
           <Text style={styles.value}>{nappletTitle}</Text>
+          {manifestEventId && <><Text style={styles.label}>Snapshot (kind 5129)</Text><Text selectable style={styles.mono}>{manifestEventId}</Text></>}
           <Text style={styles.label}>Publisher</Text>
           <Text testID="approval-sheet-publisher" selectable style={styles.mono}>{item.origin.publisher}{'\n'}{publisherNpub}</Text>
           <Text style={styles.label}>Selected identity</Text>

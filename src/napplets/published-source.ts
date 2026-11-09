@@ -5,6 +5,7 @@ import { MAX_RELAYS_PER_ROLE, normalizeRelayUrl } from '../network/relay-setting
 import type { NappletLookupCoordinate, PublishedArtifactSource } from './loader.ts';
 import type { NativePublishedRelayLookup } from './native-published-relay.ts';
 import { MAX_HTML_BYTES, MAX_MANIFEST_BYTES, NappletHashMismatchError } from './verified-artifact.ts';
+import {publishedRelayFilter} from './published-relay-request.ts';
 
 export const MAX_MANIFESTS_PER_QUERY = 32;
 export const MAX_PUBLISHED_QUERY_BYTES = MAX_MANIFESTS_PER_QUERY * MAX_MANIFEST_BYTES;
@@ -207,10 +208,10 @@ async function readBoundedBody(response: Response, maxBytes: number, signal: Abo
 function queryManifests(poolFactory: BoundedRelayPoolFactory, relayTimeoutMs: number, coordinate: NappletLookupCoordinate,
   relaysInput: readonly string[], pinnedEventId: string | null, signal: AbortSignal, discovery?: true): Promise<readonly unknown[]> {
   const relays = checkedLookupRelays(relaysInput, discovery);
-  if (coordinate.kind !== 35129 || !/^[0-9a-f]{64}$/.test(coordinate.pubkey) || typeof coordinate.identifier !== 'string' || signal.aborted ||
-      (pinnedEventId !== null && !HEX64.test(pinnedEventId))) return Promise.reject(new PublishedSourceError());
-  const filter = { kinds: [35129], authors: [coordinate.pubkey], '#d': [coordinate.identifier], limit: MAX_MANIFESTS_PER_QUERY,
-    ...(pinnedEventId === null ? {} : { ids: [pinnedEventId] }) } as Filter;
+  if (signal.aborted || (discovery && coordinate.kind === 5129)) return Promise.reject(new PublishedSourceError());
+  let filter: Filter;
+  try { filter = publishedRelayFilter(coordinate,pinnedEventId ?? undefined) as Filter; }
+  catch { return Promise.reject(new PublishedSourceError()); }
   const options: GroupRequestOptions = {
     timeout: relayTimeoutMs, reconnect: false, waitForAuth: false, eventStore: null,
     complete: RelayGroup.completeOnAllEose(),

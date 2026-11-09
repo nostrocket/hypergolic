@@ -18,6 +18,16 @@ lowercase ID of the signed event displayed in Discover. If the projection is abs
 show the address for **Settings → Open a napplet**. Settings resolves the coordinate
 using the latest eligible publication available from Lookup relays.
 
+Settings also accepts a lowercase NIP-19 `nevent` link for a kind 5129
+snapshot. A supplied kind or publisher must match the exact signed event.
+Lookup uses only the configured Lookup relays. The snapshot's own signed
+hash and capabilities govern verification and access. Lineage can describe
+where a snapshot came from and supplies no identity or permission.
+
+Snapshots reopen by exact event ID and retain separate grants and data, even
+when a named publication or another snapshot shares the HTML. They have no
+update action. Discover's published Open contract remains for named addresses.
+
 This Hypergolic extension has its own version and operation. NAP-INTENT dispatches
 conventions to handlers. NAP-CATALOG describes available napplets. NAP-LINK hands an
 external URL to the shell. The owning refs reviewed for this contract were

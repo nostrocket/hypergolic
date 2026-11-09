@@ -52,10 +52,27 @@ final class PublishedArtifactTransfer: @unchecked Sendable {
   func beginPublishedArtifact(sessionId: String, publisher: String, identifier: String,
                               eventId: String, aggregateHash: String, htmlHash: String,
                               byteLength: Int) -> String? {
-    guard (1...PublishedArtifactRegistry.maximumHTMLBytes).contains(byteLength) else { return nil }
     let claims = PublishedArtifactRegistry.Claims(
       sessionId: sessionId, publisher: publisher, identifier: identifier, eventId: eventId,
       aggregateHash: aggregateHash, htmlHash: htmlHash)
+    return begin(claims: claims, byteLength: byteLength)
+  }
+
+  func beginPublishedSnapshot(sessionId: String, publisher: String, eventId: String,
+                              verifiedTitle: String, aggregateHash: String, htmlHash: String,
+                              byteLength: Int) -> String? {
+    guard let snapshot = PublishedArtifactRegistry.Snapshot(eventId: eventId, title: verifiedTitle) else { return nil }
+    let claims = PublishedArtifactRegistry.Claims(
+      sessionId: sessionId, publisher: publisher, identifier: snapshot.appKey, eventId: eventId,
+      aggregateHash: aggregateHash, htmlHash: htmlHash, snapshot: snapshot)
+    guard PublishedArtifactRegistry.valid(claims) else { return nil }
+    return begin(claims: claims, byteLength: byteLength)
+  }
+
+  private func begin(claims: PublishedArtifactRegistry.Claims, byteLength: Int) -> String? {
+    guard (1...PublishedArtifactRegistry.maximumHTMLBytes).contains(byteLength),
+      claims.snapshot != nil || !claims.identifier.hasPrefix(" 5129:") else { return nil }
+    let sessionId = claims.sessionId
     return lock.withLock {
       pruneLocked()
       let reserved = uploads.values.reduce(byteLength) { $0 + $1.byteLength }

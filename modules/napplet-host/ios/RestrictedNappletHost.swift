@@ -241,7 +241,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     guard let input = PublishedArtifactHostInput(raw) else { fail("invalid-published-artifact"); return }
     let publishedConfiguration: CapabilityConfiguration?
     if let rawConfiguration = input.configuration {
-      guard let parsed = try? CapabilityConfiguration(rawConfiguration, generation: generation),
+      guard let parsed = try? CapabilityConfiguration(rawConfiguration, generation: generation, expectedSnapshot: input.claims.snapshot?.wire),
         parsed.matchesPublishedClaims(sessionId: input.claims.sessionId,
           publisher: input.claims.publisher, appId: input.claims.identifier,
           version: input.claims.aggregateHash),

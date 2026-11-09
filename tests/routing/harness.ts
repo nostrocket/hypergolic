@@ -7,6 +7,7 @@ import type { NativeRegistration } from '../../src/runtime/capability-protocol.t
 import { DiskSQLite } from '../storage/harness.ts';
 import { artifact } from './fixtures.ts';
 import type { VerifiedNappletArtifact } from '../../src/napplets/verified-artifact.ts';
+import {verifiedPublicationIdentity} from '../../src/napplets/verified-publication-identity.ts';
 export const user = '01'.repeat(32);
 export async function setup(t: {after(action: () => void | Promise<void>): void},
   selected?: VerifiedNappletArtifact, domains: readonly string[] = ['inc'], reviews = new RoutingReviewService()) {
@@ -15,7 +16,10 @@ export async function setup(t: {after(action: () => void | Promise<void>): void}
   const a = selected ?? await artifact(), b = await artifact(10);
   await catalog.remember({user, assertActive() {}}, a);
   const source: NativeRegistration = {user, epoch: 0, publisher: '03'.repeat(32), appId: 'caller', version: '04'.repeat(32), sessionId: 'caller-view', generation: 'source-generation', instanceId: 'caller-view', fixture: 'published', domains: ['intent', 'inc']};
-  const target: NativeRegistration = {...source, publisher: a.manifest.pubkey, appId: a.manifest.tags.find(tag => tag[0] === 'd')![1]!, version: a.manifest.versionId, sessionId: 'handler-view', generation: 'handler-generation', instanceId: 'handler-view', domains};
+  const publication = verifiedPublicationIdentity(a.manifest);
+  const target: NativeRegistration = {...source, publisher:a.manifest.pubkey,appId:publication.appId,
+    ...(publication.kind===5129?{snapshot:publication.snapshot}:{}),version:a.manifest.versionId,
+    sessionId:'handler-view',generation:'handler-generation',instanceId:'handler-view',domains};
   let state: RoutingNativeState = {user, epoch: 0, revision: 1, available: true, ownerAvailable: true, foreground: true};
   const revoked = new Set<string>(), live = new Set<string>(), slots = new Map<string, string>(), replies = new Map<string, unknown>();
   const sent: {generation: string; message: Readonly<Record<string, unknown>>}[] = [], activated: string[] = [];

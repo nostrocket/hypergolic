@@ -1,4 +1,5 @@
 import {supportsLegacyReadOnly} from '../napplets/legacy-read-only.ts';
+import {matchesPublishedAppKey,snapshotEventId} from '../napplets/published-identity.ts';
 
 /** Durable descriptors contain no WebView state or signing requests. */
 export interface NappletDescriptor {
@@ -8,7 +9,7 @@ export interface NappletDescriptor {
   readonly appId: string;
   readonly version: string;
   readonly source: 'bundled' | 'published';
-  /** Exact signed kind-35129 event selected for this published version. */
+  /** Exact signed event selected for this published version. */
   readonly eventId?: string;
   /** Explicit consent for this immutable pin, scoped by the identity workspace. */
   readonly legacyReadOnly?: true;
@@ -37,7 +38,7 @@ export function replacePublishedNapplet(state: Workspace, oldId: string, next: N
   const old = state.sessions[index];
   if (!old || old.source !== 'published' || next.source !== 'published' || next.id === oldId ||
       state.sessions.some(session => session.id === next.id) || old.publisher !== next.publisher || old.appId !== next.appId ||
-      old.eventId === next.eventId) throw new Error('Invalid published update');
+      old.eventId === next.eventId || snapshotEventId(old.appId)) throw new Error('Invalid published update');
   const sessions = [...state.sessions];
   sessions[index] = Object.freeze({ ...next });
   return { sessions, focusedId: next.id, overview: false };
@@ -81,7 +82,8 @@ export function restoreWorkspace(value: unknown): Workspace {
     if (!bounded(item.id, 80) || !/^[A-Za-z0-9_-]+$/.test(item.id) || ids.has(item.id) ||
         !bounded(item.title, 128) || !bounded(item.publisher, 128) || !bounded(item.appId, 256) ||
         !bounded(item.version, 128) || (item.source !== 'bundled' && item.source !== 'published')) throw new Error('Invalid napplet');
-    if (item.source === 'published' && (typeof item.eventId !== 'string' || !/^[0-9a-f]{64}$/.test(item.eventId))) throw new Error('Invalid published event pin');
+    if (item.source === 'published' && (typeof item.eventId !== 'string' || !/^[0-9a-f]{64}$/.test(item.eventId) ||
+        !matchesPublishedAppKey(item.appId,item.eventId))) throw new Error('Invalid published event pin');
     if (item.source === 'bundled' && item.eventId !== undefined) throw new Error('Invalid bundled event pin');
     if (item.legacyReadOnly !== undefined && (item.legacyReadOnly !== true || typeof item.legacyReadOnlyUser !== 'string' || !/^[0-9a-f]{64}$/.test(item.legacyReadOnlyUser) || item.source !== 'published' ||
         !supportsLegacyReadOnly({publisher: item.publisher, appId: item.appId, eventId: item.eventId as string, version: item.version}))) throw new Error('Invalid legacy read-only pin');

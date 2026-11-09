@@ -2,6 +2,7 @@ import { configure, schema, SHELL_DATABASE } from './schema.ts';
 import { decodeSnapshot, encodeSnapshot, identifier, publicKey, revision, text, utf8Bytes, version } from './codec.ts';
 import { fail, LIMITS, sanitize, ShellStorageError, type AccessGrant, type Binding, type RequestOptions, type Scope, type SQLiteConnection, type SQLiteModule, type StringStorage, type TrustedApp, type TrustedRegistration, type TrustedUser } from './ports.ts';
 import type { WorkspaceSnapshot } from '../shell/workspace.ts';
+import {snapshotEventId} from '../napplets/published-identity.ts';
 export { SHELL_DATABASE } from './schema.ts';
 export interface WorkspaceRecord { readonly revision: number; readonly snapshot: WorkspaceSnapshot }
 export interface WorkspaceStorage {
@@ -294,7 +295,7 @@ function bindApp(connection: StorageConnection, context: TrustedApp): Binding<Ap
     },
     acceptUpdate: (update: AcceptedUpdate, options?: RequestOptions) => {
       const from = version(update.fromVersion), target = version(update.targetVersion), targetEventId = publicKey(update.targetEventId), id = identifier(update.receiptId), assertFrozen = liveFunction(update.assertFrozen);
-      if (from === target) fail('INVALID_INPUT');
+      if (from === target || snapshotEventId(owner[2])) fail('INVALID_INPUT');
       return binding.submit(options, async check => {
         function authorized(): void { check(); try { assertFrozen(); } catch { fail('REVOKED'); } }
         const plan = { owner, from, target, targetEventId, id };

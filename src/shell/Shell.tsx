@@ -10,6 +10,7 @@ import { useWorkspaceBack } from './useWorkspaceBack';
 import { useBundledNapplets } from './useBundledNapplets';
 import { publishedSettingsActions } from './published-settings-actions';
 import { ShellBackdrop } from './ShellBackdrop';
+import {snapshotEventId} from '../napplets/published-identity';
 import {useCloseChecks} from './useCloseChecks';
 import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { AccessibilityInfo, AppState, Keyboard, StyleSheet, Text, View, type ViewInstance } from 'react-native';
@@ -223,7 +224,7 @@ export function Shell({ blocked = false, hostActivityBlocked = blocked, initialW
         onSettings={() => { clearMenu(); openSettings(); }} onClose={() => { clearMenu(); requestClose(menuSession.id); }} />}
       <ClosePrompt title={workspace.sessions.find(session => session.id === closingId)?.title ?? null} onKeepOpen={keepOpen} onClose={confirmClose} onDismiss={() => overview.current?.focusCard(lastCloseId.current)} />
       <ShellSettings settings={settings} blocked={blocked} identity={identity} SettingsContent={SettingsContent}
-        publishedSessions={workspace.sessions.filter(session => session.source === 'published')}
+        publishedSessions={workspace.sessions.filter(session => session.source === 'published' && !snapshotEventId(session.appId))}
         openSettings={() => setSettings(false)} openBundledTest={openBundledTest} openFixture={openFixture}
         openPublished={openPublished} checkPublishedUpdate={checkPublishedUpdate} openDiscovery={openDiscovery} />
     </SafeAreaView>

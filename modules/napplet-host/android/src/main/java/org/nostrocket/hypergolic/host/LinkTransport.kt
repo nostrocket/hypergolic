@@ -45,12 +45,21 @@ internal object LinkTransport {
         (!options.has("label") || options.opt("label") is String && options.getString("label").toByteArray().size <= 256 && options.getString("label").none { it.code < 32 || it.code == 127 }))
     val error = if (!shape) "invalid-url" else LinkUrl.error(url)
     if (error != null) { reply(result(id, "denied", error)); return }
+    val requester = if (config.appId.startsWith(" 5129:")) {
+      val snapshot = runCatching { parseSnapshotMetadata(JSONObject(config.snapshot).getJSONObject("snapshot")) }.getOrNull()
+      if (snapshot == null || snapshot.appKey() != config.appId) {
+        reply(result(id, "denied", "blocked-by-policy")); return
+      }
+      snapshot.requester(config.publisher)
+    } else {
+      val author = if (config.fixture == "published") "Publisher: ${config.publisher}" else "Unsigned embedded test napplet"
+      "Napplet: ${LinkUrl.displayIdentity(config.appId)}\n$author"
+    }
     val token = if (config.grantedDomains.contains("link") && activity != null && !activity.isFinishing && !activity.isDestroyed) leases.admit(generation) else null
     if (token == null) { reply(result(id, "denied", "blocked-by-policy")); return }
     val p = Pending(generation, id, url!!, reply); pending[token] = p
-    val author = if (config.fixture == "published") "Publisher: ${config.publisher}" else "Unsigned embedded test napplet"
     p.dialog = AlertDialog.Builder(activity).setTitle("Open external link?")
-      .setMessage("Napplet: ${LinkUrl.displayIdentity(config.appId)}\n$author\n\nDestination: ${Uri.parse(url).host}\n$url\n\nYour device may open a browser or an associated app.")
+      .setMessage("$requester\n\nDestination: ${Uri.parse(url).host}\n$url\n\nYour device may open a browser or an associated app.")
       .setNegativeButton("Cancel") { _, _ -> finish(token, "denied", "user-denied") }
       .setPositiveButton("Open once") { _, _ -> dispatch(token, activity!!) }
       .setOnCancelListener { finish(token, "denied", "user-denied") }.create()

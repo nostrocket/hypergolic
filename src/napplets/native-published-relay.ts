@@ -128,7 +128,7 @@ export function createNativePublishedRelayLookup(
       let request: ReturnType<typeof buildPublishedRelayRequest>;
       try {
         relays = selectedRelays(destinations, discovery);
-        if (pinnedEventId !== null && (discovery || !HEX64.test(pinnedEventId))) return Promise.reject(new NativePublishedRelayError());
+        if ((discovery && coordinate.kind === 5129) || (pinnedEventId !== null && (discovery || !HEX64.test(pinnedEventId)))) return Promise.reject(new NativePublishedRelayError());
         request = buildPublishedRelayRequest(coordinate, pinnedEventId ?? undefined);
       } catch { return Promise.reject(new NativePublishedRelayError()); }
       if (signal.aborted) return Promise.reject(new NativePublishedRelayError());

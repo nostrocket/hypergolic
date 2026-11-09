@@ -1,10 +1,20 @@
 # Intent and inter-napplet communication
 
-Verified named NIP-5D handlers use [NAP-INTENT at 43cb3a4](https://github.com/napplet/naps/blob/43cb3a4e855570ec4b90b9cc05f0c721e5ad0aab/naps/NAP-INTENT.md) with the existing Kehto window-message binding. Legacy handlers retain their [a040914 Intent](https://github.com/napplet/naps/blob/a040914b4bbd3a5cd8a14b0f316a723c968ebfb2/naps/NAP-INTENT.md) and [INC](https://github.com/napplet/naps/blob/a040914b4bbd3a5cd8a14b0f316a723c968ebfb2/naps/NAP-INC.md) behavior. The modern browser API is checked against the [SDK at efd5aa1](https://github.com/napplet/web/blob/efd5aa103359f1b150dfbb8870fa23e90fbc5540/packages/nap/src/intent/shim.ts).
+Verified named and snapshot NIP-5D handlers use [NAP-INTENT at 43cb3a4](https://github.com/napplet/naps/blob/43cb3a4e855570ec4b90b9cc05f0c721e5ad0aab/naps/NAP-INTENT.md) with the existing Kehto window-message binding. Legacy handlers retain their [a040914 Intent](https://github.com/napplet/naps/blob/a040914b4bbd3a5cd8a14b0f316a723c968ebfb2/naps/NAP-INTENT.md) and [INC](https://github.com/napplet/naps/blob/a040914b4bbd3a5cd8a14b0f316a723c968ebfb2/naps/NAP-INC.md) behavior. The modern browser API is checked against the [SDK at efd5aa1](https://github.com/napplet/web/blob/efd5aa103359f1b150dfbb8870fa23e90fbc5540/packages/nap/src/intent/shim.ts).
 
 ## Handler selection and review
 
 The app retains signed manifests of verified napplets opened with ordinary domain consent. The catalog and defaults are scoped to the selected identity, and retained after views close or the app restarts. Every read verifies the signed manifest again. Corrupt rows are removed together with their preferences. Only previously verified artifacts can enter the catalog; guest content cannot register itself or set defaults.
+
+The catalog copies existing named registrations and defaults into its v2
+database in one transaction. Earlier releases retain their v1 named catalog.
+Changes made in v2 are separate from v1, including after a downgrade.
+
+A kind 5129 snapshot has an opaque routing ID based on its exact signed event.
+Keep this ID byte-for-byte in Intent and INC, including its leading space.
+Snapshots advertise their own signed conventions and need their own approved
+Intent grant for modern delivery. An INC grant alone supplies only the existing
+INC operations. Public kind 31129 preference events do not change local defaults.
 
 An explicit user default chooses its exact publisher and app. Unsupported action/convention fails without silently replacing it. Without a default, selection considers compatible role/action/convention candidates: the sole compatible handler is proposed, or the user chooses. Modern handlers advertise matching signed `z` roles and `i` conventions. A convention matches its role and action exactly. Trailing `i` fields advertise parameter names. Incomplete or conflicting advertisements add no route. Catalog IDs distinguish publishers. Legacy roles and conventions can differ, and a specific legacy dTag shared by publishers is rejected. A channel target shared by multiple live views is also rejected.
 

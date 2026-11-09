@@ -22,3 +22,12 @@ export async function modernHandler(
     tags: [['d', identifier], ['x', hash], ...domains.map(domain => ['R', domain]), ...advertisements]}, secret);
   return verifyArtifact(await verifyManifest({kind: 35129, pubkey, identifier, relayHints: []}, JSON.parse(JSON.stringify(event))), html);
 }
+
+export async function snapshotHandler(domains = ['intent'], timestamp = 1_800_000_000) {
+  const secret = new Uint8Array(32); secret[31] = 9;
+  const html = new TextEncoder().encode('<!doctype html><html><head></head><body>modern handler</body></html>');
+  const hash = Buffer.from(await crypto.subtle.digest('SHA-256',html)).toString('hex');
+  const signed = finalizeEvent({kind:5129,created_at:timestamp,content:'Snapshot handler',
+    tags:[['x',hash],['title','Snapshot handler'],['z','napptest'],['i','napplet:napptest/open','msg'],...domains.map(domain=>['R',domain])]},secret);
+  return verifyArtifact(await verifyManifest({kind:5129,eventId:signed.id,pubkey:signed.pubkey},signed),html);
+}

@@ -1,14 +1,17 @@
 import type { HostOperationContext, NappletMessage } from '@kehto/runtime';
 import { parseRoutingMessage, routingRecord, routingText, routingPayload, ROUTING_LIMITS, routingRole, stableConvention, type RoutingMessage } from '../../src/routing/routing-contract';
 import { NativeRequestRevoked, type createNativeClient } from './native-client';
+import {isSnapshotRoutingId} from '../../src/napplets/published-identity';
 function capturedMessage(row: Record<string, unknown>): NappletMessage {
   const captured = routingRecord(routingPayload(row), ['type'], Object.keys(row).filter(key => key !== 'type'));
   return Object.freeze({...captured, type: routingText(captured.type, 128)});
 }
 const owns = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key);
 function candidate(value: unknown): void {
-  const row = routingRecord(value, ['dTag', 'actions', 'conventions'], ['title', 'isDefault', 'id', 'contracts']);
-  routingText(row.dTag, ROUTING_LIMITS.handler);
+  const row = routingRecord(value, ['actions', 'conventions'], ['dTag','title', 'isDefault', 'id', 'contracts']);
+  const snapshot = isSnapshotRoutingId(row.id);
+  if (snapshot === owns(row,'dTag')) throw new Error('Invalid handler identity');
+  if (!snapshot) routingText(row.dTag,ROUTING_LIMITS.handler);
   if (owns(row, 'title')) routingText(row.title, 128);
   if (owns(row, 'isDefault') && typeof row.isDefault !== 'boolean') throw new Error('Invalid default');
   if (!Array.isArray(row.actions) || !Array.isArray(row.conventions) || row.actions.length > 16 || row.conventions.length > 16) throw new Error('Invalid handler');

@@ -37,11 +37,11 @@ struct CapabilityConfiguration {
   let publisher: String
   let appId: String
   let version: String
-  init(_ raw: String, generation: String) throws {
+  init(_ raw: String, generation: String, expectedSnapshot: [String: Any]? = nil) throws {
     enum Invalid: Error { case configuration }
     guard raw.utf8.count <= 8192, let bytes = raw.data(using: .utf8),
       var value = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
-      Set(value.keys).subtracting(["publishedOpen","commonProfile","cvmProfile","mediaProfile","appData","legacyReadOnly"]) == Set(["sessionId", "epoch", "user", "publisher", "appId", "version", "instanceId", "fixture", "domains"])
+      Set(value.keys).subtracting(["publishedOpen","commonProfile","cvmProfile","mediaProfile","appData","legacyReadOnly","snapshot"]) == Set(["sessionId", "epoch", "user", "publisher", "appId", "version", "instanceId", "fixture", "domains"])
       else { throw Invalid.configuration }
     let open = value.removeValue(forKey: "publishedOpen")
     if let open {
@@ -62,6 +62,15 @@ struct CapabilityConfiguration {
       epoch.doubleValue.rounded(.towardZero) == epoch.doubleValue,
       let domains = value["domains"] as? [String], domains.count == Set(domains).count,
       let fixture = value["fixture"] as? String, let sessionId = value["sessionId"] as? String else { throw Invalid.configuration }
+    guard appId.hasPrefix(" 5129:") == (expectedSnapshot != nil) else { throw Invalid.configuration }
+    if let expectedSnapshot {
+      guard fixture == "published", open == nil, value["appData"] == nil, value["legacyReadOnly"] == nil,
+        let supplied = value["snapshot"] as? [String: Any],
+        try JSONSerialization.data(withJSONObject: supplied, options: .sortedKeys)
+          == JSONSerialization.data(withJSONObject: expectedSnapshot, options: .sortedKeys)
+        else { throw Invalid.configuration }
+      value["snapshot"] = expectedSnapshot
+    } else if value["snapshot"] != nil { throw Invalid.configuration }
     let expected: Set<String>
     switch fixture {
     case "ux-lab", "close-lab": expected = ["theme"]

@@ -12,13 +12,14 @@ const identity = {
   publisher: '1'.repeat(64), appId: 'published-test', eventId: '2'.repeat(64), version, htmlHash,
 };
 
-type Mode = 'normal' | 'keys-domain' | 'bad-hash' | 'malformed-base64' | 'replayed-sequence' | 'unknown-domain' | 'relay-domain' | 'attributed-head' | 'commented-head' | 'unsafe-head-comment' | 'upload-domain' | 'all-domains' | 'outbox-domain' | 'outbox-only' | 'published-approval' | 'intent-only' | 'soy-policy' | 'soy-policy-change';
+type Mode = 'normal' | 'keys-domain' | 'bad-hash' | 'malformed-base64' | 'replayed-sequence' | 'unknown-domain' | 'relay-domain' | 'attributed-head' | 'commented-head' | 'unsafe-head-comment' | 'upload-domain' | 'all-domains' | 'outbox-domain' | 'outbox-only' | 'published-approval' | 'intent-only' | 'soy-policy' | 'soy-policy-change'
+  | 'snapshot' | 'snapshot-mismatch' | 'snapshot-title-change' | 'snapshot-discovery';
 
 function artifactFor(mode: Mode): Buffer {
   if (mode === 'published-approval') return approvalHtml;
   if (mode === 'intent-only') return Buffer.from('<!doctype html><html><head><title>Intent</title></head><body><output id="deliveries"></output></body></html>');
   const source = html.toString();
-  if(mode==='soy-policy'||mode==='soy-policy-change')return Buffer.from(source.replace('</body>','<!--'+'x'.repeat(64*1024)+'--></body>'));
+  if(mode==='soy-policy'||mode==='soy-policy-change'||mode==='snapshot-title-change')return Buffer.from(source.replace('</body>','<!--'+'x'.repeat(64*1024)+'--></body>'));
   if (mode === 'keys-domain') return Buffer.from(source.replace('</body>', `
     <keys-declarative-editor id="keys-declarative" style="display:block">
       <template shadowrootmode="closed"><input aria-label="Declarative editor"></template>
@@ -75,11 +76,17 @@ async function openPublished(page: Page, mode: Mode = 'normal', extraQuery = '')
     const emit = (sequence: number) => {
       const payload = bytes.slice(sequence * 48 * 1024, (sequence + 1) * 48 * 1024);
       const base64 = mode === 'malformed-base64' ? '!!!!' : btoa(String.fromCharCode(...payload));
+      const snapshot = mode.startsWith('snapshot') ? {
+        appId: ' 5129:'+identity.eventId,
+        snapshot:{kind:5129,eventId:mode==='snapshot-mismatch'?'f'.repeat(64):identity.eventId,
+          title:mode==='snapshot-title-change'&&sequence>0?'Changed title':'Immutable snapshot'},
+        ...(mode==='snapshot-discovery'?{publishedOpen:true}:{}),
+      } : {};
       const envelope = {
         type: 'artifact.chunk', sessionId: generation,
         sequence: mode === 'replayed-sequence' ? sequence + 1 : sequence,
         base64, byteLength: payload.length, totalBytes: htmlLength,
-        ...claims, ...((mode==='soy-policy'||mode==='soy-policy-change')?{appData:{sourceKind:35129,policy:{profile:'soy.app-data/1',scope:mode==='soy-policy-change'&&sequence>0?'f'.repeat(64):'b7890c0793a7fa9c2570c56500f403724b1a4c0e453a9194ec7200132c634f8b',maxContentBytes:3072,relays:['wss://relay.damus.io'],defaultRelays:['wss://relay.damus.io']}}}:{}),
+        ...claims, ...snapshot, ...((mode==='soy-policy'||mode==='soy-policy-change')?{appData:{sourceKind:35129,policy:{profile:'soy.app-data/1',scope:mode==='soy-policy-change'&&sequence>0?'f'.repeat(64):'b7890c0793a7fa9c2570c56500f403724b1a4c0e453a9194ec7200132c634f8b',maxContentBytes:3072,relays:['wss://relay.damus.io'],defaultRelays:['wss://relay.damus.io']}}}:{}),
         domains: mode==='soy-policy'||mode==='soy-policy-change'?['identity','outbox','theme']:mode === 'intent-only' ? ['intent'] : mode === 'published-approval' ? ['identity', 'relay', 'theme'] : mode === 'unknown-domain' ? ['future-domain'] : mode === 'outbox-domain' ? ['outbox', 'relay', 'theme'] : mode === 'outbox-only' ? ['outbox', 'theme'] : mode === 'relay-domain' ? ['relay', 'theme'] : mode === 'upload-domain' ? ['upload'] : mode === 'keys-domain' ? ['keys', 'theme'] : mode === 'all-domains' ? ['config', 'identity', 'inc', 'intent', 'link', 'notify', 'outbox', 'relay', 'resource', 'storage', 'theme', 'upload'] : ['theme'],
         done: (sequence + 1) * 48 * 1024 >= htmlLength,
       };
@@ -155,6 +162,23 @@ test('older WebView query counting still rejects unexpected published parameters
   ]);
   expect(await page.evaluate(() => (window as any).__publishedTest.requests.filter((request: any) => request.type === 'artifact.read'))).toEqual([]);
 });
+
+test('published snapshot uses its verified title and only the existing native grants',async({page})=>{
+  await openPublished(page,'snapshot');
+  const guest=await publishedGuest(page);
+  await expect(page.locator('#napplet')).toHaveAttribute('title','Immutable snapshot');
+  expect(await guest.evaluate(()=>(window as any).napplet.shell.supports('intent'))).toBe(false);
+});
+
+for(const mode of ['snapshot-mismatch','snapshot-title-change','snapshot-discovery'] as const){
+  test(`published artifact rejects ${mode} before guest mount`,async({page})=>{
+    await openPublished(page,mode);
+    await expect.poll(()=>page.evaluate(()=>(window as any).__publishedTest.diagnostics)).toEqual([
+      {type:'error',code:'artifact-integrity',sessionId:generation},
+    ]);
+    await expect(page.locator('#napplet')).toHaveCount(0);
+  });
+}
 
 test('published napplet streams verified bytes, gets theme only, and runs in an isolated frame', async ({ page }) => {
   await openPublished(page);

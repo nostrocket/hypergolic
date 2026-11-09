@@ -1,7 +1,7 @@
 import { getEventHash, verifyEvent } from 'nostr-tools/pure';
 import { publishedHtmlHead } from './html-envelope.ts';
 import { MAX_HTML_BYTES } from './artifact-limits.ts';
-import { isNappletIdentifier, type NappletCoordinate } from './resolve-link.ts';
+import { isNappletIdentifier, type NappletReference } from './resolve-link.ts';
 
 export const MAX_MANIFEST_BYTES = 64 * 1024;
 
@@ -32,7 +32,7 @@ export type VerifiedNappletManifest = Readonly<{
   versionId: string;
   pubkey: string;
   created_at: number;
-  kind: 35129;
+  kind: 35129 | 5129;
   tags: readonly (readonly string[])[];
   content: string;
   sig: string;
@@ -138,23 +138,26 @@ function domainDeclarations(tags: readonly string[][], name: string): string[] {
   return domains;
 }
 
-/** Verifies and clones a kind-35129 manifest before any artifact fetch or execution. */
-export async function verifyManifest(coordinate: NappletCoordinate, signedEvent: unknown): Promise<VerifiedNappletManifest> {
+/** Verifies and clones the selected named manifest or exact snapshot before any artifact fetch. */
+export async function verifyManifest(coordinate: NappletReference, signedEvent: unknown): Promise<VerifiedNappletManifest> {
   try {
     const input = plainRecord(signedEvent, ['id', 'pubkey', 'created_at', 'kind', 'tags', 'content', 'sig']);
     const tags = cloneTags(input.tags);
     if (typeof input.id !== 'string' || !HEX64.test(input.id) || typeof input.pubkey !== 'string' || !HEX64.test(input.pubkey) ||
         typeof input.sig !== 'string' || !HEX128.test(input.sig) || typeof input.content !== 'string' ||
         typeof input.created_at !== 'number' || !Number.isSafeInteger(input.created_at) || input.created_at < 0 ||
-        input.kind !== 35129 || coordinate.kind !== 35129 || input.pubkey !== coordinate.pubkey ||
-        !isNappletIdentifier(coordinate.identifier) ||
+        (coordinate.kind !== 35129 && coordinate.kind !== 5129) || input.kind !== coordinate.kind ||
+        (coordinate.pubkey !== undefined && input.pubkey !== coordinate.pubkey) ||
         new TextEncoder().encode(JSON.stringify({ ...input, tags })).byteLength > MAX_MANIFEST_BYTES) return fail();
 
     const dTags = tags.filter(tag => tag[0] === 'd');
-    if (dTags.length !== 1 || dTags[0]!.length !== 2 || dTags[0]![1] !== coordinate.identifier) return fail();
+    const snapshot = coordinate.kind === 5129;
+    if (snapshot ? input.id !== coordinate.eventId || dTags.length !== 0
+      : input.pubkey !== coordinate.pubkey || !isNappletIdentifier(coordinate.identifier) ||
+        dTags.length !== 1 || dTags[0]!.length !== 2 || dTags[0]![1] !== coordinate.identifier) return fail();
     // Verify a newly constructed plain object, so no nostr-tools verification cache can confer trust.
     const event = {
-      id: input.id, pubkey: input.pubkey, created_at: input.created_at, kind: input.kind,
+      id: input.id, pubkey: input.pubkey, created_at: input.created_at, kind: coordinate.kind,
       tags, content: input.content, sig: input.sig,
     };
     if (getEventHash(event) !== event.id || !verifyEvent(event)) return fail();
@@ -166,13 +169,13 @@ export async function verifyManifest(coordinate: NappletCoordinate, signedEvent:
     const [hash] = hashes;
     let expectedHtmlHash: string;
     if (format === 'legacy-path') {
-      if (paths.length !== 1 || path?.length !== 3 || path[1] !== '/index.html' || !HEX64.test(path[2]!) ||
+      if (snapshot || paths.length !== 1 || path?.length !== 3 || path[1] !== '/index.html' || !HEX64.test(path[2]!) ||
           hashes.length > 1 || (hash && (hash.length !== 3 || hash[2] !== 'aggregate' || !HEX64.test(hash[1]!))) ||
           tags.some(tag => MODERN_ONLY_TAGS.has(tag[0]!))) throw new UnsupportedNappletManifestError();
       expectedHtmlHash = path[2]!;
     } else {
       if (hashes.length !== 1 || hash?.length !== 2 || !HEX64.test(hash[1]!) || !event.content.trim() ||
-          tags.some(tag => LEGACY_ONLY_TAGS.has(tag[0]!) || tag[0] === 'a' || tag[0] === 'A')) {
+          tags.some(tag => LEGACY_ONLY_TAGS.has(tag[0]!) || (!snapshot && (tag[0] === 'a' || tag[0] === 'A')))) {
         throw new UnsupportedNappletManifestError();
       }
       expectedHtmlHash = hash[1]!;
@@ -198,7 +201,7 @@ export async function verifyManifest(coordinate: NappletCoordinate, signedEvent:
     const frozenTags = freezeTags(event.tags);
     const manifest = Object.freeze({
       id: event.id, eventId: event.id, format, versionId: aggregateHash, pubkey: event.pubkey, created_at: event.created_at,
-      kind: 35129, tags: frozenTags, content: event.content, sig: event.sig,
+      kind: coordinate.kind, tags: frozenTags, content: event.content, sig: event.sig,
       expectedHtmlHash, aggregateHash,
       serverHints: Object.freeze([...serverHints]), requiredDomains: Object.freeze(requiredDomains),
       optionalDomains: Object.freeze(optionalDomains),

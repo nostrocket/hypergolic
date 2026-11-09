@@ -1,11 +1,11 @@
 import { MAX_HTML_BYTES } from './artifact-limits.ts';
-import { resolveNappletLink, type NappletCoordinate } from './resolve-link.ts';
+import { resolvePublishedReference, type NappletCoordinate, type NappletSnapshot } from './resolve-link.ts';
 import { MAX_RELAYS_PER_ROLE, normalizeRelayUrl } from '../network/relay-settings.ts';
 import { NappletHashMismatchError, NappletHtmlEnvelopeError, UnsupportedNappletManifestError, verifyArtifact, verifyManifest,
   type VerifiedNappletArtifact, type VerifiedNappletManifest } from './verified-artifact.ts';
 
 /** The source receives only the verified coordinate, never untrusted encoded relay hints. */
-export type NappletLookupCoordinate = Pick<NappletCoordinate, 'kind' | 'pubkey' | 'identifier'>;
+export type NappletLookupCoordinate = Pick<NappletCoordinate, 'kind' | 'pubkey' | 'identifier'> | NappletSnapshot;
 /** Trusted transport hooks. Neither relay replies nor blob servers grant execution authority. */
 export interface PublishedArtifactSource {
   query(coordinate: NappletLookupCoordinate, relays: readonly string[], pinnedEventId: string | null,
@@ -57,11 +57,12 @@ function active(options: PublishedLoadOptions): void {
 
 /** Prepare a verified candidate. This function never opens a WebView or grants publisher trust. */
 export async function loadPublishedArtifact(link: unknown, options: PublishedLoadOptions): Promise<VerifiedNappletArtifact> {
-  const coordinate = resolveNappletLink(link);
+  const coordinate = resolvePublishedReference(link);
   const discovery = options.expectedEventId !== undefined;
   if ((options.pinnedEventId !== undefined && !HEX64.test(options.pinnedEventId)) ||
       (discovery && (options.pinnedEventId !== undefined || !HEX64.test(options.expectedEventId!))) ||
-      (!discovery && options.networkRelays !== undefined)) throw new PublishedLoadError();
+      (!discovery && options.networkRelays !== undefined) ||
+      (coordinate.kind === 5129 && (discovery || (options.pinnedEventId !== undefined && options.pinnedEventId !== coordinate.eventId)))) throw new PublishedLoadError();
   const relays = Object.freeze([...new Set([
     ...checkedRole(options.lookupRelays), ...checkedRole(options.networkRelays ?? []),
   ])]);
@@ -69,8 +70,10 @@ export async function loadPublishedArtifact(link: unknown, options: PublishedLoa
   active(options);
   let candidates: readonly unknown[];
   try {
-    const lookup = Object.freeze({ kind: coordinate.kind, pubkey: coordinate.pubkey, identifier: coordinate.identifier });
-    candidates = await options.source.query(lookup, relays, options.pinnedEventId ?? null, options.signal, discovery ? true : undefined);
+    const lookup = coordinate.kind === 5129 ? coordinate
+      : Object.freeze({ kind: coordinate.kind, pubkey: coordinate.pubkey, identifier: coordinate.identifier });
+    candidates = await options.source.query(lookup, relays, coordinate.kind === 5129 ? null : options.pinnedEventId ?? null,
+      options.signal, discovery ? true : undefined);
   }
   catch { active(options); throw new PublishedLoadError('PUBLISHED_LOOKUP_UNAVAILABLE'); }
   active(options);

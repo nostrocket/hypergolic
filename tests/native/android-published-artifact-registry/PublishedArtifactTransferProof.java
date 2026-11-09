@@ -195,7 +195,79 @@ public final class PublishedArtifactTransferProof {
     f.transfer.revokeAllPublishedArtifacts();
   }
 
+  private static String stageSnapshot(Fixture fixture, Claims bytes, String title) {
+    String upload = fixture.transfer.beginPublishedSnapshot(SESSION, PUBLISHER, EVENT,
+        title, bytes.aggregateHash, bytes.htmlHash, bytes.bytes.length);
+    check(upload != null);
+    int cut = 13;
+    check(fixture.transfer.appendPublishedArtifact(upload, 0, encode(Arrays.copyOfRange(bytes.bytes, 0, cut))));
+    check(fixture.transfer.appendPublishedArtifact(upload, 1, encode(Arrays.copyOfRange(bytes.bytes, cut, bytes.bytes.length))));
+    String handle = fixture.transfer.finishPublishedArtifact(upload);
+    check(handle != null);
+    return handle;
+  }
+
+  private static void snapshotGenerationAndClaims() {
+    Fixture f = new Fixture();
+    Claims c = new Claims("<html>immutable snapshot</html>".getBytes(StandardCharsets.UTF_8));
+    String title = "Snapshot café";
+    PublishedArtifactRegistry.Snapshot snapshot = PublishedArtifactRegistry.Snapshot.create(EVENT, title);
+    String key = " 5129:" + EVENT;
+    check(snapshot != null && snapshot.appKey().equals(key));
+    check(f.transfer.registerPublishedSession(SESSION));
+    check(f.transfer.beginPublishedArtifact(SESSION, PUBLISHER, key, EVENT,
+        c.aggregateHash, c.htmlHash, c.bytes.length) == null);
+    String named = f.transfer.beginPublishedArtifact(SESSION, PUBLISHER, key.trim(), EVENT,
+        c.aggregateHash, c.htmlHash, c.bytes.length);
+    check(named != null);
+    f.transfer.cancelPublishedArtifact(named);
+
+    for (String invalid : new String[]{"", " a", "a  b", "a\nb", "a\u202Eb", "é".repeat(65)}) {
+      check(f.transfer.beginPublishedSnapshot(SESSION, PUBLISHER, EVENT, invalid,
+          c.aggregateHash, c.htmlHash, c.bytes.length) == null);
+    }
+    check(f.transfer.beginPublishedSnapshot(SESSION, PUBLISHER, EVENT.toUpperCase(), title,
+        c.aggregateHash, c.htmlHash, c.bytes.length) == null);
+
+    String handle = stageSnapshot(f, c, title);
+    check(f.transfer.claimForHost(handle, SESSION, PUBLISHER, key.trim(), EVENT,
+        c.aggregateHash, c.htmlHash, snapshot, VIEW) == null);
+    check(f.transfer.claimForHost(handle, SESSION, PUBLISHER, key, EVENT,
+        c.aggregateHash, c.htmlHash, snapshot, VIEW) == null);
+    check(f.transfer.claimForHost(stageSnapshot(f, c, title), SESSION, PUBLISHER, key, "e".repeat(64),
+        c.aggregateHash, c.htmlHash, snapshot, VIEW) == null);
+    check(f.transfer.claimForHost(stageSnapshot(f, c, title), SESSION, "e".repeat(64), key, EVENT,
+        c.aggregateHash, c.htmlHash, snapshot, VIEW) == null);
+    check(f.transfer.claimForHost(stageSnapshot(f, c, title), SESSION, PUBLISHER, key, EVENT,
+        c.aggregateHash, c.htmlHash, PublishedArtifactRegistry.Snapshot.create(EVENT, "Snapshot cafe\u0301"), VIEW) == null);
+    check(f.transfer.claimForHost(stageSnapshot(f, c, title), SESSION, PUBLISHER, key, EVENT,
+        c.aggregateHash, c.htmlHash, snapshot, "guest-generation") == null);
+    handle = stageSnapshot(f, c, title);
+    Fixture restarted = new Fixture();
+    check(restarted.transfer.registerPublishedSession(SESSION));
+    check(restarted.transfer.claimForHost(handle, SESSION, PUBLISHER, key, EVENT,
+        c.aggregateHash, c.htmlHash, snapshot, VIEW) == null);
+    f.transfer.revokePublishedSession(SESSION);
+    check(f.transfer.registerPublishedSession(SESSION));
+    check(f.transfer.claimForHost(handle, SESSION, PUBLISHER, key, EVENT,
+        c.aggregateHash, c.htmlHash, snapshot, VIEW) == null);
+    String cancelled = f.transfer.beginPublishedSnapshot(SESSION, PUBLISHER, EVENT, title,
+        c.aggregateHash, c.htmlHash, c.bytes.length);
+    check(cancelled != null);
+    f.transfer.cancelPublishedArtifact(cancelled);
+    check(!f.transfer.appendPublishedArtifact(cancelled, 0, encode(c.bytes)));
+    check(f.transfer.finishPublishedArtifact(cancelled) == null);
+    handle = stageSnapshot(f, c, title);
+    PublishedArtifactRegistry.ClaimedArtifact claimed = f.transfer.claimForHost(handle, SESSION, PUBLISHER,
+        key, EVENT, c.aggregateHash, c.htmlHash, snapshot, VIEW);
+    check(claimed != null && claimed.getViewGeneration().equals(VIEW));
+    check(Arrays.equals(claimed.takeHtmlBytes(), c.bytes) && claimed.takeHtmlBytes() == null);
+    check(claimed.getSnapshot().requester(PUBLISHER).equals(
+        "Snapshot (kind 5129): " + title + "\nManifest event ID: " + EVENT + "\nPublisher: " + PUBLISHER));
+  }
+
   public static void main(String[] args) {
+    snapshotGenerationAndClaims();
     check(PublishedArtifactTransfer.INSTANCE.registerPublishedSession("default-transfer-test"));
     PublishedArtifactTransfer.INSTANCE.revokePublishedSession("default-transfer-test");
     genuineBytesAndReplay();

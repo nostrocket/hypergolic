@@ -41,7 +41,7 @@ async function openFixture():Promise<TrustedIdentityOwner>{
  bindLinkOwner(transition,requireNativeModule<NativeLinkOwner>('HypergolicNappletHost'));
  const query={async query(){return [];}};
  const runtime=createRuntimeOwner(database,transition,loadNativeCapabilityPort(),undefined,{sqlite:SQLite,native:loadNativePublishedTransferPort(),lookupRelays:()=>['wss://relay.example.org'],
-  source:{async query(coordinate){const value=SIGNED_LINK_ARTIFACTS.find(value=>value.event.pubkey===coordinate.pubkey&&value.appId===coordinate.identifier);if(!value)throw Error('Unknown signed local artifact');return [value.event];},
+  source:{async query(coordinate){const value=coordinate.kind===35129&&SIGNED_LINK_ARTIFACTS.find(value=>value.event.pubkey===coordinate.pubkey&&value.appId===coordinate.identifier);if(!value)throw Error('Unknown signed local artifact');return [value.event];},
    async readHtml(hash){const value=SIGNED_LINK_ARTIFACTS.find(value=>value.htmlHash===hash);if(!value)throw Error('Unknown local bytes');return new TextEncoder().encode(value.html);}}},query,undefined,loadNativeResourceHost(()=>[],query));
  return Object.freeze({transition,formatNpub,runtime,relaySettings:null,resourceSettings:null});
 }

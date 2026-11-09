@@ -191,6 +191,13 @@ public final class NappletHostModule: Module {
         sessionId: sessionId, publisher: publisher, identifier: identifier, eventId: eventId,
         aggregateHash: aggregateHash, htmlHash: htmlHash, byteLength: byteLength)
     }
+    Function("beginPublishedSnapshot") { (sessionId: String, publisher: String, eventId: String,
+                                          verifiedTitle: String, aggregateHash: String, htmlHash: String,
+                                          byteLength: Int) -> String? in
+      PublishedArtifactTransfer.shared.beginPublishedSnapshot(
+        sessionId: sessionId, publisher: publisher, eventId: eventId, verifiedTitle: verifiedTitle,
+        aggregateHash: aggregateHash, htmlHash: htmlHash, byteLength: byteLength)
+    }
     Function("appendPublishedArtifact") { (uploadId: String, sequence: Int, base64Chunk: String) -> Bool in
       PublishedArtifactTransfer.shared.appendPublishedArtifact(uploadId, sequence: sequence, base64Chunk: base64Chunk)
     }

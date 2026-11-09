@@ -30,6 +30,7 @@ function options(events: readonly unknown[], blob: Uint8Array = html, signal = n
   const source: PublishedArtifactSource = {
     async query(coordinate, relays, pinned) {
       assert.equal(Object.hasOwn(coordinate, 'relayHints'), false);
+      assert.equal(coordinate.kind,35129);
       calls.push(`query:${coordinate.identifier}:${relays[0]}:${pinned ?? 'latest'}`);
       return events;
     },

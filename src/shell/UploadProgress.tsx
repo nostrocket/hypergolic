@@ -1,3 +1,4 @@
+import {publishedAppLabel} from '../napplets/published-identity';
 import { memo, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { FlatList, StyleSheet, Text, View, type ListRenderItemInfo } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,7 +22,7 @@ const RecoveryRow = memo(function RecoveryRow({row, checking, attempted, onCheck
   const check = useCallback(() => onCheck(row.uploadId), [onCheck, row.uploadId]);
   const accessibilityState = useMemo(() => ({disabled: checking}), [checking]);
   return <View testID="upload-recovery-record" style={styles.record}>
-          <Text selectable style={styles.detail}>{row.appId}</Text>
+          <Text selectable style={styles.detail}>{publishedAppLabel(row.appId)}</Text>
           <Text selectable style={styles.mono}>{row.destination}</Text>
           <Text selectable style={styles.mono}>{row.sha256}</Text>
           <Text style={styles.detail}>{row.size.toLocaleString()} bytes · {row.mimeType}</Text>

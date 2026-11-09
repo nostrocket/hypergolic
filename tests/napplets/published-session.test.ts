@@ -1,7 +1,7 @@
 import type { UploadService } from '../../src/uploads/upload-service.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { naddrEncode } from 'nostr-tools/nip19';
+import { naddrEncode,neventEncode } from 'nostr-tools/nip19';
 import { finalizeEvent } from 'nostr-tools/pure';
 import { createHash } from 'node:crypto';
 import { EMBEDDED_TEST_COORDINATE, EMBEDDED_TEST_EVENT, EMBEDDED_TEST_PUBLISHER,
@@ -18,6 +18,9 @@ import { ReviewBusyError } from '../../src/shell/review-slot.ts';
 import type { IdentityTransition } from '../../src/security/identity-transition.ts';
 import { createApprovalOwner, createUploadOwner } from '../../src/security/approval-owner.ts';
 import type { ApprovalOrigin, ApprovalService } from '../../src/security/approval-service.ts';
+import {snapshotAppKey} from '../../src/napplets/published-identity.ts';
+import {PUBLISHED_ARTIFACT_CACHE_DATABASE} from '../../src/napplets/published-artifact-cache.ts';
+import {decodeNativeRegistration} from '../../src/runtime/capability-protocol.ts';
 
 const USER = '31'.repeat(32);
 const SESSION = '58274370-ec8f-4058-a4cc-b63e7e75ca4b';
@@ -113,7 +116,7 @@ test('restored exact pins retain prior game access and require approval before s
     newInstanceId: () => SESSION, lookupRelays: () => ['wss://relay.example.org'],
     identity: {sessionAuthority: () => ({user: USER, epoch: 1, assertActive() {}}),
       getSnapshot: () => ({session: {epoch: 1}})} as PublishedSessionDependencies['identity'],
-    source: {query: async coordinate => [coordinate.identifier === 'saved-game' ? game : handler], readHtml: async () => html},
+    source: {query: async coordinate => {assert.equal(coordinate.kind,35129);return [coordinate.identifier === 'saved-game' ? game : handler];}, readHtml: async () => html},
   });
   const signal = new AbortController().signal;
   const loaded = await service.reopenPinned(restored.sessions[0]!, signal, async () => assert.fail('prior game grant must reopen'));
@@ -129,6 +132,71 @@ test('restored exact pins retain prior game access and require approval before s
   const accepted = await service.reopenPinned(restored.sessions[1]!, signal, async () => true);
   assert.deepEqual(JSON.parse(JSON.parse(accepted.hostInput).configuration).domains, ['intent']);
   accepted.revoke();
+});
+
+test('exact snapshots isolate same-HTML grants, data and cache across restore and refetch', async t => {
+  const {database,sqlite}=await setup(t);
+  const html=getEmbeddedTestHtmlBytes(), hash=createHash('sha256').update(html).digest('hex');
+  const secret=new Uint8Array(32).fill(35);
+  const sign=(created_at:number)=>finalizeEvent({kind:5129,created_at,content:'Immutable fixture',
+    tags:[['x',hash],['title','Exact snapshot'],['R','storage'],['O','intent'],['A','35129:'+'1'.repeat(64)+':other']]},secret);
+  const [first,second]=[sign(1),sign(2)];
+  const lookups: unknown[]=[],calls:string[]=[];
+  let hideExact=false;
+  const ports:PublishedSessionDependencies={database,sqlite,newInstanceId:()=>SESSION,
+    native:{...native(calls),beginPublishedSnapshot(_session,publisher,eventId,title,_version,htmlHash,length){
+      assert.equal(publisher,first.pubkey);assert.equal(title,'Exact snapshot');assert.equal(htmlHash,hash);
+      assert.equal(length,html.byteLength);calls.push(eventId);return 'snapshot-upload';
+    }},
+    identity:{sessionAuthority:()=>({user:USER,epoch:1,assertActive(){}}),
+      getSnapshot:()=>({session:{epoch:1}})} as PublishedSessionDependencies['identity'],
+    lookupRelays:()=>['wss://relay.example.org'],
+    source:{async query(reference,relays,pin){
+      assert.equal(reference.kind,5129);assert.deepEqual(relays,['wss://relay.example.org']);assert.equal(pin,null);
+      lookups.push(reference);return hideExact?[second]:reference.eventId===first.id?[first,second]:[second];
+    },async readHtml(expected){assert.equal(expected,hash);return html;}}};
+  const coordinator=createPublishedSessionCoordinator(ports), signal=new AbortController().signal;
+  const link=(event:typeof first)=>neventEncode({id:event.id,kind:5129,author:event.pubkey,relays:['wss://untrusted.example.org']});
+  const one=await coordinator.openLink(link(first),signal,async review=>{
+    assert.deepEqual(review.snapshot,{kind:5129,eventId:first.id,title:'Exact snapshot'});
+    return true;
+  });
+  const claimed=JSON.parse(one.hostInput);
+  assert.deepEqual(claimed.snapshot,JSON.parse(claimed.configuration).snapshot);
+  assert.equal(claimed.appId,snapshotAppKey(first.id));
+  assert.equal(claimed.eventId,first.id);
+  const projection={...JSON.parse(claimed.configuration),generation:SESSION};
+  assert.deepEqual(decodeNativeRegistration(projection).snapshot,claimed.snapshot);
+  for(const patch of [{snapshot:undefined},{snapshot:{...claimed.snapshot,eventId:second.id}},
+    {snapshot:{...claimed.snapshot,eventId:'a'.repeat(63)+'\n'}},{snapshot:{...claimed.snapshot,title:'Injected\nkind'}},
+    {appId:claimed.appId.trim()},{fixture:'state-lab'},{legacyReadOnly:{}},{appData:{}}]){
+    assert.throws(()=>decodeNativeRegistration({...projection,...patch}));
+  }
+  assert.equal(calls.includes('begin'),false);
+  one.revoke();
+
+  const named=registration({user:USER,publisher:first.pubkey,appId:snapshotAppKey(first.id).trim(),version:one.descriptor.version});
+  const selected={...named,appId:one.descriptor.appId};
+  await database.bindStorage(selected).port.set('only-here','exact');
+  assert.equal(await database.bindStorage(named).port.get('only-here'),null);
+  assert.equal(await database.bindStorage({...selected,appId:snapshotAppKey(second.id)}).port.get('only-here'),null);
+  assert.equal(await database.bindApp(named).port.readAccessGrant(),null);
+  const before=calls.slice();
+  await assert.rejects(coordinator.openLink(link(second),signal,async review=>{
+    assert.equal(review.snapshot?.eventId,second.id);return false;
+  }));
+  assert.deepEqual(calls,before);
+  const persisted=await database.bindWorkspace({user:USER,assertActive(){}}).port.save(
+    snapshotWorkspace(openNapplet(emptyWorkspace(),one.descriptor)),null);
+  const pin=restoreWorkspace(persisted.snapshot).sessions[0]!;
+  const reopened=await createPublishedSessionCoordinator(ports).reopenPinned(pin,signal,async()=>assert.fail('saved grant expected'));
+  assert.equal(reopened.artifact.manifest.id,first.id);assert.equal(lookups.length,2);reopened.revoke();
+  const cache=sqlite.raw(PUBLISHED_ARTIFACT_CACHE_DATABASE);
+  cache.prepare('DELETE FROM verified_published_artifacts').run();
+  hideExact=true;
+  await assert.rejects(coordinator.reopenPinned(pin,signal,async()=>assert.fail('wrong event cannot reach review')));
+  assert.deepEqual(lookups.at(-1),{kind:5129,eventId:first.id,pubkey:first.pubkey});
+  await assert.rejects(coordinator.prepareUpdate(pin,signal,async()=>assert.fail('snapshot is immutable'),async()=>false));
 });
 
 test('unsupported requested capabilities warn without granting unsupported domains; denial prevents launch', async t => {

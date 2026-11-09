@@ -3,6 +3,8 @@ import { assertVerifiedArtifact, type VerifiedNappletArtifact } from './verified
 import type { AppStorageControl } from '../storage/database.ts';
 import type { TrustedApp } from '../storage/ports.ts';
 import { reviewedCapabilityCompatibility, type ReviewedSupportProfile } from '../runtime/support-report.ts';
+import {verifiedPublicationIdentity} from './verified-publication-identity.ts';
+import type {SnapshotIdentity} from './published-identity.ts';
 
 export class FirstOpenConsentError extends Error {
   readonly code = 'NAPPLET_CONSENT_DENIED';
@@ -14,6 +16,7 @@ export type NappletConsentReview = Readonly<{
   publisher: string;
   appId: string;
   eventId: string;
+  snapshot?: SnapshotIdentity;
   domains: readonly string[];
   unsupportedDomains: readonly string[];
   optionalDomains: readonly string[];
@@ -39,13 +42,6 @@ function active(signal: AbortSignal, owner: TrustedApp, identity: Readonly<{ use
     identity.check(); assertActive();
   } catch { return fail(); }
   if (signal.aborted) return fail();
-}
-
-function exactIdentifier(artifact: VerifiedNappletArtifact): string {
-  const tags = artifact.manifest.tags;
-  const dTags = tags.filter(tag => tag[0] === 'd');
-  if (dTags.length !== 1 || dTags[0]!.length !== 2 || !dTags[0]![1]) return fail();
-  return dTags[0]![1]!;
 }
 
 function sameSet(left: readonly string[], right: readonly string[]): boolean {
@@ -85,14 +81,14 @@ export async function requestFirstOpenConsent(
 ): Promise<VerifiedNappletAdmission> {
   assertVerifiedArtifact(artifactInput);
   const artifact: VerifiedNappletArtifact = artifactInput;
-  const identifier = exactIdentifier(artifact);
+  const publication = verifiedPublicationIdentity(artifact.manifest);
   const publisher = artifact.manifest.pubkey;
   const eventId = artifact.manifest.eventId;
   const user = owner.user;
   const ownerPublisher = owner.publisher;
   const appId = owner.appId;
   const ownerCheck = owner.assertActive;
-  if (typeof ownerCheck !== 'function' || publisher !== ownerPublisher || appId !== identifier ||
+  if (typeof ownerCheck !== 'function' || publisher !== ownerPublisher || appId !== publication.appId ||
       typeof user !== 'string' || typeof appId !== 'string') return fail();
   const requestedDomains = Object.freeze([...artifact.manifest.requiredDomains].sort());
   const optionalDomains = Object.freeze([...artifact.manifest.optionalDomains].sort());
@@ -122,7 +118,8 @@ export async function requestFirstOpenConsent(
   }
 
   if (!accepted) {
-    const request = Object.freeze({ user, publisher, appId, eventId, domains: requestedDomains, unsupportedDomains,
+    const request = Object.freeze({ user, publisher, appId, eventId, ...(publication.kind===5129?{snapshot:publication.snapshot}:{}),
+      domains: requestedDomains, unsupportedDomains,
       optionalDomains, unsupportedOptionalDomains });
     let approved = false;
     try { approved = await review(request) === true; }
@@ -154,7 +151,7 @@ export function assertVerifiedNappletAdmission(
   const verified = admission as VerifiedNappletAdmission;
   const expected = publishedCapabilityCompatibility(artifact.manifest.requiredDomains,
     artifact.manifest.optionalDomains, verified.supportProfile).domains;
-  if (verified.publisher !== artifact.manifest.pubkey || verified.appId !== exactIdentifier(artifact) ||
+  if (verified.publisher !== artifact.manifest.pubkey || verified.appId !== verifiedPublicationIdentity(artifact.manifest).appId ||
       verified.eventId !== artifact.manifest.eventId || !sameSet(verified.domains, expected)) return fail();
   verified.assertActive();
 }

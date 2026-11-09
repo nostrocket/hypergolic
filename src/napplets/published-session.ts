@@ -1,6 +1,6 @@
 import {supportsLegacyReadOnly, isLegacyReadOnlySelection, LEGACY_READ_ONLY_PROFILE} from './legacy-read-only.ts';
 import { ReviewBusyError } from '../shell/review-slot.ts';
-import { naddrEncode } from 'nostr-tools/nip19';
+import { naddrEncode,neventEncode } from 'nostr-tools/nip19';
 import type { IdentityTransition } from '../security/identity-transition.ts';
 import type { ShellDatabase } from '../storage/database.ts';
 import type { SQLiteModule, TrustedApp } from '../storage/ports.ts';
@@ -12,6 +12,7 @@ import { descriptorForPublishedArtifact, publishedHostInput } from './published-
 import { stageAdmittedPublishedArtifact } from './admitted-transfer.ts';
 import { PublishedTransferError, type NativePublishedTransferPort } from './native-transfer.ts';
 import { assertVerifiedArtifact, type VerifiedNappletArtifact } from './verified-artifact.ts';
+import {matchesPublishedAppKey,snapshotEventId} from './published-identity.ts';
 
 export class PublishedSessionError extends Error {
   readonly code = 'PUBLISHED_SESSION_FAILED';
@@ -45,8 +46,10 @@ export interface PublishedSessionDependencies {
   readonly newInstanceId: () => string;
 }
 
-function identifier(artifact: VerifiedNappletArtifact): string {
-  return artifact.manifest.tags.find(tag => tag[0] === 'd')?.[1] ?? fail();
+function pinnedLink(pin: NappletDescriptor): string {
+  const snapshotId = snapshotEventId(pin.appId);
+  return snapshotId ? neventEncode({id:snapshotId,kind:5129,author:pin.publisher})
+    : naddrEncode({kind:35129,pubkey:pin.publisher,identifier:pin.appId});
 }
 
 type PrepareRequest = Readonly<{ link?: string; pinned?: NappletDescriptor;
@@ -108,14 +111,15 @@ async function preparePublishedSession(ports: PublishedSessionDependencies, requ
     const opensExact = exact !== undefined && request.candidate !== undefined && selected === undefined && updateOf === undefined;
     if (!opensLink && !reopensPin && !appliesUpdate && !opensExact) fail();
     if (selected && (selected.source !== 'published' || !HEX64.test(selected.publisher) ||
-        !HEX64.test(selected.version) || !HEX64.test(selected.eventId ?? '') || !selected.appId)) fail();
+        !HEX64.test(selected.version) || !HEX64.test(selected.eventId ?? '') || !selected.appId ||
+        !matchesPublishedAppKey(selected.appId,selected.eventId!))) fail();
     const coordinate = selected ?? updateOf ?? exact?.existing;
-    const link = request.link ?? (coordinate ? naddrEncode({ kind: 35129, pubkey: coordinate.publisher, identifier: coordinate.appId }) : '');
+    const link = request.link ?? (coordinate ? pinnedLink(coordinate) : '');
     const artifact = await loadSessionArtifact(ports, request, link, authority, controller.signal, active);
     const id = selected?.id ?? exact?.existing?.id ?? ports.newInstanceId();
     if (!SESSION.test(id)) fail();
     let descriptor = descriptorForPublishedArtifact(artifact, id);
-    const legacyAvailable = artifact.manifest.requiredDomains.length === 0 && artifact.manifest.optionalDomains.length === 0 &&
+    const legacyAvailable = artifact.manifest.kind === 35129 && artifact.manifest.requiredDomains.length === 0 && artifact.manifest.optionalDomains.length === 0 &&
       supportsLegacyReadOnly({...descriptor, eventId: descriptor.eventId!, htmlHash: artifact.htmlHash});
     let legacyReadOnly = selected !== undefined && isLegacyReadOnlySelection(selected, authority.user);
     if (legacyReadOnly && !legacyAvailable) fail();
@@ -128,11 +132,11 @@ async function preparePublishedSession(ports: PublishedSessionDependencies, requ
     };
     const expected = selected ?? exact?.existing;
     if (expected && !samePublishedPin(expected, descriptor)) fail();
-    if (updateOf && (updateOf.source !== 'published' || !HEX64.test(updateOf.version) ||
+    if (updateOf && (artifact.manifest.kind !== 35129 || snapshotEventId(updateOf.appId) || updateOf.source !== 'published' || !HEX64.test(updateOf.version) ||
         !HEX64.test(updateOf.eventId ?? '') || updateOf.publisher !== descriptor.publisher ||
         updateOf.appId !== descriptor.appId || updateOf.eventId === descriptor.eventId)) fail();
     const owner: TrustedApp = Object.freeze({ user: authority.user, publisher: descriptor.publisher,
-      appId: identifier(artifact), assertActive: active });
+      appId: descriptor.appId, assertActive: active });
     const grant = ports.database.bindApp(owner);
     let admission;
     let reviewed = false;
@@ -183,7 +187,7 @@ async function preparePublishedSession(ports: PublishedSessionDependencies, requ
 async function preparePublishedUpdate(ports: PublishedSessionDependencies, selected: NappletDescriptor,
   signal: AbortSignal, reviewUpdate: (request: PublishedUpdateReview) => Promise<boolean>,
   reviewConsent: ConsentReview): Promise<PreparedPublishedSession | null> {
-  if (selected.source !== 'published' || !HEX64.test(selected.publisher) ||
+  if (selected.source !== 'published' || snapshotEventId(selected.appId) || !HEX64.test(selected.publisher) ||
       !HEX64.test(selected.version) || !HEX64.test(selected.eventId ?? '') || !selected.appId) fail();
   const authority = ports.identity.sessionAuthority();
   const active = () => { if (signal.aborted) fail(); authority.assertActive(); if (signal.aborted) fail(); };

@@ -1,4 +1,4 @@
-import {artifact, modernHandler} from './fixtures.ts';
+import {artifact, modernHandler,snapshotHandler} from './fixtures.ts';
 import {namedIntentId} from '../../src/routing/routing-contract.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -132,6 +132,42 @@ test('modern Intent advertisements cannot grant a recipient domain or allow a fo
   h.reviews.decide(approval.id, {allow: true}); await request.promise;
   assert.equal(request.reply().result.ok, false);
   assert.deepEqual(h.sent, []);
+});
+
+test('same-HTML snapshots use independent opaque IDs and approved dispatch selects the exact pin',async t=>{
+  const selected=await snapshotHandler(), other=await snapshotHandler(['intent'],1_800_000_001), named=await modernHandler();
+  const h=await setup(t,selected,['intent','inc']);
+  assert.equal(selected.aggregateHash,other.aggregateHash);
+  assert.equal(selected.aggregateHash,named.aggregateHash);
+  const owner={user,assertActive(){}}, id=` snapshot:${selected.manifest.id}`, convention='napplet:napptest/open';
+  await h.catalog.remember(owner,other);
+  await h.catalog.remember(owner,named);
+  await h.catalog.remember(owner,await snapshotHandler(['inc'],1_800_000_002));
+  const lookalike = `5129:${selected.manifest.id}`;
+  await h.catalog.remember(owner,await artifact(9,lookalike,'napptest',1_800_000_000,[convention]));
+  await h.register(h.target);
+  const available=h.dispatch(h.source,{type:'intent.available',id:'available-snapshots',archetype:'napptest'});await available.promise;
+  const candidates=available.reply().availability.candidates;
+  assert.equal(candidates.length,4);
+  assert.ok(candidates.some((row:{dTag?:string})=>row.dTag===lookalike));
+  assert.deepEqual(candidates.find((row:{id:string})=>row.id===id),{id,title:'Snapshot handler',actions:['open'],
+    conventions:[convention],contracts:[{convention,params:['msg']}],isDefault:false});
+  const run=h.dispatch(h.source,{type:'intent.invoke',id:'exact-snapshot',request:{archetype:'napptest',convention,handler:id,payload:{msg:'exact'}}});
+  const review=await reviewReady(h.reviews);
+  assert.equal(review.request.kind,'intent');
+  if(review.request.kind!=='intent')throw Error('Wrong review');
+  assert.equal(review.request.selected?.eventId,selected.manifest.id);
+  h.reviews.decide(review.id,{allow:true,remember:true});await run.promise;
+  assert.equal(run.reply().result.handler,id);
+  assert.deepEqual(h.sent.at(-1),{generation:h.target.generation,message:{type:'intent.deliver',
+    delivery:{sender:namedIntentId(h.source.publisher,h.source.appId),archetype:'napptest',action:'open',convention,payload:{msg:'exact'}}}});
+  assert.equal((await h.catalog.list(owner)).defaults[0]?.appId,h.target.appId);
+  await h.catalog.remove(owner,{publisher:h.target.publisher,appId:h.target.appId});
+  const removed=h.dispatch(h.source,{type:'intent.invoke',id:'missing-snapshot',request:{archetype:'napptest',convention,handler:id}});
+  await removed.promise;
+  assert.equal(removed.reply().result.error,'no handler');
+  assert.equal(h.reviews.getSnapshot(),null);
+  assert.equal(h.activated.length,1);
 });
 
 test('native Intent pressure and unavailable unfocused handlers produce explicit unsuccessful results', async t => {

@@ -1,3 +1,4 @@
+import {snapshotEventId} from '../napplets/published-identity';
 import { TrustedBand } from './TrustedBand';
 import {useEffect, useSyncExternalStore} from 'react';
 import {AppState, ScrollView, StyleSheet, Text, View} from 'react-native';
@@ -20,6 +21,7 @@ export function IdentityListReview({service, blocked = false}: {service: Identit
   useEffect(() => {if (blocked) service?.dismissPending();}, [service, blocked]);
   if (!service || !state.review || blocked) return null;
   const review = state.review, disabled = state.busy;
+  const manifestEventId = snapshotEventId(review.owner.appId);
   const decide = (allow: boolean) => {void service.decide(review.id, allow).catch(() => { /* Service publishes the current failure. */ });};
   return <Modal visible transparent animationType="none" onRequestClose={() => {if (!disabled) decide(false);}}>
     <View style={[styles.backdrop, {paddingLeft: insets.left, paddingRight: insets.right}]}><View testID="identity-list-review" accessibilityViewIsModal style={[styles.sheet, {paddingBottom: Math.max(16, insets.bottom)}]}>
@@ -27,7 +29,8 @@ export function IdentityListReview({service, blocked = false}: {service: Identit
       <ScrollView contentContainerStyle={styles.content}>
         <Text accessibilityRole="header" style={styles.title}>Allow public list access?</Text>
         <Text style={styles.text}>This napplet wants to read your public mutes, bookmarks, pins and interests. These signed lists are already public on relays.</Text>
-        <Text style={styles.label}>Requesting app</Text><Text selectable testID="identity-list-app" style={styles.text}>{review.owner.appId}</Text>
+        <Text style={styles.label}>{manifestEventId ? 'Requesting snapshot (kind 5129)' : 'Requesting app'}</Text>
+        <Text selectable testID="identity-list-app" style={styles.text}>{manifestEventId ?? review.owner.appId}</Text>
         {review.source === 'bundled' && <Text style={styles.text}>Reviewed bundled fixture</Text>}
         <Text style={styles.label}>{review.source === 'bundled' ? 'Publisher namespace' : 'Publisher'}</Text><Text selectable testID="identity-list-publisher" style={styles.mono}>{formatNpub(review.owner.publisher)}</Text>
         <Text style={styles.label}>Selected public identity</Text><Text selectable testID="identity-list-user" style={styles.mono}>{formatNpub(review.owner.user)}</Text>

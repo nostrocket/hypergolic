@@ -3,7 +3,9 @@ package org.nostrocket.hypergolic.host
 import org.json.JSONObject
 
 /** Trusted React Native configuration. No field is accepted from a napplet request. */
-internal class CapabilityConfiguration(raw: String, generation: String, allowPublished: Boolean = false) {
+internal class CapabilityConfiguration(
+  raw: String, generation: String, allowPublished: Boolean = false, expectedSnapshot: JSONObject? = null
+) {
   val snapshot: String
   val sessionId: String
   val fixture: String
@@ -31,7 +33,7 @@ internal class CapabilityConfiguration(raw: String, generation: String, allowPub
     val media=value.has("mediaProfile")
     val data=value.has("appData")
     val legacy=value.has("legacyReadOnly")
-    require(value.keys().asSequence().toSet() == names + (if(legacy)setOf("legacyReadOnly") else emptySet()) + (if(open)setOf("publishedOpen") else emptySet()) + (if(common)setOf("commonProfile") else emptySet()) + (if(cvm)setOf("cvmProfile") else emptySet()) + (if(media)setOf("mediaProfile") else emptySet()) + (if(data)setOf("appData") else emptySet()))
+    require(value.keys().asSequence().toSet() == names + (if(legacy)setOf("legacyReadOnly") else emptySet()) + (if(open)setOf("publishedOpen") else emptySet()) + (if(common)setOf("commonProfile") else emptySet()) + (if(cvm)setOf("cvmProfile") else emptySet()) + (if(media)setOf("mediaProfile") else emptySet()) + (if(data)setOf("appData") else emptySet()) + (if(expectedSnapshot != null)setOf("snapshot") else emptySet()))
     require(!open || value.remove("publishedOpen") == true)
     fun string(name: String): String = (value.get(name) as? String) ?: error("Invalid configuration")
     for (name in listOf("sessionId", "instanceId", "fixture")) require(string(name).matches(Regex("[A-Za-z0-9_-]{1,80}")))
@@ -74,6 +76,14 @@ internal class CapabilityConfiguration(raw: String, generation: String, allowPub
     sessionId = string("sessionId")
     publisher = string("publisher")
     appId = string("appId")
+    require(appId.startsWith(" 5129:") == (expectedSnapshot != null))
+    if (expectedSnapshot != null) {
+      require(allowPublished && fixture == "published" && !open && !data && !legacy)
+      val supplied = value.getJSONObject("snapshot")
+      val keys = expectedSnapshot.keys().asSequence().toSet()
+      require(supplied.keys().asSequence().toSet() == keys && keys.all { supplied.get(it) == expectedSnapshot.get(it) })
+      value.put("snapshot", expectedSnapshot)
+    }
     require(!open || (allowPublished && fixture == "published"))
     publishedOpen = (fixture == "napplet-discovery" && appId == "napplet-discovery") || open
     version = string("version")

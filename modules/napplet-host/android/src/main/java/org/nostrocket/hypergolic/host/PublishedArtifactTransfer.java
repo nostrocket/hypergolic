@@ -17,18 +17,21 @@ public final class PublishedArtifactTransfer {
 
   private static final class Upload {
     final String sessionId, publisher, identifier, eventId, aggregateHash, htmlHash;
+    final PublishedArtifactRegistry.Snapshot snapshot;
     final long expiresAt;
     final byte[] bytes;
     int length, nextSequence;
 
     Upload(String sessionId, String publisher, String identifier, String eventId,
-        String aggregateHash, String htmlHash, long expiresAt, int byteLength) {
+        String aggregateHash, String htmlHash, PublishedArtifactRegistry.Snapshot snapshot,
+        long expiresAt, int byteLength) {
       this.sessionId = sessionId;
       this.publisher = publisher;
       this.identifier = identifier;
       this.eventId = eventId;
       this.aggregateHash = aggregateHash;
       this.htmlHash = htmlHash;
+      this.snapshot = snapshot;
       this.expiresAt = expiresAt;
       this.bytes = new byte[byteLength];
     }
@@ -64,10 +67,22 @@ public final class PublishedArtifactTransfer {
 
   public synchronized String beginPublishedArtifact(String sessionId, String publisher, String identifier,
       String eventId, String aggregateHash, String htmlHash, int byteLength) {
+    return begin(sessionId, publisher, identifier, eventId, aggregateHash, htmlHash, byteLength, null);
+  }
+
+  public synchronized String beginPublishedSnapshot(String sessionId, String publisher, String eventId,
+      String verifiedTitle, String aggregateHash, String htmlHash, int byteLength) {
+    PublishedArtifactRegistry.Snapshot snapshot = PublishedArtifactRegistry.Snapshot.create(eventId, verifiedTitle);
+    if (snapshot == null) return null;
+    return begin(sessionId, publisher, snapshot.appKey(), eventId, aggregateHash, htmlHash, byteLength, snapshot);
+  }
+
+  private String begin(String sessionId, String publisher, String identifier, String eventId,
+      String aggregateHash, String htmlHash, int byteLength, PublishedArtifactRegistry.Snapshot snapshot) {
     long time = now();
     if (time < 0 || byteLength < 1 || byteLength > PublishedArtifactRegistry.MAX_HTML_BYTES ||
         time > Long.MAX_VALUE - MAX_UPLOAD_LIFETIME_MS || !registry.hasSession(sessionId) ||
-        !PublishedArtifactRegistry.validClaims(publisher, identifier, eventId, aggregateHash, htmlHash)) return null;
+        !PublishedArtifactRegistry.validClaims(publisher, identifier, eventId, aggregateHash, htmlHash, snapshot)) return null;
     prune(time);
     if (uploads.size() >= MAX_ACTIVE_UPLOADS) return null;
     int reserved = byteLength;
@@ -79,7 +94,7 @@ public final class PublishedArtifactTransfer {
     String uploadId = newUploadId();
     if (uploadId == null) return null;
     uploads.put(uploadId, new Upload(sessionId, publisher, identifier, eventId,
-        aggregateHash, htmlHash, time + MAX_UPLOAD_LIFETIME_MS, byteLength));
+        aggregateHash, htmlHash, snapshot, time + MAX_UPLOAD_LIFETIME_MS, byteLength));
     return uploadId;
   }
 
@@ -109,7 +124,7 @@ public final class PublishedArtifactTransfer {
     try {
       if (upload.length != upload.bytes.length || !registry.hasSession(upload.sessionId)) return null;
       return registry.stage(upload.bytes, upload.sessionId, upload.publisher, upload.identifier,
-          upload.eventId, upload.aggregateHash, upload.htmlHash);
+          upload.eventId, upload.aggregateHash, upload.htmlHash, upload.snapshot);
     } finally { upload.clear(); }
   }
 
@@ -139,8 +154,15 @@ public final class PublishedArtifactTransfer {
   public synchronized PublishedArtifactRegistry.ClaimedArtifact claimForHost(String handle, String sessionId,
       String publisher, String identifier, String eventId, String aggregateHash, String htmlHash,
       String viewGeneration) {
+    return claimForHost(handle, sessionId, publisher, identifier, eventId, aggregateHash, htmlHash,
+        null, viewGeneration);
+  }
+
+  synchronized PublishedArtifactRegistry.ClaimedArtifact claimForHost(String handle, String sessionId,
+      String publisher, String identifier, String eventId, String aggregateHash, String htmlHash,
+      PublishedArtifactRegistry.Snapshot snapshot, String viewGeneration) {
     return registry.claim(handle, sessionId, publisher, identifier, eventId, aggregateHash, htmlHash,
-        viewGeneration);
+        snapshot, viewGeneration);
   }
 
   private boolean reject(String uploadId) {

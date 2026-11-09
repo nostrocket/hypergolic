@@ -5,6 +5,7 @@ import {selectedAppDataRelays,type AppDataContext} from './app-data-context.ts';
 /** Called only after source signature/body verification and reviewed grant admission. */
 export function appDataContextForArtifact(input:VerifiedNappletArtifact,domains:readonly string[],network:readonly string[]):AppDataContext|null{
   assertVerifiedArtifact(input);
+  if(input.manifest.kind!==35129)return null;
   if(!domains.includes('identity')||!domains.some(domain=>domain==='outbox'||domain==='relay'))return null;
   const relays=selectedAppDataRelays(network);if(!relays.length||relays.some(url=>new TextEncoder().encode(url).byteLength>256))return null;
   const identifier=input.manifest.tags.find(tag=>tag[0]==='d')?.[1];if(!identifier)throw new Error('Invalid application-data source');

@@ -1,6 +1,11 @@
 # Published artifact native registry
 
-The trusted loader verifies the signed kind-35129 manifest, exact publisher/`d` coordinate, original HTML hash and NIP-5A single-path aggregate. Native registries independently establish byte integrity and host ownership; they do not prove Nostr signature validity, publisher trust or user consent. Ordinary Settings loading and the workspace now use [published admission](published-network.md#published-admission-and-updates).
+The trusted loader verifies the signed kind 35129 publisher and `d` coordinate
+or the signed kind 5129 snapshot and exact event ID. It verifies the original
+HTML hash and NIP-5A single-path aggregate in both cases. Native registries
+independently check byte integrity and host ownership. Signature verification,
+publisher trust and consent belong to the trusted shell.
+See [published admission](published-network.md#published-admission-and-updates).
 
 The Android and iOS registries implement the following core contract. The Expo
 modules stage verified bytes through a bounded app-only transfer. Each native
@@ -29,7 +34,8 @@ the host's ownership; the host must clear its copy on view teardown. The native
 modules and host views revoke their bytes on backgrounding or teardown.
 
 The Expo module transfer uses `registerPublishedSession`,
-`beginPublishedArtifact`, `appendPublishedArtifact`, `finishPublishedArtifact`,
+`beginPublishedArtifact`, `beginPublishedSnapshot`, `appendPublishedArtifact`,
+`finishPublishedArtifact`,
 `cancelPublishedArtifact`, `revokePublishedSession`, and
 `revokeAllPublishedArtifacts` on both platforms. A begin call binds the exact
 claims and declared length (1 byte through 20 MiB) to a registered session. At
@@ -43,6 +49,20 @@ all pending bytes and registrations; the trusted owner must register again
 before a later transfer. No claim function is exposed to JavaScript. A
 verifier-branded JavaScript adapter chunks a private copy and rechecks live
 ownership around every native call.
+
+The app-only snapshot method takes the session, publisher, exact event ID,
+verified title, aggregate hash, HTML hash and declared length. Native code derives
+the private key from an ASCII space, `5129:` and the lowercase event ID. The
+snapshot title is a single line of at most 128 UTF-8 bytes. The immutable
+kind, event ID and title must match in the host prop and its required capability
+configuration, then match the one-use claim. Native code carries those fields
+into each chunk and the capability registration for that generation.
+
+Snapshot configurations reject named-only shared app data, legacy read-only
+and Discover opening profiles. Snapshot signing, upload and external-link reviews display the
+verified title, manifest kind, full event ID and publisher from the native
+registration. A named publication with a literal `5129:<eventId>` identifier
+retains its own identity and review label.
 
 The host claims the handle internally and exposes ordered 48 KiB chunks only to its exact top-level packaged document and native generation. The runtime rechecks original bytes/aggregate, inserts leading CSP before publisher markup, and mounts an opaque sandboxed guest with only exact admitted grants. The verifier requires leading doctype, html and head so no publisher content precedes CSP. Each domain still needs its owning native operation policy. The theme-only signed host fixture is a narrower QA composition, not the current published-domain limit.
 
@@ -64,4 +84,5 @@ xcrun swiftc -warnings-as-errors modules/napplet-host/ios/PublishedArtifactRegis
   tests/native/published-artifact-transfer/PublishedArtifactTransferProof.swift \
   -o /tmp/hypergolic-ios-transfer-proof
 /tmp/hypergolic-ios-transfer-proof
+python3 tests/native/published-artifact-host/runner.py --build-root /tmp/hypergolic-ios-host-proof
 ```

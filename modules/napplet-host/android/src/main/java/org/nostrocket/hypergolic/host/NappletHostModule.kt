@@ -214,6 +214,11 @@ class NappletHostModule : Module() {
       PublishedArtifactTransfer.INSTANCE.beginPublishedArtifact(
         sessionId, publisher, identifier, eventId, aggregateHash, htmlHash, byteLength)
     }
+    Function("beginPublishedSnapshot") { sessionId: String, publisher: String, eventId: String,
+      verifiedTitle: String, aggregateHash: String, htmlHash: String, byteLength: Int ->
+      PublishedArtifactTransfer.INSTANCE.beginPublishedSnapshot(
+        sessionId, publisher, eventId, verifiedTitle, aggregateHash, htmlHash, byteLength)
+    }
     Function("appendPublishedArtifact") { uploadId: String, sequence: Int, base64Chunk: String ->
       PublishedArtifactTransfer.INSTANCE.appendPublishedArtifact(uploadId, sequence, base64Chunk)
     }

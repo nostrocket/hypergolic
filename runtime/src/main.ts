@@ -371,8 +371,8 @@ async function start(): Promise<void> {
     if (source === 'published') {
       if (Array.from(parameters).length !== 2 || parameters.get('fixture') !== null) { fail('artifact-integrity'); return; }
       const {html, metadata} = await readPublishedArtifact(hostWindow.HypergolicHost!, sessionId);
-      const {appId, version: aggregateHash, domains, publishedOpen, appData, mesh, legacyReadOnly} = metadata;
-      if (!stopped) renderGuest({aggregateHash, appId, title: appId, domains,...(appData?{appData:appData.policy}:{}), ...(mesh ? {mesh} : {}), ...(legacyReadOnly ? {legacyReadOnly} : {}),
+      const {appId, version: aggregateHash, domains, publishedOpen, appData, mesh, legacyReadOnly, snapshot} = metadata;
+      if (!stopped) renderGuest({aggregateHash, appId, title: snapshot?.title ?? appId, domains,...(appData?{appData:appData.policy}:{}), ...(mesh ? {mesh} : {}), ...(legacyReadOnly ? {legacyReadOnly} : {}),
         published: true, discoveryOpen: publishedOpen === true}, html);
       return;
     }

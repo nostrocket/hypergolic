@@ -8,10 +8,10 @@ import { ShellPressable as Pressable } from './ShellPressable';
 import { ShellTextInput as TextInput } from './ShellTextInput';
 import type { SettingsActions } from './Shell';
 import type { NappletConsentReview } from '../napplets/first-open-consent';
-import { resolveNappletLink } from '../napplets/resolve-link';
+import { resolvePublishedReference } from '../napplets/resolve-link';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 
-/** A trusted settings surface for one explicit naddr open, never rendered inside guest content. */
+/** A trusted settings surface for one explicit published open. */
 export function OpenPublishedNapplet({ open }: { open: SettingsActions['openPublished'] }) {
   const { styles, colors } = useShellStyles(createStyles);
   const [link, setLink] = useState('');
@@ -36,8 +36,8 @@ export function OpenPublishedNapplet({ open }: { open: SettingsActions['openPubl
   };
   const start = () => {
     if (busy || pending.current || !link.trim()) return;
-    try { resolveNappletLink(link.trim()); }
-    catch { setError('Paste a napplet address starting with naddr1, not a web page URL.'); return; }
+    try { resolvePublishedReference(link.trim()); }
+    catch { setError('Paste a named napplet address (naddr) or a snapshot event link (nevent).'); return; }
     Keyboard.dismiss();
     const controller = new AbortController();
     pending.current = controller;
@@ -59,8 +59,8 @@ export function OpenPublishedNapplet({ open }: { open: SettingsActions['openPubl
     <Text accessibilityRole="header" style={styles.title}>Open a napplet</Text>
     <Text style={styles.detail}>Paste a napplet address. We’ll check its signed version, then show you who published it and what access it needs.</Text>
     <Text style={styles.addressLabel}>Napplet address</Text>
-    <TextInput testID="settings-napplet-address" accessibilityLabel="Napplet naddr" value={link} onChangeText={value => { setLink(value); setError(''); }}
-      autoCapitalize="none" autoCorrect={false} maxLength={8192} editable={!busy} placeholder="naddr1…" placeholderTextColor={colors.muted}
+    <TextInput testID="settings-napplet-address" accessibilityLabel="Napplet address" value={link} onChangeText={value => { setLink(value); setError(''); }}
+      autoCapitalize="none" autoCorrect={false} maxLength={8192} editable={!busy} placeholder="naddr1… or nevent1…" placeholderTextColor={colors.muted}
       style={styles.input} returnKeyType="done" onSubmitEditing={start} />
     {error !== '' && <Text testID="settings-napplet-error" accessibilityLiveRegion="polite" style={styles.error}>{error}</Text>}
     {busy && <Text testID="settings-napplet-loading" accessibilityLiveRegion="polite" style={styles.detail}>Finding and verifying the signed napplet…</Text>}
@@ -71,14 +71,21 @@ export function OpenPublishedNapplet({ open }: { open: SettingsActions['openPubl
   </View>;
 }
 
+function OpenSourceReview({review}: {review:NappletConsentReview}) {
+  const {styles} = useShellStyles(createStyles);
+  return <>
+    <Text style={styles.detail}>Publisher</Text><Text selectable style={styles.claim}>{review.publisher}</Text>
+    <Text style={styles.detail}>{review.snapshot ? 'Snapshot (kind 5129)' : 'Napplet'}</Text><Text selectable style={styles.claim}>{review.snapshot?.title ?? review.appId}</Text>
+    <Text style={styles.detail}>Signed event</Text><Text selectable style={styles.claim}>{review.eventId}</Text>
+  </>;
+}
+
 function OpenAccessReview({review, decide}: {review: NappletConsentReview; decide(accepted: boolean): void}) {
   const { styles } = useShellStyles(createStyles);
   const insets = useSafeAreaInsets();
   return <Modal visible transparent animationType="none" onRequestClose={() => decide(false)}><View style={[styles.backdrop, { paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right }]}><View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]} accessibilityViewIsModal><TrustedBand /><ScrollView contentContainerStyle={styles.review} testID="settings-napplet-review">
     <Text accessibilityRole="header" style={styles.title}>Allow this napplet?</Text>
-    <Text style={styles.detail}>Publisher</Text><Text selectable style={styles.claim}>{review.publisher}</Text>
-    <Text style={styles.detail}>Napplet</Text><Text selectable style={styles.claim}>{review.appId}</Text>
-    <Text style={styles.detail}>Signed event</Text><Text selectable style={styles.claim}>{review.eventId}</Text>
+    <OpenSourceReview review={review}/>
     {(review.domains.includes('resource') || review.optionalDomains.includes('resource')) && <Text style={styles.detail}>Resource access allows bounded downloads from public HTTPS sites and your configured Blossom servers. Files stay in memory while this napplet is loaded.</Text>}
     {(review.domains.includes('media') || review.optionalDomains.includes('media')) && <Text style={styles.detail}>{MEDIA_ACCESS_DETAIL}</Text>}
     {(review.domains.includes('upload') || review.optionalDomains.includes('upload')) && <Text style={styles.detail}>Upload access allows this napplet to read files you select. Every upload still needs your separate approval of the file, identity and server.</Text>}

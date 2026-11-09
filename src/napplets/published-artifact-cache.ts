@@ -1,6 +1,8 @@
 import { createConnection, type Access, type StorageConnection } from '../storage/connection.ts';
 import { fail, type RequestOptions, type SQLiteModule, type TrustedApp } from '../storage/ports.ts';
-import type { NappletCoordinate } from './resolve-link.ts';
+import type { NappletReference } from './resolve-link.ts';
+import {matchesPublishedAppKey,snapshotEventId} from './published-identity.ts';
+import {verifiedPublicationIdentity} from './verified-publication-identity.ts';
 import { assertVerifiedArtifact, MAX_HTML_BYTES, MAX_MANIFEST_BYTES, verifyArtifact, verifyManifest, type VerifiedNappletArtifact } from './verified-artifact.ts';
 
 export const PUBLISHED_ARTIFACT_CACHE_DATABASE = 'hypergolic-published-artifacts-v1.db';
@@ -72,7 +74,7 @@ export async function openPublishedArtifactCache(
   const owner = authority.owner;
   if (!Number.isSafeInteger(authority.epoch) || authority.epoch < 0 || typeof authority.currentEpoch !== 'function' ||
       typeof owner.assertActive !== 'function' || !HEX64.test(owner.user) || !HEX64.test(owner.publisher) ||
-      !validIdentifier(owner.appId)) return fail('INVALID_INPUT');
+      (!validIdentifier(owner.appId) && snapshotEventId(owner.appId) === null)) return fail('INVALID_INPUT');
   const user = owner.user, publisher = owner.publisher, appId = owner.appId, epoch = authority.epoch;
   let storage: StorageConnection | undefined;
   const assertIdentity = () => {
@@ -99,7 +101,7 @@ export async function openPublishedArtifactCache(
     const cache: PublishedArtifactCache = {
       get: async (identifier, eventId, options) => {
         assertOpen();
-        if (!validIdentifier(identifier) || identifier !== appId || !HEX64.test(eventId)) return fail('INVALID_INPUT');
+        if (identifier !== appId || !HEX64.test(eventId) || !matchesPublishedAppKey(identifier,eventId)) return fail('INVALID_INPUT');
         const rows = await request(options, io => io.all<Row>(
           'SELECT publisher, identifier, event_id, signed_event, html, byte_count FROM verified_published_artifacts WHERE user = ? AND publisher = ? AND identifier = ? AND event_id = ?',
           user, publisher, identifier, eventId));
@@ -111,7 +113,9 @@ export async function openPublishedArtifactCache(
               typeof row.signed_event !== 'string' || new TextEncoder().encode(row.signed_event).byteLength > MAX_MANIFEST_BYTES ||
               !(row.html instanceof Uint8Array) || row.html.byteLength === 0 || row.html.byteLength > MAX_HTML_BYTES ||
               row.byte_count !== new TextEncoder().encode(row.signed_event).byteLength + row.html.byteLength || row.byte_count > MAX_STORED_ROW_BYTES) fail('CORRUPT_STORAGE');
-          const coordinate: NappletCoordinate = Object.freeze({ kind: 35129, pubkey: publisher, identifier, relayHints: Object.freeze([]) });
+          const coordinate: NappletReference = snapshotEventId(identifier)
+            ? Object.freeze({kind:5129,pubkey:publisher,eventId})
+            : Object.freeze({ kind: 35129, pubkey: publisher, identifier, relayHints: Object.freeze([]) });
           const event: unknown = JSON.parse(row.signed_event);
           assertOpen();
           const manifest = await verifyManifest(coordinate, event);
@@ -131,11 +135,9 @@ export async function openPublishedArtifactCache(
       put: async (artifactInput, options) => {
         assertOpen(); assertVerifiedArtifact(artifactInput);
         const artifact: VerifiedNappletArtifact = artifactInput;
-        const dTag = artifact.manifest.tags.find(tag => tag[0] === 'd');
-        if (artifact.manifest.pubkey !== publisher || !dTag || !validIdentifier(dTag[1]) ||
+        const identifier = verifiedPublicationIdentity(artifact.manifest).appId;
+        if (artifact.manifest.pubkey !== publisher || identifier !== appId ||
             !HEX64.test(artifact.manifest.eventId)) return fail('INVALID_INPUT');
-        const identifier = dTag[1];
-        if (identifier !== appId) return fail('INVALID_INPUT');
         const signedEvent = JSON.stringify(eventFrom(artifact));
         const eventBytes = new TextEncoder().encode(signedEvent);
         const byteCount = eventBytes.byteLength + artifact.htmlByteLength;

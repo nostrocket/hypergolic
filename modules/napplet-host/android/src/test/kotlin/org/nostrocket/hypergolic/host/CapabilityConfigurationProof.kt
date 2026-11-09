@@ -66,7 +66,36 @@ object CapabilityConfigurationProof {
     checkProof(leases.register(generation) && !admitted(revoked))
   }
 
+  private fun snapshotConfiguration() {
+    val event = "b".repeat(64)
+    val metadata = JSONObject().put("kind", 5129).put("eventId", event).put("title", "Verified café")
+    val expectedKey = " 5129:$event"
+    val body = JSONObject(raw("published", listOf("inc", "resource")))
+      .put("appId", expectedKey).put("snapshot", metadata)
+    val rawConfig = body.toString()
+    val config = CapabilityConfiguration(rawConfig, "snapshot-generation", true, metadata)
+    val registration = JSONObject(config.snapshot)
+    checkProof(registration.getString("generation") == "snapshot-generation")
+    checkProof(registration.getString("appId") == expectedKey)
+    checkProof(registration.getJSONObject("snapshot").getString("title") == "Verified café")
+    checkProof(config.grantedDomains == listOf("inc", "resource"))
+    denied(rawConfig)
+    denied(JSONObject(rawConfig).apply { remove("snapshot") }.toString())
+    for (name in listOf("appData", "legacyReadOnly", "publishedOpen")) {
+      val attempted = JSONObject(rawConfig).put(name, true)
+      checkProof(runCatching { CapabilityConfiguration(attempted.toString(), "view", true, metadata) }.isFailure)
+    }
+    for ((name, replacement) in listOf("title" to "Verified cafe\u0301", "eventId" to "c".repeat(64), "kind" to "5129", "extra" to true)) {
+      val attempted = JSONObject(rawConfig)
+      attempted.getJSONObject("snapshot").put(name, replacement)
+      checkProof(runCatching { CapabilityConfiguration(attempted.toString(), "view", true, metadata) }.isFailure)
+    }
+    val disguised = JSONObject(rawConfig).put("appId", expectedKey.trim())
+    checkProof(runCatching { CapabilityConfiguration(disguised.toString(), "view", true, metadata) }.isFailure)
+  }
+
   @JvmStatic fun main(args: Array<String>) {
+    snapshotConfiguration()
     outboxQueryAuthority()
     val old = CapabilityConfiguration(raw("ux-lab", listOf("theme")), "old-generation")
     checkProof(old.fixture == "ux-lab" && old.grantedDomains == listOf("theme"))

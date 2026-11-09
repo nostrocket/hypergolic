@@ -3,6 +3,7 @@ import {AppState,ScrollView,StyleSheet,Text,View,type ViewInstance} from 'react-
 import {ShellModal} from './ShellModal';import {ShellPressable} from './ShellPressable';import {TrustedBand} from './TrustedBand';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useShellStyles,type ShellPalette,type ShellFonts} from './theme';
+import {snapshotEventId} from '../napplets/published-identity';
 import type {CvmService} from '../cvm/cvm-service';import type {ReviewSlot} from './review-slot';import type {Workspace} from './workspace';
 const emptySubscribe=()=>()=>{},empty=()=>null;
 const noCvm=Object.freeze({current:null,pendingSessionIds:Object.freeze([] as string[])}),emptyCvm=()=>noCvm;
@@ -22,6 +23,7 @@ export function CvmReview({service,slot,workspace}:{service:CvmService;slot?:Rev
   const shown=item&&(!slot||selected?.lane==='cvm'&&selected.item.id===item.id)?item:null;
   if(!shown)return null;
   const review=shown.review,method=review.message.method??'Send response';
+  const manifestEventId=snapshotEventId(review.scope.appId);
   return <ShellModal visible transparent animationType="none" onShow={()=>cancel.current?.focus()} onRequestClose={()=>service.decide(shown.id,false)}>
     <View style={[styles.backdrop,{paddingLeft:insets.left,paddingRight:insets.right,paddingBottom:insets.bottom}]}>
       <View accessibilityViewIsModal testID="cvm-review" style={styles.sheet}>
@@ -30,6 +32,7 @@ export function CvmReview({service,slot,workspace}:{service:CvmService;slot?:Rev
           <Text style={styles.text}>{title} can keep this request running while you use another napplet. It stops when Hypergolic goes into the background, your account changes, or you close this napplet.</Text>
           <Text style={styles.text}>Time limit: {Math.ceil(review.options.timeoutMs / 1000)} seconds, including time spent on this review. Payments through Hypergolic are unavailable. Provider tools may have external effects.</Text>
           <Text style={styles.label}>Requesting napplet</Text><Text selectable style={styles.text}>{title}</Text>
+          {manifestEventId && <><Text style={styles.label}>Snapshot (kind 5129)</Text><Text selectable style={styles.mono}>{manifestEventId}</Text></>}
           <Text style={styles.label}>Publisher and exact version</Text><Text selectable style={styles.mono}>{review.scope.publisher}{'\n'}{review.scope.version}</Text>
           <Text style={styles.label}>Provider</Text><Text testID="cvm-review-provider" selectable style={styles.mono}>{review.server.pubkey}</Text>
           <Text style={styles.label}>Operation</Text><Text style={styles.text}>{method}</Text>

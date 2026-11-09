@@ -8,6 +8,26 @@ import java.util.concurrent.atomic.AtomicLong
 private var checks=0
 private fun checkThat(value:Boolean){check(value);checks++}
 private fun denied(work:()->Unit){try{work();error("Expected native denial")}catch(expected:IllegalArgumentException){checks++}catch(expected:IllegalStateException){if(expected.message=="Expected native denial")throw expected;checks++}}
+private fun snapshotRequester(registration: JSONObject) {
+  val publisher = registration.getString("publisher")
+  val version = registration.getString("version")
+  val event = "b".repeat(64)
+  val named = "5129:$event"
+  val snapshot = checkNotNull(PublishedArtifactRegistry.Snapshot.create(event, "Verified café"))
+  val raw = JSONObject(registration.toString()).apply { remove("generation") }.put("appId", named)
+  val namedConfig = CapabilityConfiguration(raw.toString(), "generation", true)
+  checkThat(signingRequester(JSONObject(namedConfig.snapshot)) == "Napplet: $named\nPublisher: $publisher\nVersion: $version")
+  raw.put("appId", snapshot.appKey()).put("snapshot", snapshot.toWire())
+  val claimedConfig = CapabilityConfiguration(raw.toString(), "generation", true, snapshot.toWire())
+  val trusted = JSONObject(claimedConfig.snapshot)
+  checkThat(signingRequester(trusted) ==
+    "Snapshot (kind 5129): Verified café\nManifest event ID: $event\nPublisher: $publisher\nVersion: $version")
+  trusted.put("appId", named)
+  denied { signingRequester(trusted) }
+  trusted.put("appId", snapshot.appKey()).remove("snapshot")
+  denied { signingRequester(trusted) }
+}
+
 fun main(args:Array<String>){
   val cases=JSONArray(File(args[0]).readText())
   for(index in 0 until cases.length()){
@@ -30,6 +50,7 @@ fun main(args:Array<String>){
     }else denied{NativeApprovalSigningData.capture(source,JSONObject().put("event",JSONObject()).toString(),plan)}
   }
   val fixture=cases.getJSONObject(0);val registration=JSONObject(fixture.getString("snapshot")).getJSONObject("registration")
+  snapshotRequester(registration)
   val config=JSONObject(registration.toString());config.remove("generation")
   checkThat(CapabilityConfiguration(config.toString(),"generation",true).allowsCommonSocial("common.follow"))
   config.remove("commonProfile");checkThat(!CapabilityConfiguration(config.toString(),"generation",true).allowsCommonSocial("common.follow"))

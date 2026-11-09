@@ -1,3 +1,4 @@
+import {publishedAppLabel} from '../napplets/published-identity';
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {AppState, FlatList, StyleSheet, Text, View} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,8 +11,8 @@ import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 function PermissionRow({permission, busy, revoke}: {permission: NotifyPermission; busy: boolean; revoke(permission: NotifyPermission): void}) {
   const { styles } = useShellStyles(createStyles);
   const press = useCallback(() => revoke(permission), [permission, revoke]);
-  return <View style={styles.permission}><Text style={styles.title}>{permission.appId}</Text><Text selectable style={styles.publisher}>{formatNpub(permission.publisher)}</Text><Text style={styles.detail}>{permission.channel || 'General notifications'}</Text>
-    <Pressable testID={'notify-revoke-' + permission.appId + '-' + (permission.channel || 'general')} accessibilityRole="button" disabled={busy} accessibilityState={{disabled: busy}} onPress={press} style={styles.button}><Text style={styles.action}>Revoke notification permission</Text></Pressable></View>;
+  return <View style={styles.permission}><Text style={styles.title}>{publishedAppLabel(permission.appId)}</Text><Text selectable style={styles.publisher}>{formatNpub(permission.publisher)}</Text><Text style={styles.detail}>{permission.channel || 'General notifications'}</Text>
+    <Pressable testID={'notify-revoke-' + publishedAppLabel(permission.appId) + '-' + (permission.channel || 'general')} accessibilityRole="button" disabled={busy} accessibilityState={{disabled: busy}} onPress={press} style={styles.button}><Text style={styles.action}>Revoke notification permission</Text></Pressable></View>;
 }
 export function NotificationSettings({service}: {service: NotificationSettingsService}) {
   const { styles } = useShellStyles(createStyles);

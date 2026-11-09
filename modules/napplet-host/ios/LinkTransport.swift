@@ -42,12 +42,23 @@ enum LinkTransport {
       } else {shape = false}
     }
     if let error = shape ? LinkUrl.error(url) : "invalid-url" {reply(result(id, "denied", error)); return}
+    let requester: String
+    if config.appId.hasPrefix(" 5129:") {
+      guard let registration = try? JSONSerialization.jsonObject(with: Data(config.snapshot.utf8)) as? [String: Any],
+        let rawSnapshot = registration["snapshot"],
+        let snapshot = PublishedArtifactRegistry.Snapshot(rawSnapshot), snapshot.appKey == config.appId else {
+        reply(result(id, "denied", "blocked-by-policy")); return
+      }
+      requester = snapshot.requester(publisher: config.publisher)
+    } else {
+      let author = config.fixture == "published" ? "Publisher: \(config.publisher)" : "Unsigned embedded test napplet"
+      requester = "Napplet: \(LinkUrl.displayIdentity(config.appId))\n\(author)"
+    }
     guard config.domains.contains("link"), var presenter = view.window?.rootViewController, let token = leases.admit(generation), let target = URL(string: url!) else {reply(result(id, "denied", "blocked-by-policy")); return}
     while let next = presenter.presentedViewController {presenter = next}
     pending[token] = Pending(generation: generation, id: id, url: target, reply: reply)
     guard !presenter.isBeingDismissed, !presenter.isBeingPresented else {finish(token, "denied", "blocked-by-policy"); return}
-    let author = config.fixture == "published" ? "Publisher: \(config.publisher)" : "Unsigned embedded test napplet"
-    let dialog = UIAlertController(title: "Open external link?", message: "Napplet: \(LinkUrl.displayIdentity(config.appId))\n\(author)\n\nDestination: \(target.host ?? "")\n\(url!)\n\nYour device may open a browser or an associated app.", preferredStyle: .alert)
+    let dialog = UIAlertController(title: "Open external link?", message: "\(requester)\n\nDestination: \(target.host ?? "")\n\(url!)\n\nYour device may open a browser or an associated app.", preferredStyle: .alert)
     dialog.addAction(UIAlertAction(title: "Cancel", style: .cancel) {_ in finish(token, "denied", "user-denied")})
     dialog.addAction(UIAlertAction(title: "Open once", style: .default) {_ in dispatch(token)})
     pending[token]?.dialog = dialog; presenter.present(dialog, animated: true)

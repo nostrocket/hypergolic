@@ -166,6 +166,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
               .put("eventId", claims.eventId).put("version", claims.version)
               .put("htmlHash", claims.htmlHash).put("domains", JSONArray(configuration?.grantedDomains ?: listOf("theme")))
               .put("done", chunk.done)
+            claims.snapshot?.let { result.put("snapshot", it.toWire()) }
             configuration?.legacyReadOnly?.let { result.put("legacyReadOnly", JSONObject(it.metadata)) }
             configuration?.appData?.let { result.put("appData", JSONObject(it)) }
             if (configuration?.publishedOpen == true) result.put("publishedOpen", true)
@@ -437,7 +438,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
   private data class PublishedClaims(
     val sessionId: String, val publisher: String, val appId: String, val eventId: String,
     val version: String, val htmlHash: String, val handle: String,
-    val configuration: CapabilityConfiguration?
+    val snapshot: PublishedArtifactRegistry.Snapshot?, val configuration: CapabilityConfiguration?
   )
 
   fun startPublishedArtifact(raw: String) {
@@ -453,9 +454,10 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     }
     val claimed = PublishedArtifactTransfer.INSTANCE.claimForHost(
       claims.handle, claims.sessionId, claims.publisher, claims.appId, claims.eventId,
-      claims.version, claims.htmlHash, generation)
-    val bytes = claimed?.takeHtmlBytes()
-    if (bytes == null) { fail("artifact-claim-failed"); return }
+      claims.version, claims.htmlHash, claims.snapshot, generation)
+      ?: run { fail("artifact-claim-failed"); return }
+    val bytes = claimed.takeHtmlBytes() ?: run { fail("artifact-claim-failed"); return }
+    publishedReader = PublishedArtifactReadOwner(bytes)
     val config = claims.configuration
     if (config != null) {
       if (!CapabilityTransport.leases.register(generation)) { fail("capability-unavailable"); return }
@@ -470,9 +472,8 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     RoutingTransport.focus(generation, active)
     LinkTransport.focus(generation, active)
     }
-    published = claims
+    published = claims.copy(snapshot = claimed.snapshot)
     publishedSource = raw
-    publishedReader = PublishedArtifactReadOwner(bytes)
     live = true
     expectedUrl = "$ORIGIN/assets/runtime/index.html?sessionId=$generation&source=published"
     webView.loadUrl(expectedUrl!!)
@@ -485,22 +486,26 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
       val data = JSONObject(raw)
       val required = setOf("sessionId", "publisher", "appId", "eventId", "version", "htmlHash", "handle")
       val names = data.keys().asSequence().toSet()
-      if (names != required && names != required + "configuration") return null
+      if (!names.containsAll(required) || (names - required - setOf("configuration", "snapshot")).isNotEmpty()) return null
       val values = listOf("sessionId", "publisher", "appId", "eventId", "version", "htmlHash", "handle")
         .map { data.get(it) as? String ?: return null }
       val session = values[0]
+      val snapshot = if (data.has("snapshot")) {
+        parseSnapshotMetadata(data.getJSONObject("snapshot")) ?: return null
+      } else null
       if (!session.matches(Regex("[A-Za-z0-9_-]{1,80}")) ||
-          !PublishedArtifactRegistry.validClaims(values[1], values[2], values[3], values[4], values[5]) ||
+          !PublishedArtifactRegistry.validClaims(values[1], values[2], values[3], values[4], values[5], snapshot) ||
           !values[6].matches(Regex("[0-9a-f]{64}"))) return null
       val config = if (names.contains("configuration")) {
         val rawConfig = data.get("configuration") as? String ?: return null
-        val parsed = CapabilityConfiguration(rawConfig, generation, allowPublished = true)
+        val parsed = CapabilityConfiguration(rawConfig, generation, allowPublished = true, expectedSnapshot = snapshot?.toWire())
         if (!PublishedCapabilityBinding.matches(parsed.fixture, parsed.sessionId,
             parsed.publisher, parsed.appId, parsed.version, session, values[1], values[2], values[4])) return null
         if (parsed.legacyReadOnly?.matches(values[3], values[5]) == false) return null
         parsed
       } else null
-      PublishedClaims(session, values[1], values[2], values[3], values[4], values[5], values[6], config)
+      if (snapshot != null && config == null) return null
+      PublishedClaims(session, values[1], values[2], values[3], values[4], values[5], values[6], snapshot, config)
     } catch (_: Exception) { null }
   }
 

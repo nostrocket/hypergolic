@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { CatalogHandler } from '../routing/routing-catalog';
 import type { RoutingReviewItem, RoutingReviewService, RoutingReviewRequest } from '../routing/routing-review';
 import { formatNpub } from '../security/public-identity';
+import {publishedAppLabel,type SnapshotIdentity} from '../napplets/published-identity';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 const subscribe = () => () => {}, empty = () => null;
 export function RoutingReview({service, reviewSlot, blocked = false}: {service: RoutingReviewService | null; reviewSlot?: ReviewSlot; blocked?: boolean}) {
@@ -24,9 +25,15 @@ export function RoutingReview({service, reviewSlot, blocked = false}: {service: 
   return service && item && !blocked && (!reviewSlot || current?.lane === 'routing' && current.item.id === item.id) ? <RoutingReviewSheet key={item.id} service={service} item={item} /> : null;
 }
 type IntentReviewRequest = Extract<RoutingReviewRequest, {kind: 'intent'}>;
-function NappletIdentity({appId, publisher, fixture}: {appId: string; publisher: string; fixture: string}) {
+function NappletIdentity({appId, publisher, fixture, snapshot}: {appId: string; publisher: string; fixture: string; snapshot?: SnapshotIdentity | undefined}) {
   const { styles } = useShellStyles(createStyles);
-  return <View style={styles.group}><Text selectable style={styles.text}>{appId}</Text><Text selectable style={styles.mono}>{formatNpub(publisher)}</Text>{fixture !== 'published' && <Text style={styles.detail}>Unsigned embedded test napplet</Text>}</View>;
+  return <View style={styles.group}><Text selectable style={styles.text}>{snapshot?.title ?? publishedAppLabel(appId)}</Text>
+    {snapshot && <SnapshotDetails eventId={snapshot.eventId}/>}
+    <Text selectable style={styles.mono}>{formatNpub(publisher)}</Text>{fixture !== 'published' && <Text style={styles.detail}>Unsigned embedded test napplet</Text>}</View>;
+}
+function SnapshotDetails({eventId}: {eventId:string}) {
+  const {styles} = useShellStyles(createStyles);
+  return <><Text style={styles.detail}>Snapshot (kind 5129)</Text><Text selectable style={styles.mono}>{eventId}</Text></>;
 }
 function reviewTitle(request: RoutingReviewRequest): string {
   switch (request.kind) {
@@ -47,8 +54,9 @@ function IntentReviewDetails({request, selected, onSelect, remember, onRemember}
     <Text style={styles.label}>Payload shared with the selected handler</Text><Text selectable testID="routing-payload" style={styles.mono}>{payload}</Text>
     <Text style={styles.detail}>{request.newInstance ? 'Approval opens another view.' : 'A matching loaded view is reused; otherwise the saved handler opens.'} {request.request.behavior?.focus === false ? 'Your current view keeps focus.' : 'The handler receives focus.'}</Text>
     <Text style={styles.label}>Handler and publisher</Text>
-    {handlers.map(handler => <Pressable key={handler.publisher + ':' + handler.appId} testID={'routing-candidate-' + handler.publisher + '-' + handler.appId} accessibilityRole="radio" accessibilityState={{selected: selected === handler}} onPress={() => onSelect(handler)} style={[styles.choice, selected === handler && styles.chosen]}>
-      <Text style={styles.text}>{handler.title}</Text><Text selectable style={styles.mono}>{formatNpub(handler.publisher)}</Text><Text style={styles.detail}>{selected === handler ? 'Selected' : 'Choose this handler'}</Text>
+    {handlers.map(handler => <Pressable key={handler.publisher + ':' + handler.appId} testID={'routing-candidate-' + handler.publisher + '-' + publishedAppLabel(handler.appId)} accessibilityRole="radio" accessibilityState={{selected: selected === handler}} onPress={() => onSelect(handler)} style={[styles.choice, selected === handler && styles.chosen]}>
+      <Text style={styles.text}>{handler.title}</Text>{handler.manifest.kind === 5129 && <SnapshotDetails eventId={handler.eventId}/>}
+      <Text selectable style={styles.mono}>{formatNpub(handler.publisher)}</Text><Text style={styles.detail}>{selected === handler ? 'Selected' : 'Choose this handler'}</Text>
     </Pressable>)}
     <Pressable accessibilityRole="checkbox" accessibilityState={{checked: remember}} onPress={onRemember} style={styles.button}><Text style={styles.action}>{remember ? '✓ ' : ''}Use this handler by default for {request.request.archetype}</Text></Pressable>
     <Text style={styles.detail}>A saved default still needs your approval for each dispatch. Change it in Settings.</Text>
@@ -66,7 +74,7 @@ function PermissionReviewDetails({request}: {request: Extract<RoutingReviewReque
   const { styles } = useShellStyles(createStyles);
   const { consent } = request;
   return <>
-    <Text style={styles.label}>Handler</Text><NappletIdentity appId={consent.appId} publisher={consent.publisher} fixture="published"/>
+    <Text style={styles.label}>Handler</Text><NappletIdentity appId={consent.appId} publisher={consent.publisher} fixture="published" snapshot={consent.snapshot}/>
     <Text style={styles.label}>Required capabilities</Text><Text selectable style={styles.text}>{consent.domains.join(', ') || 'None'}</Text>
     {consent.optionalDomains.length > 0 && <><Text style={styles.label}>Optional capabilities</Text><Text selectable style={styles.text}>{consent.optionalDomains.join(', ')}</Text></>}
     {(consent.domains.includes('keys') || consent.optionalDomains.includes('keys')) &&
