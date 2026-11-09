@@ -1,6 +1,7 @@
 package org.nostrocket.hypergolic.mesh;
 
 import java.io.ByteArrayInputStream;
+import org.nostrocket.hypergolic.signercore.NativeLocalVaultLease;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -25,6 +26,11 @@ final class NativeMeshIdentityStore implements AutoCloseable {
     AccountLease(String account,long epoch,long vaultRevision,Current current){
       if(!hex(account)||!revision(epoch)||!revision(vaultRevision)||current==null)throw new Failure();
       this.account=account;this.epoch=epoch;this.vaultRevision=vaultRevision;this.current=current;
+    }
+    static AccountLease selectedLocal(NativeLocalVaultLease lease) {
+      if(lease==null || !lease.isCurrent()) throw new Failure();
+      AccountLease result=new AccountLease(lease.account,lease.runtimeEpoch,lease.vaultRevision,lease::isCurrent);
+      if(!result.isCurrent()) throw new Failure(); return result;
     }
     boolean isCurrent(){try{return !revoked.get()&&current.current()&&!revoked.get();}catch(RuntimeException failure){return false;}}
     void revoke(){revoked.set(true);}

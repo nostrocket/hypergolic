@@ -21,6 +21,14 @@ final class NativeVaultRuntimeAuthority: @unchecked Sendable {
     return gate.current(epoch, requireForeground: requireForeground)
   }
   func update(foreground: Bool, protectedData: Bool) { gate.update(foreground: foreground, protectedData: protectedData) }
+  func suspendLocalLeases() { gate.suspendLocalLeases() }
+  func localLeaseEpoch(_ epoch: UInt64) throws -> UInt64 {
+    guard isOwner() else { throw NativeVaultFailure.stale }
+    return try gate.localLeaseEpoch(epoch)
+  }
+  func currentLocalLease(_ epoch: UInt64, localEpoch: UInt64) -> Bool {
+    isOwner() && gate.currentLocalLease(epoch, localEpoch: localEpoch)
+  }
   func invalidateActions() { gate.invalidateActions() }
   func close() { gate.close() }
   func permit(_ epoch: UInt64, deadline: ContinuousClock.Instant? = nil) -> any NativeSignerStorageAuthority { NativeVaultMutationPermit(authority: self, epoch: epoch, deadline: deadline) }

@@ -13,7 +13,18 @@ final class NativeVaultBinding: @unchecked Sendable {
         guard value.authority.owns(context), value.authority.isAlive else { throw NativeVaultFailure.stale }
         return false
       }
-      value = NativeVaultLease(context: context); return true
+      value = NativeVaultLease(context: context)
+      do {
+        try NativeLocalVaultLease.install(owner:self) { [weak self] in
+          guard let self else { throw NativeLocalVaultLease.Unavailable() }
+          let authority = try self.lease().authority
+          let epoch = try authority.epoch(), localEpoch = try authority.localLeaseEpoch(epoch)
+          return try await NativeVaultCore.shared.localLease(runtimeEpoch: epoch, current: {
+            authority.currentLocalLease(epoch, localEpoch: localEpoch)
+          })
+        }
+      } catch { value?.close(); value=nil; throw error }
+      return true
     }
   }
   func lease() throws -> NativeVaultLease {

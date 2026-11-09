@@ -1,5 +1,8 @@
 import Foundation
 import CryptoKit
+#if canImport(HypergolicSignerCore)
+import HypergolicSignerCore
+#endif
 
 /// Native-only credential/pair state. No bridge, signer, socket or proof factory is installed.
 final class NativeMeshIdentityStore: @unchecked Sendable {
@@ -11,6 +14,11 @@ final class NativeMeshIdentityStore: @unchecked Sendable {
     init(account:String,epoch:Int64,vaultRevision:Int64,current:@escaping @Sendable()->Bool)throws{
       guard NativeMeshIdentityStore.hex(account),NativeMeshIdentityStore.revision(epoch),NativeMeshIdentityStore.revision(vaultRevision) else{throw Failure.unavailable}
       self.account=account;self.epoch=epoch;self.vaultRevision=vaultRevision;self.current=current
+    }
+    convenience init(selectedLocal lease:NativeLocalVaultLease)throws{
+      guard lease.isCurrent,lease.runtimeEpoch<=UInt64(Int64.max),lease.vaultRevision<=UInt64(Int64.max) else{throw Failure.unavailable}
+      try self.init(account:lease.account,epoch:Int64(lease.runtimeEpoch),vaultRevision:Int64(lease.vaultRevision),current:{lease.isCurrent})
+      guard isCurrent else{throw Failure.unavailable}
     }
     var isCurrent:Bool{leaseLock.lock();let stopped=revoked;leaseLock.unlock();guard !stopped,current() else{return false};leaseLock.lock();defer{leaseLock.unlock()};return !revoked}
     func revoke(){leaseLock.lock();revoked=true;leaseLock.unlock()}

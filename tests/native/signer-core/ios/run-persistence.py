@@ -38,6 +38,7 @@ EXTRA = [
     'modules/signer-core/ios/NativeVaultMutationGate.swift',
     'modules/signer-core/ios/NativeVaultRecord.swift',
     'modules/signer-core/ios/NativeVaultCore.swift',
+    'modules/signer-core/ios/NativeLocalVaultLease.swift',
     'modules/signer-core/ios/NativeVaultImportPanel.swift',
     'modules/napplet-host/ios/NativeSignerRelayPolicy.swift',
     'modules/napplet-host/ios/NativeApprovalAuthority.swift',

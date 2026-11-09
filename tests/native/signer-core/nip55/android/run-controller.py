@@ -60,7 +60,7 @@ def main():
     signer = ROOT / 'modules/signer-core/android/src/main/java/org/nostrocket/hypergolic/signercore'
     host = ROOT / 'modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host'
     signer_names = ['NativeSigningKey', 'NativeEvent', 'NativeSignerCore', 'NativeSecretBuffer', 'NativeVaultFile',
-                    'NativeVault', 'NativeVaultRecordCodec', 'NativeVaultMetadata', 'NativeVaultMethods', 'NativeAndroidSignerCandidates', 'NativeTransportCrypto',
+                    'NativeVault', 'NativeLocalVaultLease', 'NativeVaultRecordCodec', 'NativeVaultMetadata', 'NativeVaultMethods', 'NativeAndroidSignerCandidates', 'NativeTransportCrypto',
                     'NativeRemoteBinding', 'NativeConnectionCandidate', 'NativeRpcJson', 'NativeSignedEvent',
                     'NativeAndroidSignerBinding', 'NativeAndroidSignerInventory', 'NativeAndroidSignerParcel',
                     'NativeAndroidSignerResult', 'NativeAndroidSignerActivityController', 'NativeAndroidSignerPicker']

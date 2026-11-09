@@ -61,6 +61,13 @@ class SignerCoreModule : Module() {
     @Volatile var androidDispatched = false
   }
   @Volatile private var signing: Signing? = null
+  private val localVaultLeaseProvider = java.util.function.Supplier {
+    synchronized(session.lock) {
+      val epoch = session.epoch
+      session.require(epoch, ::active)
+      vaultOwned().localLease(appContext, epoch) { session.localLeaseCurrent(epoch, ::active) }
+    }
+  }
 
   private fun active(): Boolean = NativeIdentityOwnerAccess.owns(appContext) &&
     appContext.runtime.reactContext?.lifecycleState == LifecycleState.RESUMED
@@ -178,6 +185,7 @@ class SignerCoreModule : Module() {
   private fun revoke(background: Boolean) {
     val cleanup = synchronized(session.lock) {
       session.invalidate(background)
+      vault?.retireLocalLeases()
       clearImportTimer()
       if (background) vault?.close() else runCatching { vault?.cancelImports(appContext) }
       val current = signing.also { signing = null }
@@ -227,6 +235,10 @@ class SignerCoreModule : Module() {
   private fun retire() = revoke(true)
 
   private fun background() {
+    synchronized(session.lock) {
+      // A protected-signer handoff may preserve the signer epoch across a pause.
+      session.suspendLocalLeases(vault)
+    }
     if (!handoffs.background()) { retire(); return }
     val cleanup = synchronized(session.lock) {
       val identityActions = actions
@@ -301,6 +313,7 @@ class SignerCoreModule : Module() {
     Function("activateNativeVault") { vaultAction {
       if (appContext.runtime.reactContext?.isOnJSQueueThread != true) throw NativeVault.Error("AUTHORIZATION_DENIED")
       session.activate(::active)
+      NativeLocalVaultLease.install(localVaultLeaseProvider)
       actions?.foreground(true)
       true
     } }
@@ -787,6 +800,7 @@ class SignerCoreModule : Module() {
     Function("cancelPublicSignatures") { operationId: String -> publicVerification.cancel(operationId) }
 
     OnActivityEntersForeground {
+      session.resumeLocalLeases()
       publicVerification.foreground(true)
       cvmSessions.foreground(active())
       androidSigners?.foreground(true)

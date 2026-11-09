@@ -33,7 +33,7 @@ final class NativeVault implements AutoCloseable {
       this.record = record; this.deadline = now + 120_000L;
     }
   }
-  private NativeConnectionCandidate remoteCandidate;
+  private final NativeConnectionCandidate.Registry remoteCandidates;
   private final NativeAndroidSignerCandidates androidCandidates = new NativeAndroidSignerCandidates(this);
   private final Object owner;
   private final NativeVaultFile file;
@@ -42,12 +42,15 @@ final class NativeVault implements AutoCloseable {
   private Candidate candidate;
   private boolean poisoned, initialized;
   private long committedWrites;
+  private final List<NativeLocalVaultLease> localLeases = new ArrayList<>();
+  private Object localLeaseIncarnation = new Object();
 
   NativeVault(Object owner, Context context) { this(owner, context, SystemClock::elapsedRealtime); }
   /** Native-only deterministic clock seam; the Expo module always uses the OS clock. */
   NativeVault(Object owner, Context context, LongSupplier clock) {
     if (owner == null || context == null || clock == null) throw new Error("NOT_READY");
     this.owner = owner; this.clock = clock; file = new NativeVaultFile(context);
+    remoteCandidates = new NativeConnectionCandidate.Registry(this, clock, this::hasCandidate);
   }
   private void owned(Object context) { if (owner != context || poisoned) throw new Error("AUTHORIZATION_DENIED"); }
   private State opened(Object context) {
@@ -56,7 +59,7 @@ final class NativeVault implements AutoCloseable {
     if (state == null) {
       byte[] encoded=null;
       try { encoded=file.read(); if(encoded==null)throw new Error("RECOVERY_REQUIRED");state=decode(encoded); }
-      catch(RuntimeException failure) { poisoned=true;releaseState();throw failure; }
+      catch(RuntimeException failure) { poisoned=true;retireLocalLeases();releaseState();throw failure; }
       finally { if(encoded!=null)Arrays.fill(encoded,(byte)0); }
     }
     return state;
@@ -74,6 +77,7 @@ final class NativeVault implements AutoCloseable {
     return result;
   }
   void persist(State value, boolean initialize) {
+    retireLocalLeases();
     byte[] clear = null;
     try { clear=encode(value); file.write(clear, initialize); value.persistedHash=hash(clear); committedWrites++; }
     catch (RuntimeException failure) { poisoned = true; close(); throw failure; }
@@ -145,7 +149,7 @@ final class NativeVault implements AutoCloseable {
     current.records.add(next.record); current.selected=next.record.pubkey; current.revision++;
     persist(current,false); return snapshot(current);
   }
-  synchronized String addPublicIdentity(Object context, String pubkey, String vault, long revision) {
+  synchronized String addPublicIdentity(Object context, String pubkey, String vault, long revision) { retireLocalLeases();
     try {
       State current = expected(context, vault, revision);
       if (hasCandidate() || !NativeSigningKey.validPublicKey(pubkey) ||
@@ -203,7 +207,7 @@ final class NativeVault implements AutoCloseable {
     if (!current.selected.equals(pubkey)) throw new Error("AUTHORIZATION_DENIED");
     return record(current, pubkey);
   }
-  synchronized String selectMethod(Object context, String pubkey, String method, String vault, long revision) {
+  synchronized String selectMethod(Object context, String pubkey, String method, String vault, long revision) { retireLocalLeases();
     try {
       State current = expected(context, vault, revision);
       Record value = selected(current, pubkey);
@@ -214,7 +218,7 @@ final class NativeVault implements AutoCloseable {
       return snapshot(current);
     } finally { releaseState(); }
   }
-  synchronized String disconnect(Object context, String pubkey, String method, String vault, long revision) {
+  synchronized String disconnect(Object context, String pubkey, String method, String vault, long revision) { retireLocalLeases();
     try {
       State current = expected(context, vault, revision);
       Record value = selected(current, pubkey);
@@ -223,7 +227,7 @@ final class NativeVault implements AutoCloseable {
       return snapshot(current);
     } finally { releaseState(); }
   }
-  synchronized void deleteLocal(Object context, String pubkey, String vault, long revision) {
+  synchronized void deleteLocal(Object context, String pubkey, String vault, long revision) { retireLocalLeases();
     try {
       State current = expected(context, vault, revision);
       Record value = selected(current, pubkey);
@@ -251,114 +255,48 @@ final class NativeVault implements AutoCloseable {
     } finally { releaseState(); }
   }
   synchronized boolean refreshActive(Object context, String handle, String vault, long revision) {
-    try { remote(context, handle, vault, revision, true); return true; }
+    return remoteActive(context, handle, vault, revision, true);
+  }
+  synchronized boolean remoteActive(Object context, String handle, String vault, long revision) {
+    return remoteActive(context, handle, vault, revision, false);
+  }
+  private boolean remoteActive(Object context, String handle, String vault, long revision, boolean refresh) {
+    try { remote(context, handle, vault, revision, refresh); return true; }
     catch (RuntimeException failure) { return false; }
   }
   synchronized String refreshReview(Object context, String handle, String vault, long revision) {
-    NativeConnectionCandidate value = remote(context, handle, vault, revision, true);
-    return "Identity:\n" + value.pubkey + "\n\nSigner peer:\n" + value.binding.peer +
-      "\n\nUse exactly these signer relays:\n" + String.join("\n", value.binding.relays) +
-      "\n\nAccount data and the selected signing method remain unchanged. Pending requests will be cancelled.";
+    return remote(context, handle, vault, revision, true).refreshReview();
+  }
+  synchronized String remoteReview(Object context, String handle, String vault, long revision) {
+    NativeConnectionCandidate value = remote(context, handle, vault, revision, false);
+    try { return value.connectReview(expected(context, vault, revision)); }
+    finally { releaseState(); }
   }
   synchronized String prepareRemote(Object context, String pubkey, NativeRemoteBinding binding, long deadline, String vault, long revision) {
-    try { return prepareConnection(expected(context, vault, revision), pubkey, binding, deadline, false); }
+    try { return remoteCandidates.prepare(expected(context, vault, revision), pubkey, binding, deadline, false); }
     finally { releaseState(); }
   }
   synchronized String prepareRefresh(Object context, String pubkey, NativeRemoteBinding binding, long deadline, String vault, long revision) {
-    try { return prepareConnection(expected(context, vault, revision), pubkey, binding, deadline, true); }
+    try { return remoteCandidates.prepare(expected(context, vault, revision), pubkey, binding, deadline, true); }
     finally { releaseState(); }
-  }
-  private String prepareConnection(State current, String pubkey, NativeRemoteBinding binding, long deadline, boolean refresh) {
-    try {
-      long now = clock.getAsLong();
-      if (now < 0 || deadline <= now || deadline - now > 120_000L) throw new Error("SIGNER_EXPIRED");
-      if (!NativeSigningKey.validPublicKey(pubkey)) throw new Error("SIGNER_RESPONSE_INVALID");
-      if (hasCandidate()) throw new Error("NOT_READY");
-      Record existing = current.records.stream().filter(value -> value.pubkey.equals(pubkey)).findFirst().orElse(null);
-      if (refresh) {
-        if (!current.selected.equals(pubkey) || existing == null || existing.remote == null ||
-            !existing.remote.peer.equals(binding.peer) || !existing.remote.client.publicKey().equals(binding.client.publicKey())) {
-          throw new Error("AUTHORIZATION_DENIED");
-        }
-        if (existing.remote.relays.equals(binding.relays)) throw new Error("SIGNER_UNSUPPORTED");
-      } else if (existing != null && existing.remote != null) throw new Error("SIGNER_ALREADY_CONNECTED");
-      if (existing == null && current.records.size() >= MAX_IDENTITIES) throw new Error("LIMIT_REACHED");
-      remoteCandidate = new NativeConnectionCandidate(current, pubkey, binding, deadline, refresh);
-      return new JSONObject().put("handle", remoteCandidate.handle).put("pubkey", pubkey).toString();
-    } catch (Error failure) { throw failure; }
-    catch (Exception failure) { throw new Error("STORAGE_FAILURE"); }
-  }
-  private NativeConnectionCandidate remote(Object context, String handle, String vault, long revision) {
-    return remote(context, handle, vault, revision, false);
   }
   private NativeConnectionCandidate remote(Object context, String handle, String vault, long revision, boolean refresh) {
     owned(context);
-    if (remoteCandidate != null && clock.getAsLong() >= remoteCandidate.deadline) {
-      remoteCandidate.binding.close();
-      remoteCandidate = null;
-    }
-    NativeConnectionCandidate value = remoteCandidate;
-    if (value == null || !value.handle.equals(handle) || !value.vault.equals(vault) || value.revision != revision || value.refresh != refresh) {
-      throw new Error("SIGNER_EXPIRED");
-    }
-    return value;
+    return remoteCandidates.current(handle, vault, revision, refresh);
   }
-  synchronized boolean remoteActive(Object context, String handle, String vault, long revision) {
-    try { remote(context, handle, vault, revision); return true; }
-    catch (RuntimeException failure) { return false; }
-  }
-  synchronized String remoteReview(Object context, String handle, String vault, long revision) {
-    NativeConnectionCandidate value = remote(context, handle, vault, revision);
-    try {
-      State current = expected(context, vault, revision);
-      Record existing = current.records.stream().filter(record -> record.pubkey.equals(value.pubkey)).findFirst().orElse(null);
-      return "Connect and use this signer for identity:\n" + value.pubkey + "\n\nSigner peer:\n" + value.binding.peer +
-        "\n\nSigner relays:\n" + String.join("\n", value.binding.relays) +
-        (existing != null && existing.key != null ? "\n\nThe local key remains available." : "\n\nNo local key is stored for this identity.");
-    } finally { releaseState(); }
-  }
-  synchronized String commitRemote(Object context, String handle, String vault, long revision) {
+  synchronized String commitRemote(Object context, String handle, String vault, long revision) { retireLocalLeases();
     return commitConnection(context, handle, vault, revision, false);
   }
-  synchronized String commitRefresh(Object context, String handle, String vault, long revision) {
+  synchronized String commitRefresh(Object context, String handle, String vault, long revision) { retireLocalLeases();
     return commitConnection(context, handle, vault, revision, true);
   }
   private String commitConnection(Object context, String handle, String vault, long revision, boolean refresh) {
-    NativeRemoteBinding previous = null;
-    try {
-      State current = expected(context, vault, revision);
-      NativeConnectionCandidate pending = remote(context, handle, vault, revision, refresh);
-      Record existing = current.records.stream().filter(value -> value.pubkey.equals(pending.pubkey)).findFirst().orElse(null);
-      if (refresh) {
-        if (!current.selected.equals(pending.pubkey) || existing == null || existing.remote == null ||
-            !existing.remote.peer.equals(pending.binding.peer) || !existing.remote.client.publicKey().equals(pending.binding.client.publicKey())) {
-          throw new Error("AUTHORIZATION_DENIED");
-        }
-        previous = existing.remote;
-      } else if (existing != null && existing.remote != null) throw new Error("SIGNER_ALREADY_CONNECTED");
-      if (existing == null && current.records.size() >= MAX_IDENTITIES) throw new Error("LIMIT_REACHED");
-      advance(current);
-      if (existing == null) {
-        existing = new Record(pending.pubkey, null, pending.binding, timestamp(), 2, NIP46);
-        current.records.add(existing);
-      } else { existing.remote = pending.binding; if (!refresh) existing.method = NIP46; }
-      remoteCandidate = null;
-      current.selected = existing.pubkey;
-      persist(current, false);
-      return snapshot(current);
-    } finally { if (previous != null) previous.close(); releaseState(); }
+    try { return remoteCandidates.commit(expected(context, vault, revision), handle, vault, revision, refresh); }
+    finally { releaseState(); }
   }
-  synchronized void cancelRemote(Object context, String handle) { cancelConnection(context, handle, false); }
-  synchronized void cancelRefresh(Object context, String handle) { cancelConnection(context, handle, true); }
-  private void cancelConnection(Object context, String handle, boolean refresh) {
-    owned(context);
-    if (remoteCandidate != null && remoteCandidate.handle.equals(handle)) {
-      if (remoteCandidate.refresh != refresh) throw new Error("AUTHORIZATION_DENIED");
-      remoteCandidate.binding.close();
-      remoteCandidate = null;
-    }
-  }
-  private boolean hasCandidate() { return candidate != null || remoteCandidate != null || androidCandidates.pending(clock.getAsLong()); }
+  synchronized void cancelRemote(Object context, String handle) { owned(context); remoteCandidates.cancel(handle, false); }
+  synchronized void cancelRefresh(Object context, String handle) { owned(context); remoteCandidates.cancel(handle, true); }
+  private boolean hasCandidate() { return candidate != null || remoteCandidates.pending() || androidCandidates.pending(clock.getAsLong()); }
   synchronized String prepareAndroidSigner(Object context, String pubkey, NativeAndroidSignerBinding binding, long deadline, String vault, long revision) {
     try {
       State current = expected(context, vault, revision);
@@ -374,7 +312,7 @@ final class NativeVault implements AutoCloseable {
     try { return androidCandidates.binding(expected(context, vault, revision), handle, clock.getAsLong()); }
     finally { releaseState(); }
   }
-  synchronized String commitAndroidSigner(Object context, String handle, String vault, long revision) {
+  synchronized String commitAndroidSigner(Object context, String handle, String vault, long revision) { retireLocalLeases();
     try { return androidCandidates.commit(expected(context, vault, revision), handle, clock.getAsLong()); }
     finally { releaseState(); }
   }
@@ -386,14 +324,46 @@ final class NativeVault implements AutoCloseable {
       return value.androidSigner;
     } finally { releaseState(); }
   }
+  synchronized void retireLocalLeases() {
+    for(NativeLocalVaultLease lease:localLeases) lease.retire();
+    localLeases.clear();
+    localLeaseIncarnation = new Object();
+  }
+  synchronized NativeLocalVaultLease localLease(Object context,long epoch,java.util.function.BooleanSupplier runtimeCurrent) {
+    try {
+      owned(context); localLeases.removeIf(NativeLocalVaultLease::retired);
+      if(epoch<0 || runtimeCurrent==null || !runtimeCurrent.getAsBoolean() || localLeases.size()>=16) throw new Error("AUTHORIZATION_DENIED");
+      State value=opened(context); verifyCurrent();
+      Record selected=record(value,value.selected);
+      if(selected.method!=LOCAL || selected.key==null) throw new Error("LOCAL_KEY_UNAVAILABLE");
+      String account=value.selected, vault=value.id; long revision=value.revision;
+      if(!runtimeCurrent.getAsBoolean()) throw new Error("AUTHORIZATION_DENIED");
+      Object incarnation = localLeaseIncarnation;
+      NativeLocalVaultLease lease=NativeLocalVaultLease.issue(account,vault,revision,epoch,
+        ()->localLeaseCurrent(context,account,vault,revision,incarnation,runtimeCurrent));
+      localLeases.add(lease); return lease;
+    } finally { releaseState(); }
+  }
+  private boolean localLeaseCurrent(Object context,String account,String vault,long revision,Object incarnation,java.util.function.BooleanSupplier runtimeCurrent) {
+    if(!runtimeCurrent.getAsBoolean()) return false;
+    synchronized(this) {
+      // An in-flight check for a retired lease cannot touch a newly opened vault incarnation.
+      if(incarnation!=localLeaseIncarnation) return false;
+      try {
+        State value=expected(context,vault,revision); Record selected=selected(value,account);
+        return selected.method==LOCAL && selected.key!=null && runtimeCurrent.getAsBoolean();
+      } catch(RuntimeException failure) { retireLocalLeases(); return false; }
+      finally { releaseState(); }
+    }
+  }
   synchronized long committedWrites() { return committedWrites; }
   private void releaseState() { if(state!=null) { state.close();state=null; } }
   synchronized String open(Object context) { try { return openInternal(context); } finally { releaseState(); } }
   synchronized String publicSnapshot(Object context) { try { return snapshotInternal(context); } finally { releaseState(); } }
   synchronized String prepareImport(Object context,NativeSigningKey key,String vault,long revision) { try { return prepareInternal(context,key,vault,revision); } finally { releaseState(); } }
-  synchronized String commitImport(Object context,String handle,String vault,long revision) { try { return commitInternal(context,handle,vault,revision); } finally { releaseState(); } }
-  synchronized String select(Object context,String pubkey,String vault,long revision) { try { return selectInternal(context,pubkey,vault,revision); } finally { releaseState(); } }
-  synchronized void delete(Object context,String pubkey,String vault,long revision) { try { deleteInternal(context,pubkey,vault,revision); } finally { releaseState(); } }
+  synchronized String commitImport(Object context,String handle,String vault,long revision) { retireLocalLeases(); try { return commitInternal(context,handle,vault,revision); } finally { releaseState(); } }
+  synchronized String select(Object context,String pubkey,String vault,long revision) { retireLocalLeases(); try { return selectInternal(context,pubkey,vault,revision); } finally { releaseState(); } }
+  synchronized void delete(Object context,String pubkey,String vault,long revision) { retireLocalLeases(); try { deleteInternal(context,pubkey,vault,revision); } finally { releaseState(); } }
   synchronized NativeSigningKey signingKey(Object context,String pubkey,String vault,long revision) { try { return signingInternal(context,pubkey,vault,revision); } finally { releaseState(); } }
   synchronized byte[] backupScalar(Object context,String pubkey,String vault,long revision) { try { return backupInternal(context,pubkey,vault,revision); } finally { releaseState(); } }
   synchronized String importIdentity(Object context,String handle,String vault,long revision) {
@@ -410,11 +380,12 @@ final class NativeVault implements AutoCloseable {
     owned(context);
     androidCandidates.clear();
     if (candidate != null) { candidate.record.close(); candidate = null; }
-    if (remoteCandidate != null) { remoteCandidate.binding.close(); remoteCandidate = null; }
+    remoteCandidates.clear();
   }
   @Override public synchronized void close() {
+    retireLocalLeases();
     androidCandidates.clear();
-    if (remoteCandidate != null) { remoteCandidate.binding.close(); remoteCandidate = null; }
+    remoteCandidates.clear();
     if (candidate!=null) { candidate.record.key.close(); candidate=null; }
     if (state!=null) { state.close(); state=null; }
   }

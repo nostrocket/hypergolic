@@ -60,6 +60,7 @@ import HypergolicNappletHost
       protectedData: UIApplication.shared.isProtectedDataAvailable)
   }
   private func resignActive() {
+    authority.suspendLocalLeases()
     NativeSignerIdentityActions.clearBackup()
     if authentication == nil { background() } else { cancelImport(); cancelSigning() }
   }
