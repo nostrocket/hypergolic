@@ -1,4 +1,5 @@
 import { isHostActivityBlocked } from './workspace-activity';
+import { WorkspaceFullscreenContext, useWorkspaceFullscreen } from './WorkspaceFullscreen';
 import { useWorkspaceDiscovery } from './useWorkspaceDiscovery';
 import { DiscoveryAccessReview } from './DiscoveryAccessReview';
 import { WorkspaceHeader } from './WorkspaceHeader';
@@ -81,6 +82,7 @@ export function Shell({ blocked = false, hostActivityBlocked = blocked, initialW
   const owner = useContext(OwnerContext);
   const [localWorkspace, setLocalWorkspace] = useState(() => initialWorkspace ?? initialTestWorkspace());
   const workspace = controlledWorkspace ?? localWorkspace;
+  const fullscreen = useWorkspaceFullscreen(workspace);
   const current = useRef(workspace);
   useLayoutEffect(() => { current.current = workspace; }, [workspace]);
   const change = useCallback((next: Workspace) => {
@@ -102,7 +104,7 @@ export function Shell({ blocked = false, hostActivityBlocked = blocked, initialW
   const focusedIndex = Math.max(0, workspace.sessions.findIndex(session => session.id === workspace.focusedId));
   const focused = workspace.sessions.find(session => session.id === workspace.focusedId);
   const { session: menuSession, visible: menuVisible, anchor: menuAnchor, dismiss: dismissMenu, open: openMenu, clear: clearMenu } =
-    useWorkspaceMenu(focused, workspace.overview, { blocked, busy: busyRef, dragging: handleDragging, closeChecks });
+    useWorkspaceMenu(focused, workspace.overview, { blocked, fullscreen, busy: busyRef, dragging: handleDragging, closeChecks });
   const navigationBlocked = blocked || busy || closeCheck !== null;
   const progress = useSharedValue(workspace.overview ? 1 : 0);
   const position = useSharedValue(focusedIndex);
@@ -141,7 +143,7 @@ export function Shell({ blocked = false, hostActivityBlocked = blocked, initialW
   }, []);
   useEffect(() => {
     if (!busyRef.current) { position.set(focusedIndex); progress.set(workspace.overview ? 1 : 0); }
-  }, [focusedIndex, position, progress, workspace.overview]);
+  }, [focusedIndex, fullscreen, position, progress, workspace.overview]);
 
   const focusSession = useCallback((id: string) => {
     if (blocked || busyRef.current || closeChecks.isPending()) return;
@@ -160,10 +162,10 @@ export function Shell({ blocked = false, hostActivityBlocked = blocked, initialW
     change(showOverview(current.current));
     runAnimation(progress, 1, () => overview.current?.focusCard(current.current.focusedId));
   }, [blocked, change, closeChecks, progress, runAnimation]);
-  useWorkspaceBack({ workspace, blocked, menuVisible, busy: busyRef, keyboard: keyboardVisible,
+  useWorkspaceBack({ workspace, blocked, fullscreen, menuVisible, busy: busyRef, keyboard: keyboardVisible,
     closeChecks, dismissMenu, openOverview, focusSession });
   const onHandleEnd = (side: HandleSide, result: 'overview' | 'switch' | 'cancel') => handleWorkspaceGestureEnd({
-    side, result, blocked, busyRef, focusedIndex, current, position, openOverview, runAnimation, change,
+    side, result, blocked, fullscreen, busyRef, focusedIndex, current, position, openOverview, runAnimation, change,
     setHandleDragging,
   });
   function closeSession(id: string) {
@@ -208,15 +210,15 @@ export function Shell({ blocked = false, hostActivityBlocked = blocked, initialW
       <ShellBackdrop mood={workspace.overview ? 'shelf' : 'running'} />
       <ReviewFocus sessionId={workspace.focusedId} overview={workspace.overview} busy={busy} dragging={handleDragging} blocked={blocked} settings={obscured} closing={closingId !== null} />
       <View accessibilityElementsHidden={obscured} importantForAccessibility={obscured ? 'no-hide-descendants' : 'auto'} style={styles.content}>
-        <WorkspaceHeader overview={workspace.overview} focused={focused} identity={identity} disabled={navigationBlocked || handleDragging}
+        <WorkspaceHeader fullscreen={fullscreen} overview={workspace.overview} focused={focused} identity={identity} disabled={navigationBlocked || handleDragging}
           menuAnchor={menuAnchor} onSettings={openSettings} onOverview={openOverview} onMenu={openMenu} />
-        <WorkspaceStage onZoomTarget={registerZoomTarget} closeCheck={closeCheck} workspace={workspace} progress={progress} position={position} scrollY={scrollY} swipeY={swipeY} swipeId={swipeId} busy={busy} blocked={navigationBlocked || obscured} hostActivityBlocked={isHostActivityBlocked(hostActivityBlocked, obscured)} interactive={!handleDragging}
+        <WorkspaceStage fullscreen={fullscreen} onZoomTarget={registerZoomTarget} closeCheck={closeCheck} workspace={workspace} progress={progress} position={position} scrollY={scrollY} swipeY={swipeY} swipeId={swipeId} busy={busy} blocked={navigationBlocked || obscured} hostActivityBlocked={isHostActivityBlocked(hostActivityBlocked, obscured)} interactive={!handleDragging}
           pending={pendingApprovals ?? noPending} ref={overview} onHostEvent={receiveHostEvent} onFocus={focusSession} onClose={requestClose} onOpen={openDiscovery}
           onDragEnd={(id, close) => { runAnimation(swipeY, 0, () => { swipeId.set(null); if (close) requestClose(id); }, 140); }}
           onHandleStart={() => { setHandleDragging(true); Keyboard.dismiss(); cancelAnimation(position); }}
           onHandleEnd={onHandleEnd} />
       </View>
-      {footer}
+      <WorkspaceFullscreenContext value={fullscreen}>{footer}</WorkspaceFullscreenContext>
       <DiscoveryAccessReview review={discovery.review} decide={discovery.decide} />
       {menuSession && <WorkspaceMenu title={menuSession.title} disabled={navigationBlocked} onNappletSettings={openNappletSettings}
         onResetZoom={() => resetZoom(menuSession)} zoomResetDisabled={!zoomResetAvailable}
@@ -245,10 +247,11 @@ interface ShellSettingsProps {
   openDiscovery: () => void;
 }
 
-function handleWorkspaceGestureEnd({ side, result, blocked, busyRef, focusedIndex, current, position, openOverview, runAnimation, change, setHandleDragging }: {
+function handleWorkspaceGestureEnd({ side, result, blocked, fullscreen, busyRef, focusedIndex, current, position, openOverview, runAnimation, change, setHandleDragging }: {
   side: HandleSide;
   result: 'overview' | 'switch' | 'cancel';
   blocked: boolean;
+  fullscreen: boolean;
   busyRef: { current: boolean };
   focusedIndex: number;
   current: { current: Workspace };
@@ -259,7 +262,9 @@ function handleWorkspaceGestureEnd({ side, result, blocked, busyRef, focusedInde
   setHandleDragging: (dragging: boolean) => void;
 }) {
   setHandleDragging(false);
-  if (blocked || busyRef.current) return;
+  if (busyRef.current) return;
+  if (fullscreen) { position.set(focusedIndex); return; }
+  if (blocked) return;
   if (result === 'overview') { position.set(focusedIndex); openOverview(); return; }
   const id = result === 'switch' ? adjacentNapplet(current.current, directionForHandle(side)) : null;
   const destination = id ? current.current.sessions.findIndex(session => session.id === id) : focusedIndex;

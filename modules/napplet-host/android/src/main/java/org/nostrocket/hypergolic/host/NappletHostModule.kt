@@ -5,12 +5,31 @@ import expo.modules.kotlin.modules.ModuleDefinition
 import com.facebook.react.common.LifecycleState
 import android.util.Base64
 import expo.modules.kotlin.functions.Coroutine
+import expo.modules.kotlin.functions.Queues
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 
 class NappletHostModule : Module() {
+  private var workspaceFullscreen = false
+
+  private fun updateWorkspaceBars() {
+    val window = appContext.currentActivity?.window ?: return
+    val controller = WindowCompat.getInsetsController(window, window.decorView)
+    val bars = WindowInsetsCompat.Type.systemBars()
+    if (workspaceFullscreen) {
+      controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+      controller.hide(bars)
+    } else {
+      controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+      controller.show(bars)
+    }
+  }
+
   override fun definition() = ModuleDefinition {
     Name("HypergolicNappletHost")
     Events("onRelayStream", "onRelayLifecycle", "onUploadProgress", "onRoutingLifecycle")
@@ -32,7 +51,12 @@ class NappletHostModule : Module() {
       ResourceHttpsRequestOwner.INSTANCE.setForeground(foreground)
       PublishedRelayWssRequestOwner.INSTANCE.setForeground(foreground)
     }
+    AsyncFunction("setWorkspaceFullscreen") { fullscreen: Boolean ->
+      workspaceFullscreen = fullscreen
+      updateWorkspaceBars()
+    }.runOnQueue(Queues.MAIN)
     OnActivityEntersForeground {
+      if (workspaceFullscreen) updateWorkspaceBars()
       SelectedFilePicker.foreground(true)
       UploadTransport.foreground(true)
       CvmTransport.foreground(true)
