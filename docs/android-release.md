@@ -20,33 +20,30 @@ and test implementations still exist in the binary; hiding entry points does not
 prove their removal or replace native authority tests. Ordinary Discover and
 verified published opening remain available.
 
-## One-time signing setup
+## Production signing identity
 
-The production certificate fingerprint is deliberately unset. Signing stops
-until the owner creates the permanent key and registers its public fingerprint.
-Do this in a private terminal, outside the repository:
+Production APKs must use the existing owner-held key with alias `hypergolic`.
+Its SHA-256 certificate fingerprint is pinned in `config/android-release.json`:
+
+```text
+F4:76:9A:85:46:1B:D3:F3:36:CF:1B:B7:45:46:F1:6E:98:ED:4B:1E:8F:A4:D2:16:FD:E7:BB:C2:E4:B4:34:1A
+```
+
+Use this same keystore for future updates and for GitHub, website and Zapstore
+APKs. Keep its encrypted backup and password-manager record. Losing the key
+prevents ordinary updates to existing installations.
+
+To inspect the existing certificate, use your keystore's actual path:
 
 ```sh
-mkdir -p "$HOME/.config/hypergolic/signing"
-chmod 700 "$HOME/.config/hypergolic/signing"
-keytool -genkeypair -keystore "$HOME/.config/hypergolic/signing/android-release.p12" \
-  -storetype PKCS12 -alias hypergolic -keyalg RSA -keysize 4096 -validity 10000 \
-  -dname 'CN=Hypergolic'
-chmod 600 "$HOME/.config/hypergolic/signing/android-release.p12"
 keytool -list -v -keystore "$HOME/.config/hypergolic/signing/android-release.p12" \
   -alias hypergolic
 ```
 
 Let `keytool` prompt for the password; do not put it in shell history or chat.
-PKCS12 uses the same password for this key and its store. Keep an encrypted
-backup and password-manager record, then verify that the backup opens. Losing
-the key prevents ordinary updates to existing installations. Use the same key
-for GitHub, website and Zapstore APKs.
-
-Set `signingCertificateSha256` in `config/android-release.json` to the displayed
-SHA-256 certificate fingerprint, without colons (64 hexadecimal characters).
-This fingerprint is public; the keystore and passwords are secrets. Review and
-commit this configuration before creating the release candidate.
+The configured fingerprint is public and stored without colons as 64 lowercase
+hexadecimal characters. The keystore and passwords remain private. The signer
+verifies the APK against this pinned certificate before accepting the candidate.
 
 Create the GitHub environment **android-release**, restrict its deployment
 branches to `main`, and configure a required maintainer reviewer. Add:
