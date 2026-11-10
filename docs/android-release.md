@@ -95,7 +95,7 @@ maintainer reconciliation; the workflow will not overwrite their assets.
 The packaging checks require clean committed source, matching package/config
 versions, the production Expo config embedded in the APK, ARM64-only native
 libraries, non-debug/non-test flags, the reviewed permission set, packaged notice
-manifests, 16 KB ELF segment alignment, ZIP alignment, a valid signature and the
+manifests, 16 KB ELF segment/RELRO alignment, ZIP alignment, a valid signature and the
 registered certificate. The receipt binds the commit, unsigned input digest and
 final APK digest. These checks do not establish reproducible builds or complete
 product, licensing or security acceptance. See [native notices](native-dependency-notices.md)

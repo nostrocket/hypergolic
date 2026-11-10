@@ -4,3 +4,7 @@ add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../../../../shared" "${CMAKE_CURRENT
 add_library(hypergolic_signer_jni SHARED signer_jni.c)
 target_link_libraries(hypergolic_signer_jni PRIVATE hypergolic_signer)
 target_compile_options(hypergolic_signer_jni PRIVATE -Wall -Wextra -Werror)
+# NDK r27 needs both flags for load segments and RELRO on 16 KB devices.
+target_link_options(hypergolic_signer_jni PRIVATE
+  "-Wl,-z,max-page-size=16384"
+  "-Wl,-z,common-page-size=16384")
