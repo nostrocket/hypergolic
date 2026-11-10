@@ -33,7 +33,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '17.0.20+101'
-      - run: sdkmanager 'build-tools;36.0.0'
+      - name: Install Android signing tools
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'build-tools;36.0.0'
       - run: pnpm install --frozen-lockfile
       - run: pnpm run runtime:install
       - run: pnpm run test:release
@@ -60,7 +62,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '17.0.20+101'
-      - run: sdkmanager 'build-tools;36.0.0'
+      - name: Install Android signing tools
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'build-tools;36.0.0'
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: android-unsigned-${{ github.sha }}
