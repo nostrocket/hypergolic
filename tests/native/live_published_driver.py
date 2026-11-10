@@ -61,15 +61,7 @@ class LivePublishedDriver(base.Driver):
         raise CheckFailed(description + ' was not reached by observed native scrolling')
 
     def verify_review(self, nodes):
-        if not any(has_id(n, 'settings-napplet-review') for n in nodes):
-            raise CheckFailed('First-open consent review is not visible')
-        expected = ((PUBLISHER, 'publisher'), (APP_ID, 'napplet'), (EVENT, 'signed event'),
-                    ('Requested access: theme', 'requested access'))
-        for value, field in expected:
-            if not any(label(n) == value for n in nodes):
-                raise CheckFailed('Consent review did not show exact expected ' + field)
-        return exactly_one(nodes, lambda n: has_id(n, 'settings-napplet-approve'),
-                           'explicit Allow and open control')
+        return base.verify_published_review_claims(nodes, PUBLISHER, APP_ID, EVENT, ('theme',))
 
     def run_scenario(self):
         if not re.fullmatch(r'[A-Za-z0-9_.]+', self.args.package):
@@ -124,7 +116,7 @@ class LivePublishedDriver(base.Driver):
             diagnostic = next((label(n) for n in nodes if has_id(n, 'live-fixture-open-diagnostic')),
                               'source stage unavailable')
             raise CheckFailed('Published Settings open failed before review: ' + diagnostic[:240])
-        approve = self.verify_review(nodes)
+        approve = self.verify_review(base.reveal_published_review(self, nodes, EVENT))
         self.check('first-open-review-exact', {'publisher': PUBLISHER, 'event': EVENT,
                    'app': APP_ID, 'requestedAccess': 'theme', 'explicitApprovalRequired': True})
         self.capture('03-consent-review')

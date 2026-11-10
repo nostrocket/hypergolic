@@ -68,14 +68,8 @@ def verify_fixture_screen(nodes):
 
 
 def verify_consent_review(nodes):
-    if not any(resource_id_is(n, 'settings-napplet-review') for n in nodes):
-        raise CheckFailed('First-open consent review is not visible')
-    expected = (FIXTURE['publisher'], FIXTURE['app'], FIXTURE['oldEvent'])
-    for value, field in zip(expected, ('publisher', 'app', 'old event')):
-        if not any(label(n) == value for n in nodes):
-            raise CheckFailed('Consent review did not show the expected ' + field)
-    return exactly_one(nodes, lambda n: resource_id_is(n, 'settings-napplet-approve'),
-                       'explicit first-open approval')
+    return base.verify_published_review_claims(nodes, FIXTURE['publisher'], FIXTURE['app'],
+                                               FIXTURE['oldEvent'], ('theme',))
 
 
 def find_update_control(nodes, prefix):
@@ -232,7 +226,7 @@ class PublishedUpdateDriver(base.Driver):
         self.tap_id('settings-open-napplet', 'verify and open public napplet')
         _, nodes = self.wait(lambda observed: any(resource_id_is(n, 'settings-napplet-review') for n in observed),
                              'first-open consent review')
-        approve = verify_consent_review(nodes)
+        approve = verify_consent_review(base.reveal_published_review(self, nodes, FIXTURE['oldEvent']))
         self.check('first-open-consent-exact', {'publisher': FIXTURE['publisher'], 'app': FIXTURE['app'],
                    'event': FIXTURE['oldEvent'], 'explicitApprovalRequired': True})
         self.capture('02-consent-review')

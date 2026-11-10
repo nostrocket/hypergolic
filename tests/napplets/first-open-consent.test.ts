@@ -38,7 +38,10 @@ test('only explicit trusted review persists the exact publisher, signed coordina
   const candidate = await artifact(); let seen: unknown;
   const admission = await requestFirstOpenConsent(candidate, owner, storage, new AbortController().signal, owner.assertActive,
     async request => { seen = request; return true; });
-  assert.deepEqual(seen, { user, publisher, appId: 'hello', eventId: candidate.manifest.eventId, domains: ['theme'], unsupportedDomains: [], optionalDomains: [], unsupportedOptionalDomains: [] });
+  assert.deepEqual(seen, { user, publisher, appId: 'hello', eventId: candidate.manifest.eventId,
+    metadata: { title: 'hello', description: '', reference: naddrEncode({ kind: 35129, pubkey: publisher, identifier: 'hello' }),
+      version: candidate.aggregateHash, htmlHash: candidate.htmlHash },
+    domains: ['theme'], unsupportedDomains: [], optionalDomains: [], unsupportedOptionalDomains: [] });
   assert.equal(Object.isFrozen(seen), true);
   assert.deepEqual((await storage.readAccessGrant())?.domains, ['theme']);
   assertVerifiedNappletAdmission(admission, candidate);

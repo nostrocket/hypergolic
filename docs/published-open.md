@@ -48,11 +48,15 @@ and [NAP-LINK](https://github.com/napplet/naps/blob/100e5c939ae6b1ea82cc58587c6d
    event and checks the caller's expected ID before fetching the HTML. The loader
    refuses same-time conflicts and checks the original bytes against the signed
    manifest.
-3. The shell presents the actual caller, target publisher and `d`, signed event ID,
-   verified artifact version, and required and optional capabilities, including
-   unavailable ones. The same review obtains first-open or changed access consent
-   when needed. Hypergolic saves approved access under the usual identity, publisher
-   and app scope. A later launch failure may leave that approved access in place.
+3. The shell presents the requesting catalog, the target’s signed name and
+   description, its signing publisher, and the required and optional capabilities.
+   Unavailable capabilities show which features may be missing. Public profile data
+   comes from signed metadata by that publisher. The profile and the signed artwork
+   load separately from the decision. Technical details expose the full publisher
+   key, publication reference, signed event ID and verified hashes. Settings uses
+   the same layout for first-open access review. Hypergolic saves approved access
+   under the usual identity, publisher and app scope. A later launch failure may
+   leave that approved access in place.
 4. Approval permits the exact reviewed artifact. The host reuses a matching mounted
    view or stages the verified artifact through the ordinary one-use native transfer.
    A different saved revision of the same publication coordinate yields a conflict

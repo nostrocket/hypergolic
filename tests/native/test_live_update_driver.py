@@ -18,11 +18,12 @@ class LiveUpdateDriverTests(unittest.TestCase):
         self.driver.fixture = dict(FIXTURE)
 
     def test_first_open_requires_exact_publisher_event_and_theme(self):
-        nodes = [node(FIXTURE['publisher']), node(FIXTURE['identifier']), node(FIXTURE['v1']),
-                 node('Requested access: theme'), node('Allow and open', 'settings-napplet-approve')]
+        nodes = [node('', 'settings-napplet-review'), node(FIXTURE['publisher']), node(FIXTURE['identifier']),
+                 node(FIXTURE['v1']), node('Appearance', 'published-review-required-theme'),
+                 node('Allow and open', 'settings-napplet-approve')]
         self.assertEqual(self.driver.check_review(nodes, update=False), nodes[-1])
         with self.assertRaises(CheckFailed):
-            self.driver.check_review(nodes[:2] + nodes[3:], update=False)
+            self.driver.check_review(nodes[:3] + nodes[4:], update=False)
 
     def test_update_requires_both_exact_events_and_session_scoped_review(self):
         nodes = [node(FIXTURE['publisher']), node(FIXTURE['identifier']), node(FIXTURE['v1']),

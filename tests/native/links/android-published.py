@@ -52,7 +52,9 @@ class Journey(ui.Journey):
    self.guest('Open external link');self.find('Open external link?');text='\n'.join(n.get('text','') for n in self.nodes());assert 'Napplet: signed-resource-link-lab' in text and 'Publisher: '+publisher in text and 'https://example.com/?hypergolic=link-tracer' in text and 'Unsigned embedded' not in text and 'Read external page' not in text;self.capture('signed-review-'+str(len(self.report['checks'])))
   def cancel():self.tap('CANCEL');self.find('Link opening denied.');self.receipt('denied');self.absent()
   def open_signed(role,reject=False):
-   address=self.find('signed-'+role+'-address').get('content-desc');assert address.startswith('naddr1');self.tap('shell-settings');self.enter_address(address);self.settings_tap('settings-open-napplet');self.settings_find('Allow this napplet?');self.settings_find('Requested access: '+('link, resource' if role=='link' else 'resource'));self.capture(role+'-domain-consent')
+   address=self.find('signed-'+role+'-address').get('content-desc');assert address.startswith('naddr1');self.tap('shell-settings');self.enter_address(address);self.settings_tap('settings-open-napplet');self.settings_find('Allow this napplet?');
+   if role=='link':self.settings_find('published-review-required-link')
+   self.settings_find('published-review-required-resource');self.capture(role+'-domain-consent')
    if reject:
     self.settings_tap('settings-napplet-reject');assert not any(n.get('class')=='android.webkit.WebView' for n in self.nodes());self.absent();self.check('domain-consent-decline-no-host');self.settings_tap('settings-open-napplet');self.settings_find('Allow this napplet?')
    self.settings_tap('settings-napplet-approve');admitted()

@@ -4,6 +4,7 @@ import type { AppStorageControl } from '../storage/database.ts';
 import type { TrustedApp } from '../storage/ports.ts';
 import { reviewedCapabilityCompatibility, type ReviewedSupportProfile } from '../runtime/support-report.ts';
 import {verifiedPublicationIdentity} from './verified-publication-identity.ts';
+import { verifiedLaunchMetadata, type VerifiedLaunchMetadata } from './verified-launch-metadata.ts';
 import type {SnapshotIdentity} from './published-identity.ts';
 
 export class FirstOpenConsentError extends Error {
@@ -16,6 +17,7 @@ export type NappletConsentReview = Readonly<{
   publisher: string;
   appId: string;
   eventId: string;
+  metadata: VerifiedLaunchMetadata;
   snapshot?: SnapshotIdentity;
   domains: readonly string[];
   unsupportedDomains: readonly string[];
@@ -118,7 +120,7 @@ export async function requestFirstOpenConsent(
   }
 
   if (!accepted) {
-    const request = Object.freeze({ user, publisher, appId, eventId, ...(publication.kind===5129?{snapshot:publication.snapshot}:{}),
+    const request = Object.freeze({ user, publisher, appId, eventId, metadata: verifiedLaunchMetadata(artifact), ...(publication.kind===5129?{snapshot:publication.snapshot}:{}),
       domains: requestedDomains, unsupportedDomains,
       optionalDomains, unsupportedOptionalDomains });
     let approved = false;

@@ -51,7 +51,7 @@ class Published(module.Journey):
         self.adb('shell','am','force-stop',module.PACKAGE);self.adb('shell','pm','clear',module.PACKAGE);self.start()
         address=self.find('signed-upload-address').get('content-desc');assert address.startswith('naddr1');self.tap('shell-settings');self.settings_tap('settings-napplet-address');self.adb('shell','input','text',address);self.adb('shell','input','keyevent','4')
         self.settings_tap('settings-open-napplet');self.settings_find('Allow this napplet?');self.capture('first-open-consent')
-        self.settings_find('Requested access: upload');self.settings_find('Upload access allows this napplet to read files you select. Every upload still needs your separate approval of the file, identity and server.')
+        self.settings_find('published-review-required-upload');self.settings_find('Ask to upload files you choose to Blossom. Each upload needs your approval.')
         self.settings_tap('settings-napplet-reject');assert self.observer()==baseline;self.check('normal first-open rejection has zero TLS and no grant')
         self.settings_tap('settings-open-napplet');self.settings_find('Allow this napplet?');self.settings_tap('settings-napplet-approve');self.find('Ready to request a PNG upload.');self.capture('signed-sdk-ready');self.check('signed manifest admitted through normal settings and native binding')
         self.guest_find('Read upload limits');self.tap('Read upload limits');self.find('upload-info')

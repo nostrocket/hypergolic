@@ -1,9 +1,6 @@
-import { MEDIA_ACCESS_DETAIL } from '../runtime/support-report';
-import { TrustedBand } from './TrustedBand';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { PublishedLaunchReview } from './PublishedLaunchReview';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Keyboard, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { ShellModal as Modal } from './ShellModal';
+import { ActivityIndicator, Keyboard, StyleSheet, Text, View } from 'react-native';
 import { ShellPressable as Pressable } from './ShellPressable';
 import { ShellTextInput as TextInput } from './ShellTextInput';
 import type { SettingsActions } from './Shell';
@@ -55,7 +52,9 @@ export function OpenPublishedNapplet({ open }: { open: SettingsActions['openPubl
       if (!controller.signal.aborted) setBusy(false);
     });
   };
-  if (review) return <OpenAccessReview review={review} decide={decide} />;
+  if (review) return <PublishedLaunchReview target={{ ...review, requiredDomains: review.domains }}
+    title="Allow this napplet?" changesAccess onAccept={() => decide(true)} onCancel={() => decide(false)}
+    ids={reviewIds} />;
   return <View style={styles.group}>
     <Text accessibilityRole="header" style={styles.title}>Open a napplet</Text>
     <Text style={styles.detail}>Paste a napplet address. We’ll check its signed version, then show you who published it and what access it needs.</Text>
@@ -72,38 +71,9 @@ export function OpenPublishedNapplet({ open }: { open: SettingsActions['openPubl
   </View>;
 }
 
-function OpenSourceReview({review}: {review:NappletConsentReview}) {
-  const {styles} = useShellStyles(createStyles);
-  return <>
-    <Text style={styles.detail}>Publisher</Text><Text selectable style={styles.claim}>{review.publisher}</Text>
-    <Text style={styles.detail}>{review.snapshot ? 'Snapshot (kind 5129)' : 'Napplet'}</Text><Text selectable style={styles.claim}>{review.snapshot?.title ?? review.appId}</Text>
-    <Text style={styles.detail}>Signed event</Text><Text selectable style={styles.claim}>{review.eventId}</Text>
-  </>;
-}
-
-function OpenAccessReview({review, decide}: {review: NappletConsentReview; decide(accepted: boolean): void}) {
-  const { styles } = useShellStyles(createStyles);
-  const insets = useSafeAreaInsets();
-  return <Modal visible transparent animationType="none" onRequestClose={() => decide(false)}><View style={[styles.backdrop, { paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right }]}><View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]} accessibilityViewIsModal><TrustedBand /><ScrollView contentContainerStyle={styles.review} testID="settings-napplet-review">
-    <Text accessibilityRole="header" style={styles.title}>Allow this napplet?</Text>
-    <OpenSourceReview review={review}/>
-    {(review.domains.includes('resource') || review.optionalDomains.includes('resource')) && <Text style={styles.detail}>Resource access allows bounded downloads from public HTTPS sites and your configured Blossom servers. Files stay in memory while this napplet is loaded.</Text>}
-    {(review.domains.includes('media') || review.optionalDomains.includes('media')) && <Text style={styles.detail}>{MEDIA_ACCESS_DETAIL}</Text>}
-    {(review.domains.includes('upload') || review.optionalDomains.includes('upload')) && <Text style={styles.detail}>Upload access allows this napplet to read files you select. Every upload still needs your separate approval of the file, identity and server.</Text>}
-    <Text style={styles.detail}>{review.optionalDomains.length ? 'Required access · ' : 'Requested access: '}{review.domains.join(', ') || 'none'}</Text>
-    {review.optionalDomains.length > 0 && <Text style={styles.detail}>Optional access · {review.optionalDomains.join(', ')}</Text>}
-    {(review.domains.includes('keys') || review.optionalDomains.includes('keys')) &&
-      <Text style={styles.detail}>Keys lets this napplet use hardware shortcuts while it has focus.</Text>}
-    {review.unsupportedDomains.length > 0 && <Text testID="settings-napplet-unsupported" accessibilityLiveRegion="polite" style={styles.error}>Required capabilities unavailable · {review.unsupportedDomains.join(', ')}. The napplet can open with limited features.</Text>}
-    {review.unsupportedOptionalDomains.length > 0 && <Text style={styles.detail}>Optional capabilities unavailable · {review.unsupportedOptionalDomains.join(', ')}</Text>}
-    <Pressable accessibilityRole="button" testID="settings-napplet-approve" onPress={() => decide(true)} style={styles.action}><Text style={styles.actionText}>Allow and open</Text></Pressable>
-    <Pressable accessibilityRole="button" testID="settings-napplet-reject" onPress={() => decide(false)} style={styles.secondary}><Text style={styles.secondaryText}>Cancel</Text></Pressable>
-  </ScrollView></View></View></Modal>;
-}
+const reviewIds = { review: 'settings-napplet-review', approve: 'settings-napplet-approve', cancel: 'settings-napplet-reject' };
 
 const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.create({
-  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.shade },
-  sheet: { maxHeight: '92%', backgroundColor: colors.surface },
   disabled: { opacity: 0.45 },
   addressLabel: { fontFamily: fonts.mono, fontSize: 11, letterSpacing: 1.2, textTransform: 'uppercase', color: colors.muted },
   group: { gap: 12 }, title: { fontFamily: fonts.display, color: colors.text, fontSize: 28, },
@@ -112,8 +82,6 @@ const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.cre
   input: { fontFamily: fonts.body, color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: 0, minHeight: 56, padding: 16, fontSize: 16 },
   action: { padding: 18, minHeight: 56, borderRadius: 0, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   actionText: { textTransform: 'uppercase', letterSpacing: 1.8, fontFamily: fonts.strong, color: colors.onPrimary, fontSize: 14, },
-  review: { gap: 16, padding: 24 },
-  claim: { fontFamily: fonts.mono, color: colors.text, fontSize: 12 },
   secondary: { padding: 18, minHeight: 56, borderRadius: 0, borderColor: colors.border, borderWidth: 1, alignItems: 'center' },
   secondaryText: { textTransform: 'uppercase', letterSpacing: 1.8, fontFamily: fonts.strong, color: colors.text, fontSize: 14 },
 });

@@ -26,7 +26,7 @@ const address = naddrEncode({ kind: 35129, pubkey: publisher, identifier: appId 
 const html = new TextEncoder().encode('<!doctype html><html lang="en"><head></head><body>Test</body></html>');
 const hash = createHash('sha256').update(html).digest('hex');
 const signed = finalizeEvent({ kind: 35129, created_at: 1_700_000_001, content: 'Open test',
-  tags: [['d', appId], ['x', hash], ['server', 'https://blossom.example.org/'], ['R', 'relay'], ['O', 'pow'], ['O', 'keys']] }, secret);
+  tags: [['d', appId], ['title', 'Open test title'], ['x', hash], ['server', 'https://blossom.example.org/'], ['R', 'relay'], ['O', 'pow'], ['O', 'keys']] }, secret);
 const wire = { id: signed.id, pubkey: signed.pubkey, created_at: signed.created_at, kind: signed.kind,
   tags: signed.tags.map(tag => [...tag]), content: signed.content, sig: signed.sig };
 let artifact: VerifiedNappletArtifact;
@@ -162,6 +162,11 @@ test('the actual bundled source opens a verified exact cold target after review 
   assert.deepEqual(review.request.source, source);
   assert.equal(review.request.target.publisher, publisher);
   assert.equal(review.request.target.eventId, artifact.manifest.eventId);
+  assert.deepEqual(review.request.target.metadata, {
+    title: 'Open test title', description: 'Open test', reference: address,
+    version: artifact.aggregateHash, htmlHash: artifact.htmlHash,
+  });
+  assert.equal(Object.isFrozen(review.request.target.metadata), true);
   assert.deepEqual(review.request.target.requiredDomains, ['relay']);
   assert.deepEqual(review.request.target.optionalDomains, ['keys', 'pow']);
   assert.deepEqual(review.request.target.unsupportedOptionalDomains, ['pow']);

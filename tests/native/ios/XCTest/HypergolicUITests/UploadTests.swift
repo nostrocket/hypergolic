@@ -608,7 +608,7 @@ final class UploadTests: XCTestCase {
     let input = app.textFields["settings-napplet-address"];settings(input);input.tap();input.typeText(link + "\n")
     let consent = app.staticTexts["Allow this napplet?"].firstMatch
     XCTAssertTrue(consent.waitForExistence(timeout: 30),app.debugDescription);settings(consent);capture("first-open-consent")
-    XCTAssertTrue(app.staticTexts["Requested access: upload"].exists)
+    XCTAssertTrue(app.staticTexts["published-review-required-upload"].exists)
     XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label == %@", "Upload access allows this napplet to read files you select. Every upload still needs your separate approval of the file, identity and server.")).firstMatch.exists)
     let reject = app.buttons["settings-napplet-reject"];settings(reject);reject.tap();emit("CONSENT_REJECT")
     let verify = app.buttons["settings-open-napplet"];settings(verify);verify.tap()

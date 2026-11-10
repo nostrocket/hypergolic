@@ -1,3 +1,4 @@
+import { verifiedLaunchMetadata } from './verified-launch-metadata.ts';
 import { ReviewBusyError } from '../shell/review-slot.ts';
 import { naddrEncode } from 'nostr-tools/nip19';
 import { resolveNappletLink, type NappletCoordinate } from './resolve-link.ts';
@@ -173,7 +174,7 @@ async function openExact(ports: Ports, launch: Launch, attempt: Attempt, active:
   const requiredDomains = Object.freeze([...manifest.requiredDomains].sort());
   const optionalDomains = Object.freeze([...manifest.optionalDomains].sort());
   const { unsupportedDomains, unsupportedOptionalDomains } = publishedCapabilityCompatibility(requiredDomains, optionalDomains);
-  const review = reviewLaunch(ports, launch, Object.freeze({ publisher, appId, eventId, version,
+  const review = reviewLaunch(ports, launch, Object.freeze({ publisher, appId, eventId, version, metadata: verifiedLaunchMetadata(artifact),
     requiredDomains, optionalDomains, unsupportedDomains, unsupportedOptionalDomains }), attempt, active);
   let next: NappletDescriptor;
   if (loaded) {

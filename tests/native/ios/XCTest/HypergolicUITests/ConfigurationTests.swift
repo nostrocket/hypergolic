@@ -27,7 +27,7 @@ final class ConfigurationTests: XCTestCase {
    let input=app.textFields["settings-napplet-address"];settings(input);input.tap();if let old=input.value as? String,!old.isEmpty {input.typeText(String(repeating:XCUIKeyboardKey.delete.rawValue,count:old.count))}
    for offset in stride(from:0,to:link.count,by:12) {let end=min(offset+12,link.count),startIndex=link.index(link.startIndex,offsetBy:offset),endIndex=link.index(link.startIndex,offsetBy:end);input.typeText(String(link[startIndex..<endIndex]));XCTAssertEqual(input.value as? String,String(link.prefix(end)))}
    input.typeText("\n")
-   if first {wait("Allow this napplet?");wait("Requested access: config");capture("normal-config-domain-consent");settingsButton("settings-napplet-approve")}
+   if first {wait("Allow this napplet?");XCTAssertTrue(app.staticTexts["published-review-required-"+("config")].firstMatch.waitForExistence(timeout:30),app.debugDescription);capture("normal-config-domain-consent");settingsButton("settings-napplet-approve")}
    wait("SDK ready for routing.");XCTAssertEqual(app.staticTexts["focused-napplet-name"].label,"signed-config-caller-lab")
   }
   func register() {guest("Register configuration");wait("Configuration schema accepted.")}
@@ -69,7 +69,7 @@ final class PresentationLifecycleTests: XCTestCase {
   let address=app.staticTexts["signed-"+role+"-address"];XCTAssertTrue(address.waitForExistence(timeout:30),app.debugDescription);let link=address.label;XCTAssertTrue(link.hasPrefix("naddr1"));button("shell-settings");let input=app.textFields["settings-napplet-address"];scroll(input);input.tap()
   if let old=input.value as? String,!old.isEmpty {input.typeText(String(repeating:XCUIKeyboardKey.delete.rawValue,count:old.count))}
   for offset in stride(from:0,to:link.count,by:12) {let end=min(offset+12,link.count),startIndex=link.index(link.startIndex,offsetBy:offset),endIndex=link.index(link.startIndex,offsetBy:end);input.typeText(String(link[startIndex..<endIndex]));XCTAssertEqual(input.value as? String,String(link.prefix(end)))}
-  input.typeText("\n");wait("Allow this napplet?");wait("Requested access: "+domain);settingsButton("settings-napplet-approve");wait("SDK ready for routing.")
+  input.typeText("\n");wait("Allow this napplet?");XCTAssertTrue(app.staticTexts["published-review-required-"+(domain)].firstMatch.waitForExistence(timeout:30),app.debugDescription);settingsButton("settings-napplet-approve");wait("SDK ready for routing.")
  }
  func focus(_ name: String) {button("handle-right");wait("Loaded napplets");let open=app.buttons["Open "+name];scroll(open);open.tap();XCTAssertEqual(app.staticTexts["focused-napplet-name"].label,name)}
  func background() {XCUIDevice.shared.press(.home);app.activate();XCTAssertTrue(app.staticTexts["focused-napplet-name"].waitForExistence(timeout:15),app.debugDescription)}

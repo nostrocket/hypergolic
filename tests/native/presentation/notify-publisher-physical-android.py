@@ -35,7 +35,7 @@ class Journey(base.Journey):
   while time.monotonic()<deadline:
    nodes=self.nodes()
    if any(n.get('resource-id')=='settings-napplet-approve' for n in nodes):
-    self.settings_find('Allow this napplet?');self.settings_find('Requested access: notify');self.capture('native-signed-access-review-'+role);self.settings_tap('settings-napplet-approve');self.report.setdefault('signedAccessReviews',[]).append({'role':role,'eventId':fixtures[role]['event']['id'],'domain':'notify'});break
+    self.settings_find('Allow this napplet?');self.settings_find('published-review-required-notify');self.capture('native-signed-access-review-'+role);self.settings_tap('settings-napplet-approve');self.report.setdefault('signedAccessReviews',[]).append({'role':role,'eventId':fixtures[role]['event']['id'],'domain':'notify'});break
    if any(n.get('text')=='SDK ready for routing.' for n in nodes) and not any(n.get('resource-id')=='settings-done' and self.visible(n) for n in nodes):break
    time.sleep(.2)
   else:raise AssertionError('Signed loader did not reach exact consent or restored SDK')

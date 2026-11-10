@@ -1,5 +1,6 @@
 import { ReviewBusyError, type ReviewSlot } from '../shell/review-slot.ts';
 import type { NappletDescriptor } from '../shell/workspace.ts';
+import type { VerifiedLaunchMetadata } from '../napplets/verified-launch-metadata.ts';
 import type { NappletConsentReview } from '../napplets/first-open-consent.ts';
 import type { NativeRegistration } from '../runtime/capability-protocol.ts';
 import type { IntentRequest } from './routing-contract.ts';
@@ -9,7 +10,7 @@ export type RoutingReviewRequest = Readonly<{ kind: 'intent'; origin: NativeRegi
   | Readonly<{ kind: 'channel'; origin: NativeRegistration; peer: NativeRegistration }>
   | Readonly<{ kind: 'permissions'; origin: NativeRegistration; consent: NappletConsentReview }>
   | Readonly<{ kind: 'published-open'; origin: NativeRegistration; source: NappletDescriptor; changesAccess: boolean; legacyReadOnlyAvailable?: true;
-      target: Readonly<{ publisher: string; appId: string; eventId: string; version: string;
+      target: Readonly<{ publisher: string; appId: string; eventId: string; version: string; metadata: VerifiedLaunchMetadata;
         requiredDomains: readonly string[]; optionalDomains: readonly string[];
         unsupportedDomains: readonly string[]; unsupportedOptionalDomains: readonly string[] }> }>;
 export type RoutingDecision = Readonly<{ allow: boolean; selected?: CatalogHandler; remember?: boolean; legacyReadOnly?: true }>;

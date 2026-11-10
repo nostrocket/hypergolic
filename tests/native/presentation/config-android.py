@@ -15,7 +15,7 @@ class Journey(base.Journey):
  def open_caller(self,first):
   address=self.find('signed-config-caller-address').get('content-desc');assert address.startswith('naddr1');self.tap('shell-settings');self.enter_address(address);self.settings_tap('settings-open-napplet')
   if first:
-   self.settings_find('Allow this napplet?');self.settings_find('Requested access: config');self.capture('normal-config-domain-consent');self.settings_tap('settings-napplet-approve')
+   self.settings_find('Allow this napplet?');self.settings_find('published-review-required-config');self.capture('normal-config-domain-consent');self.settings_tap('settings-napplet-approve')
   self.find('SDK ready for routing.');assert self.find('focused-napplet-name').get('text')=='signed-config-caller-lab'
  def register(self):
   self.guest('Register configuration');self.find('Configuration schema accepted.')

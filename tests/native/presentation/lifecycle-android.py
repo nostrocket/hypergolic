@@ -9,7 +9,7 @@ USERS=['79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798','c6047
 class Journey(config.Journey):
  def open_role(self,role,domain,first=True):
   address=self.find('signed-'+role+'-address').get('content-desc');self.tap('shell-settings');self.enter_address(address);self.settings_tap('settings-open-napplet')
-  if first:self.settings_find('Allow this napplet?');self.settings_find('Requested access: '+domain);self.settings_tap('settings-napplet-approve')
+  if first:self.settings_find('Allow this napplet?');self.settings_find('published-review-required-'+domain);self.settings_tap('settings-napplet-approve')
   self.find('SDK ready for routing.')
  def focus(self,name):
   self.tap('handle-right');self.find('Loaded napplets');time.sleep(.6);self.tap('Open '+name);time.sleep(.6);assert self.find('focused-napplet-name').get('text')==name
