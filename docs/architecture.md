@@ -15,6 +15,8 @@ integrity and publisher identity; it does not grant native authority.
 
 The reviewed Mapplets release `3a5eeb98b3251a48a3ff1e32cb92ce76b7488b721dd492ae1659e90eeffe76f5` accepts a single finger drag when its rectangle tool is armed. The host translates this gesture into the guest’s existing local rectangle events under the trusted input gate. A second finger, cancellation, or loss of input ends the unfinished drag. Ordinary map gestures still use MapLibre’s handlers. Opening the editor requires a separate activation of **Edit** and the usual Intent review.
 
+The reviewed Emoji Browser release `24b16ab3eb550d50eff01a3c42c6e56c3a81da4cf6914b11dc766d8575767381` refreshes its image cache during retry, revoking Blob URLs while other images still use them. Its guest-only compatibility layer defers those revocations until the last image reference is removed or replaced. Unused URLs revoke immediately; unloading the document releases remaining URLs. The original artifact hashes and CSP remain unchanged, and other apps or versions receive no override.
+
 Android WebView and iOS WKWebView host the packaged runtime. Native code stages
 verified artifact bytes through a one-use registry. The runtime mediates guest
 messages through the selected capability profile. There is no general-purpose
