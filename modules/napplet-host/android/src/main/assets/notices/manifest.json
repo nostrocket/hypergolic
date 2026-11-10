@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "platform": "android",
-  "scope": "63 main Android JavaScript package contributors. Android native/transitive and separate web-runtime attribution review remains open.",
+  "scope": "64 main Android JavaScript package contributors. Android native/transitive and separate web-runtime attribution review remains open.",
   "components": [
     {
       "name": "@expo/cli",
@@ -1331,18 +1331,39 @@
           "bytes": 1107
         }
       ]
+    },
+    {
+      "name": "@noble/ciphers",
+      "version": "2.1.1",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/paulmillr/noble-ciphers.git"
+      },
+      "packageJsonSha256": "f30139134b7f4465b1ea0e82c5ba97c56e4db0125e176f3e73455478b43bbb09",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-@noble_ciphers-2.1.1-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "@noble/ciphers@2.1.1",
+          "sourceUrl": "https://www.npmjs.com/package/@noble/ciphers/v/2.1.1",
+          "sha256": "f36671a5487c9c5050efacb58011c37c24c55a889803cb036cf9d9a6347c1e2d",
+          "bytes": 1161
+        }
+      ]
     }
   ],
   "mainJavaScriptProfile": {
     "platform": "android",
-    "reviewedMetroBundleSha256": "0ea7fc458e018567db7bf91f0ac5308dc0afa12ae200a626008e4d29681dee40",
-    "sourceMapSha256": "7faabcfa2b831977aec8f1eacce23391d6b28ddb9b0a9681c19fed4a3cf2ff32",
-    "packageIdentityCount": 63,
-    "suppliedOriginalFileCount": 60,
+    "reviewedMetroBundleSha256": "8ea9cb099b19f7e13958ee7c6290f417b9a5e72177e358d502656aa00e8456aa",
+    "sourceMapSha256": "ecdb12a8da245b8e10307df7513da80d748470aa825c800695cca1a91aa72aef",
+    "packageIdentityCount": 64,
+    "suppliedOriginalFileCount": 61,
     "sharedOriginalPackageCount": 4,
     "dependencyInputs": {
-      "package.json": "3ea0d77aa941b230d7bf424dedb0c8af771b0b5e5a9867825a4b18ac05861a8c",
-      "pnpm-lock.yaml": "7c2e27acbd4092f478a70d43318739d4e2ab9ac3060e8475d84205d9173ec6b3",
+      "package.json": "896bba8ec0e9cad2d51a4f35f81963fe584858981456997a6ecad082c6641074",
+      "pnpm-lock.yaml": "5a32e752cd212d8eac141168552220b105edd083112b2b911107deeb3ee33795",
       "node_modules/.pnpm/@expo+cli@58.1.19_@expo+dom-webview@58.0.2_expo-constants@58.0.15_expo@58.0.23_react-na_56e6f5118065dd911a566dde5519da83/node_modules/@expo/cli/package.json": "279eb99e60e282dde3bfd4a8b4d231c12db34544e30a888eccd7adb94c41e003",
       "node_modules/.pnpm/@react-native+js-polyfills@0.88.1/node_modules/@react-native/js-polyfills/package.json": "4b540e4c8ea9920faeefdaa16a7da7dd49ff5521fd168153ef52aa5e975f837b",
       "node_modules/.pnpm/expo@58.0.23_@babel+core@7.29.7_@expo+dom-webview@58.0.2_react-native-worklets@0.13.0_@_37efeb4228490d2fc4486fb86dce2ee6/node_modules/expo/package.json": "6d461bcd4e874be6b30583b13480fb28e74d9fa2732acba593640415693643f6",
@@ -1405,7 +1426,8 @@
       "node_modules/.pnpm/expo-sqlite@58.0.15_expo@58.0.23_react-native@0.88.1_@babel+core@7.29.7_@react-native+m_d8ca3eda7466ae07e12e847c2d858e5d/node_modules/expo-sqlite/package.json": "08f5188824aca83d2adbe6d550d3038fe7c3393090d59aae6cfd74dff6cfac63",
       "node_modules/.pnpm/@babel+runtime@7.29.7/node_modules/@babel/runtime/package.json": "8c4bf20c55e3f3a93df034b12746bf72185cf2acb0ef52847a3465d6e67c61e7",
       "node_modules/.pnpm/await-lock@2.2.2/node_modules/await-lock/package.json": "646f3516dc035f0aef095b321eee009cefff46529813e4923e39e5579098205e",
-      "node_modules/.pnpm/@expo+devtools@58.0.2_expo@58.0.23_react-native@0.88.1_@babel+core@7.29.7_@react-native_9dfdf269eff94e775900098b293ac671/node_modules/@expo/devtools/package.json": "79495142bcf449038d73e827010ba7b5c41014c5c70684540437025fea941c59"
+      "node_modules/.pnpm/@expo+devtools@58.0.2_expo@58.0.23_react-native@0.88.1_@babel+core@7.29.7_@react-native_9dfdf269eff94e775900098b293ac671/node_modules/@expo/devtools/package.json": "79495142bcf449038d73e827010ba7b5c41014c5c70684540437025fea941c59",
+      "node_modules/.pnpm/@noble+ciphers@2.1.1/node_modules/@noble/ciphers/package.json": "f30139134b7f4465b1ea0e82c5ba97c56e4db0125e176f3e73455478b43bbb09"
     }
   }
 }

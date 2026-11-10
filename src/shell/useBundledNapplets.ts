@@ -1,3 +1,4 @@
+import { developerToolsEnabled } from '../config/build-info';
 import { useRef } from 'react';
 import type { SharedValue } from 'react-native-reanimated';
 import type { RuntimeOwner } from '../runtime/runtime-owner';
@@ -15,6 +16,7 @@ interface Props {
 export function useBundledNapplets({ current, runtime, position, progress, change, setSettings }: Props) {
   const nextNumber = useRef(Math.max(3, ...current.current.sessions.map(session => session.source === 'bundled' ? Number(session.title.match(/ ([1-9][0-9]*)$/)?.[1] ?? 0) : 0)) + 1);
   return (variant: BundledVariant) => {
+    if (!developerToolsEnabled) return;
     while (current.current.sessions.some(session => session.id === `${variant}-${nextNumber.current}`)) nextNumber.current++;
     if (variant !== 'ux-lab' && !runtime) return;
     const number = nextNumber.current++;

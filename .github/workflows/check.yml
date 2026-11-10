@@ -81,6 +81,7 @@ jobs:
           pnpm run test:outbox
           pnpm run test:quality
           pnpm run test:tester
+          pnpm run test:release
       - name: Native harness regressions without device dispatch
         run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/native -p 'test_*.py'
   exports:

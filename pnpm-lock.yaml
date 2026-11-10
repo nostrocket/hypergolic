@@ -68,6 +68,9 @@ importers:
       expo-build-properties:
         specifier: 58.0.12
         version: 58.0.12(expo@58.0.23)
+      expo-constants:
+        specifier: 58.0.15
+        version: 58.0.15(expo@58.0.23)(react-native@0.88.1(@babel/core@7.29.7)(@react-native/metro-config@0.88.1(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(typescript@6.0.3)
       expo-crypto:
         specifier: 58.0.7
         version: 58.0.7(expo@58.0.23)

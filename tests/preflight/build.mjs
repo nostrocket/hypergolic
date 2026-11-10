@@ -18,6 +18,7 @@ export const store = {
 };
 `;
 const mocks = {
+ 'expo-constants': `export default {expoConfig:{extra:{hypergolic:{variant:'production'}}}};`,
  'test:fixture': fixture,
  'expo': `import {fixture,store} from 'test:fixture'; export function requireNativeModule(name) { fixture.calls.push('module:'+name); if(name==='HypergolicSignerCore'&&!fixture.missingStore) return store; throw Error('TEST: module unavailable'); }`,
  'react-native': `import {forbidden} from 'test:fixture'; export const Platform={OS:'ios'}; export const View='View',Text='Text',ActivityIndicator='ActivityIndicator',Modal='Modal',ScrollView='ScrollView',StatusBar='StatusBar'; export const useColorScheme=()=> 'light'; export const StyleSheet={create:value=>value};`,

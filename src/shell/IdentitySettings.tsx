@@ -1,3 +1,5 @@
+import { developerToolsEnabled } from '../config/build-info';
+import { AboutSettings } from './AboutSettings';
 import { backgroundIdentitySettings } from './identity-settings-lifecycle';
 import { SignerSettings } from './SignerSettings';
 import { identityChangeCopy } from './identity-change-copy';
@@ -156,11 +158,38 @@ function SavedIdentities({session, transition, format, canDelete, onDelete}: {
       </View>)}
   </>;
 }
+function DeveloperSettings({ onSignedLab, openBundledTest, openStateLab }: Pick<SettingsActions, 'openBundledTest' | 'openStateLab'> & { onSignedLab(): void }) {
+  const { styles } = useShellStyles(createStyles);
+  const { runtime, fixturePublisher, formatNpub } = useIdentityOwner();
+  if (!developerToolsEnabled) return null;
+  return <SettingsSection title="Developer tools" detail="Test napplets and compatibility" id="developer">
+      <NativeSignerCheck />
+      {runtime && <Action title="Open NAP Support" testID="settings-open-nap-support" onPress={() => openStateLab('nap-support')} subdued />}
+      {runtime && <>
+        <Text accessibilityRole="header" style={styles.title}>Signed host test</Text>
+        <Action title="Inspect signed test napplet" testID="settings-inspect-signed-test" onPress={onSignedLab} subdued />
+      </>}
+      {fixturePublisher && <FixturePublisherLab service={fixturePublisher} format={formatNpub} />}
+      <Text accessibilityRole="header" style={styles.title}>Bundled test napplets</Text>
+      <Action title="Open UX Lab" testID="settings-open-ux-lab" onPress={openBundledTest} subdued />
+      {runtime && <>
+        <Action title="Open Upload Lab" testID="settings-open-upload-lab" onPress={() => openStateLab('upload-lab')} subdued />
+        <Action title="Open Resource Lab" testID="settings-open-resource-lab" onPress={() => openStateLab('resource-lab')} subdued />
+        <Action title="Open Routing Lab" testID="settings-open-routing-lab" onPress={() => openStateLab('routing-lab')} subdued />
+        <Action title="Open Routing Lab Peer" testID="settings-open-routing-lab-peer" onPress={() => openStateLab('routing-lab-peer')} subdued />
+        <Action title="Open Feed Lab" testID="settings-open-feed-lab" onPress={() => openStateLab('feed-lab')} subdued />
+        <Action title="Open Approval Lab" testID="settings-open-approval-lab" onPress={() => openStateLab('approval-lab')} subdued />
+        <Action title="Open Close Lab" testID="settings-open-close-lab" onPress={() => openStateLab('close-lab')} subdued />
+        <Action title="Open State Lab" testID="settings-open-state-lab" onPress={() => openStateLab('state-lab')} subdued />
+        <Action title="Open State Lab Peer" testID="settings-open-state-lab-peer" onPress={() => openStateLab('state-lab-peer')} subdued />
+        <Action title="Open State Lab · other publisher" testID="settings-open-state-lab-other-publisher" onPress={() => openStateLab('state-lab-other-publisher')} subdued />
+      </>}      </SettingsSection>;
+}
 function SettingsHome({session, onBackup, onCloseBackup, onDelete, onImport, onPublic, onSignedLab, openDiscovery, openBundledTest, openStateLab, openPublished, publishedSessions, checkPublishedUpdate}: Omit<SettingsActions, 'closeSettings'> & {
   session: IdentitySession; onBackup(): void; onCloseBackup(): void; onDelete(pubkey: string): void; onImport(): void; onPublic(): void; onSignedLab(): void;
 }) {
   const { styles } = useShellStyles(createStyles);
-  const {transition, formatNpub, runtime, actions, relaySettings, resourceSettings, uploadSettings, listAccess, routing, notificationSettings, fixturePublisher} = useIdentityOwner();
+  const {transition, formatNpub, runtime, actions, relaySettings, resourceSettings, uploadSettings, listAccess, routing, notificationSettings} = useIdentityOwner();
   const publishedCount = publishedSessions.length;
   return <>
       <View style={styles.currentIdentity}><Text style={styles.identityLabel}>Your identity</Text>
@@ -191,28 +220,8 @@ function SettingsHome({session, onBackup, onCloseBackup, onDelete, onImport, onP
       {notificationSettings && <NotificationSettings key={`notifications-${session.epoch}`} service={notificationSettings} />}
       <IdentityListSettings service={listAccess ?? null} user={session.vault.selectedPubkey} />
       </SettingsSection>
-      <SettingsSection title="Developer tools" detail="Test napplets and compatibility" id="developer">
-      <NativeSignerCheck />
-      {runtime && <Action title="Open NAP Support" testID="settings-open-nap-support" onPress={() => openStateLab('nap-support')} subdued />}
-      {runtime && <>
-        <Text accessibilityRole="header" style={styles.title}>Signed host test</Text>
-        <Action title="Inspect signed test napplet" testID="settings-inspect-signed-test" onPress={onSignedLab} subdued />
-      </>}
-      {fixturePublisher && <FixturePublisherLab service={fixturePublisher} format={formatNpub} />}
-      <Text accessibilityRole="header" style={styles.title}>Bundled test napplets</Text>
-      <Action title="Open UX Lab" testID="settings-open-ux-lab" onPress={openBundledTest} subdued />
-      {runtime && <>
-        <Action title="Open Upload Lab" testID="settings-open-upload-lab" onPress={() => openStateLab('upload-lab')} subdued />
-        <Action title="Open Resource Lab" testID="settings-open-resource-lab" onPress={() => openStateLab('resource-lab')} subdued />
-        <Action title="Open Routing Lab" testID="settings-open-routing-lab" onPress={() => openStateLab('routing-lab')} subdued />
-        <Action title="Open Routing Lab Peer" testID="settings-open-routing-lab-peer" onPress={() => openStateLab('routing-lab-peer')} subdued />
-        <Action title="Open Feed Lab" testID="settings-open-feed-lab" onPress={() => openStateLab('feed-lab')} subdued />
-        <Action title="Open Approval Lab" testID="settings-open-approval-lab" onPress={() => openStateLab('approval-lab')} subdued />
-        <Action title="Open Close Lab" testID="settings-open-close-lab" onPress={() => openStateLab('close-lab')} subdued />
-        <Action title="Open State Lab" testID="settings-open-state-lab" onPress={() => openStateLab('state-lab')} subdued />
-        <Action title="Open State Lab Peer" testID="settings-open-state-lab-peer" onPress={() => openStateLab('state-lab-peer')} subdued />
-        <Action title="Open State Lab · other publisher" testID="settings-open-state-lab-other-publisher" onPress={() => openStateLab('state-lab-other-publisher')} subdued />
-      </>}      </SettingsSection>
+      <DeveloperSettings onSignedLab={onSignedLab} openBundledTest={openBundledTest} openStateLab={openStateLab} />
+      <AboutSettings />
       </View>
   </>;
 }
@@ -255,7 +264,7 @@ export function IdentitySettings({ openDiscovery, openBundledTest, openStateLab,
     <IdentityBackup actions={actions} session={state.session} npub={formatNpub(state.session.vault.selectedPubkey)} reviewing
       onReview={() => setBackupReview(true)} onClose={() => setBackupReview(false)} Action={Action} />
   </ScrollView>;
-  if (signedLab) return <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+  if (developerToolsEnabled && signedLab) return <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
     <PublishedHostLab onClose={() => setSignedLab(false)} sessionAuthority={() => transition.sessionAuthority()} />
   </ScrollView>;
   if (state.phase === 'deleting') return <View style={styles.body}>
