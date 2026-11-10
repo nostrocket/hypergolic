@@ -1,6 +1,6 @@
 {
   "name": "hypergolic",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@10.34.5",
   "main": "index.ts",
@@ -51,7 +51,10 @@
     "test:native-dav1d": "node scripts/test-native-dav1d.mjs",
     "test:native-codec-patches": "node --test tests/native/codecs/patch-integration.cjs && ruby tests/native/codecs/patch-hook.rb && ruby tests/native/codecs/notice-packaging.rb",
     "test:signer": "node --experimental-strip-types --test tests/security/native-signer-contract.test.ts tests/security/native-vault.test.ts tests/security/native-android-signer.test.ts",
-    "test:signer:native": "python3 tests/native/signer-core/run.py"
+    "test:signer:native": "python3 tests/native/signer-core/run.py",
+    "build:release": "node scripts/android-release.mjs build",
+    "sign:release": "node scripts/android-release.mjs sign",
+    "test:release": "node --test tests/release/*.test.mjs"
   },
   "dependencies": {
     "@expo/dom-webview": "58.0.2",
@@ -60,6 +63,7 @@
     "applesauce-relay": "6.2.1",
     "expo": "58.0.23",
     "expo-build-properties": "58.0.12",
+    "expo-constants": "58.0.15",
     "expo-crypto": "58.0.7",
     "expo-font": "58.0.11",
     "expo-image": "58.0.18",

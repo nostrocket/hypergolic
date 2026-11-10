@@ -135,6 +135,11 @@ Native/config-plugin changes need regeneration and compilation on each affected
 platform, plus focused boundary tests. Compiles, browser tests and Simulator
 results do not close full native device acceptance.
 
+## Production Android release
+
+See [Android release candidates](android-release.md) for the production variant,
+permanent signing-key setup, verified APK packaging and draft GitHub workflow.
+
 ## Tester APK command
 
 On macOS or Linux, install Android Build Tools 36.0.0 alongside 37.0.0. The

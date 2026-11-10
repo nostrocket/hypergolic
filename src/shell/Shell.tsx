@@ -1,3 +1,5 @@
+import { developerToolsEnabled } from '../config/build-info';
+import { initialWorkspaceForBuild } from './initial-workspace';
 import { isHostActivityBlocked } from './workspace-activity';
 import { WorkspaceFullscreenContext, useWorkspaceFullscreen } from './WorkspaceFullscreen';
 import { useWorkspaceDiscovery } from './useWorkspaceDiscovery';
@@ -34,7 +36,7 @@ import { ReviewFocus } from './ReviewFocus';
 import type { NappletConsentReview } from '../napplets/first-open-consent';
 import type { PublishedUpdateReview } from '../napplets/published-session';
 
-import { initialTestWorkspace, type BundledVariant } from './fixtures';
+import { type BundledVariant } from './fixtures';
 
 const noPending = new Set<string>();
 export interface SettingsActions {
@@ -80,7 +82,7 @@ export function Shell({ blocked = false, hostActivityBlocked = blocked, initialW
   const { styles } = useShellStyles(createStyles);
   const runtime = useContext(RuntimeContext);
   const owner = useContext(OwnerContext);
-  const [localWorkspace, setLocalWorkspace] = useState(() => initialWorkspace ?? initialTestWorkspace());
+  const [localWorkspace, setLocalWorkspace] = useState(() => initialWorkspace ?? initialWorkspaceForBuild());
   const workspace = controlledWorkspace ?? localWorkspace;
   const fullscreen = useWorkspaceFullscreen(workspace);
   const current = useRef(workspace);
@@ -306,8 +308,8 @@ function ShellSettings({ settings, blocked, identity, SettingsContent, published
         {settings && (SettingsContent ? <SettingsContent closeSettings={openSettings} openBundledTest={openBundledTest} openStateLab={openFixture} openPublished={openPublished}
           publishedSessions={publishedSessions} checkPublishedUpdate={checkPublishedUpdate} openDiscovery={openDiscovery} /> : <View style={styles.settingsBody}>
           <Text selectable testID="settings-full-npub" style={styles.settingsText}>{identity ? identity.npub : 'Identity is not configured in this build.'}</Text>
-          <Text accessibilityRole="header" style={styles.settingsSection}>Bundled test napplets</Text>
-          <Pressable testID="settings-open-ux-lab" accessibilityRole="button" onPress={openBundledTest} style={styles.openTest}><Text style={styles.openTestText}>Open UX Lab</Text><Text style={styles.addMark} accessible={false}>+</Text></Pressable>
+          {developerToolsEnabled && <><Text accessibilityRole="header" style={styles.settingsSection}>Bundled test napplets</Text>
+          <Pressable testID="settings-open-ux-lab" accessibilityRole="button" onPress={openBundledTest} style={styles.openTest}><Text style={styles.openTestText}>Open UX Lab</Text><Text style={styles.addMark} accessible={false}>+</Text></Pressable></>}
         </View>)}
       </SafeAreaView></SafeAreaProvider>
     </Modal>

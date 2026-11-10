@@ -2,7 +2,7 @@
   "expo": {
     "name": "Hypergolic",
     "slug": "hypergolic",
-    "version": "0.0.0",
+    "version": "0.1.0",
     "icon": "./assets/brand/app-icon.png",
     "platforms": [
       "android",

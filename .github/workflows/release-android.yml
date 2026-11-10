@@ -1,0 +1,124 @@
+name: Android release candidate
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: android-release
+  cancel-in-progress: false
+jobs:
+  build:
+    if: github.repository == 'nostrocket/hypergolic' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Require successful CI for this exact main commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          conclusion=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/check.yml/runs?head_sha=$GITHUB_SHA&event=push&per_page=1" --jq '.workflow_runs[0].conclusion')
+          test "$conclusion" = success
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '17.0.20+101'
+      - run: sdkmanager 'build-tools;36.0.0'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run runtime:install
+      - run: pnpm run test:release
+      - run: pnpm run build:release "$RUNNER_TEMP/unsigned"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: android-unsigned-${{ github.sha }}
+          path: ${{ runner.temp }}/unsigned/
+          if-no-files-found: error
+          retention-days: 7
+  sign:
+    needs: build
+    runs-on: ubuntu-24.04
+    environment: android-release
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '17.0.20+101'
+      - run: sdkmanager 'build-tools;36.0.0'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: android-unsigned-${{ github.sha }}
+          path: ${{ runner.temp }}/unsigned
+      - name: Sign and verify candidate without running a dependency install or build
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          HYPERGOLIC_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          HYPERGOLIC_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          HYPERGOLIC_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          export HYPERGOLIC_KEYSTORE_PATH="$RUNNER_TEMP/hypergolic-release.p12"
+          trap 'rm -f "$HYPERGOLIC_KEYSTORE_PATH"' EXIT
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$HYPERGOLIC_KEYSTORE_PATH"
+          unset ANDROID_KEYSTORE_BASE64
+          node scripts/android-release.mjs sign "$RUNNER_TEMP/unsigned" "$RUNNER_TEMP/signed"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: android-candidate-${{ github.sha }}
+          path: ${{ runner.temp }}/signed/
+          if-no-files-found: error
+          retention-days: 30
+  draft:
+    needs: sign
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: android-candidate-${{ github.sha }}
+          path: ${{ runner.temp }}/signed
+      - name: Prepare draft metadata from verified candidate
+        working-directory: ${{ runner.temp }}/signed
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import {readFileSync,writeFileSync,appendFileSync} from 'node:fs';
+          import {createHash} from 'node:crypto';
+          const receipt=JSON.parse(readFileSync('build.json','utf8'));
+          assert.equal(receipt.sourceCommit,process.env.GITHUB_SHA);
+          assert.equal(receipt.applicationId,'space.hypergolic');
+          assert(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(receipt.version));
+          assert(Number.isInteger(receipt.versionCode) && receipt.versionCode>0);
+          assert(/^[a-f0-9]{64}$/.test(receipt.signingCertificateSha256));
+          assert.equal(receipt.apk,`hypergolic-${receipt.version}-${receipt.versionCode}-arm64.apk`);
+          assert.equal(createHash('sha256').update(readFileSync(receipt.apk)).digest('hex'),receipt.sha256);
+          assert.equal(readFileSync('SHA256SUMS','utf8'),`${receipt.sha256}  ${receipt.apk}\n`);
+          appendFileSync(process.env.GITHUB_ENV,`RELEASE_TAG=v${receipt.version}\nRELEASE_APK=${receipt.apk}\n`);
+          writeFileSync('release-notes.md',`Android ARM64 candidate: **${receipt.version}**, build **${receipt.versionCode}**.\n\nApplication ID: \`${receipt.applicationId}\`\n\nSource: \`${receipt.sourceCommit}\`\n\nAPK SHA-256: \`${receipt.sha256}\`\n\nSigning certificate SHA-256: \`${receipt.signingCertificateSha256}\`\n\nMaintainer: complete standalone Android acceptance and release notes before publishing. Keep this exact APK for distribution through GitHub, the website and Zapstore. See docs/android-release.md at the source commit.\n`);
+          NODE
+      - name: Create draft only; refuse to replace an existing release
+        working-directory: ${{ runner.temp }}/signed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$RELEASE_TAG" "$RELEASE_APK" SHA256SUMS build.json \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft \
+            --title "Hypergolic $RELEASE_TAG" --notes-file release-notes.md
