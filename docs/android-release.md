@@ -76,7 +76,7 @@ before approving access to that environment.
    installs no application dependencies, verifies the source receipt and signs.
 4. The final job gets repository-write access and creates a **draft** release
    `v0.1.0` containing the signed APK, `SHA256SUMS` and `build.json`. It cannot
-   replace an existing release. A draft is not an anonymous download channel.
+   replace an existing release or reuse an existing tag. A draft is not an anonymous download channel.
 5. Test those exact bytes without Metro using the Android-applicable
    [acceptance matrix](../tests/acceptance-matrix.json). Record the SHA-256,
    device/OS coverage, first launch, identity recovery, Discover/opening,

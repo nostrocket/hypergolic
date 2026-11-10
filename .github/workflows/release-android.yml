@@ -119,6 +119,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          tag_count=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$RELEASE_TAG" --jq "map(select(.ref == \"refs/tags/$RELEASE_TAG\")) | length")
+          if [[ "$tag_count" != 0 ]]; then
+            echo 'Release tag already exists; reconcile it before creating a candidate.' >&2
+            exit 1
+          fi
           gh release create "$RELEASE_TAG" "$RELEASE_APK" SHA256SUMS build.json \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft \
             --title "Hypergolic $RELEASE_TAG" --notes-file release-notes.md
