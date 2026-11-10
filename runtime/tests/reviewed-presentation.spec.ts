@@ -102,6 +102,8 @@ async function open(page:Page,appId:string,variant='exact',uploadMode='complete'
           if(!state.releaseImages){held.set(request.id,envelope);return;}
           response.items=request.requests.map((item:any,index:number)=>({url:item.url,ok:true,
             transfer:{handle:`00000000-0000-4000-8000-${String(index+1).padStart(12,'0')}`,length:atob(png).length,mime:'image/png'}}));
+        }else if(request.type==='resource.bytes'){
+          response.transfer={handle:'00000000-0000-4000-8000-000000000007',length:atob(png).length,mime:'image/png'};
         }else if(request.type==='resource.__chunk'){state.chunks++;response.base64=png;}
         else if(request.type==='resource.cancel'){
           const prior=held.get(request.id);if(prior){held.delete(request.id);reply(prior,{type:'resource.bytesMany.error',id:request.id,error:'timeout'});}
@@ -114,6 +116,7 @@ async function open(page:Page,appId:string,variant='exact',uploadMode='complete'
   await page.goto(`/assets/runtime/index.html?sessionId=${generation}&source=published`);
   const frame=page.frameLocator('#napplet');
   await expect(frame.locator('#hypergolic-reviewed-presentation')).toHaveCount(variant==='exact'?1:0);
+  await expect(frame.locator('[data-hypergolic-emoji-images]')).toHaveCount(appId==='emoji-browser'&&variant==='exact'?1:0);
   await expect(frame.locator('[data-hypergolic-creator-upload]')).toHaveCount(appId==='emoji-pack-creator'&&variant==='exact'?1:0);
   await expect(frame.locator('body')).not.toHaveText('');
   return frame;
@@ -142,6 +145,7 @@ for(const width of [320,360])for(const colorScheme of ['light','dark'] as const)
     await page.evaluate(()=>(window as any).__presentation.releaseImages=true);
     await retry.click();await expect.poll(()=>page.evaluate(()=>(window as any).__presentation.chunks)).toBeGreaterThanOrEqual(6);
     await expect(frame.locator('.emoji-card')).toHaveCount(6);
+    await expect.poll(()=>frame.locator('.emoji-card img').evaluateAll(images=>images.filter(image=>image.complete&&image.naturalWidth>0).length)).toBe(6);
     await frame.locator('.emoji-card').first().click();await expect(frame.locator('.detail')).toContainText('sample_0');
     await fits(frame.locator('.topbar button,.toolbar button,.toolbar input,.emoji-card,.detail button'));
     expect(await page.evaluate(()=>(window as any).__presentation.batches)).toBeGreaterThanOrEqual(2);

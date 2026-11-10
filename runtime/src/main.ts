@@ -2,6 +2,7 @@ import {createLegacyImageMount} from './legacy-image-mount';
 import {injectLegacyImages} from './legacy-image-guest';
 import {injectReviewedPresentation} from './reviewed-presentation';
 import {injectCreatorUpload} from './reviewed-creator-upload';
+import {injectEmojiImages} from './reviewed-emoji-images';
 import {supportsMappletsTouchSelection} from './reviewed-mapplets-touch';
 import {validEnvelope, rejectEnvelope} from './guest-envelope';
 import {commonFailure} from '../../src/common/common-contract';
@@ -349,7 +350,7 @@ function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
     frame.srcdoc = prefix + injectLegacyReadOnly(injectLegacyImages(injectAndroidGuestHelpers(injectResourceMediaGate(layout)), legacyNonce), legacyNonce);
     return;
   }
-  const presentation = injectReviewedPresentation(withCsp, artifact);
+  const presentation = injectReviewedPresentation(injectEmojiImages(withCsp, artifact), artifact);
   const html = discoveryToken ? injectDiscoveryOpen(presentation, discoveryToken, artifact.domains.includes('relay')) : presentation;
   const guest = injectAndroidGuestHelpers(injectResourceMediaGate(html, supportsMappletsTouchSelection(artifact)));
   const injected = injectNappletNamespacePrelude(injectCreatorUpload(injectSupportReport(guest), artifact), {
