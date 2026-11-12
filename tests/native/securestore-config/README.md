@@ -1,6 +1,6 @@
 # SecureStore configuration boundary
 
-The pinned `expo-secure-store@58.0.2` patch restricts its native data exports to
+The pinned `expo-secure-store@58.0.3` patch restricts its native data exports to
 `org.nostrocket.hypergolic.napplet-config.v1` and exact lowercase `scope.<64hex>` keys.
 Both synchronous get/set and asynchronous get/set/delete use the same native gate.
 Authentication, access groups, prompts and unsafe accessibility settings are denied.
@@ -50,7 +50,7 @@ bridge registration, OS encryption, hardware protection or device restart.
 The patch is registered in `pnpm.patchedDependencies`:
 
 ```json
-"expo-secure-store@58.0.2": "patches/expo-secure-store@58.0.2.patch"
+"expo-secure-store@58.0.3": "patches/expo-secure-store@58.0.3.patch"
 ```
 
 Preserve existing entries. Force the module to compile from patched source using
@@ -65,7 +65,7 @@ append both SecureStore patterns there as well because platform options replace
 the root list. Keep its existing `^expo-image$` entry. Android matches Gradle project names with a full regex;
 iOS matches the npm package or pod name. This is required even if a current local
 Android build already selects source. A precompiled AAR/XCFramework cannot include
-the new policy. The installed Expo autolinking 58.0.17 implements these selectors.
+the new policy. The installed Expo autolinking 58.1.0 implements these selectors.
 After coordinating active build jobs, regenerate the lock and install the patch:
 
 ```sh

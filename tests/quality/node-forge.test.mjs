@@ -134,3 +134,19 @@ test('Expo CLI reads signing information from a disposable certificate', async (
   await assert.rejects(actual.exports.getCertificateForSigningIdAsync('DISPOSABLE'));
   assert.equal(calls, 3);
 });
+
+// GHSA-6889-vf6x-f3g5: an identity public key must not authenticate arbitrary messages.
+test('Expo tooling rejects Ed25519 signatures under a small-order public key', () => {
+  const message = Buffer.from('disposable signature regression');
+  const pair = forge.pki.ed25519.generateKeyPair();
+  const signature = forge.pki.ed25519.sign({ message, privateKey: pair.privateKey });
+  assert.equal(forge.pki.ed25519.verify({ message, signature, publicKey: pair.publicKey }), true);
+  assert.equal(forge.pki.ed25519.verify({ message: Buffer.from('altered'), signature, publicKey: pair.publicKey }), false);
+  const identity = Buffer.alloc(32);
+  identity[0] = 1;
+  const forged = Buffer.alloc(64);
+  identity.copy(forged);
+  for (const payload of [message, Buffer.from('unrelated message')]) {
+    assert.equal(forge.pki.ed25519.verify({ message: payload, signature: forged, publicKey: identity }), false);
+  }
+});

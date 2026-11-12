@@ -1,7 +1,7 @@
 {
   "package": "expo-secure-store",
-  "version": "58.0.2",
-  "upstreamGitHead": "1c3458414038427eb5f14b085477fac3dce0b69f",
+  "version": "58.0.3",
+  "upstreamGitHead": "e579718110a93144461d58bbebbf32451cfb5f2a",
   "original": {
     "android/src/main/java/expo/modules/securestore/SecureStoreModule.kt": "2c1f4172b3779de3e65052ecd0ce61ffef311565052a3fb5d0956c11f26f0deb",
     "android/src/main/java/expo/modules/securestore/SecureStoreOptions.kt": "24d147420924f504f97aaf912cfca23a9f02aeeb2b5c5ff8b848a76693eb284c",
@@ -21,6 +21,6 @@
     "android/src/main/java/expo/modules/securestore/encryptors/AESEncryptor.kt": "40d0f6d800718537c85bda8be145ba02f7e4321d23bddad6417b901e13b94daa"
   },
   "upstreamGitHeadSource": "official npm provenance resolvedDependencies; attestation retrieved, signature not independently verified",
-  "upstreamPackageJsonSha256": "810fd562270182b7497ef1045a7a09a038861f7733e2967e165aa686bbad34e6",
-  "publishedIntegrity": "sha512-VupWWEuQF6IiQ06McSymtn7/tehs8ifThhFwAU4UK8poomZcaa2S0UVt/y7G2XozBdkI3xpiPSx+r0pS2zsuYQ=="
+  "upstreamPackageJsonSha256": "6444907f88b0469162bef880f30e5c311e54a69dec08df12810b416b8b9198f4",
+  "publishedIntegrity": "sha512-RpubZfqJREEcwKbx3HFoWbtDd31t+yESMj7Ei5/mGQp5vViwUBzL4nUCZRLFyt+O690mT8We7dDtIUZeIk6LbQ=="
 }

@@ -16,7 +16,7 @@ import tempfile
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 PACKAGE = ROOT / 'node_modules/expo-secure-store'
-PATCH = ROOT / 'patches/expo-secure-store@58.0.2.patch'
+PATCH = ROOT / 'patches/expo-secure-store@58.0.3.patch'
 manifest = json.loads((HERE / 'source-manifest.json').read_text())
 sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
 def run(command, **options):

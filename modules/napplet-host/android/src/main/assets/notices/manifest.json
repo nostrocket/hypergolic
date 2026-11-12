@@ -1,37 +1,271 @@
 {
   "schemaVersion": 1,
   "platform": "android",
-  "scope": "64 main Android JavaScript package contributors. Android native/transitive and separate web-runtime attribution review remains open.",
+  "scope": "58 main android JavaScript package contributors. Other native/transitive and runtime attribution review remains open.",
   "components": [
     {
+      "name": "@babel/runtime",
+      "version": "7.29.7",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/babel/babel.git",
+        "directory": "packages/babel-runtime"
+      },
+      "packageJsonSha256": "8c4bf20c55e3f3a93df034b12746bf72185cf2acb0ef52847a3465d6e67c61e7",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-@babel_runtime-7.29.7-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "@babel/runtime@7.29.7",
+          "sourceUrl": "https://www.npmjs.com/package/@babel/runtime/v/7.29.7",
+          "sha256": "117da2af0d4ce0fe1c8e19b5cff9dcd806adf973d328d27b11d4448c4ff24f76",
+          "bytes": 1106
+        }
+      ]
+    },
+    {
       "name": "@expo/cli",
-      "version": "58.1.19",
+      "version": "58.1.20",
       "license": "MIT",
       "repository": {
         "type": "git",
         "url": "https://github.com/expo/expo.git",
         "directory": "packages/@expo/cli"
       },
-      "packageJsonSha256": "279eb99e60e282dde3bfd4a8b4d231c12db34544e30a888eccd7adb94c41e003",
+      "packageJsonSha256": "98f35dbe2ac27fd7ee90905352ab6215fc157f80094f6e7c2bce87ebd1e85c39",
       "scope": "main Android JavaScript source-map contributor",
       "notices": [
         {
-          "file": "js-@expo_cli-58.1.19-LICENSE.txt",
+          "file": "js-@expo_cli-58.1.20-LICENSE.txt",
           "sourcePath": "LICENSE",
-          "sourceCoordinate": "@expo/cli@58.1.19",
-          "sourceUrl": "https://www.npmjs.com/package/@expo/cli/v/58.1.19",
+          "sourceCoordinate": "@expo/cli@58.1.20",
+          "sourceUrl": "https://www.npmjs.com/package/@expo/cli/v/58.1.20",
           "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
           "bytes": 1106
         },
         {
-          "file": "js-@expo_cli-58.1.19-LICENSE-third-party.txt",
+          "file": "js-@expo_cli-58.1.20-LICENSE-third-party.txt",
           "sourcePath": "LICENSE-third-party",
-          "sourceCoordinate": "@expo/cli@58.1.19",
-          "sourceUrl": "https://www.npmjs.com/package/@expo/cli/v/58.1.19",
+          "sourceCoordinate": "@expo/cli@58.1.20",
+          "sourceUrl": "https://www.npmjs.com/package/@expo/cli/v/58.1.20",
           "sha256": "377f1a9763b9dd9dad730c1534fe2f215496eda131553a16f3f9251f559e3a59",
           "bytes": 1076
         }
       ]
+    },
+    {
+      "name": "@expo/devtools",
+      "version": "58.0.2",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/expo/expo.git",
+        "directory": "packages/@expo/devtools"
+      },
+      "packageJsonSha256": "79495142bcf449038d73e827010ba7b5c41014c5c70684540437025fea941c59",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-@expo_devtools-58.0.2-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "@expo/devtools@58.0.2",
+          "sourceUrl": "https://www.npmjs.com/package/@expo/devtools/v/58.0.2",
+          "sha256": "16feb932ce2ba7bc7712657bb28afe409eaa4334f9f05d0e1b7a5f12bf6132f4",
+          "bytes": 1107
+        }
+      ]
+    },
+    {
+      "name": "@noble/ciphers",
+      "version": "0.5.3",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/paulmillr/noble-ciphers.git"
+      },
+      "packageJsonSha256": "ce52c396efb7421146dbd6729ad92b511ca52922fee5da804c587866348381cd",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-@noble_ciphers-0.5.3-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "@noble/ciphers@0.5.3",
+          "sourceUrl": "https://www.npmjs.com/package/@noble/ciphers/v/0.5.3",
+          "sha256": "f36671a5487c9c5050efacb58011c37c24c55a889803cb036cf9d9a6347c1e2d",
+          "bytes": 1161
+        }
+      ]
+    },
+    {
+      "name": "@noble/ciphers",
+      "version": "2.1.1",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/paulmillr/noble-ciphers.git"
+      },
+      "packageJsonSha256": "f30139134b7f4465b1ea0e82c5ba97c56e4db0125e176f3e73455478b43bbb09",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-@noble_ciphers-2.1.1-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "@noble/ciphers@2.1.1",
+          "sourceUrl": "https://www.npmjs.com/package/@noble/ciphers/v/2.1.1",
+          "sha256": "f36671a5487c9c5050efacb58011c37c24c55a889803cb036cf9d9a6347c1e2d",
+          "bytes": 1161
+        }
+      ]
+    },
+    {
+      "name": "@noble/curves",
+      "version": "1.2.0",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/paulmillr/noble-curves.git"
+      },
+      "packageJsonSha256": "bf61194229da9a7fd331fcf44cc24f746b5cbaefe941a312215376584c269bd5",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-@noble_curves-1.2.0-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "@noble/curves@1.2.0",
+          "sourceUrl": "https://www.npmjs.com/package/@noble/curves/v/1.2.0",
+          "sha256": "4f221aee6e072336700c408c68ab3b96a3fc09f6aebe6f48f1bd99e5ef13faec",
+          "bytes": 1109
+        }
+      ]
+    },
+    {
+      "name": "@noble/curves",
+      "version": "2.0.1",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/paulmillr/noble-curves.git"
+      },
+      "packageJsonSha256": "588b510f1b8804bdf820acbd14065126286d92575c45811acef08fe480899469",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-@noble_curves-2.0.1-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "@noble/curves@2.0.1",
+          "sourceUrl": "https://www.npmjs.com/package/@noble/curves/v/2.0.1",
+          "sha256": "4f221aee6e072336700c408c68ab3b96a3fc09f6aebe6f48f1bd99e5ef13faec",
+          "bytes": 1109
+        }
+      ]
+    },
+    {
+      "name": "@noble/hashes",
+      "version": "1.3.1",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/paulmillr/noble-hashes.git"
+      },
+      "packageJsonSha256": "f2067c9417ae3e6061aa7d541b59f9466460c985e5c5ee933ffedee4219ee95a",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-@noble_hashes-1.3.1-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "@noble/hashes@1.3.1",
+          "sourceUrl": "https://www.npmjs.com/package/@noble/hashes/v/1.3.1",
+          "sha256": "4f221aee6e072336700c408c68ab3b96a3fc09f6aebe6f48f1bd99e5ef13faec",
+          "bytes": 1109
+        }
+      ]
+    },
+    {
+      "name": "@noble/hashes",
+      "version": "1.3.2",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/paulmillr/noble-hashes.git"
+      },
+      "packageJsonSha256": "8d8203c66e91a9e6ee510facf378a2c7420b27139360132a257010c2e5f091bc",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-@noble_hashes-1.3.2-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "@noble/hashes@1.3.2",
+          "sourceUrl": "https://www.npmjs.com/package/@noble/hashes/v/1.3.2",
+          "sha256": "4f221aee6e072336700c408c68ab3b96a3fc09f6aebe6f48f1bd99e5ef13faec",
+          "bytes": 1109
+        }
+      ]
+    },
+    {
+      "name": "@noble/hashes",
+      "version": "2.0.1",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/paulmillr/noble-hashes.git"
+      },
+      "packageJsonSha256": "ceb30ba96a14786c419db53f2b8d3d59ece7ac5221c198ac03def462cf96ef23",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-@noble_hashes-2.0.1-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "@noble/hashes@2.0.1",
+          "sourceUrl": "https://www.npmjs.com/package/@noble/hashes/v/2.0.1",
+          "sha256": "4f221aee6e072336700c408c68ab3b96a3fc09f6aebe6f48f1bd99e5ef13faec",
+          "bytes": 1109
+        }
+      ]
+    },
+    {
+      "name": "@noble/hashes",
+      "version": "2.4.0",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/paulmillr/noble-hashes.git"
+      },
+      "packageJsonSha256": "3e361734f5269de162fa362483d7f45dee7efb533ec217157945338f7591baaf",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-@noble_hashes-2.4.0-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "@noble/hashes@2.4.0",
+          "sourceUrl": "https://www.npmjs.com/package/@noble/hashes/v/2.4.0",
+          "sha256": "4f221aee6e072336700c408c68ab3b96a3fc09f6aebe6f48f1bd99e5ef13faec",
+          "bytes": 1109
+        }
+      ]
+    },
+    {
+      "name": "@react-native/asset-utils",
+      "version": "0.88.1",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/react/react-native.git",
+        "directory": "packages/asset-utils"
+      },
+      "packageJsonSha256": "6c4dcaed880cf55da43c5c00dcbdb392475c5e0e8f47d723d66ad5dd11764e3f",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [],
+      "licenseNoticeFiles": [
+        "js-react-native-0.88.1-LICENSE.txt"
+      ],
+      "sharedLicenseSource": {
+        "repository": "https://github.com/react/react-native",
+        "commit": "c30b7f86850d47422637a64c70508e7411dbd8ea",
+        "sourcePath": "LICENSE",
+        "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+      }
     },
     {
       "name": "@react-native/js-polyfills",
@@ -56,24 +290,730 @@
       }
     },
     {
+      "name": "@react-native/normalize-colors",
+      "version": "0.88.1",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/react/react-native.git",
+        "directory": "packages/normalize-color"
+      },
+      "packageJsonSha256": "796c5dab617381b4796c79fd6d3761d9891d6cf0daf0a5ccd11d7fa240a04121",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [],
+      "licenseNoticeFiles": [
+        "js-react-native-0.88.1-LICENSE.txt"
+      ],
+      "sharedLicenseSource": {
+        "repository": "https://github.com/react/react-native",
+        "commit": "c30b7f86850d47422637a64c70508e7411dbd8ea",
+        "sourcePath": "LICENSE",
+        "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+      }
+    },
+    {
+      "name": "@react-native/virtualized-lists",
+      "version": "0.88.1",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/react/react-native.git",
+        "directory": "packages/virtualized-lists"
+      },
+      "packageJsonSha256": "4e27d1f0c2b9d22f543db9f88dfb89b4ad8f404140eca75ecfe2aae5c0bb9f8a",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [],
+      "licenseNoticeFiles": [
+        "js-react-native-0.88.1-LICENSE.txt"
+      ],
+      "sharedLicenseSource": {
+        "repository": "https://github.com/react/react-native",
+        "commit": "c30b7f86850d47422637a64c70508e7411dbd8ea",
+        "sourcePath": "LICENSE",
+        "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+      }
+    },
+    {
+      "name": "@scure/base",
+      "version": "1.1.1",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/paulmillr/scure-base.git"
+      },
+      "packageJsonSha256": "7f2a6ea2aafb73ceb759a045921e2f6bbeac94d242ce58ddcbc6e3c90d25c403",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-@scure_base-1.1.1-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "@scure/base@1.1.1",
+          "sourceUrl": "https://www.npmjs.com/package/@scure/base/v/1.1.1",
+          "sha256": "3239e134eb6e6d64538ca76498c7fcb08a395249dd9d4af9927bf6d0169ee429",
+          "bytes": 1110
+        }
+      ]
+    },
+    {
+      "name": "@scure/base",
+      "version": "2.0.0",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/paulmillr/scure-base.git"
+      },
+      "packageJsonSha256": "93cb3a28e1f34a5399aed7c4ba8ba337acd28b01420c34e6daa9bc35a24f34af",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-@scure_base-2.0.0-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "@scure/base@2.0.0",
+          "sourceUrl": "https://www.npmjs.com/package/@scure/base/v/2.0.0",
+          "sha256": "3239e134eb6e6d64538ca76498c7fcb08a395249dd9d4af9927bf6d0169ee429",
+          "bytes": 1110
+        }
+      ]
+    },
+    {
+      "name": "@ungap/structured-clone",
+      "version": "1.4.0",
+      "license": "ISC",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/ungap/structured-clone.git"
+      },
+      "packageJsonSha256": "8f931c21e4c0b37c35d5ffef35e0bc057f3cbd0224b026b21a5bdb82a98cbd8f",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-@ungap_structured-clone-1.4.0-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "@ungap/structured-clone@1.4.0",
+          "sourceUrl": "https://www.npmjs.com/package/@ungap/structured-clone/v/1.4.0",
+          "sha256": "dc6d4961d8b6ee747231582ae9c53ce1d66bf76bc9f5a28f554c0e97210953bf",
+          "bytes": 765
+        }
+      ]
+    },
+    {
+      "name": "applesauce-core",
+      "version": "6.2.0",
+      "license": "MIT",
+      "packageJsonSha256": "889b287ef9f674d835b560738cd74352e38ea3d97d7bdfba4394deeb5e445d04",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-applesauce-core-6.2.0-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "applesauce-core@6.2.0",
+          "sourceUrl": "https://www.npmjs.com/package/applesauce-core/v/6.2.0",
+          "sha256": "0f5f034ecb6d7e3ae79a2e63be4b1ee77e2ad6680ef9f71f5741e2799c5013af",
+          "bytes": 1074
+        }
+      ]
+    },
+    {
+      "name": "applesauce-relay",
+      "version": "6.2.1",
+      "license": "MIT",
+      "packageJsonSha256": "00de51a6cefc0fba1e8a48b8dc896f519a7f437787e18b7a9513da79034f98c7",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-applesauce-relay-6.2.1-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "applesauce-relay@6.2.1",
+          "sourceUrl": "https://www.npmjs.com/package/applesauce-relay/v/6.2.1",
+          "sha256": "0f5f034ecb6d7e3ae79a2e63be4b1ee77e2ad6680ef9f71f5741e2799c5013af",
+          "bytes": 1074
+        }
+      ]
+    },
+    {
+      "name": "await-lock",
+      "version": "2.2.2",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/ide/await-lock.git"
+      },
+      "packageJsonSha256": "646f3516dc035f0aef095b321eee009cefff46529813e4923e39e5579098205e",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-await-lock-2.2.2-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "await-lock@2.2.2",
+          "sourceUrl": "https://www.npmjs.com/package/await-lock/v/2.2.2",
+          "sha256": "396eefd21683c5f4de3640e7627638d07be75126f896d3ee0cf924cbff64e0a2",
+          "bytes": 1084
+        }
+      ]
+    },
+    {
+      "name": "base64-js",
+      "version": "1.5.1",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git://github.com/beatgammit/base64-js.git"
+      },
+      "packageJsonSha256": "9758f3ab8c45e07bb9a368e32f9a8b3729623bbf47cbbb205b32d674ab2a91f0",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-base64-js-1.5.1-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "base64-js@1.5.1",
+          "sourceUrl": "https://www.npmjs.com/package/base64-js/v/1.5.1",
+          "sha256": "5b37224c080cdcc97c871ada971c224e9926370fe74f11b539aa1cf9f3b1aca1",
+          "bytes": 1081
+        }
+      ]
+    },
+    {
+      "name": "debug",
+      "version": "4.4.3",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git://github.com/debug-js/debug.git"
+      },
+      "packageJsonSha256": "ea8e33d63fe5f3a4c36609b6c3df8e2ef1f8b8ba2fc3a2e1e53cb27291f384af",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-debug-4.4.3-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "debug@4.4.3",
+          "sourceUrl": "https://www.npmjs.com/package/debug/v/4.4.3",
+          "sha256": "3a61c6c96caf5c1d9b623fb9b04c822b783dfcb78aa7e49c76a3f643e6ed7f95",
+          "bytes": 1139
+        }
+      ]
+    },
+    {
+      "name": "expo-asset",
+      "version": "58.0.21",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/expo/expo.git",
+        "directory": "packages/expo-asset"
+      },
+      "packageJsonSha256": "a317879b994f92128624136f42832597fc411015de25aa1125dfb73a82487427",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-expo-asset-58.0.21-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "expo-asset@58.0.21",
+          "sourceUrl": "https://www.npmjs.com/package/expo-asset/v/58.0.21",
+          "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
+          "bytes": 1106
+        }
+      ]
+    },
+    {
+      "name": "expo-constants",
+      "version": "58.0.16",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/expo/expo.git",
+        "directory": "packages/expo-constants"
+      },
+      "packageJsonSha256": "d993120267b9e8b8b65b92f605d0cbc7ddb2e3bfe295df6c4a97bfe81e06247a",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-expo-constants-58.0.16-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "expo-constants@58.0.16",
+          "sourceUrl": "https://www.npmjs.com/package/expo-constants/v/58.0.16",
+          "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
+          "bytes": 1106
+        }
+      ]
+    },
+    {
+      "name": "expo-crypto",
+      "version": "58.0.8",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/expo/expo.git",
+        "directory": "packages/expo-crypto"
+      },
+      "packageJsonSha256": "4cf192f0430e01fa5e9a149a2ff1dcf9f69ac6c9079570e96374e28a2c65ec86",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-expo-crypto-58.0.8-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "expo-crypto@58.0.8",
+          "sourceUrl": "https://www.npmjs.com/package/expo-crypto/v/58.0.8",
+          "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
+          "bytes": 1106
+        }
+      ]
+    },
+    {
+      "name": "expo-font",
+      "version": "58.0.12",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/expo/expo.git",
+        "directory": "packages/expo-font"
+      },
+      "packageJsonSha256": "0b86ac4efb1c5cc4aa7a593b4fc096c96b1933aa57f8f71c145de6c87f9d2668",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-expo-font-58.0.12-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "expo-font@58.0.12",
+          "sourceUrl": "https://www.npmjs.com/package/expo-font/v/58.0.12",
+          "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
+          "bytes": 1106
+        }
+      ]
+    },
+    {
+      "name": "expo-image",
+      "version": "58.0.18",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/expo/expo.git",
+        "directory": "packages/expo-image"
+      },
+      "packageJsonSha256": "b21f4530a67399aaa7492c51e7b2c1aa50bc5b9c1089e86e9e9ffa7fba095f2f",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-expo-image-58.0.18-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "expo-image@58.0.18",
+          "sourceUrl": "https://www.npmjs.com/package/expo-image/v/58.0.18",
+          "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
+          "bytes": 1106
+        }
+      ]
+    },
+    {
+      "name": "expo-modules-core",
+      "version": "58.1.0",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/expo/expo.git",
+        "directory": "packages/expo-modules-core"
+      },
+      "packageJsonSha256": "285de31be98571eea2a85f8eac1d30fce6a1474e2dc4b1772dd4465333762004",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-expo-modules-core-58.1.0-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "expo-modules-core@58.1.0",
+          "sourceUrl": "https://www.npmjs.com/package/expo-modules-core/v/58.1.0",
+          "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
+          "bytes": 1106
+        }
+      ]
+    },
+    {
+      "name": "expo-secure-store",
+      "version": "58.0.3",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/expo/expo.git",
+        "directory": "packages/expo-secure-store"
+      },
+      "packageJsonSha256": "6444907f88b0469162bef880f30e5c311e54a69dec08df12810b416b8b9198f4",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-expo-secure-store-58.0.3-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "expo-secure-store@58.0.3",
+          "sourceUrl": "https://www.npmjs.com/package/expo-secure-store/v/58.0.3",
+          "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
+          "bytes": 1106
+        }
+      ]
+    },
+    {
+      "name": "expo-sqlite",
+      "version": "58.0.16",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/expo/expo.git",
+        "directory": "packages/expo-sqlite"
+      },
+      "packageJsonSha256": "7ed78ff082b83d4eb815ebc47c8265c071df2ad1713c6a389c1997f77e7e4fe8",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-expo-sqlite-58.0.16-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "expo-sqlite@58.0.16",
+          "sourceUrl": "https://www.npmjs.com/package/expo-sqlite/v/58.0.16",
+          "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
+          "bytes": 1106
+        }
+      ]
+    },
+    {
       "name": "expo",
-      "version": "58.0.23",
+      "version": "58.0.24",
       "license": "MIT",
       "repository": {
         "type": "git",
         "url": "https://github.com/expo/expo.git",
         "directory": "packages/expo"
       },
-      "packageJsonSha256": "6d461bcd4e874be6b30583b13480fb28e74d9fa2732acba593640415693643f6",
+      "packageJsonSha256": "a818f429d76946b5fddaa804ac67ebcc45cfe232a47b1bf7a30b66f1c0c3c9ac",
       "scope": "main Android JavaScript source-map contributor",
       "notices": [
         {
-          "file": "js-expo-58.0.23-LICENSE.txt",
+          "file": "js-expo-58.0.24-LICENSE.txt",
           "sourcePath": "LICENSE",
-          "sourceCoordinate": "expo@58.0.23",
-          "sourceUrl": "https://www.npmjs.com/package/expo/v/58.0.23",
+          "sourceCoordinate": "expo@58.0.24",
+          "sourceUrl": "https://www.npmjs.com/package/expo/v/58.0.24",
           "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
           "bytes": 1106
+        }
+      ]
+    },
+    {
+      "name": "fast-deep-equal",
+      "version": "3.1.3",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/epoberezkin/fast-deep-equal.git"
+      },
+      "packageJsonSha256": "a5c63940db0260739be9e2ac67f3aac268df4db5770420ee4e34e493152f97d2",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-fast-deep-equal-3.1.3-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "fast-deep-equal@3.1.3",
+          "sourceUrl": "https://www.npmjs.com/package/fast-deep-equal/v/3.1.3",
+          "sha256": "7bf9b2de73a6b356761c948d0e9eeb4be6c1270bd04c79cd489c1e400ffdfc1a",
+          "bytes": 1074
+        }
+      ]
+    },
+    {
+      "name": "flow-enums-runtime",
+      "version": "0.0.6",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/facebook/flow.git"
+      },
+      "packageJsonSha256": "a9d83154145ed1bf98a1bb5b52ec7cac031537f6e8e47e726aa0b6f16a551c8b",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-flow-enums-runtime-0.0.6-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "flow-enums-runtime@0.0.6",
+          "sourceUrl": "https://www.npmjs.com/package/flow-enums-runtime/v/0.0.6",
+          "sha256": "52412d7bc7ce4157ea628bbaacb8829e0a9cb3c58f57f99176126bc8cf2bfc85",
+          "bytes": 1086
+        }
+      ]
+    },
+    {
+      "name": "hash-sum",
+      "version": "2.0.0",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git://github.com/bevacqua/hash-sum.git"
+      },
+      "packageJsonSha256": "98143ac87fd952cd97b99503d8786637c99d6daf8d0d65c669c0b64b7861dee7",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-hash-sum-2.0.0-license.txt",
+          "sourcePath": "license",
+          "sourceCoordinate": "hash-sum@2.0.0",
+          "sourceUrl": "https://www.npmjs.com/package/hash-sum/v/2.0.0",
+          "sha256": "8e07dd904e9341d592acf2a11b34ee64ef559773bc77e89a51f509eae654a6cc",
+          "bytes": 1082
+        }
+      ]
+    },
+    {
+      "name": "invariant",
+      "version": "2.2.4",
+      "license": "MIT",
+      "repository": "https://github.com/zertosh/invariant",
+      "packageJsonSha256": "ef0c08d9f91029e247bb570a04903f3a9bd646c1f2128d29e69ee171794cd2a3",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-invariant-2.2.4-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "invariant@2.2.4",
+          "sourceUrl": "https://www.npmjs.com/package/invariant/v/2.2.4",
+          "sha256": "f657f99d3fb9647db92628e96007aabb46e5f04f33e49999075aab8e250ca7ce",
+          "bytes": 1080
+        }
+      ]
+    },
+    {
+      "name": "memoize-one",
+      "version": "5.2.1",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/alexreardon/memoize-one.git"
+      },
+      "packageJsonSha256": "42f75cce8e78478ae86f07c881c8f52073c2698aaf17b2fdae916bea56fc3925",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-memoize-one-5.2.1-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "memoize-one@5.2.1",
+          "sourceUrl": "https://www.npmjs.com/package/memoize-one/v/5.2.1",
+          "sha256": "b1c501095de70182748cb8e8d97ac5577701a4ef3b755ba30d59fd87b24bdb0f",
+          "bytes": 1073
+        }
+      ]
+    },
+    {
+      "name": "ms",
+      "version": "2.1.3",
+      "license": "MIT",
+      "repository": "vercel/ms",
+      "packageJsonSha256": "1a6b4d9739790c0b94ab96c8cc0507e281c164c311ff4fbf5e57fb8d26290b40",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-ms-2.1.3-license.md.txt",
+          "sourcePath": "license.md",
+          "sourceCoordinate": "ms@2.1.3",
+          "sourceUrl": "https://www.npmjs.com/package/ms/v/2.1.3",
+          "sha256": "1662fae9b5314d11cf51284e2dcd1f006a354f7343f08712a730fcff9a359801",
+          "bytes": 1079
+        }
+      ]
+    },
+    {
+      "name": "nanoid",
+      "version": "5.1.16",
+      "license": "MIT",
+      "repository": "ai/nanoid",
+      "packageJsonSha256": "07ac373149102d5a442db2aa0fef31c53ef5652e718fb96752000e6d99328dc4",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-nanoid-5.1.16-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "nanoid@5.1.16",
+          "sourceUrl": "https://www.npmjs.com/package/nanoid/v/5.1.16",
+          "sha256": "4383cb2c3608397ce7a4159502614ed66890f8999c2a9c056dd3b1024d6721f0",
+          "bytes": 1095
+        }
+      ]
+    },
+    {
+      "name": "nostr-tools",
+      "version": "2.19.4",
+      "license": "Unlicense",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/nbd-wtf/nostr-tools.git"
+      },
+      "packageJsonSha256": "ef408a3c64bc2519f34a3e5ad9a935a20cd409f596e9fafe1e5c52799203a0fa",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-nostr-tools-2.19.4-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "nostr-tools@2.19.4",
+          "sourceUrl": "https://www.npmjs.com/package/nostr-tools/v/2.19.4",
+          "sha256": "f0510d3b9d1223c45e8fdd2b49270ec8734fff491c7f7d1b948ee70162e1ceff",
+          "bytes": 1210
+        }
+      ]
+    },
+    {
+      "name": "nostr-tools",
+      "version": "2.24.0",
+      "license": "Unlicense",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/nbd-wtf/nostr-tools.git"
+      },
+      "packageJsonSha256": "7817e738fed149c64692941611c401f49d98aead0053978d14f3fd076ba5a227",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-nostr-tools-2.24.0-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "nostr-tools@2.24.0",
+          "sourceUrl": "https://www.npmjs.com/package/nostr-tools/v/2.24.0",
+          "sha256": "f0510d3b9d1223c45e8fdd2b49270ec8734fff491c7f7d1b948ee70162e1ceff",
+          "bytes": 1210
+        }
+      ]
+    },
+    {
+      "name": "nullthrows",
+      "version": "1.1.1",
+      "license": "MIT",
+      "repository": "https://github.com/zertosh/nullthrows",
+      "packageJsonSha256": "e1baeb08c11213a4434f0e0001c4358c9b42f4efd1fc817d0b2185568b9f12a0",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-nullthrows-1.1.1-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "nullthrows@1.1.1",
+          "sourceUrl": "https://www.npmjs.com/package/nullthrows/v/1.1.1",
+          "sha256": "dd5f97aa25431e25fea6654f12f4ce167dc19b3148ab515cc271aa8efe6eb0be",
+          "bytes": 1079
+        }
+      ]
+    },
+    {
+      "name": "promise",
+      "version": "8.3.0",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/then/promise.git"
+      },
+      "packageJsonSha256": "28417b7401d8242ac8889384d1028326012e88ab131b0c8cda17b8b3e0aeb4b0",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-promise-8.3.0-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "promise@8.3.0",
+          "sourceUrl": "https://www.npmjs.com/package/promise/v/8.3.0",
+          "sha256": "5e733eb92ed0c571da3f27c5da203e0a9f975b4f96e7692c9fa3660ca54820ec",
+          "bytes": 1059
+        }
+      ]
+    },
+    {
+      "name": "react-native-gesture-handler",
+      "version": "3.3.0",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/software-mansion/react-native-gesture-handler.git"
+      },
+      "packageJsonSha256": "e662c78f69e36947e39b7d4e1265e12a5c976dcdec584da4a1b7369cd44fbd05",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-react-native-gesture-handler-3.3.0-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "react-native-gesture-handler@3.3.0",
+          "sourceUrl": "https://www.npmjs.com/package/react-native-gesture-handler/v/3.3.0",
+          "sha256": "f1ae22eddd3a96c3b7b8a494ef03749ae6a1e19574bacc9c195d83c916de09e2",
+          "bytes": 1099
+        }
+      ]
+    },
+    {
+      "name": "react-native-is-edge-to-edge",
+      "version": "1.3.1",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/zoontek/react-native-edge-to-edge.git"
+      },
+      "packageJsonSha256": "4808c1cfb5e0c5d8d082c0d9e5efaf36eeb64da249fc65502d1a0333f3762a23",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-react-native-is-edge-to-edge-1.3.1-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "react-native-is-edge-to-edge@1.3.1",
+          "sourceUrl": "https://www.npmjs.com/package/react-native-is-edge-to-edge/v/1.3.1",
+          "sha256": "4efb635cc4fd67f738ce2af65f8b73514ee338d0d201b836ab3a823cfda771d1",
+          "bytes": 1076
+        }
+      ]
+    },
+    {
+      "name": "react-native-reanimated",
+      "version": "4.7.1",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/software-mansion/react-native-reanimated.git",
+        "directory": "packages/react-native-reanimated"
+      },
+      "packageJsonSha256": "48f6747c1b290642a1391402d2b8f342ee2c141840a9c7a12afe0f72e55c170c",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-react-native-reanimated-4.7.1-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "react-native-reanimated@4.7.1",
+          "sourceUrl": "https://www.npmjs.com/package/react-native-reanimated/v/4.7.1",
+          "sha256": "f1ae22eddd3a96c3b7b8a494ef03749ae6a1e19574bacc9c195d83c916de09e2",
+          "bytes": 1099
+        }
+      ]
+    },
+    {
+      "name": "react-native-safe-area-context",
+      "version": "5.11.1",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/appandflow/react-native-safe-area-context.git"
+      },
+      "packageJsonSha256": "664910ae3a789f27bdbc31b9bc9e639fceb89d5d30294dc3bb4c209a67a27a83",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-react-native-safe-area-context-5.11.1-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "react-native-safe-area-context@5.11.1",
+          "sourceUrl": "https://www.npmjs.com/package/react-native-safe-area-context/v/5.11.1",
+          "sha256": "f5c7a4d527258e11fdfe3d84eb73cd14fe6d64224ef051e59f6ee21fe378800c",
+          "bytes": 1067
+        }
+      ]
+    },
+    {
+      "name": "react-native-worklets",
+      "version": "0.13.0",
+      "license": "MIT",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/software-mansion/react-native-reanimated.git",
+        "directory": "packages/react-native-worklets"
+      },
+      "packageJsonSha256": "aa8f3e796568bedf9b72b8cac0b1935a2356a5cd5ba5bd7735e75e1bad7e9ead",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-react-native-worklets-0.13.0-LICENSE.txt",
+          "sourcePath": "LICENSE",
+          "sourceCoordinate": "react-native-worklets@0.13.0",
+          "sourceUrl": "https://www.npmjs.com/package/react-native-worklets/v/0.13.0",
+          "sha256": "92c22d327a6644efda43527bfa6f136f4382359f40bc288eda0764f67be9c269",
+          "bytes": 1062
         }
       ]
     },
@@ -100,45 +1040,6 @@
       ]
     },
     {
-      "name": "invariant",
-      "version": "2.2.4",
-      "license": "MIT",
-      "repository": "https://github.com/zertosh/invariant",
-      "packageJsonSha256": "ef0c08d9f91029e247bb570a04903f3a9bd646c1f2128d29e69ee171794cd2a3",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-invariant-2.2.4-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "invariant@2.2.4",
-          "sourceUrl": "https://www.npmjs.com/package/invariant/v/2.2.4",
-          "sha256": "f657f99d3fb9647db92628e96007aabb46e5f04f33e49999075aab8e250ca7ce",
-          "bytes": 1080
-        }
-      ]
-    },
-    {
-      "name": "stacktrace-parser",
-      "version": "0.1.11",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "git+https://github.com/errwischt/stacktrace-parser.git"
-      },
-      "packageJsonSha256": "e074abdd6fd9da17db51b0eacc14c7a1b7f4a069e9786e15e8069fedb833b430",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-stacktrace-parser-0.1.11-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "stacktrace-parser@0.1.11",
-          "sourceUrl": "https://www.npmjs.com/package/stacktrace-parser/v/0.1.11",
-          "sha256": "e1898814043cb5500483d9c8517edda824b352f696d35e5043fcfb537c221531",
-          "bytes": 1076
-        }
-      ]
-    },
-    {
       "name": "react",
       "version": "19.3.0",
       "license": "MIT",
@@ -161,64 +1062,44 @@
       ]
     },
     {
-      "name": "@react-native/normalize-colors",
-      "version": "0.88.1",
+      "name": "regenerator-runtime",
+      "version": "0.13.11",
       "license": "MIT",
       "repository": {
         "type": "git",
-        "url": "git+https://github.com/react/react-native.git",
-        "directory": "packages/normalize-color"
+        "url": "https://github.com/facebook/regenerator/tree/main/packages/runtime"
       },
-      "packageJsonSha256": "796c5dab617381b4796c79fd6d3761d9891d6cf0daf0a5ccd11d7fa240a04121",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [],
-      "licenseNoticeFiles": [
-        "js-react-native-0.88.1-LICENSE.txt"
-      ],
-      "sharedLicenseSource": {
-        "repository": "https://github.com/react/react-native",
-        "commit": "c30b7f86850d47422637a64c70508e7411dbd8ea",
-        "sourcePath": "LICENSE",
-        "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
-      }
-    },
-    {
-      "name": "@react-native/asset-utils",
-      "version": "0.88.1",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "git+https://github.com/react/react-native.git",
-        "directory": "packages/asset-utils"
-      },
-      "packageJsonSha256": "6c4dcaed880cf55da43c5c00dcbdb392475c5e0e8f47d723d66ad5dd11764e3f",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [],
-      "licenseNoticeFiles": [
-        "js-react-native-0.88.1-LICENSE.txt"
-      ],
-      "sharedLicenseSource": {
-        "repository": "https://github.com/react/react-native",
-        "commit": "c30b7f86850d47422637a64c70508e7411dbd8ea",
-        "sourcePath": "LICENSE",
-        "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
-      }
-    },
-    {
-      "name": "nullthrows",
-      "version": "1.1.1",
-      "license": "MIT",
-      "repository": "https://github.com/zertosh/nullthrows",
-      "packageJsonSha256": "e1baeb08c11213a4434f0e0001c4358c9b42f4efd1fc817d0b2185568b9f12a0",
+      "packageJsonSha256": "438ba14ad7859f5e16914e174e425afa8f5d9c21cf5ab208699a28454c4618ee",
       "scope": "main Android JavaScript source-map contributor",
       "notices": [
         {
-          "file": "js-nullthrows-1.1.1-LICENSE.txt",
+          "file": "js-regenerator-runtime-0.13.11-LICENSE.txt",
           "sourcePath": "LICENSE",
-          "sourceCoordinate": "nullthrows@1.1.1",
-          "sourceUrl": "https://www.npmjs.com/package/nullthrows/v/1.1.1",
-          "sha256": "dd5f97aa25431e25fea6654f12f4ce167dc19b3148ab515cc271aa8efe6eb0be",
-          "bytes": 1079
+          "sourceCoordinate": "regenerator-runtime@0.13.11",
+          "sourceUrl": "https://www.npmjs.com/package/regenerator-runtime/v/0.13.11",
+          "sha256": "51887a3d47051ac2fce1210562e5b9fe0830a8a8fabeb272c2d586eeb18a05fd",
+          "bytes": 1080
+        }
+      ]
+    },
+    {
+      "name": "rxjs",
+      "version": "7.8.2",
+      "license": "Apache-2.0",
+      "repository": {
+        "type": "git",
+        "url": "https://github.com/reactivex/rxjs.git"
+      },
+      "packageJsonSha256": "2399f5d968d1d693ecd206e7972fd26cb7e3daa45931ecc12202b3a924be38b7",
+      "scope": "main Android JavaScript source-map contributor",
+      "notices": [
+        {
+          "file": "js-rxjs-7.8.2-LICENSE.txt.txt",
+          "sourcePath": "LICENSE.txt",
+          "sourceCoordinate": "rxjs@7.8.2",
+          "sourceUrl": "https://www.npmjs.com/package/rxjs/v/7.8.2",
+          "sha256": "81c407ac717813b0e3795402960e04003c7bba8ba59b621624707028531c9ade",
+          "bytes": 11064
         }
       ]
     },
@@ -245,65 +1126,65 @@
       ]
     },
     {
-      "name": "promise",
-      "version": "8.3.0",
-      "license": "MIT",
+      "name": "semver",
+      "version": "7.8.5",
+      "license": "ISC",
       "repository": {
         "type": "git",
-        "url": "https://github.com/then/promise.git"
+        "url": "git+https://github.com/npm/node-semver.git"
       },
-      "packageJsonSha256": "28417b7401d8242ac8889384d1028326012e88ab131b0c8cda17b8b3e0aeb4b0",
+      "packageJsonSha256": "7c94cb7f2a53c27b20d76386ec144c062894dbcc909cfabd0f728c37874b1776",
       "scope": "main Android JavaScript source-map contributor",
       "notices": [
         {
-          "file": "js-promise-8.3.0-LICENSE.txt",
+          "file": "js-semver-7.8.5-LICENSE.txt",
           "sourcePath": "LICENSE",
-          "sourceCoordinate": "promise@8.3.0",
-          "sourceUrl": "https://www.npmjs.com/package/promise/v/8.3.0",
-          "sha256": "5e733eb92ed0c571da3f27c5da203e0a9f975b4f96e7692c9fa3660ca54820ec",
-          "bytes": 1059
+          "sourceCoordinate": "semver@7.8.5",
+          "sourceUrl": "https://www.npmjs.com/package/semver/v/7.8.5",
+          "sha256": "4ec3d4c66cd87f5c8d8ad911b10f99bf27cb00cdfcff82621956e379186b016b",
+          "bytes": 765
         }
       ]
     },
     {
-      "name": "regenerator-runtime",
-      "version": "0.13.11",
+      "name": "stacktrace-parser",
+      "version": "0.1.11",
       "license": "MIT",
       "repository": {
         "type": "git",
-        "url": "https://github.com/facebook/regenerator/tree/main/packages/runtime"
+        "url": "git+https://github.com/errwischt/stacktrace-parser.git"
       },
-      "packageJsonSha256": "438ba14ad7859f5e16914e174e425afa8f5d9c21cf5ab208699a28454c4618ee",
+      "packageJsonSha256": "e074abdd6fd9da17db51b0eacc14c7a1b7f4a069e9786e15e8069fedb833b430",
       "scope": "main Android JavaScript source-map contributor",
       "notices": [
         {
-          "file": "js-regenerator-runtime-0.13.11-LICENSE.txt",
+          "file": "js-stacktrace-parser-0.1.11-LICENSE.txt",
           "sourcePath": "LICENSE",
-          "sourceCoordinate": "regenerator-runtime@0.13.11",
-          "sourceUrl": "https://www.npmjs.com/package/regenerator-runtime/v/0.13.11",
-          "sha256": "51887a3d47051ac2fce1210562e5b9fe0830a8a8fabeb272c2d586eeb18a05fd",
-          "bytes": 1080
+          "sourceCoordinate": "stacktrace-parser@0.1.11",
+          "sourceUrl": "https://www.npmjs.com/package/stacktrace-parser/v/0.1.11",
+          "sha256": "e1898814043cb5500483d9c8517edda824b352f696d35e5043fcfb537c221531",
+          "bytes": 1076
         }
       ]
     },
     {
-      "name": "base64-js",
-      "version": "1.5.1",
-      "license": "MIT",
+      "name": "tslib",
+      "version": "2.8.1",
+      "license": "0BSD",
       "repository": {
         "type": "git",
-        "url": "git://github.com/beatgammit/base64-js.git"
+        "url": "https://github.com/Microsoft/tslib.git"
       },
-      "packageJsonSha256": "9758f3ab8c45e07bb9a368e32f9a8b3729623bbf47cbbb205b32d674ab2a91f0",
+      "packageJsonSha256": "f02b4851df316f29bdfcd404aa1eb41e4e216b5859015f81fcd3e91caf8be931",
       "scope": "main Android JavaScript source-map contributor",
       "notices": [
         {
-          "file": "js-base64-js-1.5.1-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "base64-js@1.5.1",
-          "sourceUrl": "https://www.npmjs.com/package/base64-js/v/1.5.1",
-          "sha256": "5b37224c080cdcc97c871ada971c224e9926370fe74f11b539aa1cf9f3b1aca1",
-          "bytes": 1081
+          "file": "js-tslib-2.8.1-LICENSE.txt.txt",
+          "sourcePath": "LICENSE.txt",
+          "sourceCoordinate": "tslib@2.8.1",
+          "sourceUrl": "https://www.npmjs.com/package/tslib/v/2.8.1",
+          "sha256": "210b19e543130388c68654b7497e967119ce17145f66ab7d85688fbd70f08751",
+          "bytes": 655
         }
       ]
     },
@@ -342,1031 +1223,21 @@
           "bytes": 1143
         }
       ]
-    },
-    {
-      "name": "@expo/metro",
-      "version": "58.0.0",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "git+https://github.com/expo/expo-metro.git"
-      },
-      "packageJsonSha256": "2892f82b55f62c61a046cd85e98747b4810207e31a505ba152b9679b8e6fca21",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-@expo_metro-58.0.0-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "@expo/metro@58.0.0",
-          "sourceUrl": "https://www.npmjs.com/package/@expo/metro/v/58.0.0",
-          "sha256": "0c0fc06d178272faaf09281aff0cb014d52c56fb0d9516b964808d4cccb65c93",
-          "bytes": 1147
-        }
-      ]
-    },
-    {
-      "name": "metro-runtime",
-      "version": "0.87.1",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "git+https://github.com/react/metro.git",
-        "directory": "packages/metro-runtime"
-      },
-      "packageJsonSha256": "26eed1885b7589f22eb2073c71a4bc7925db90fe60426e78842aa99c614252b0",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-metro-runtime-0.87.1-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "metro-runtime@0.87.1",
-          "sourceUrl": "https://raw.githubusercontent.com/react/metro/c7597f88c3e5b2a0d5e5915dfed2413aadcdfcce/LICENSE",
-          "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",
-          "bytes": 1088
-        }
-      ]
-    },
-    {
-      "name": "pretty-format",
-      "version": "29.7.0",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "https://github.com/jestjs/jest.git",
-        "directory": "packages/pretty-format"
-      },
-      "packageJsonSha256": "05dc4d4a3b4ad3659b9909f45be39b7ada56dba05c30327770fefdfd0f1f8316",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-pretty-format-29.7.0-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "pretty-format@29.7.0",
-          "sourceUrl": "https://www.npmjs.com/package/pretty-format/v/29.7.0",
-          "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93",
-          "bytes": 1088
-        }
-      ]
-    },
-    {
-      "name": "ansi-styles",
-      "version": "5.2.0",
-      "license": "MIT",
-      "repository": "chalk/ansi-styles",
-      "packageJsonSha256": "c4b717d4808738c3a8270e8485df6cdbf0cd4f7abb523784dca883b94c212e79",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-ansi-styles-5.2.0-license.txt",
-          "sourcePath": "license",
-          "sourceCoordinate": "ansi-styles@5.2.0",
-          "sourceUrl": "https://www.npmjs.com/package/ansi-styles/v/5.2.0",
-          "sha256": "48da2f39e100d4085767e94966b43f4fa95ff6a0698fba57ed460914e35f94a0",
-          "bytes": 1109
-        }
-      ]
-    },
-    {
-      "name": "react-is",
-      "version": "18.3.1",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "https://github.com/facebook/react.git",
-        "directory": "packages/react-is"
-      },
-      "packageJsonSha256": "8d8b7b3d6df8fa36fcd2fbee3561faea9bfa488c2318dabef4cfeaf275aee7f3",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-react-is-18.3.1-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "react-is@18.3.1",
-          "sourceUrl": "https://www.npmjs.com/package/react-is/v/18.3.1",
-          "sha256": "52412d7bc7ce4157ea628bbaacb8829e0a9cb3c58f57f99176126bc8cf2bfc85",
-          "bytes": 1086
-        }
-      ]
-    },
-    {
-      "name": "@react-native/virtualized-lists",
-      "version": "0.88.1",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "git+https://github.com/react/react-native.git",
-        "directory": "packages/virtualized-lists"
-      },
-      "packageJsonSha256": "4e27d1f0c2b9d22f543db9f88dfb89b4ad8f404140eca75ecfe2aae5c0bb9f8a",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [],
-      "licenseNoticeFiles": [
-        "js-react-native-0.88.1-LICENSE.txt"
-      ],
-      "sharedLicenseSource": {
-        "repository": "https://github.com/react/react-native",
-        "commit": "c30b7f86850d47422637a64c70508e7411dbd8ea",
-        "sourcePath": "LICENSE",
-        "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
-      }
-    },
-    {
-      "name": "memoize-one",
-      "version": "5.2.1",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "https://github.com/alexreardon/memoize-one.git"
-      },
-      "packageJsonSha256": "42f75cce8e78478ae86f07c881c8f52073c2698aaf17b2fdae916bea56fc3925",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-memoize-one-5.2.1-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "memoize-one@5.2.1",
-          "sourceUrl": "https://www.npmjs.com/package/memoize-one/v/5.2.1",
-          "sha256": "b1c501095de70182748cb8e8d97ac5577701a4ef3b755ba30d59fd87b24bdb0f",
-          "bytes": 1073
-        }
-      ]
-    },
-    {
-      "name": "flow-enums-runtime",
-      "version": "0.0.6",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "git+https://github.com/facebook/flow.git"
-      },
-      "packageJsonSha256": "a9d83154145ed1bf98a1bb5b52ec7cac031537f6e8e47e726aa0b6f16a551c8b",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-flow-enums-runtime-0.0.6-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "flow-enums-runtime@0.0.6",
-          "sourceUrl": "https://www.npmjs.com/package/flow-enums-runtime/v/0.0.6",
-          "sha256": "52412d7bc7ce4157ea628bbaacb8829e0a9cb3c58f57f99176126bc8cf2bfc85",
-          "bytes": 1086
-        }
-      ]
-    },
-    {
-      "name": "@expo/log-box-utils",
-      "version": "58.0.2",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "https://github.com/expo/expo.git",
-        "directory": "packages/@expo/log-box-utils"
-      },
-      "packageJsonSha256": "a30b58aaf90c3ec9210dba94ce4e619978fbef799ab9a4d3b8770c755cd94ee9",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-@expo_log-box-utils-58.0.2-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "@expo/log-box-utils@58.0.2",
-          "sourceUrl": "https://www.npmjs.com/package/@expo/log-box-utils/v/58.0.2",
-          "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
-          "bytes": 1106
-        }
-      ]
-    },
-    {
-      "name": "@ungap/structured-clone",
-      "version": "1.4.0",
-      "license": "ISC",
-      "repository": {
-        "type": "git",
-        "url": "git+https://github.com/ungap/structured-clone.git"
-      },
-      "packageJsonSha256": "8f931c21e4c0b37c35d5ffef35e0bc057f3cbd0224b026b21a5bdb82a98cbd8f",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-@ungap_structured-clone-1.4.0-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "@ungap/structured-clone@1.4.0",
-          "sourceUrl": "https://www.npmjs.com/package/@ungap/structured-clone/v/1.4.0",
-          "sha256": "dc6d4961d8b6ee747231582ae9c53ce1d66bf76bc9f5a28f554c0e97210953bf",
-          "bytes": 765
-        }
-      ]
-    },
-    {
-      "name": "expo-modules-core",
-      "version": "58.0.30",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "https://github.com/expo/expo.git",
-        "directory": "packages/expo-modules-core"
-      },
-      "packageJsonSha256": "37f280f153bd97aab338c92512a4ca570edbe001c2a51c1758838bbb7624b7cc",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-expo-modules-core-58.0.30-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "expo-modules-core@58.0.30",
-          "sourceUrl": "https://www.npmjs.com/package/expo-modules-core/v/58.0.30",
-          "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
-          "bytes": 1106
-        }
-      ]
-    },
-    {
-      "name": "expo-asset",
-      "version": "58.0.20",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "https://github.com/expo/expo.git",
-        "directory": "packages/expo-asset"
-      },
-      "packageJsonSha256": "9e9f2ad7a8106015c8cc61232b35bb84f1d80fa942ed99641f7146c3ac248f12",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-expo-asset-58.0.20-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "expo-asset@58.0.20",
-          "sourceUrl": "https://www.npmjs.com/package/expo-asset/v/58.0.20",
-          "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
-          "bytes": 1106
-        }
-      ]
-    },
-    {
-      "name": "expo-constants",
-      "version": "58.0.15",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "https://github.com/expo/expo.git",
-        "directory": "packages/expo-constants"
-      },
-      "packageJsonSha256": "1a3adee283dc0e514170ddf724c9aed5425ffad1386b1416164cc90d97b83511",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-expo-constants-58.0.15-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "expo-constants@58.0.15",
-          "sourceUrl": "https://www.npmjs.com/package/expo-constants/v/58.0.15",
-          "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
-          "bytes": 1106
-        }
-      ]
-    },
-    {
-      "name": "react-native-gesture-handler",
-      "version": "3.3.0",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "git+https://github.com/software-mansion/react-native-gesture-handler.git"
-      },
-      "packageJsonSha256": "e662c78f69e36947e39b7d4e1265e12a5c976dcdec584da4a1b7369cd44fbd05",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-react-native-gesture-handler-3.3.0-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "react-native-gesture-handler@3.3.0",
-          "sourceUrl": "https://www.npmjs.com/package/react-native-gesture-handler/v/3.3.0",
-          "sha256": "f1ae22eddd3a96c3b7b8a494ef03749ae6a1e19574bacc9c195d83c916de09e2",
-          "bytes": 1099
-        }
-      ]
-    },
-    {
-      "name": "react-native-worklets",
-      "version": "0.13.0",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "git+https://github.com/software-mansion/react-native-reanimated.git",
-        "directory": "packages/react-native-worklets"
-      },
-      "packageJsonSha256": "aa8f3e796568bedf9b72b8cac0b1935a2356a5cd5ba5bd7735e75e1bad7e9ead",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-react-native-worklets-0.13.0-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "react-native-worklets@0.13.0",
-          "sourceUrl": "https://www.npmjs.com/package/react-native-worklets/v/0.13.0",
-          "sha256": "92c22d327a6644efda43527bfa6f136f4382359f40bc288eda0764f67be9c269",
-          "bytes": 1062
-        }
-      ]
-    },
-    {
-      "name": "react-native-reanimated",
-      "version": "4.7.1",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "git+https://github.com/software-mansion/react-native-reanimated.git",
-        "directory": "packages/react-native-reanimated"
-      },
-      "packageJsonSha256": "48f6747c1b290642a1391402d2b8f342ee2c141840a9c7a12afe0f72e55c170c",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-react-native-reanimated-4.7.1-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "react-native-reanimated@4.7.1",
-          "sourceUrl": "https://www.npmjs.com/package/react-native-reanimated/v/4.7.1",
-          "sha256": "f1ae22eddd3a96c3b7b8a494ef03749ae6a1e19574bacc9c195d83c916de09e2",
-          "bytes": 1099
-        }
-      ]
-    },
-    {
-      "name": "semver",
-      "version": "7.8.5",
-      "license": "ISC",
-      "repository": {
-        "type": "git",
-        "url": "git+https://github.com/npm/node-semver.git"
-      },
-      "packageJsonSha256": "7c94cb7f2a53c27b20d76386ec144c062894dbcc909cfabd0f728c37874b1776",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-semver-7.8.5-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "semver@7.8.5",
-          "sourceUrl": "https://www.npmjs.com/package/semver/v/7.8.5",
-          "sha256": "4ec3d4c66cd87f5c8d8ad911b10f99bf27cb00cdfcff82621956e379186b016b",
-          "bytes": 765
-        }
-      ]
-    },
-    {
-      "name": "react-native-is-edge-to-edge",
-      "version": "1.3.1",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "https://github.com/zoontek/react-native-edge-to-edge.git"
-      },
-      "packageJsonSha256": "4808c1cfb5e0c5d8d082c0d9e5efaf36eeb64da249fc65502d1a0333f3762a23",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-react-native-is-edge-to-edge-1.3.1-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "react-native-is-edge-to-edge@1.3.1",
-          "sourceUrl": "https://www.npmjs.com/package/react-native-is-edge-to-edge/v/1.3.1",
-          "sha256": "4efb635cc4fd67f738ce2af65f8b73514ee338d0d201b836ab3a823cfda771d1",
-          "bytes": 1076
-        }
-      ]
-    },
-    {
-      "name": "react-native-safe-area-context",
-      "version": "5.11.1",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "git+https://github.com/appandflow/react-native-safe-area-context.git"
-      },
-      "packageJsonSha256": "664910ae3a789f27bdbc31b9bc9e639fceb89d5d30294dc3bb4c209a67a27a83",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-react-native-safe-area-context-5.11.1-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "react-native-safe-area-context@5.11.1",
-          "sourceUrl": "https://www.npmjs.com/package/react-native-safe-area-context/v/5.11.1",
-          "sha256": "f5c7a4d527258e11fdfe3d84eb73cd14fe6d64224ef051e59f6ee21fe378800c",
-          "bytes": 1067
-        }
-      ]
-    },
-    {
-      "name": "expo-font",
-      "version": "58.0.11",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "https://github.com/expo/expo.git",
-        "directory": "packages/expo-font"
-      },
-      "packageJsonSha256": "a39a111996fb3549857ce64b59fee0900af9d953f9b8581e5f116ae647041220",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-expo-font-58.0.11-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "expo-font@58.0.11",
-          "sourceUrl": "https://www.npmjs.com/package/expo-font/v/58.0.11",
-          "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
-          "bytes": 1106
-        }
-      ]
-    },
-    {
-      "name": "expo-image",
-      "version": "58.0.18",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "https://github.com/expo/expo.git",
-        "directory": "packages/expo-image"
-      },
-      "packageJsonSha256": "b21f4530a67399aaa7492c51e7b2c1aa50bc5b9c1089e86e9e9ffa7fba095f2f",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-expo-image-58.0.18-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "expo-image@58.0.18",
-          "sourceUrl": "https://www.npmjs.com/package/expo-image/v/58.0.18",
-          "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
-          "bytes": 1106
-        }
-      ]
-    },
-    {
-      "name": "expo-crypto",
-      "version": "58.0.7",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "https://github.com/expo/expo.git",
-        "directory": "packages/expo-crypto"
-      },
-      "packageJsonSha256": "95d382241a7f7d9662dafaef7b590988ad4def1144e38b05f9eafc5aac7d8b3b",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-expo-crypto-58.0.7-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "expo-crypto@58.0.7",
-          "sourceUrl": "https://www.npmjs.com/package/expo-crypto/v/58.0.7",
-          "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
-          "bytes": 1106
-        }
-      ]
-    },
-    {
-      "name": "applesauce-relay",
-      "version": "6.2.1",
-      "license": "MIT",
-      "repository": null,
-      "packageJsonSha256": "00de51a6cefc0fba1e8a48b8dc896f519a7f437787e18b7a9513da79034f98c7",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-applesauce-relay-6.2.1-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "applesauce-relay@6.2.1",
-          "sourceUrl": "https://www.npmjs.com/package/applesauce-relay/v/6.2.1",
-          "sha256": "0f5f034ecb6d7e3ae79a2e63be4b1ee77e2ad6680ef9f71f5741e2799c5013af",
-          "bytes": 1074
-        }
-      ]
-    },
-    {
-      "name": "applesauce-core",
-      "version": "6.2.0",
-      "license": "MIT",
-      "repository": null,
-      "packageJsonSha256": "889b287ef9f674d835b560738cd74352e38ea3d97d7bdfba4394deeb5e445d04",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-applesauce-core-6.2.0-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "applesauce-core@6.2.0",
-          "sourceUrl": "https://www.npmjs.com/package/applesauce-core/v/6.2.0",
-          "sha256": "0f5f034ecb6d7e3ae79a2e63be4b1ee77e2ad6680ef9f71f5741e2799c5013af",
-          "bytes": 1074
-        }
-      ]
-    },
-    {
-      "name": "nostr-tools",
-      "version": "2.19.4",
-      "license": "Unlicense",
-      "repository": {
-        "type": "git",
-        "url": "https://github.com/nbd-wtf/nostr-tools.git"
-      },
-      "packageJsonSha256": "ef408a3c64bc2519f34a3e5ad9a935a20cd409f596e9fafe1e5c52799203a0fa",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-nostr-tools-2.19.4-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "nostr-tools@2.19.4",
-          "sourceUrl": "https://www.npmjs.com/package/nostr-tools/v/2.19.4",
-          "sha256": "f0510d3b9d1223c45e8fdd2b49270ec8734fff491c7f7d1b948ee70162e1ceff",
-          "bytes": 1210
-        }
-      ]
-    },
-    {
-      "name": "@noble/curves",
-      "version": "1.2.0",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "https://github.com/paulmillr/noble-curves.git"
-      },
-      "packageJsonSha256": "bf61194229da9a7fd331fcf44cc24f746b5cbaefe941a312215376584c269bd5",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-@noble_curves-1.2.0-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "@noble/curves@1.2.0",
-          "sourceUrl": "https://www.npmjs.com/package/@noble/curves/v/1.2.0",
-          "sha256": "4f221aee6e072336700c408c68ab3b96a3fc09f6aebe6f48f1bd99e5ef13faec",
-          "bytes": 1109
-        }
-      ]
-    },
-    {
-      "name": "@noble/hashes",
-      "version": "1.3.2",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "https://github.com/paulmillr/noble-hashes.git"
-      },
-      "packageJsonSha256": "8d8203c66e91a9e6ee510facf378a2c7420b27139360132a257010c2e5f091bc",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-@noble_hashes-1.3.2-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "@noble/hashes@1.3.2",
-          "sourceUrl": "https://www.npmjs.com/package/@noble/hashes/v/1.3.2",
-          "sha256": "4f221aee6e072336700c408c68ab3b96a3fc09f6aebe6f48f1bd99e5ef13faec",
-          "bytes": 1109
-        }
-      ]
-    },
-    {
-      "name": "@noble/hashes",
-      "version": "1.3.1",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "https://github.com/paulmillr/noble-hashes.git"
-      },
-      "packageJsonSha256": "f2067c9417ae3e6061aa7d541b59f9466460c985e5c5ee933ffedee4219ee95a",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-@noble_hashes-1.3.1-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "@noble/hashes@1.3.1",
-          "sourceUrl": "https://www.npmjs.com/package/@noble/hashes/v/1.3.1",
-          "sha256": "4f221aee6e072336700c408c68ab3b96a3fc09f6aebe6f48f1bd99e5ef13faec",
-          "bytes": 1109
-        }
-      ]
-    },
-    {
-      "name": "rxjs",
-      "version": "7.8.2",
-      "license": "Apache-2.0",
-      "repository": {
-        "type": "git",
-        "url": "https://github.com/reactivex/rxjs.git"
-      },
-      "packageJsonSha256": "2399f5d968d1d693ecd206e7972fd26cb7e3daa45931ecc12202b3a924be38b7",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-rxjs-7.8.2-LICENSE.txt.txt",
-          "sourcePath": "LICENSE.txt",
-          "sourceCoordinate": "rxjs@7.8.2",
-          "sourceUrl": "https://www.npmjs.com/package/rxjs/v/7.8.2",
-          "sha256": "81c407ac717813b0e3795402960e04003c7bba8ba59b621624707028531c9ade",
-          "bytes": 11064
-        }
-      ]
-    },
-    {
-      "name": "tslib",
-      "version": "2.8.1",
-      "license": "0BSD",
-      "repository": {
-        "type": "git",
-        "url": "https://github.com/Microsoft/tslib.git"
-      },
-      "packageJsonSha256": "f02b4851df316f29bdfcd404aa1eb41e4e216b5859015f81fcd3e91caf8be931",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-tslib-2.8.1-LICENSE.txt.txt",
-          "sourcePath": "LICENSE.txt",
-          "sourceCoordinate": "tslib@2.8.1",
-          "sourceUrl": "https://www.npmjs.com/package/tslib/v/2.8.1",
-          "sha256": "210b19e543130388c68654b7497e967119ce17145f66ab7d85688fbd70f08751",
-          "bytes": 655
-        }
-      ]
-    },
-    {
-      "name": "@scure/base",
-      "version": "1.1.1",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "git+https://github.com/paulmillr/scure-base.git"
-      },
-      "packageJsonSha256": "7f2a6ea2aafb73ceb759a045921e2f6bbeac94d242ce58ddcbc6e3c90d25c403",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-@scure_base-1.1.1-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "@scure/base@1.1.1",
-          "sourceUrl": "https://www.npmjs.com/package/@scure/base/v/1.1.1",
-          "sha256": "3239e134eb6e6d64538ca76498c7fcb08a395249dd9d4af9927bf6d0169ee429",
-          "bytes": 1110
-        }
-      ]
-    },
-    {
-      "name": "@noble/ciphers",
-      "version": "0.5.3",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "git+https://github.com/paulmillr/noble-ciphers.git"
-      },
-      "packageJsonSha256": "ce52c396efb7421146dbd6729ad92b511ca52922fee5da804c587866348381cd",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-@noble_ciphers-0.5.3-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "@noble/ciphers@0.5.3",
-          "sourceUrl": "https://www.npmjs.com/package/@noble/ciphers/v/0.5.3",
-          "sha256": "f36671a5487c9c5050efacb58011c37c24c55a889803cb036cf9d9a6347c1e2d",
-          "bytes": 1161
-        }
-      ]
-    },
-    {
-      "name": "fast-deep-equal",
-      "version": "3.1.3",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "git+https://github.com/epoberezkin/fast-deep-equal.git"
-      },
-      "packageJsonSha256": "a5c63940db0260739be9e2ac67f3aac268df4db5770420ee4e34e493152f97d2",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-fast-deep-equal-3.1.3-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "fast-deep-equal@3.1.3",
-          "sourceUrl": "https://www.npmjs.com/package/fast-deep-equal/v/3.1.3",
-          "sha256": "7bf9b2de73a6b356761c948d0e9eeb4be6c1270bd04c79cd489c1e400ffdfc1a",
-          "bytes": 1074
-        }
-      ]
-    },
-    {
-      "name": "debug",
-      "version": "4.4.3",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "git://github.com/debug-js/debug.git"
-      },
-      "packageJsonSha256": "ea8e33d63fe5f3a4c36609b6c3df8e2ef1f8b8ba2fc3a2e1e53cb27291f384af",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-debug-4.4.3-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "debug@4.4.3",
-          "sourceUrl": "https://www.npmjs.com/package/debug/v/4.4.3",
-          "sha256": "3a61c6c96caf5c1d9b623fb9b04c822b783dfcb78aa7e49c76a3f643e6ed7f95",
-          "bytes": 1139
-        }
-      ]
-    },
-    {
-      "name": "ms",
-      "version": "2.1.3",
-      "license": "MIT",
-      "repository": "vercel/ms",
-      "packageJsonSha256": "1a6b4d9739790c0b94ab96c8cc0507e281c164c311ff4fbf5e57fb8d26290b40",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-ms-2.1.3-license.md.txt",
-          "sourcePath": "license.md",
-          "sourceCoordinate": "ms@2.1.3",
-          "sourceUrl": "https://www.npmjs.com/package/ms/v/2.1.3",
-          "sha256": "1662fae9b5314d11cf51284e2dcd1f006a354f7343f08712a730fcff9a359801",
-          "bytes": 1079
-        }
-      ]
-    },
-    {
-      "name": "hash-sum",
-      "version": "2.0.0",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "git://github.com/bevacqua/hash-sum.git"
-      },
-      "packageJsonSha256": "98143ac87fd952cd97b99503d8786637c99d6daf8d0d65c669c0b64b7861dee7",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-hash-sum-2.0.0-license.txt",
-          "sourcePath": "license",
-          "sourceCoordinate": "hash-sum@2.0.0",
-          "sourceUrl": "https://www.npmjs.com/package/hash-sum/v/2.0.0",
-          "sha256": "8e07dd904e9341d592acf2a11b34ee64ef559773bc77e89a51f509eae654a6cc",
-          "bytes": 1082
-        }
-      ]
-    },
-    {
-      "name": "nanoid",
-      "version": "5.1.16",
-      "license": "MIT",
-      "repository": "ai/nanoid",
-      "packageJsonSha256": "07ac373149102d5a442db2aa0fef31c53ef5652e718fb96752000e6d99328dc4",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-nanoid-5.1.16-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "nanoid@5.1.16",
-          "sourceUrl": "https://www.npmjs.com/package/nanoid/v/5.1.16",
-          "sha256": "4383cb2c3608397ce7a4159502614ed66890f8999c2a9c056dd3b1024d6721f0",
-          "bytes": 1095
-        }
-      ]
-    },
-    {
-      "name": "@noble/hashes",
-      "version": "2.4.0",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "git+https://github.com/paulmillr/noble-hashes.git"
-      },
-      "packageJsonSha256": "3e361734f5269de162fa362483d7f45dee7efb533ec217157945338f7591baaf",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-@noble_hashes-2.4.0-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "@noble/hashes@2.4.0",
-          "sourceUrl": "https://www.npmjs.com/package/@noble/hashes/v/2.4.0",
-          "sha256": "4f221aee6e072336700c408c68ab3b96a3fc09f6aebe6f48f1bd99e5ef13faec",
-          "bytes": 1109
-        }
-      ]
-    },
-    {
-      "name": "nostr-tools",
-      "version": "2.24.0",
-      "license": "Unlicense",
-      "repository": {
-        "type": "git",
-        "url": "git+https://github.com/nbd-wtf/nostr-tools.git"
-      },
-      "packageJsonSha256": "7817e738fed149c64692941611c401f49d98aead0053978d14f3fd076ba5a227",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-nostr-tools-2.24.0-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "nostr-tools@2.24.0",
-          "sourceUrl": "https://www.npmjs.com/package/nostr-tools/v/2.24.0",
-          "sha256": "f0510d3b9d1223c45e8fdd2b49270ec8734fff491c7f7d1b948ee70162e1ceff",
-          "bytes": 1210
-        }
-      ]
-    },
-    {
-      "name": "@noble/curves",
-      "version": "2.0.1",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "git+https://github.com/paulmillr/noble-curves.git"
-      },
-      "packageJsonSha256": "588b510f1b8804bdf820acbd14065126286d92575c45811acef08fe480899469",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-@noble_curves-2.0.1-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "@noble/curves@2.0.1",
-          "sourceUrl": "https://www.npmjs.com/package/@noble/curves/v/2.0.1",
-          "sha256": "4f221aee6e072336700c408c68ab3b96a3fc09f6aebe6f48f1bd99e5ef13faec",
-          "bytes": 1109
-        }
-      ]
-    },
-    {
-      "name": "@noble/hashes",
-      "version": "2.0.1",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "git+https://github.com/paulmillr/noble-hashes.git"
-      },
-      "packageJsonSha256": "ceb30ba96a14786c419db53f2b8d3d59ece7ac5221c198ac03def462cf96ef23",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-@noble_hashes-2.0.1-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "@noble/hashes@2.0.1",
-          "sourceUrl": "https://www.npmjs.com/package/@noble/hashes/v/2.0.1",
-          "sha256": "4f221aee6e072336700c408c68ab3b96a3fc09f6aebe6f48f1bd99e5ef13faec",
-          "bytes": 1109
-        }
-      ]
-    },
-    {
-      "name": "@scure/base",
-      "version": "2.0.0",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "git+https://github.com/paulmillr/scure-base.git"
-      },
-      "packageJsonSha256": "93cb3a28e1f34a5399aed7c4ba8ba337acd28b01420c34e6daa9bc35a24f34af",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-@scure_base-2.0.0-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "@scure/base@2.0.0",
-          "sourceUrl": "https://www.npmjs.com/package/@scure/base/v/2.0.0",
-          "sha256": "3239e134eb6e6d64538ca76498c7fcb08a395249dd9d4af9927bf6d0169ee429",
-          "bytes": 1110
-        }
-      ]
-    },
-    {
-      "name": "expo-secure-store",
-      "version": "58.0.2",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "https://github.com/expo/expo.git",
-        "directory": "packages/expo-secure-store"
-      },
-      "packageJsonSha256": "810fd562270182b7497ef1045a7a09a038861f7733e2967e165aa686bbad34e6",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-expo-secure-store-58.0.2-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "expo-secure-store@58.0.2",
-          "sourceUrl": "https://www.npmjs.com/package/expo-secure-store/v/58.0.2",
-          "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
-          "bytes": 1106
-        }
-      ]
-    },
-    {
-      "name": "expo-sqlite",
-      "version": "58.0.15",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "https://github.com/expo/expo.git",
-        "directory": "packages/expo-sqlite"
-      },
-      "packageJsonSha256": "08f5188824aca83d2adbe6d550d3038fe7c3393090d59aae6cfd74dff6cfac63",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-expo-sqlite-58.0.15-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "expo-sqlite@58.0.15",
-          "sourceUrl": "https://www.npmjs.com/package/expo-sqlite/v/58.0.15",
-          "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
-          "bytes": 1106
-        }
-      ]
-    },
-    {
-      "name": "@babel/runtime",
-      "version": "7.29.7",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "https://github.com/babel/babel.git",
-        "directory": "packages/babel-runtime"
-      },
-      "packageJsonSha256": "8c4bf20c55e3f3a93df034b12746bf72185cf2acb0ef52847a3465d6e67c61e7",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-@babel_runtime-7.29.7-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "@babel/runtime@7.29.7",
-          "sourceUrl": "https://www.npmjs.com/package/@babel/runtime/v/7.29.7",
-          "sha256": "117da2af0d4ce0fe1c8e19b5cff9dcd806adf973d328d27b11d4448c4ff24f76",
-          "bytes": 1106
-        }
-      ]
-    },
-    {
-      "name": "await-lock",
-      "version": "2.2.2",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "https://github.com/ide/await-lock.git"
-      },
-      "packageJsonSha256": "646f3516dc035f0aef095b321eee009cefff46529813e4923e39e5579098205e",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-await-lock-2.2.2-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "await-lock@2.2.2",
-          "sourceUrl": "https://www.npmjs.com/package/await-lock/v/2.2.2",
-          "sha256": "396eefd21683c5f4de3640e7627638d07be75126f896d3ee0cf924cbff64e0a2",
-          "bytes": 1084
-        }
-      ]
-    },
-    {
-      "name": "@expo/devtools",
-      "version": "58.0.2",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "https://github.com/expo/expo.git",
-        "directory": "packages/@expo/devtools"
-      },
-      "packageJsonSha256": "79495142bcf449038d73e827010ba7b5c41014c5c70684540437025fea941c59",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-@expo_devtools-58.0.2-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "@expo/devtools@58.0.2",
-          "sourceUrl": "https://www.npmjs.com/package/@expo/devtools/v/58.0.2",
-          "sha256": "16feb932ce2ba7bc7712657bb28afe409eaa4334f9f05d0e1b7a5f12bf6132f4",
-          "bytes": 1107
-        }
-      ]
-    },
-    {
-      "name": "@noble/ciphers",
-      "version": "2.1.1",
-      "license": "MIT",
-      "repository": {
-        "type": "git",
-        "url": "git+https://github.com/paulmillr/noble-ciphers.git"
-      },
-      "packageJsonSha256": "f30139134b7f4465b1ea0e82c5ba97c56e4db0125e176f3e73455478b43bbb09",
-      "scope": "main Android JavaScript source-map contributor",
-      "notices": [
-        {
-          "file": "js-@noble_ciphers-2.1.1-LICENSE.txt",
-          "sourcePath": "LICENSE",
-          "sourceCoordinate": "@noble/ciphers@2.1.1",
-          "sourceUrl": "https://www.npmjs.com/package/@noble/ciphers/v/2.1.1",
-          "sha256": "f36671a5487c9c5050efacb58011c37c24c55a889803cb036cf9d9a6347c1e2d",
-          "bytes": 1161
-        }
-      ]
     }
   ],
   "mainJavaScriptProfile": {
     "platform": "android",
-    "reviewedMetroBundleSha256": "8ea9cb099b19f7e13958ee7c6290f417b9a5e72177e358d502656aa00e8456aa",
-    "sourceMapSha256": "ecdb12a8da245b8e10307df7513da80d748470aa825c800695cca1a91aa72aef",
-    "packageIdentityCount": 64,
-    "suppliedOriginalFileCount": 61,
+    "reviewedMetroBundleSha256": "6a7ae5fef32cf12913af7a31f06847ff9df3efa9a5e9fcd0293421241db4dbc6",
+    "sourceMapSha256": "b1f812fbe9be428f28f261de9da6eaf063cc9da31931e31c41fdb134a878cdeb",
+    "packageIdentityCount": 58,
+    "suppliedOriginalFileCount": 55,
     "sharedOriginalPackageCount": 4,
     "dependencyInputs": {
-      "package.json": "896bba8ec0e9cad2d51a4f35f81963fe584858981456997a6ecad082c6641074",
-      "pnpm-lock.yaml": "5a32e752cd212d8eac141168552220b105edd083112b2b911107deeb3ee33795",
-      "node_modules/.pnpm/@expo+cli@58.1.19_@expo+dom-webview@58.0.2_expo-constants@58.0.15_expo@58.0.23_react-na_56e6f5118065dd911a566dde5519da83/node_modules/@expo/cli/package.json": "279eb99e60e282dde3bfd4a8b4d231c12db34544e30a888eccd7adb94c41e003",
+      "package.json": "4c1a96eb96ad3e92104b1e6d85e155dfbfffa719c45d59cc6961c4d455b21293",
+      "pnpm-lock.yaml": "1a06ddc136757b242dae1b0dcac2a50fc699a140aeb16da5d03b82128f4565b1",
+      "node_modules/.pnpm/@expo+cli@58.1.20_@expo+dom-webview@58.0.2_expo-constants@58.0.16_expo@58.0.24_react-na_9e33ccae367f67a78635be2cb8b90a55/node_modules/@expo/cli/package.json": "98f35dbe2ac27fd7ee90905352ab6215fc157f80094f6e7c2bce87ebd1e85c39",
       "node_modules/.pnpm/@react-native+js-polyfills@0.88.1/node_modules/@react-native/js-polyfills/package.json": "4b540e4c8ea9920faeefdaa16a7da7dd49ff5521fd168153ef52aa5e975f837b",
-      "node_modules/.pnpm/expo@58.0.23_@babel+core@7.29.7_@expo+dom-webview@58.0.2_react-native-worklets@0.13.0_@_37efeb4228490d2fc4486fb86dce2ee6/node_modules/expo/package.json": "6d461bcd4e874be6b30583b13480fb28e74d9fa2732acba593640415693643f6",
+      "node_modules/.pnpm/expo@58.0.24_@babel+core@7.29.7_@expo+dom-webview@58.0.2_react-native-worklets@0.13.0_@_e4077e8daa009d5de0ae5ebaf648044e/node_modules/expo/package.json": "a818f429d76946b5fddaa804ac67ebcc45cfe232a47b1bf7a30b66f1c0c3c9ac",
       "node_modules/.pnpm/react-native@0.88.1_@babel+core@7.29.7_@react-native+metro-config@0.88.1_@babel+core@7._05eadce5f1d68d8a8a609a3b62d66ff9/node_modules/react-native/package.json": "3f2bf69ed883e97a295b1de43f5a2d75d112ab45495153360c2fb521023c7f3f",
       "node_modules/.pnpm/invariant@2.2.4/node_modules/invariant/package.json": "ef0c08d9f91029e247bb570a04903f3a9bd646c1f2128d29e69ee171794cd2a3",
       "node_modules/.pnpm/stacktrace-parser@0.1.11/node_modules/stacktrace-parser/package.json": "e074abdd6fd9da17db51b0eacc14c7a1b7f4a069e9786e15e8069fedb833b430",
@@ -1380,28 +1251,26 @@
       "node_modules/.pnpm/base64-js@1.5.1/node_modules/base64-js/package.json": "9758f3ab8c45e07bb9a368e32f9a8b3729623bbf47cbbb205b32d674ab2a91f0",
       "node_modules/.pnpm/whatwg-fetch@3.6.20/node_modules/whatwg-fetch/package.json": "773f705e4e3f83dc4758188878c4db45478df953a10bceeb14e4aafbbe7847bc",
       "node_modules/.pnpm/whatwg-url-minimum@0.2.0/node_modules/whatwg-url-minimum/package.json": "bf04cfa304e4e421b426525ba7511c29a521048728a90c887072c9cb06b6b1a0",
-      "node_modules/.pnpm/@expo+metro@58.0.0/node_modules/@expo/metro/package.json": "2892f82b55f62c61a046cd85e98747b4810207e31a505ba152b9679b8e6fca21",
-      "node_modules/.pnpm/metro-runtime@0.87.1/node_modules/metro-runtime/package.json": "26eed1885b7589f22eb2073c71a4bc7925db90fe60426e78842aa99c614252b0",
-      "node_modules/.pnpm/pretty-format@29.7.0/node_modules/pretty-format/package.json": "05dc4d4a3b4ad3659b9909f45be39b7ada56dba05c30327770fefdfd0f1f8316",
-      "node_modules/.pnpm/ansi-styles@5.2.0/node_modules/ansi-styles/package.json": "c4b717d4808738c3a8270e8485df6cdbf0cd4f7abb523784dca883b94c212e79",
-      "node_modules/.pnpm/react-is@18.3.1/node_modules/react-is/package.json": "8d8b7b3d6df8fa36fcd2fbee3561faea9bfa488c2318dabef4cfeaf275aee7f3",
+      "node_modules/.pnpm/@ungap+structured-clone@1.4.0/node_modules/@ungap/structured-clone/package.json": "8f931c21e4c0b37c35d5ffef35e0bc057f3cbd0224b026b21a5bdb82a98cbd8f",
+      "node_modules/.pnpm/expo-modules-core@58.1.0_react-native-worklets@0.13.0_@babel+core@7.29.7_@react-native+_1459ac40354ce461335c9b8d504d851b/node_modules/expo-modules-core/package.json": "285de31be98571eea2a85f8eac1d30fce6a1474e2dc4b1772dd4465333762004",
       "node_modules/.pnpm/@react-native+virtualized-lists@0.88.1_@types+react@19.3.0_react-native@0.88.1_@babel+c_7e205acfb700a2c9b3fabadb2779afac/node_modules/@react-native/virtualized-lists/package.json": "4e27d1f0c2b9d22f543db9f88dfb89b4ad8f404140eca75ecfe2aae5c0bb9f8a",
       "node_modules/.pnpm/memoize-one@5.2.1/node_modules/memoize-one/package.json": "42f75cce8e78478ae86f07c881c8f52073c2698aaf17b2fdae916bea56fc3925",
       "node_modules/.pnpm/flow-enums-runtime@0.0.6/node_modules/flow-enums-runtime/package.json": "a9d83154145ed1bf98a1bb5b52ec7cac031537f6e8e47e726aa0b6f16a551c8b",
-      "node_modules/.pnpm/@expo+log-box-utils@58.0.2/node_modules/@expo/log-box-utils/package.json": "a30b58aaf90c3ec9210dba94ce4e619978fbef799ab9a4d3b8770c755cd94ee9",
-      "node_modules/.pnpm/@ungap+structured-clone@1.4.0/node_modules/@ungap/structured-clone/package.json": "8f931c21e4c0b37c35d5ffef35e0bc057f3cbd0224b026b21a5bdb82a98cbd8f",
-      "node_modules/.pnpm/expo-modules-core@58.0.30_react-native-worklets@0.13.0_@babel+core@7.29.7_@react-native_0023c1a6f87aca7abf0bf32d4b5800b1/node_modules/expo-modules-core/package.json": "37f280f153bd97aab338c92512a4ca570edbe001c2a51c1758838bbb7624b7cc",
-      "node_modules/.pnpm/expo-asset@58.0.20_expo@58.0.23_react-native@0.88.1_@babel+core@7.29.7_@react-native+me_201862596b3b04390ca09fa571fa5dfe/node_modules/expo-asset/package.json": "9e9f2ad7a8106015c8cc61232b35bb84f1d80fa942ed99641f7146c3ac248f12",
-      "node_modules/.pnpm/expo-constants@58.0.15_expo@58.0.23_react-native@0.88.1_@babel+core@7.29.7_@react-nativ_1c907b16ea264956e3978aee4aca93a5/node_modules/expo-constants/package.json": "1a3adee283dc0e514170ddf724c9aed5425ffad1386b1416164cc90d97b83511",
+      "node_modules/.pnpm/expo-asset@58.0.21_expo@58.0.24_react-native@0.88.1_@babel+core@7.29.7_@react-native+me_153a7d70a79e46d4d2f31ed2b08e9520/node_modules/expo-asset/package.json": "a317879b994f92128624136f42832597fc411015de25aa1125dfb73a82487427",
+      "node_modules/.pnpm/expo-constants@58.0.16_expo@58.0.24_react-native@0.88.1_@babel+core@7.29.7_@react-nativ_abf1f4bb6f37107561a6a8f39d9bb91c/node_modules/expo-constants/package.json": "d993120267b9e8b8b65b92f605d0cbc7ddb2e3bfe295df6c4a97bfe81e06247a",
       "node_modules/.pnpm/react-native-gesture-handler@3.3.0_react-native@0.88.1_@babel+core@7.29.7_@react-native_b2f6696ee0a672602e00329259e59717/node_modules/react-native-gesture-handler/package.json": "e662c78f69e36947e39b7d4e1265e12a5c976dcdec584da4a1b7369cd44fbd05",
       "node_modules/.pnpm/react-native-worklets@0.13.0_@babel+core@7.29.7_@react-native+metro-config@0.88.1_@babe_bc56d9ab56e73b28d35c31eb1f837328/node_modules/react-native-worklets/package.json": "aa8f3e796568bedf9b72b8cac0b1935a2356a5cd5ba5bd7735e75e1bad7e9ead",
       "node_modules/.pnpm/react-native-reanimated@4.7.1_react-native-worklets@0.13.0_@babel+core@7.29.7_@react-na_bbb623bb11b5342864751febb74c7aff/node_modules/react-native-reanimated/package.json": "48f6747c1b290642a1391402d2b8f342ee2c141840a9c7a12afe0f72e55c170c",
       "node_modules/.pnpm/semver@7.8.5/node_modules/semver/package.json": "7c94cb7f2a53c27b20d76386ec144c062894dbcc909cfabd0f728c37874b1776",
       "node_modules/.pnpm/react-native-is-edge-to-edge@1.3.1_react-native@0.88.1_@babel+core@7.29.7_@react-native_caa0fd8d5fa2fc426fb93dca17b7810b/node_modules/react-native-is-edge-to-edge/package.json": "4808c1cfb5e0c5d8d082c0d9e5efaf36eeb64da249fc65502d1a0333f3762a23",
       "node_modules/.pnpm/react-native-safe-area-context@5.11.1_react-native@0.88.1_@babel+core@7.29.7_@react-nat_87f127276331cf4845053b57b369b15e/node_modules/react-native-safe-area-context/package.json": "664910ae3a789f27bdbc31b9bc9e639fceb89d5d30294dc3bb4c209a67a27a83",
-      "node_modules/.pnpm/expo-font@58.0.11_expo@58.0.23_react-native@0.88.1_@babel+core@7.29.7_@react-native+met_3500d7b9317d0b4b4429a5a57a72234c/node_modules/expo-font/package.json": "a39a111996fb3549857ce64b59fee0900af9d953f9b8581e5f116ae647041220",
-      "node_modules/.pnpm/expo-image@58.0.18_expo@58.0.23_react-native@0.88.1_@babel+core@7.29.7_@react-native+me_8851e0179bc82020014abc409e2d6365/node_modules/expo-image/package.json": "b21f4530a67399aaa7492c51e7b2c1aa50bc5b9c1089e86e9e9ffa7fba095f2f",
-      "node_modules/.pnpm/expo-crypto@58.0.7_expo@58.0.23/node_modules/expo-crypto/package.json": "95d382241a7f7d9662dafaef7b590988ad4def1144e38b05f9eafc5aac7d8b3b",
+      "node_modules/.pnpm/expo-font@58.0.12_expo@58.0.24_react-native@0.88.1_@babel+core@7.29.7_@react-native+met_532e7938b90def2503a02dc772655522/node_modules/expo-font/package.json": "0b86ac4efb1c5cc4aa7a593b4fc096c96b1933aa57f8f71c145de6c87f9d2668",
+      "node_modules/.pnpm/expo-image@58.0.18_expo@58.0.24_react-native@0.88.1_@babel+core@7.29.7_@react-native+me_bead0f7adb4c533d73e7c801ca39e177/node_modules/expo-image/package.json": "b21f4530a67399aaa7492c51e7b2c1aa50bc5b9c1089e86e9e9ffa7fba095f2f",
+      "node_modules/.pnpm/expo-crypto@58.0.8_expo@58.0.24/node_modules/expo-crypto/package.json": "4cf192f0430e01fa5e9a149a2ff1dcf9f69ac6c9079570e96374e28a2c65ec86",
+      "node_modules/.pnpm/@scure+base@2.0.0/node_modules/@scure/base/package.json": "93cb3a28e1f34a5399aed7c4ba8ba337acd28b01420c34e6daa9bc35a24f34af",
+      "node_modules/.pnpm/nostr-tools@2.24.0_typescript@6.0.3/node_modules/nostr-tools/package.json": "7817e738fed149c64692941611c401f49d98aead0053978d14f3fd076ba5a227",
+      "node_modules/.pnpm/@noble+curves@2.0.1/node_modules/@noble/curves/package.json": "588b510f1b8804bdf820acbd14065126286d92575c45811acef08fe480899469",
+      "node_modules/.pnpm/@noble+hashes@2.0.1/node_modules/@noble/hashes/package.json": "ceb30ba96a14786c419db53f2b8d3d59ece7ac5221c198ac03def462cf96ef23",
       "node_modules/.pnpm/applesauce-relay@6.2.1_typescript@6.0.3/node_modules/applesauce-relay/package.json": "00de51a6cefc0fba1e8a48b8dc896f519a7f437787e18b7a9513da79034f98c7",
       "node_modules/.pnpm/applesauce-core@6.2.0_typescript@6.0.3/node_modules/applesauce-core/package.json": "889b287ef9f674d835b560738cd74352e38ea3d97d7bdfba4394deeb5e445d04",
       "node_modules/.pnpm/nostr-tools@2.19.4_typescript@6.0.3/node_modules/nostr-tools/package.json": "ef408a3c64bc2519f34a3e5ad9a935a20cd409f596e9fafe1e5c52799203a0fa",
@@ -1418,16 +1287,12 @@
       "node_modules/.pnpm/hash-sum@2.0.0/node_modules/hash-sum/package.json": "98143ac87fd952cd97b99503d8786637c99d6daf8d0d65c669c0b64b7861dee7",
       "node_modules/.pnpm/nanoid@5.1.16/node_modules/nanoid/package.json": "07ac373149102d5a442db2aa0fef31c53ef5652e718fb96752000e6d99328dc4",
       "node_modules/.pnpm/@noble+hashes@2.4.0/node_modules/@noble/hashes/package.json": "3e361734f5269de162fa362483d7f45dee7efb533ec217157945338f7591baaf",
-      "node_modules/.pnpm/nostr-tools@2.24.0_typescript@6.0.3/node_modules/nostr-tools/package.json": "7817e738fed149c64692941611c401f49d98aead0053978d14f3fd076ba5a227",
-      "node_modules/.pnpm/@noble+curves@2.0.1/node_modules/@noble/curves/package.json": "588b510f1b8804bdf820acbd14065126286d92575c45811acef08fe480899469",
-      "node_modules/.pnpm/@noble+hashes@2.0.1/node_modules/@noble/hashes/package.json": "ceb30ba96a14786c419db53f2b8d3d59ece7ac5221c198ac03def462cf96ef23",
-      "node_modules/.pnpm/@scure+base@2.0.0/node_modules/@scure/base/package.json": "93cb3a28e1f34a5399aed7c4ba8ba337acd28b01420c34e6daa9bc35a24f34af",
-      "node_modules/.pnpm/expo-secure-store@58.0.2_patch_hash=d82c16f5c16a19e5294400cdf1ae5b572506e22a449bf7eea00eb08a63eebb82_expo@58.0.23/node_modules/expo-secure-store/package.json": "810fd562270182b7497ef1045a7a09a038861f7733e2967e165aa686bbad34e6",
-      "node_modules/.pnpm/expo-sqlite@58.0.15_expo@58.0.23_react-native@0.88.1_@babel+core@7.29.7_@react-native+m_d8ca3eda7466ae07e12e847c2d858e5d/node_modules/expo-sqlite/package.json": "08f5188824aca83d2adbe6d550d3038fe7c3393090d59aae6cfd74dff6cfac63",
+      "node_modules/.pnpm/@noble+ciphers@2.1.1/node_modules/@noble/ciphers/package.json": "f30139134b7f4465b1ea0e82c5ba97c56e4db0125e176f3e73455478b43bbb09",
+      "node_modules/.pnpm/expo-secure-store@58.0.3_patch_hash=d82c16f5c16a19e5294400cdf1ae5b572506e22a449bf7eea00eb08a63eebb82_expo@58.0.24/node_modules/expo-secure-store/package.json": "6444907f88b0469162bef880f30e5c311e54a69dec08df12810b416b8b9198f4",
+      "node_modules/.pnpm/expo-sqlite@58.0.16_expo@58.0.24_react-native@0.88.1_@babel+core@7.29.7_@react-native+m_f247aa4307fad32ab951f147f2901db9/node_modules/expo-sqlite/package.json": "7ed78ff082b83d4eb815ebc47c8265c071df2ad1713c6a389c1997f77e7e4fe8",
       "node_modules/.pnpm/@babel+runtime@7.29.7/node_modules/@babel/runtime/package.json": "8c4bf20c55e3f3a93df034b12746bf72185cf2acb0ef52847a3465d6e67c61e7",
       "node_modules/.pnpm/await-lock@2.2.2/node_modules/await-lock/package.json": "646f3516dc035f0aef095b321eee009cefff46529813e4923e39e5579098205e",
-      "node_modules/.pnpm/@expo+devtools@58.0.2_expo@58.0.23_react-native@0.88.1_@babel+core@7.29.7_@react-native_9dfdf269eff94e775900098b293ac671/node_modules/@expo/devtools/package.json": "79495142bcf449038d73e827010ba7b5c41014c5c70684540437025fea941c59",
-      "node_modules/.pnpm/@noble+ciphers@2.1.1/node_modules/@noble/ciphers/package.json": "f30139134b7f4465b1ea0e82c5ba97c56e4db0125e176f3e73455478b43bbb09"
+      "node_modules/.pnpm/@expo+devtools@58.0.2_expo@58.0.24_react-native@0.88.1_@babel+core@7.29.7_@react-native_9e1a004d6021732951baf7d3f0d20444/node_modules/@expo/devtools/package.json": "79495142bcf449038d73e827010ba7b5c41014c5c70684540437025fea941c59"
     }
   }
 }

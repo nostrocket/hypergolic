@@ -52,60 +52,22 @@ function fixture(t) {
   return directory;
 }
 
-for (const [name, consumer] of Object.entries({ cli, fingerprint })) {
-  test(`Expo ${name} glob preserves discovery, ignores and symlink options`, async t => {
-    const cwd = fixture(t);
-    const { glob, globStream, globSync } = consumer('glob');
-    const pattern = 'src/**/*.{js,ts}';
-    const expected = ['src/.hidden.ts', 'src/a.js', 'src/b.ts', 'src/deep/c.ts'];
-    const options = {
-      cwd,
-      absolute: true,
-      dot: true,
-      nodir: true,
-      follow: false,
-      ignore: ['**/*.test.ts', 'src/link/**'],
-    };
-
-    assert.deepEqual(relativePaths(cwd, globSync(pattern, options)), expected, 'sync');
-    assert.deepEqual(relativePaths(cwd, await glob(pattern, options)), expected, 'async');
-
-    const streamed = [];
-    for await (const file of globStream(pattern, options)) streamed.push(file);
-    assert.deepEqual(relativePaths(cwd, streamed), expected, 'stream');
-
-    assert.deepEqual(
-      relativePaths(cwd, globSync('src/@(a|b).@(js|ts)', options)),
-      ['src/a.js', 'src/b.ts'],
-      'extglob',
-    );
-    assert.deepEqual(
-      relativePaths(cwd, globSync('src/link/*.ts', { cwd, absolute: true, follow: false })),
-      ['src/link/c.ts'],
-      'explicit symlink path',
-    );
-    assert.deepEqual(
-      relativePaths(cwd, globSync('src/**/*.ts', {
-        cwd, absolute: true, follow: true, ignore: ['**/*.test.ts'],
-      })),
-      ['src/b.ts', 'src/deep/c.ts', 'src/link/c.ts'],
-      'follow symlink',
-    );
-  });
-}
-
-test('Expo CLI wrappers return all matches, one match, or no matches', async t => {
+test('Expo template discovery includes dotfiles and skips symlink contents', async t => {
   const cwd = fixture(t);
-  const { anyMatchAsync, everyMatchAsync } = cli('./build/src/utils/glob.js');
-  const pattern = 'src/**/*.ts';
-  const options = { cwd, ignore: ['src/link/**'] };
+  const { getTemplateFilesToRenameAsync } = cli('./build/src/prebuild/renameTemplateAppName.js');
+  const files = await getTemplateFilesToRenameAsync(cwd, { renameConfig: ['src/**/*.{js,ts}'] });
+  assert.deepEqual(files.sort(), ['src/.hidden.ts', 'src/a.js', 'src/b.ts', 'src/deep/c.ts', 'src/skip.test.ts']);
+  assert.deepEqual(await getTemplateFilesToRenameAsync(cwd, { renameConfig: ['absent/**/*.ts'] }), []);
+});
 
-  const all = await everyMatchAsync(pattern, options);
-  assert.deepEqual(all.sort(), ['src/b.ts', 'src/deep/c.ts', 'src/skip.test.ts']);
-  const one = await anyMatchAsync(pattern, options);
-  assert.equal(one.length, 1);
-  assert.ok(all.includes(one[0]));
-  assert.deepEqual(await anyMatchAsync('absent/**/*.ts', { cwd }), []);
+test('Expo CLI finds the native project, prefers its workspace and rejects missing projects', async t => {
+  const cwd = fixture(t);
+  const { resolveXcodeProject } = cli('./build/src/run/ios/options/resolveXcodeProject.js');
+  assert.deepEqual(await resolveXcodeProject(cwd), { name: path.join(cwd, 'ios/Main.xcodeproj'), isWorkspace: false });
+  mkdirSync(path.join(cwd, 'ios/Main.xcworkspace'));
+  assert.deepEqual(await resolveXcodeProject(cwd), { name: path.join(cwd, 'ios/Main.xcworkspace'), isWorkspace: true });
+  rmSync(path.join(cwd, 'ios'), { recursive: true });
+  await assert.rejects(resolveXcodeProject(cwd), /Xcode project not found/);
 });
 
 test('native config finds the main scheme and ignores dependency projects', t => {

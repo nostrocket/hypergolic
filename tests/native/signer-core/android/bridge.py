@@ -33,7 +33,7 @@ env['EXPO_NO_TELEMETRY'] = '1'
 def run(command, timeout=60):
     return subprocess.check_output([str(x) for x in command], env=env, text=True, stderr=subprocess.STDOUT, timeout=timeout)
 def hashes():
-    files = [entry, Path(__file__).resolve(), Path(__file__).with_name('BoundaryInstrumentation.java'), ROOT / 'patches/expo-secure-store@58.0.2.patch', ROOT / 'tests/native/securestore-config/source-manifest.json', ROOT / 'app.json', ROOT / 'package.json', ROOT / 'pnpm-lock.yaml', ROOT / 'android/app/build.gradle']
+    files = [entry, Path(__file__).resolve(), Path(__file__).with_name('BoundaryInstrumentation.java'), ROOT / 'patches/expo-secure-store@58.0.3.patch', ROOT / 'tests/native/securestore-config/source-manifest.json', ROOT / 'app.json', ROOT / 'package.json', ROOT / 'pnpm-lock.yaml', ROOT / 'android/app/build.gradle']
     files += [path for path in (ROOT / 'src').rglob('*') if path.is_file()]
     files += [path for path in (ROOT / 'tests/native/securestore-config').rglob('*') if path.is_file()]
     files += [path for path in (ROOT / 'node_modules/expo-secure-store/android').rglob('*') if path.is_file() and '/build/' not in str(path)]
@@ -46,7 +46,7 @@ def hashes():
         files += [path for path in folder.rglob('*') if path.is_file()]
     return {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest() for path in files}
 manifest = json.loads((ROOT / 'tests/native/securestore-config/source-manifest.json').read_text())
-if hashlib.sha256((ROOT / 'patches/expo-secure-store@58.0.2.patch').read_bytes()).hexdigest() != manifest['patchSha256']:
+if hashlib.sha256((ROOT / 'patches/expo-secure-store@58.0.3.patch').read_bytes()).hexdigest() != manifest['patchSha256']:
     raise RuntimeError('SecureStore patch differs from reviewed manifest')
 for relative, expected in manifest['patched'].items():
     if hashlib.sha256((ROOT / 'node_modules/expo-secure-store' / relative).read_bytes()).hexdigest() != expected:
