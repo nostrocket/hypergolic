@@ -1173,9 +1173,9 @@
     },
     {
       "component": "expo-modules-core",
-      "version": "58.0.30",
+      "version": "58.1.0",
       "files": [
-        "js-expo-modules-core-58.0.30-LICENSE.txt"
+        "js-expo-modules-core-58.1.0-LICENSE.txt"
       ],
       "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4"
     }

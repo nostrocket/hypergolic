@@ -874,8 +874,8 @@
       "sha256": "a7f713593007813bf07d19bd1df9f81c86c0719e9a0bb2ef1b98b78313fc940d"
     },
     {
-      "component": "expo.modules.asset:expo.modules.asset:58.0.20",
-      "filename": "expo.modules.asset-58.0.20.aar",
+      "component": "expo.modules.asset:expo.modules.asset:58.0.21",
+      "filename": "expo.modules.asset-58.0.21.aar",
       "sha256": "6638572bc255e7dd1653db31deff0bc5150b52a04b0fc4e9d9db5ac63e7cbbf8"
     },
     {
@@ -884,9 +884,9 @@
       "sha256": "0804b30fbabf4b4484ed877f6b90f17839a430ee67e6dcd91cdc9a270f3705c7"
     },
     {
-      "component": "host.exp.exponent:expo.modules.crypto:58.0.7",
-      "filename": "expo.modules.crypto-58.0.7.aar",
-      "sha256": "3e72ad98ec4ea60dbd6c7794ef67d31180d203a8de19b454d0af1af634f00859"
+      "component": "host.exp.exponent:expo.modules.crypto:58.0.8",
+      "filename": "expo.modules.crypto-58.0.8.aar",
+      "sha256": "64175c284a50062819d31a44f58b47840163391a6d9a17e37d16c567538acd33"
     },
     {
       "component": "host.exp.exponent:expo.modules.filesystem:58.0.13",
@@ -894,19 +894,19 @@
       "sha256": "05b04d656f4a5b19617aeb299500fce68d6777c9c3272c1886efea7fdf2f0ab9"
     },
     {
-      "component": "host.exp.exponent:expo.modules.font:58.0.11",
-      "filename": "expo.modules.font-58.0.11.aar",
+      "component": "host.exp.exponent:expo.modules.font:58.0.12",
+      "filename": "expo.modules.font-58.0.12.aar",
       "sha256": "8722bab1c001def6d5f57762b550c8520065b9def4951f15fa9118a310d4cd41"
     },
     {
-      "component": "host.exp.exponent:expo.modules.keepawake:58.0.3",
-      "filename": "expo.modules.keepawake-58.0.3.aar",
+      "component": "host.exp.exponent:expo.modules.keepawake:58.0.4",
+      "filename": "expo.modules.keepawake-58.0.4.aar",
       "sha256": "8d1d85f4ad5abad880118a04c9bd6db709b1a8c2843a25d6e4705828088f6f61"
     },
     {
-      "component": "host.exp.exponent:expo.modules.sqlite:58.0.15",
-      "filename": "expo.modules.sqlite-58.0.15.aar",
-      "sha256": "07fd702db446c37af350500fbb2bba0c344b9c219c407cd4676417b5c04269b0"
+      "component": "host.exp.exponent:expo.modules.sqlite:58.0.16",
+      "filename": "expo.modules.sqlite-58.0.16.aar",
+      "sha256": "651f98f8175acf20e12acf3877e569b4b332ac39729775350b6d7c234ec437e7"
     },
     {
       "component": "host.exp.exponent:expo.modules.systemui:58.0.7",
@@ -6941,7 +6941,7 @@
           "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4",
           "source": "https://raw.githubusercontent.com/expo/kolibri/afb099efe52588941346b02a88859d124c822730/LICENSE.txt",
           "original": {
-            "file": "js-expo-modules-core-58.0.30-LICENSE.txt",
+            "file": "js-expo-modules-core-58.1.0-LICENSE.txt",
             "location": "main-javascript",
             "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4"
           }
@@ -7433,12 +7433,12 @@
       "version": "3.53.3",
       "sourceId": "2026-06-26 20:14:12 d4c0e51e4aeb96955b99185ab9cde75c339e2c29c3f3f12428d364a10d782c62",
       "owningArtifact": {
-        "component": "host.exp.exponent:expo.modules.sqlite:58.0.15",
-        "filename": "expo.modules.sqlite-58.0.15.aar",
-        "sha256": "07fd702db446c37af350500fbb2bba0c344b9c219c407cd4676417b5c04269b0"
+        "component": "host.exp.exponent:expo.modules.sqlite:58.0.16",
+        "filename": "expo.modules.sqlite-58.0.16.aar",
+        "sha256": "651f98f8175acf20e12acf3877e569b4b332ac39729775350b6d7c234ec437e7"
       },
       "entry": "jni/arm64-v8a/libexpo-sqlite.so",
-      "nativeSha256": "fe74626a8f01bbd4796eae1acb724b4b824a6962991d26b315237ddef163d277",
+      "nativeSha256": "9d9050afe95d80c4bcf1d095872b8caf5a5179d759c0511d3de5da45f8367f56",
       "nativeBytes": 1717128,
       "sourceArchive": {
         "url": "https://sqlite.org/2026/sqlite-amalgamation-3530300.zip",
@@ -7471,7 +7471,7 @@
         }
       ],
       "wrapperOriginal": {
-        "file": "js-expo-sqlite-58.0.15-LICENSE.txt",
+        "file": "js-expo-sqlite-58.0.16-LICENSE.txt",
         "sha256": "fb3ca4a837f5779e83cef89b78253a8949cfb9429c340309f62d0465ec6610b4"
       },
       "boundary": "The selected AAR contains the recorded arm64 library and exact SQLite source ID. Reversing the wrapper prefix reproduces the official C and header."

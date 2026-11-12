@@ -14,30 +14,42 @@ minimumReleaseAgeExclude:
   - compression@1.8.2
 
   # Expo SDK 58 alignment, approved 2026-11-06. Remove when these releases reach seven days.
-  - expo@58.0.23
   - expo-build-properties@58.0.12
-  - expo-sqlite@58.0.15
   - react-native-safe-area-context@5.11.1
-  - '@expo/cli@58.1.19'
-  - expo-asset@58.0.20
-  - '@expo/config@58.0.11'
   - '@expo/log-box@58.0.15'
-  - expo-constants@58.0.15
-  - '@expo/fingerprint@0.21.9'
-  - babel-preset-expo@58.0.24
-  - expo-modules-core@58.0.30
-  - '@expo/metro-config@58.0.21'
-  - '@expo/config-plugins@58.0.12'
-  - expo-modules-autolinking@58.0.17
-  - '@expo/local-build-cache-provider@58.0.11'
   - '@expo/schema-utils@58.0.3'
-  - '@expo/env@2.5.4'
-  - '@expo/router-server@58.0.21'
-  - '@expo/inline-modules@0.2.9'
-  - '@expo/prebuild-config@58.0.19'
-  - expo-modules-jsi@58.0.22
-  - expo-modules-macros@0.29.0
-  - '@expo/modules-macros-linux-x64@0.29.0'
-  - '@expo/modules-macros-win32-x64@0.29.0'
-  - '@expo/modules-macros-linux-arm64@0.29.0'
-  - '@expo/modules-macros-win32-arm64@0.29.0'
+
+  # Reviewed Expo compatibility updates, 2026-11-12; exact releases only.
+  - '@expo/cli@58.1.20'
+  - '@expo/config@58.0.12'
+  - '@expo/config-plugins@58.0.13'
+  - '@expo/env@2.6.0'
+  - '@expo/fingerprint@0.21.10'
+  - '@expo/image-utils@0.12.7'
+  - '@expo/inline-modules@0.2.10'
+  - '@expo/local-build-cache-provider@58.0.12'
+  - '@expo/metro-config@58.0.22'
+  - '@expo/metro-file-map@58.0.6'
+  - '@expo/modules-macros-linux-arm64@0.33.0'
+  - '@expo/modules-macros-linux-x64@0.33.0'
+  - '@expo/modules-macros-win32-arm64@0.33.0'
+  - '@expo/modules-macros-win32-x64@0.33.0'
+  - '@expo/plist@0.10.2'
+  - '@expo/prebuild-config@58.0.20'
+  - '@expo/require-utils@58.0.6'
+  - '@expo/router-server@58.0.22'
+  - 'babel-preset-expo@58.0.25'
+  - 'expo@58.0.24'
+  - 'expo-asset@58.0.21'
+  - 'expo-constants@58.0.16'
+  - 'expo-crypto@58.0.8'
+  - 'expo-font@58.0.12'
+  - 'expo-keep-awake@58.0.4'
+  - 'expo-modules-autolinking@58.1.0'
+  - 'expo-modules-cli@0.5.0'
+  - 'expo-modules-core@58.1.0'
+  - 'expo-modules-jsi@58.0.23'
+  - 'expo-modules-macros@0.33.0'
+  - 'expo-secure-store@58.0.3'
+  - 'expo-server@58.1.0'
+  - 'expo-sqlite@58.0.16'

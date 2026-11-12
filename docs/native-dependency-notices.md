@@ -54,14 +54,19 @@ unresolved. Final distribution review must reconcile these gaps. Build tools are
 included in the shipped inventory only when actual bundle/package evidence shows
 their code contributes.
 
-The Android 0.1.0 preparation refreshed both main JavaScript inventories from
-production Metro exports: 64 package identities, 61 supplied original files and
-four shared-original mappings. `expo-constants` was already present at 58.0.15;
-its direct dependency declaration changes no resolved version. The current
-bundles also include `@noble/ciphers` 2.1.1, whose installed original license is
-now packaged alongside the existing 0.5.3 original. Dependency metadata and
-bundle/source-map digests are bound in each manifest. This scoped refresh does
-not close the runtime attribution gaps above.
+The Expo 58.0.24 update refreshed both main JavaScript inventories from
+production Metro exports: 58 package identities, 55 supplied original files and
+four shared-original mappings. The exports no longer include six development
+logging contributors. Both installed `@noble/ciphers` versions retain their
+original licenses. Dependency metadata and bundle/source-map digests are bound
+in each manifest.
+
+The Android archive inventory was refreshed for five Expo AAR versions. The
+SQLite AAR contains newly built native bytes with the same recorded SQLite
+source ID; its vendored C/header files and notice ranges remain byte-identical.
+The native library and enclosing archive hashes bind the new selected artifact.
+These source/package checks do not establish a reproducible upstream build or
+close the runtime attribution gaps above.
 
 ## Checks
 

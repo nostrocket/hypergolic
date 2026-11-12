@@ -61,14 +61,14 @@
     "@scure/base": "2.0.0",
     "applesauce-core": "6.2.0",
     "applesauce-relay": "6.2.1",
-    "expo": "58.0.23",
+    "expo": "58.0.24",
     "expo-build-properties": "58.0.12",
-    "expo-constants": "58.0.15",
-    "expo-crypto": "58.0.7",
-    "expo-font": "58.0.11",
+    "expo-constants": "58.0.16",
+    "expo-crypto": "58.0.8",
+    "expo-font": "58.0.12",
     "expo-image": "58.0.18",
-    "expo-secure-store": "58.0.2",
-    "expo-sqlite": "58.0.15",
+    "expo-secure-store": "58.0.3",
+    "expo-sqlite": "58.0.16",
     "expo-system-ui": "58.0.7",
     "nostr-tools": "2.24.0",
     "react": "19.3.0",
@@ -111,17 +111,15 @@
       "@babel/helper-create-regexp-features-plugin@7.29.7>semver": "7.8.5",
       "@babel/plugin-transform-runtime@7.29.7>semver": "7.8.5",
       "babel-plugin-polyfill-corejs2@0.4.17>semver": "7.8.5",
-      "node-forge": "1.4.2",
-      "glob": "14.0.3",
+      "node-forge": "1.4.3",
       "minimatch": "11.0.2",
-      "minimatch@11.0.2>@isaacs/nonrecursive-glob-match": "1.0.2",
-      "glob@14.0.3>path-scurry": "3.0.0"
+      "minimatch@11.0.2>@isaacs/nonrecursive-glob-match": "1.0.2"
     },
     "patchedDependencies": {
       "braces@3.0.3": "tools/quality/patches/braces@3.0.3.patch",
-      "expo-secure-store@58.0.2": "patches/expo-secure-store@58.0.2.patch",
-      "@expo/config@58.0.11": "patches/expo-config-safe-merge-58.patch",
-      "@expo/metro-config@58.0.21": "patches/expo-metro-workspace-ignores-58.patch"
+      "expo-secure-store@58.0.3": "patches/expo-secure-store@58.0.3.patch",
+      "@expo/config@58.0.12": "patches/expo-config-safe-merge-58.patch",
+      "@expo/metro-config@58.0.22": "patches/expo-metro-workspace-ignores-58.patch"
     }
   },
   "expo": {

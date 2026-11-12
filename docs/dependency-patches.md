@@ -17,9 +17,9 @@ enforced.
 | --- | --- | --- |
 | `aislop@0.16.0` | [C preprocessor classification](../tools/quality/patches/aislop@0.16.0.patch) stops the trivial-comment scanner from treating C-family `#` directives as Python comments. CLI, API and MCP bundles share the correction; actual comments and all other rules remain active. | `pnpm run test:quality` exercises installed CLI/API scans with C directives and genuine C/JavaScript/Python comment findings. |
 | `braces@3.0.3` | [Depth guard](../tools/quality/patches/braces@3.0.3.patch) bounds parsing and AST traversal to 256 levels. Unusually deep patterns throw `RangeError`; callers must handle invalid patterns. The root and quality tool use the same patch. | `pnpm run test:quality` checks both installed consumers, hostile nesting and normal glob behavior. |
-| `@expo/config@58.0.11` | [Merge guard](../patches/expo-config-safe-merge-58.patch) extends Expo's own merger to drop `constructor` and `prototype` alongside `__proto__`, and materializes sparse array holes as undefined. The upstream merger replaces the former Fastify substitution. Existing tests retain array concatenation, updates-array deduplication, undefined updates, symbols, plugin order and cloning. | Installed-consumer cases in `pnpm run test:quality`; both native prebuilds. |
-| `@expo/metro-config@58.0.21` | [Workspace filter](../patches/expo-metro-workspace-ignores-58.patch) applies the existing directory exclusion to glob results as well as traversal. Node's native glob can return an excluded terminal directory for a narrow pattern. Workspace discovery excludes `node_modules`, `Pods` and `Carthage` for narrow and recursive patterns. | Actual Metro workspace discovery in `pnpm run test:quality`; both exports and native builds. |
-| `expo-secure-store@58.0.2` | [Configuration-only native gate](../patches/expo-secure-store@58.0.2.patch) restricts every data export to the exact napplet-config service, keys and options. Identity records and legacy addresses cannot be read, written, deleted or migrated through that bridge. Android also rejects a false confirmation option; iOS rejects missing accessibility and updates only to the fixed device-only accessibility. Both platforms must build this module from source. | [SecureStore boundary](../tests/native/securestore-config/README.md); native bridge tests on both platforms. |
+| `@expo/config@58.0.12` | [Merge guard](../patches/expo-config-safe-merge-58.patch) extends Expo's own merger to drop `constructor` and `prototype` alongside `__proto__`, and materializes sparse array holes as undefined. The upstream merger replaces the former Fastify substitution. Existing tests retain array concatenation, updates-array deduplication, undefined updates, symbols, plugin order and cloning. | Installed-consumer cases in `pnpm run test:quality`; both native prebuilds. |
+| `@expo/metro-config@58.0.22` | [Workspace filter](../patches/expo-metro-workspace-ignores-58.patch) applies the existing directory exclusion to glob results as well as traversal. Node's native glob can return an excluded terminal directory for a narrow pattern. Workspace discovery excludes `node_modules`, `Pods` and `Carthage` for narrow and recursive patterns. | Actual Metro workspace discovery in `pnpm run test:quality`; both exports and native builds. |
+| `expo-secure-store@58.0.3` | [Configuration-only native gate](../patches/expo-secure-store@58.0.3.patch) restricts every data export to the exact napplet-config service, keys and options. Identity records and legacy addresses cannot be read, written, deleted or migrated through that bridge. Android also rejects a false confirmation option; iOS rejects missing accessibility and updates only to the fixed device-only accessibility. Both platforms must build this module from source. | [SecureStore boundary](../tests/native/securestore-config/README.md); native bridge tests on both platforms. |
 | `@kehto/runtime@0.22.0`, `@kehto/shell@0.20.0` | [Runtime patches](../runtime/patches/) supply the selected native adapter, secure randomness and capability behavior. Configuration replies with an ID are correlated responses; only no-ID values reach subscription listeners. Existing ACL, source and session checks remain required. | `pnpm run runtime:test`; [runtime contracts](../runtime/README.md). |
 
 The SecureStore patch is app-specific. It does not turn the generic configuration
@@ -36,15 +36,23 @@ duplicates when that field was absent.
 Root overrides pin compatible security or tooling updates for fast-uri,
 ip-address, brace-expansion, source-map-js, proxy-addr, compression, shell-quote,
 MCP SDK, Hono, Zod, qs, body-parser, Hono's Node server, Fallow, xcode's uuid,
-node-forge, glob, minimatch and their traversal/optimizer dependencies.
+node-forge, minimatch and its optimizer dependency.
 The manifests are the version authority. Runtime and lab projects have separate
 lockfiles and pins; review all ten installed projects when auditing the repository.
 
-Expo CLI and its certificate library use `node-forge@1.4.2`. It rejects malformed
-RSA DigestInfo encodings and restores PEM Buffer input, which regressed in 1.4.1.
-`pnpm run test:quality` checks the encodings against OpenSSL and exercises the
-Expo certificate APIs and CLI parser with disposable certificates.
-[Upstream changelog](https://github.com/digitalbazaar/forge/blob/v1.4.2/CHANGELOG.md).
+Expo CLI and its certificate library use `node-forge@1.4.3`. This release rejects
+small-order Ed25519 public keys and fixes HTTP header parsing and TLS error
+handling advisories. Existing RSA DigestInfo and PEM Buffer fixes remain.
+`pnpm run test:quality` checks forged and valid signatures, malformed RSA
+encodings against OpenSSL, and Expo certificate generation and parsing with
+disposable certificates.
+[Upstream changelog](https://github.com/digitalbazaar/forge/blob/v1.4.3/CHANGELOG.md).
+
+The Expo 58.0.24 update retains the Config merge and Metro workspace patches on
+58.0.12 and 58.0.22. SecureStore 58.0.3 adds SwiftPM packaging; its native bridge
+and policy dependencies are byte-identical to 58.0.2. The same patch bytes apply,
+with refreshed package integrity and provenance pins. Keep both native builds
+and the SecureStore source/policy checks with this update.
 
 The following substitutions cross consumers' declared major ranges and need
 their specific compatibility checks:
@@ -53,21 +61,20 @@ their specific compatibility checks:
   runtime range `<0.0.0` has an intentional intersection difference. Keep the
   actual-consumer and Expo/Metro/Worklets checks; do not generalize the override
   to every SemVer 6 caller.
-- Expo and ESLint consumers select glob 14.0.3 and minimatch 11.0.2, with
-  path-scurry 3.0.0 and the nonrecursive matcher 1.0.2. These releases bound
-  optimizer expansion and stop directory traversal after cancellation.
-  `pnpm run test:quality` checks the actual consumer APIs, discovery and ignore
-  rules, default CJS/ESM bundles, expansion limits and cancellation. Expansion
-  ceilings affect unusually complex patterns; these checks establish compatibility
-  for the exercised consumers. Keep both native prebuilds and Metro exports in
-  the update checks.
+- Expo Fingerprint and ESLint consumers select minimatch 11.0.2 with the
+  nonrecursive matcher 1.0.2. Tests exercise their installed APIs, expansion
+  limits, ordinary matching, ignore rules and default CJS/ESM bundles.
+  Expo CLI 58.1.20 and Fingerprint 0.21.10 no longer depend on `glob`; its
+  override and path-scurry override are retired. The consumer tests now exercise
+  Expo's native project discovery and template traversal through their current
+  Node glob and tinyglobby implementations, including symlink exclusion.
 
 The tracked scene-lifecycle plugin configures the single iOS scene in the Expo
 template. Keep the native source-build settings in `app.json` when updating
 Expo or regenerating the CocoaPods project.
 
-Expo CLI 58.1.19 removed its direct Zod dependency, so the CLI-specific Zod override
-is retired. Its optional `expo-mcp` peer is absent from the installed graph.
+Expo CLI 58.1.20 has no direct Zod dependency, so no CLI-specific Zod override
+is needed. Its optional `expo-mcp` peer is absent from the installed graph.
 
 ## Native codec patches and provenance
 
