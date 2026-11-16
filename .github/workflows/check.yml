@@ -28,9 +28,13 @@ jobs:
       - id: dependencies
         run: pnpm run quality:install
       - run: pnpm run typecheck
-      - name: Check Expo SDK compatibility
+      - name: Check pinned Expo SDK compatibility
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: pnpm run doctor:expo
+      - name: Report latest Expo upgrade recommendations (advisory)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        continue-on-error: true
+        run: pnpm run doctor:expo:latest
       - name: Score the full source and audit every lockfile
         id: scores
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}

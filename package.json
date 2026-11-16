@@ -13,7 +13,7 @@
     "prebuild:android": "pnpm run runtime:build && expo prebuild --platform android --no-install --template ./node_modules/expo/template.tgz",
     "export:android": "pnpm run runtime:build && expo export --platform android",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.tests.json",
-    "doctor:expo": "expo-doctor",
+    "doctor:expo": "node scripts/check-expo.mjs",
     "doctor:react": "react-doctor . --no-telemetry --no-supply-chain --yes --blocking warning",
     "doctor:slop": "node tools/quality/node_modules/aislop/dist/cli.js ci",
     "quality:install": "pnpm --dir tools/quality install --frozen-lockfile",
@@ -54,7 +54,8 @@
     "test:signer:native": "python3 tests/native/signer-core/run.py",
     "build:release": "node scripts/android-release.mjs build",
     "sign:release": "node scripts/android-release.mjs sign",
-    "test:release": "node --test tests/release/*.test.mjs"
+    "test:release": "node --test tests/release/*.test.mjs",
+    "doctor:expo:latest": "expo install --check"
   },
   "dependencies": {
     "@expo/dom-webview": "58.0.2",

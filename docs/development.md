@@ -97,7 +97,7 @@ pnpm run export:android
 pnpm run export:ios
 ```
 
-`check` runs TypeScript, Expo Doctor, React Doctor, aislop and dependency audits
+`check` runs TypeScript, pinned-SDK compatibility and Expo Doctor, React Doctor, aislop and dependency audits
 for the root, runtime and quality-tool lockfiles. High/critical audit findings
 block the gate. A successful export is a JavaScript bundle, not an installable
 native build. Report each result and any blocked or skipped stage separately.

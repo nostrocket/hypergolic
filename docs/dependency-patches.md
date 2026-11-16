@@ -11,6 +11,23 @@ The SDK 58 age exceptions admit reviewed Expo releases and their required
 platform tooling. Publisher-trust checks and the install-script allowlist remain
 enforced.
 
+## Expo compatibility and upgrade recommendations
+
+`pnpm run doctor:expo` checks installed direct dependencies (including development
+packages) against `expo/bundledNativeModules.json` from the exact pinned Expo
+release, then runs the remaining Expo Doctor checks online. Missing packages,
+incompatible versions and other Doctor failures still block CI. The wrapper uses
+the pinned Expo CLI's SemVer implementation and replaces only Doctor's moving
+remote version recommendation check; it does not use package exclusions.
+
+`pnpm run doctor:expo:latest` reports Expo's current remote recommendations.
+CI displays this as an advisory step, so a newly published patch cannot invalidate
+an otherwise compatible frozen build. Review these recommendations during
+upgrades, after the seven-day waiting period (or an explicit reviewed exception).
+Security audits remain blocking regardless of release age. The pinned map proves
+compatibility with that SDK release, not that the release is the newest or free
+of vulnerabilities. Updating Expo also updates the compatibility baseline.
+
 ## Active package patches
 
 | Package | Change and boundary | Owning checks |
