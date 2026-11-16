@@ -4,6 +4,7 @@ import { ShellPressable as Pressable } from './ShellPressable';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedScrollHandler, useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 import { OverviewCard } from './OverviewCard';
+import { createOverviewScrollRestorer, overviewScrollOffset } from './overview-scroll';
 import type { OverviewGeometry, CardMeasurement, Size } from './motion';
 import type { NappletDescriptor } from './workspace';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
@@ -45,19 +46,17 @@ export const Overview = forwardRef<OverviewHandle, Props>(function Overview({ se
   const setCardRef = useCallback((id: string, view: ViewInstance | null) => {
     if (view) cardRefs.current.set(id, view); else cardRefs.current.delete(id);
   }, []);
+  const restoreScroll = useMemo(() => createOverviewScrollRestorer(), []);
+  const revealCard = useCallback((id: string | null) => {
+    const index = sessions.findIndex(session => session.id === id);
+    const next = overviewScrollOffset(geometry, index, scrollY.get(), size.height);
+    scroll.current?.scrollToOffset({ offset: next, animated: false });
+    scrollY.set(next);
+  }, [geometry, scrollY, sessions, size.height]);
   useImperativeHandle(ref, () => ({
     focusCard: id => focusView(id ? cardRefs.current.get(id) ?? heading.current : heading.current),
-    revealCard: id => {
-      const index = sessions.findIndex(session => session.id === id);
-      const rect = geometry.cards[index];
-      if (!rect) return;
-      const top = scrollY.get();
-      const bottom = rect.y + rect.height + geometry.captionHeight;
-      const next = rect.y < top ? Math.max(0, rect.y - 12) : bottom > top + size.height ? bottom - size.height + 12 : top;
-      scroll.current?.scrollToOffset({ offset: next, animated: false });
-      scrollY.set(next);
-    },
-  }), [geometry, scrollY, sessions, size.height]);
+    revealCard,
+  }), [revealCard]);
   const opacity = useAnimatedStyle(() => ({ opacity: progress.get() }));
   const onScroll = useAnimatedScrollHandler(event => { scrollY.set(event.contentOffset.y); });
   const headerHeight = geometry.cards[0]?.y ?? 72;
@@ -72,6 +71,8 @@ export const Overview = forwardRef<OverviewHandle, Props>(function Overview({ se
     <GestureDetector gesture={scrollGesture}>
       <Animated.FlatList ref={scroll} data={sessions} numColumns={2} keyExtractor={sessionKey} testID="napplet-overview"
         initialNumToRender={6} windowSize={5} removeClippedSubviews={false} scrollEnabled={visible && !busy}
+        onLayout={() => restoreScroll('layout', () => revealCard(focusedId))}
+        onContentSizeChange={() => restoreScroll('content', () => revealCard(focusedId))}
         onScroll={onScroll} scrollEventThrottle={16} bounces={false} overScrollMode="never" keyboardShouldPersistTaps="handled"
         columnWrapperStyle={styles.row} contentContainerStyle={{ minHeight: geometry.contentHeight, paddingHorizontal: 12, paddingBottom: 24 }}
         getItemLayout={(_data, row) => ({ index: row, length: stride, offset: headerHeight + row * stride })}
