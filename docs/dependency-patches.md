@@ -105,3 +105,11 @@ Verify the archive, installed consumer resolution, original notice bytes, positi
 and hostile regressions, affected exports/native builds and full quality reports.
 Remove the patch and its override only in the same reviewed update. Preserve
 earlier failed results as history; publish a new result for the new source.
+
+## Development-tool advisory refresh
+
+The root and quality-tool overrides select Hono 4.13.16 and @hono/node-server
+2.1.6. These patch releases address the Hono and Node adapter advisories reported
+by the quality scan; the application runtime dependencies are unchanged. See the
+[Hono advisory](https://github.com/advisories/GHSA-4m76-xfj5-7975) and
+[Node adapter advisory](https://github.com/advisories/GHSA-qv5m-9pm6-hqp3).

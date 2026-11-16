@@ -1,3 +1,5 @@
+import { pinNapplet, isPinned } from '../shell/pins.ts';
+import { descriptorForPublishedArtifact } from './published-host-input.ts';
 import { verifiedLaunchMetadata } from './verified-launch-metadata.ts';
 import { ReviewBusyError } from '../shell/review-slot.ts';
 import { naddrEncode } from 'nostr-tools/nip19';
@@ -131,7 +133,7 @@ function reviewLaunch(ports: Ports, launch: Launch, target: Extract<RoutingRevie
   return async (changesAccess: boolean, legacyReadOnlyAvailable = false) => {
     active();
     const decision = await ports.reviews.ask(Object.freeze({ kind: 'published-open', origin: launch.captured.origin,
-      source: launch.source, changesAccess, target, ...(legacyReadOnlyAvailable ? {legacyReadOnlyAvailable: true as const} : {}) }), active, () => true);
+      source: launch.source, changesAccess, target, ...(launch.captured.request.action === 'pin' ? {pinOnly: true as const} : {}), ...(legacyReadOnlyAvailable ? {legacyReadOnlyAvailable: true as const} : {}) }), active, () => true);
     active();
     attempt.declined = !decision.allow;
     return decision.allow && decision.legacyReadOnly ? 'legacy-read-only-v1' as const : decision.allow;
@@ -176,6 +178,16 @@ async function openExact(ports: Ports, launch: Launch, attempt: Attempt, active:
   const { unsupportedDomains, unsupportedOptionalDomains } = publishedCapabilityCompatibility(requiredDomains, optionalDomains);
   const review = reviewLaunch(ports, launch, Object.freeze({ publisher, appId, eventId, version, metadata: verifiedLaunchMetadata(artifact),
     requiredDomains, optionalDomains, unsupportedDomains, unsupportedOptionalDomains }), attempt, active);
+  if (request.action === 'pin') {
+    if (!await review(false)) return 'rejected';
+    active();
+    const shortcut = existing ?? descriptorForPublishedArtifact(artifact, ports.native.newChannelId());
+    workspace.change(pinNapplet(workspace.getSnapshot().workspace, shortcut));
+    await workspace.flush();
+    active();
+    if (!isPinned(workspace.getSnapshot().workspace, shortcut)) return 'failed';
+    return 'pinned';
+  }
   let next: NappletDescriptor;
   if (loaded) {
     if (!await review(false)) return 'rejected';
@@ -226,7 +238,7 @@ async function runLaunch(ports: Ports, launch: Launch): Promise<DiscoveryOpenOut
     release.push(ports.native.subscribe(check));
     active(); ports.reviews.assertAvailable();
     status = await openExact(ports, launch, attempt, active, signal);
-    if (status === 'opened') active();
+    if (status === 'opened' || status === 'pinned') active();
     return status;
   } catch (error) {
     try { active(); } catch { status = 'cancelled'; return status; }

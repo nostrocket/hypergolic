@@ -97,7 +97,7 @@ final class RoutingTransportRegistry: @unchecked Sendable {
       let domain = type == Self.publishedOpen ? "published-open" : type == "notify.__register" ? "notify" : type == "routing.__register" ? row.config.domains.sorted().first(where: {$0 == "intent" || $0 == "inc"}) : type.split(separator: ".").first.map(String.init),
       domain != "published-open" || type == Self.publishedOpen,
       mayDeliver(generation, revision: revision, domain: domain),
-      type != Self.publishedOpen || (mayReview(generation, revision: revision) && Set(message.keys) == ["type", "id", "address", "expectedEventId"]),
+      type != Self.publishedOpen || (mayReview(generation, revision: revision) && (Set(message.keys) == ["type", "id", "address", "expectedEventId"] || (message["action"] as? String == "pin" && Set(message.keys) == ["type", "id", "address", "expectedEventId", "action"]))),
       (type != "routing.__register" && type != "notify.__register") || Set(message.keys) == ["type"] else {
       _ = CapabilityTransport.leases.consumeSequence(generation, sequence: sequence); reply(nil); return nil
     }

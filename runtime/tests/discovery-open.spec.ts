@@ -183,3 +183,23 @@ for (const declaration of ['R', 'O']) {
     await expect(guest.locator('.detail-actions .feedback')).toHaveText('Opened in Hypergolic.');
   });
 }
+
+test('packaged Discover pins from listing and details without opening', async ({page}) => {
+  const event = finalizeEvent({kind: 35129, created_at: Math.floor(Date.now() / 1000) - 10,
+    content: 'Pin test', tags: [['d', 'pin-control'], ['title', 'Pin control'], ['x', 'c'.repeat(64)]]}, new Uint8Array(32).fill(1));
+  const guest = await openRuntime(page, 'napplet-discovery', [{event}]);
+  await guest.getByRole('button', {name: 'Pin Pin control to Home', exact: true}).click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length)).toBe(1);
+  expect((await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls))[0]).toEqual({
+    type, id: expect.any(String), action: 'pin', expectedEventId: event.id,
+    address: naddrEncode({kind: 35129, pubkey: event.pubkey, identifier: 'pin-control'}),
+  });
+  await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.finish?.('pinned'));
+  await expect(guest.locator('#row-open-status')).toHaveText('Pinned to Home.');
+  await guest.getByRole('button', {name: 'Details for Pin control', exact: true}).click();
+  await guest.getByRole('button', {name: 'Pin to Home', exact: true}).click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length)).toBe(2);
+  await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.finish?.('rejected'));
+  await expect(guest.locator('.detail-actions .feedback')).toHaveText('Pinning was declined in Hypergolic.');
+  await expect(guest.getByRole('button', {name: 'Pin to Home', exact: true})).not.toHaveAttribute('aria-disabled', 'true');
+});

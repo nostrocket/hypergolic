@@ -96,3 +96,21 @@ test('unavailable restored napplets fail before replacement or a write', async t
   await assert.rejects(openWorkspaceController(binding, () => { throw Error('must not seed'); }, () => { throw Error('unverified'); }), assertCode('STORAGE_FAILURE'));
   assert.equal(sqlite.calls.filter(call => call.sql.startsWith('UPDATE workspaces')).length, before);
 });
+
+test('Home shortcuts remain isolated across identities and process-style reopen', async t => {
+  const {pinNapplet, unpinNapplet, pinnedNapplets, showHome} = await import('../../src/shell/pins.ts');
+  const {sqlite, database} = await setup(t);
+  const firstOwner = registration();
+  const otherOwner = registration({user: '99'.repeat(32)});
+  const first = await openWorkspaceController(database.bindWorkspace(firstOwner), emptyWorkspace, accept);
+  first.change(showHome(pinNapplet(first.getSnapshot().workspace, descriptor('saved'))));
+  await first.flush();
+  const second = await openWorkspaceController(database.bindWorkspace(otherOwner), emptyWorkspace, accept);
+  second.change(unpinNapplet(second.getSnapshot().workspace, pinnedNapplets(second.getSnapshot().workspace)[0]));
+  await second.flush(); await database.close();
+  const reopened = await openShellDatabase(sqlite, 'android');
+  const restored = await openWorkspaceController(reopened.bindWorkspace(firstOwner), emptyWorkspace, accept);
+  const other = await openWorkspaceController(reopened.bindWorkspace(otherOwner), emptyWorkspace, accept);
+  assert.deepEqual(pinnedNapplets(restored.getSnapshot().workspace).map(pin => pin.title), ['Discover', 'saved']);
+  assert.deepEqual(pinnedNapplets(other.getSnapshot().workspace), []);
+});

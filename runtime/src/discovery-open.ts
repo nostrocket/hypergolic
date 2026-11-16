@@ -21,7 +21,7 @@ export function injectDiscoveryOpen(html: string, token: string, catalogEnabled 
       const reason = Object.prototype.hasOwnProperty.call(failureStatus, data.status) ? data.status : undefined;
       reply.resolve(Object.freeze(reason ? { status: failureStatus[reason], reason } : { status: data.status }));
     });
-    const open = (address, expectedEventId) => {
+    const open = (address, expectedEventId, action) => {
       if (pending) return Promise.resolve({ status: 'busy' });
       if (typeof address !== 'string' || address.length > 512 ||
           typeof expectedEventId !== 'string' || !/^[0-9a-f]{64}$/.test(expectedEventId)) {
@@ -31,12 +31,12 @@ export function injectDiscoveryOpen(html: string, token: string, catalogEnabled 
         const id = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
         const timer = setTimeout(() => { pending = undefined; resolve({ status: 'unavailable' }); }, ${DISCOVERY_LEASE_MS + 5_000});
         pending = { id, timer, resolve };
-        parent.postMessage({ type, id, address, expectedEventId, token }, '*');
+        parent.postMessage({ type, id, address, expectedEventId, token, ...(action === 'pin' ? {action} : {}) }, '*');
       });
     };
     ${catalogEnabled ? catalogPagePrelude : ''}
     Object.defineProperty(window, 'hypergolic', { value: Object.freeze({
-      publishedOpen: Object.freeze({ version: 1, open })${catalogEnabled ? ', catalogPage' : ''}
+      publishedOpen: Object.freeze({ version: 1, open: (address, eventId) => open(address, eventId), pin: (address, eventId) => open(address, eventId, 'pin') })${catalogEnabled ? ', catalogPage' : ''}
     }) });
   })();</script>`;
   return html.replace(/(<meta\s+http-equiv=["']Content-Security-Policy["'][^>]*>)/i, match => match + script);
@@ -46,7 +46,7 @@ export function createDiscoveryOpenReceiver(source: Window, native: ReturnType<t
   token: string, live: () => boolean): (value: unknown) => void {
   let pending = false;
   return value => {
-    if (!live() || !value || typeof value !== 'object' || Object.keys(value).length !== 5) return;
+    if (!live() || !value || typeof value !== 'object' || (Object.keys(value).length !== 5 && Object.keys(value).length !== 6)) return;
     const { token: presented, ...request } = value as Record<string, unknown>;
     if (presented !== token) return;
     let message;

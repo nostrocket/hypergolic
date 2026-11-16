@@ -1,6 +1,7 @@
+import { homeVisible } from './pins';
 import { workspaceSessionActivity } from './workspace-activity';
 import type { CloseCheckRequest } from './close-check';
-import { forwardRef, memo, useCallback, useMemo, useState } from 'react';
+import { forwardRef, memo, useCallback, useMemo, useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View, useWindowDimensions, type NativeSyntheticEvent } from 'react-native';
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 import { NappletHost, type HostEvent } from '../runtime/NappletHost';
@@ -13,6 +14,7 @@ import { runtimeStatus } from './runtime-status';
 import type {ZoomResetRegistration} from './zoom-reset';
 
 interface LiveProps {
+  hidden: boolean;
   gutter: number;
   session: NappletDescriptor;
   closeCheck: string;
@@ -30,7 +32,7 @@ interface LiveProps {
   onZoomTarget: ZoomResetRegistration;
   onHostEvent?: (event: HostEvent) => void;
 }
-const LiveSession = memo(function LiveSession({ gutter, session, closeCheck, index, size, rect, progress, position, scrollY, swipeY, swipeId, active, inputBlocked, raised, onZoomTarget, onHostEvent }: LiveProps) {
+const LiveSession = memo(function LiveSession({ hidden, gutter, session, closeCheck, index, size, rect, progress, position, scrollY, swipeY, swipeId, active, inputBlocked, raised, onZoomTarget, onHostEvent }: LiveProps) {
   const { styles } = useShellStyles(createStyles);
   // A keyed session starts when first focused and stays mounted until close or identity change.
   const [loaded, setLoaded] = useState(raised);
@@ -55,7 +57,7 @@ const LiveSession = memo(function LiveSession({ gutter, session, closeCheck, ind
   }, [onHostEvent, session.id]);
   return (
     <Animated.View collapsable={false} pointerEvents={active && !inputBlocked ? 'auto' : 'none'} importantForAccessibility={active && !inputBlocked ? 'auto' : 'no-hide-descendants'} accessibilityElementsHidden={!active || inputBlocked}
-      style={[styles.live, { width, height, zIndex: raised ? 2 : 1 }, movement]}>
+      style={[styles.live, { width, height, zIndex: raised ? 2 : 1, opacity: Number(!hidden) }, movement]}>
       {loaded ? <NappletHost onZoomTarget={onZoomTarget} closeCheck={closeCheck} active={active} inputBlocked={inputBlocked} session={session} onHostEvent={onNativeEvent} style={[styles.host, {marginHorizontal: gutter}]} />
         : <View style={styles.unloaded}><Text style={styles.reopen}>Open to load</Text></View>}
       <Text testID={`runtime-status-${session.id}`} importantForAccessibility={active ? 'auto' : 'no-hide-descendants'} accessibilityElementsHidden={!active} accessibilityLiveRegion={active ? 'polite' : 'none'} style={[styles.runtimeStatus, loaded && status === 'Runtime connected' && styles.connected]}>{loaded ? status : 'Not loaded'}</Text>
@@ -64,6 +66,7 @@ const LiveSession = memo(function LiveSession({ gutter, session, closeCheck, ind
 });
 
 interface StageProps {
+  home?: ReactNode;
   fullscreen: boolean;
   onZoomTarget: ZoomResetRegistration;
   workspace: Workspace;
@@ -87,7 +90,7 @@ interface StageProps {
   onHandleEnd: (side: HandleSide, result: 'overview' | 'switch' | 'cancel') => void;
 }
 
-export const WorkspaceStage = forwardRef<OverviewHandle, StageProps>(function WorkspaceStage({ fullscreen, onZoomTarget, workspace, closeCheck, progress, position, scrollY, swipeY, swipeId, busy, blocked, hostActivityBlocked = blocked, interactive, pending, onHostEvent, onFocus, onClose, onOpen, onDragEnd, onHandleStart, onHandleEnd }, ref) {
+export const WorkspaceStage = forwardRef<OverviewHandle, StageProps>(function WorkspaceStage({ home, fullscreen, onZoomTarget, workspace, closeCheck, progress, position, scrollY, swipeY, swipeId, busy, blocked, hostActivityBlocked = blocked, interactive, pending, onHostEvent, onFocus, onClose, onOpen, onDragEnd, onHandleStart, onHandleEnd }, ref) {
   const { styles } = useShellStyles(createStyles);
   const [size, setSize] = useState<Size>({ width: 0, height: 0 });
   const [measured, setMeasured] = useState<Record<string, CardMeasurement>>({});
@@ -101,10 +104,10 @@ export const WorkspaceStage = forwardRef<OverviewHandle, StageProps>(function Wo
     setSize(previous => previous.width === width && previous.height === height ? previous : { width, height });
   }}>
     {size.width > 0 && size.height > 0 && <>
-      {workspace.sessions.map((session, index) => <LiveSession key={session.id} gutter={fullscreen ? 0 : HANDLE_GUTTER} onZoomTarget={onZoomTarget} session={session} closeCheck={closeCheck?.sessionId === session.id ? JSON.stringify({id: closeCheck.id, generation: closeCheck.generation}) : ''} index={index} size={size} rect={resolveCardRect(geometry.cards[index], measured[session.id])}
+      {workspace.sessions.map((session, index) => <LiveSession hidden={homeVisible(workspace)} key={session.id} gutter={fullscreen ? 0 : HANDLE_GUTTER} onZoomTarget={onZoomTarget} session={session} closeCheck={closeCheck?.sessionId === session.id ? JSON.stringify({id: closeCheck.id, generation: closeCheck.generation}) : ''} index={index} size={size} rect={resolveCardRect(geometry.cards[index], measured[session.id])}
         progress={progress} position={position} scrollY={scrollY} swipeY={swipeY} swipeId={swipeId} {...workspaceSessionActivity({focused: workspace.focusedId === session.id, overview: workspace.overview, busy, interactive, blocked, checkingClose: closeCheck !== null, hostActivityBlocked})}
         raised={workspace.focusedId === session.id} onHostEvent={onHostEvent} />)}
-      <Overview ref={ref} sessions={workspace.sessions} geometry={geometry} size={size} visible={workspace.overview} busy={disabled} focusedId={workspace.focusedId}
+      <Overview hidden={homeVisible(workspace)} ref={ref} sessions={workspace.sessions} geometry={geometry} size={size} visible={workspace.overview && !homeVisible(workspace)} busy={disabled} focusedId={workspace.focusedId}
         progress={progress} scrollY={scrollY} swipeId={swipeId} swipeY={swipeY} pending={pending} onFocus={onFocus} onClose={onClose} onOpen={onOpen}
         onDragEnd={onDragEnd}
         onMeasure={(id, measurement) => setMeasured(previous => {
@@ -113,6 +116,7 @@ export const WorkspaceStage = forwardRef<OverviewHandle, StageProps>(function Wo
             && prior.actual.width === measurement.actual.width && prior.actual.height === measurement.actual.height
             ? previous : { ...previous, [id]: measurement };
         })} />
+      {homeVisible(workspace) && <View style={styles.home} pointerEvents={disabled ? 'none' : 'auto'}>{home}</View>}
       <Handles width={size.width} position={position} index={Math.max(0, workspace.sessions.findIndex(session => session.id === workspace.focusedId))} count={workspace.sessions.length} top={clamp(size.height * 0.62, 40, Math.max(40, size.height - 104))} disabled={fullscreen || workspace.overview || disabled}
         canPrevious={adjacentNapplet(workspace, -1) !== null} canNext={adjacentNapplet(workspace, 1) !== null}
         onStart={onHandleStart} onEnd={onHandleEnd} />
@@ -120,6 +124,7 @@ export const WorkspaceStage = forwardRef<OverviewHandle, StageProps>(function Wo
   </View>;
 });
 const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.create({
+  home: {...StyleSheet.absoluteFill, zIndex: 20},
   stage: { flex: 1, overflow: 'hidden' },
   stageMargin: { marginHorizontal: 6, marginBottom: 2 },
   live: { position: 'absolute', left: 0, top: 0, overflow: 'hidden', backgroundColor: colors.background },

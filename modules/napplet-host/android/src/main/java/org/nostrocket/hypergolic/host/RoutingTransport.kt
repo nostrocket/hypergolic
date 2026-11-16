@@ -71,7 +71,7 @@ internal object RoutingTransport {
     val focusRevision = if (discovery) reviewRevision(generation, revision) else -1
     val valid = row != null && wrapper != null && wrapper.keys().asSequence().toSet() == setOf("type", "id", "message") &&
       wrapper.opt("type") == "routing.call" && id != null && id.matches(Regex("[A-Za-z0-9_-]{1,128}")) && domain != null && (discovery || domain != "published-open") && mayDeliver(generation, revision, domain) &&
-      (!discovery || (focusRevision >= 0 && mayReview(generation, revision) && message!!.keys().asSequence().toSet() == setOf("type", "id", "address", "expectedEventId"))) &&
+      (!discovery || (focusRevision >= 0 && mayReview(generation, revision) && (message!!.keys().asSequence().toSet() == setOf("type", "id", "address", "expectedEventId") || (message.opt("action") == "pin" && message.keys().asSequence().toSet() == setOf("type", "id", "address", "expectedEventId", "action"))))) &&
       ((type != "routing.__register" && type != "notify.__register") || message!!.keys().asSequence().toSet() == setOf("type"))
     if (!valid) { CapabilityTransport.leases.consumeSequence(generation, sequence); reply(null); return null }
     row!!.push = push

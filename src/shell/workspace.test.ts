@@ -40,7 +40,7 @@ test('accepted published revision replaces its card and native session without c
 test('snapshot preserves opening order and last active but never ephemeral properties', () => {
   const state = showOverview(focusNapplet(three(), 'b'));
   const snapshot = snapshotWorkspace(state);
-  assert.deepEqual(Object.keys(snapshot), ['schema', 'sessions', 'lastActiveId']);
+  assert.deepEqual(Object.keys(snapshot), ['schema', 'sessions', 'lastActiveId', 'pins', 'home']);
   const serialized = JSON.stringify(snapshot);
   const restored = restoreWorkspace(JSON.parse(serialized));
   assert.equal(restored.focusedId, 'b'); assert.equal(restored.overview, false);

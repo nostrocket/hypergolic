@@ -33,7 +33,7 @@ test('real workspace controller saves and cold-loads exact account-bound legacy 
   assert.deepEqual((await reopened.bindWorkspace(owner).port.load())?.snapshot, saved(ordinary));
   const previousFormat = {id: ordinary.id, title: ordinary.title, publisher: ordinary.publisher, appId: ordinary.appId,
     version: ordinary.version, source: ordinary.source, eventId: ordinary.eventId};
-  assert.equal(encodeSnapshot(saved(ordinary)), JSON.stringify({schema: 1, sessions: [previousFormat], lastActiveId: ordinary.id}));
+  assert.equal(encodeSnapshot(saved(ordinary)), JSON.stringify({...saved(ordinary), sessions: [previousFormat]}));
 });
 
 test('strict durable codec rejects unbound, malformed, bundled and changed-pin legacy consent', () => {

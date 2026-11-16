@@ -91,3 +91,32 @@ restoration. [Workspace restart](../tests/native/workspace-restart.md) and
 co-located native drivers describe installed-app scenarios. Native fixtures
 establish only their own storage/UI scope, not physical key protection. Full
 ordinary-app and Phase 2/3 acceptance remain open in [testing](testing.md).
+
+## Home shortcuts
+
+Home is separate from the overview of open sessions. The header logo returns to
+Home without closing live views; All napplets opens the existing switcher. There
+is no bottom navigation bar. The shell removes focus/input authority while Home
+is visible and keeps already-loaded views mounted.
+
+Workspace snapshot version 2 stores an ordered `pins` array and a `home` flag in
+the existing per-account row. Version 1 snapshots remain readable and receive
+Discover as their initial shortcut. An explicitly empty version 2 pins array is
+preserved, so unpinning Discover survives restart. The SQLite schema is unchanged.
+
+Pin from an open napplet's menu or Discover. Each publication has one shortcut,
+keyed by source, publisher and app identifier (snapshot identifiers remain exact).
+Shortcuts retain the selected signed revision. Opening focuses an existing session
+for that publication or reopens the saved descriptor through ordinary artifact
+verification and access review. An accepted update refreshes an existing shortcut
+in place. Unpinning changes neither open sessions, grants nor application data.
+The first version supports up to 64 shortcuts in pinning order.
+
+Signed content-addressed artwork uses the existing bounded native image loader;
+missing or unavailable artwork uses a title monogram. Discover uses bundled brand
+artwork. No arbitrary remote image URL is passed to the native image component.
+
+### Follow-up
+
+- Long-press actions to rearrange and unpin Home shortcuts. The first version uses
+  Edit on Home and Unpin from Home in the napplet menu.

@@ -1,3 +1,6 @@
+import { Home } from './Home';
+import { isPinned } from './pins';
+import { useHomeNavigation } from './useHomeNavigation';
 import { developerToolsEnabled } from '../config/build-info';
 import { initialWorkspaceForBuild } from './initial-workspace';
 import { isHostActivityBlocked } from './workspace-activity';
@@ -164,8 +167,10 @@ export function Shell({ blocked = false, hostActivityBlocked = blocked, initialW
     change(showOverview(current.current));
     runAnimation(progress, 1, () => overview.current?.focusCard(current.current.focusedId));
   }, [blocked, change, closeChecks, progress, runAnimation]);
+  const {openHome, openPin, togglePin, unpin} = useHomeNavigation({blocked: navigationBlocked, busyRef, closeChecks, current,
+    clearMenu, change, progress, focusSession, discover: () => openDiscovery()});
   useWorkspaceBack({ workspace, blocked, fullscreen, menuVisible, busy: busyRef, keyboard: keyboardVisible,
-    closeChecks, dismissMenu, openOverview, focusSession });
+    closeChecks, dismissMenu, openOverview, openHome, focusSession });
   const onHandleEnd = (side: HandleSide, result: 'overview' | 'switch' | 'cancel') => handleWorkspaceGestureEnd({
     side, result, blocked, fullscreen, busyRef, focusedIndex, current, position, openOverview, runAnimation, change,
     setHandleDragging,
@@ -204,6 +209,7 @@ export function Shell({ blocked = false, hostActivityBlocked = blocked, initialW
     blocked: navigationBlocked, dragging: handleDragging, settings, closing: closingId !== null, discovery: discovery.review !== null,
   });
   const obscured = settings || menuVisible || closingId !== null || discovery.review !== null;
+  const stageBlocked = navigationBlocked || obscured;
   const {resetZoom, registerZoomTarget, zoomResetAvailable} = useZoomReset({workspace, identity: identity?.npub, lifetime: runtime,
     active: AppState.currentState === 'active', blocked: navigationBlocked, dragging: handleDragging, settings,
     closing: closingId !== null, reviewing: discovery.review !== null}, clearMenu);
@@ -213,8 +219,9 @@ export function Shell({ blocked = false, hostActivityBlocked = blocked, initialW
       <ReviewFocus sessionId={workspace.focusedId} overview={workspace.overview} busy={busy} dragging={handleDragging} blocked={blocked} settings={obscured} closing={closingId !== null} />
       <View accessibilityElementsHidden={obscured} importantForAccessibility={obscured ? 'no-hide-descendants' : 'auto'} style={styles.content}>
         <WorkspaceHeader fullscreen={fullscreen} overview={workspace.overview} focused={focused} identity={identity} disabled={navigationBlocked || handleDragging}
-          menuAnchor={menuAnchor} onSettings={openSettings} onOverview={openOverview} onMenu={openMenu} />
-        <WorkspaceStage fullscreen={fullscreen} onZoomTarget={registerZoomTarget} closeCheck={closeCheck} workspace={workspace} progress={progress} position={position} scrollY={scrollY} swipeY={swipeY} swipeId={swipeId} busy={busy} blocked={navigationBlocked || obscured} hostActivityBlocked={isHostActivityBlocked(hostActivityBlocked, obscured)} interactive={!handleDragging}
+          menuAnchor={menuAnchor} onSettings={openSettings} onHome={openHome} onOverview={openOverview} onMenu={openMenu} />
+        <WorkspaceStage home={<Home workspace={workspace} disabled={stageBlocked} onOpen={openPin}
+          onUnpin={unpin} onOverview={openOverview} onDiscover={openDiscovery} />} fullscreen={fullscreen} onZoomTarget={registerZoomTarget} closeCheck={closeCheck} workspace={workspace} progress={progress} position={position} scrollY={scrollY} swipeY={swipeY} swipeId={swipeId} busy={busy} blocked={stageBlocked} hostActivityBlocked={isHostActivityBlocked(hostActivityBlocked, obscured)} interactive={!handleDragging}
           pending={pendingApprovals ?? noPending} ref={overview} onHostEvent={receiveHostEvent} onFocus={focusSession} onClose={requestClose} onOpen={openDiscovery}
           onDragEnd={(id, close) => { runAnimation(swipeY, 0, () => { swipeId.set(null); if (close) requestClose(id); }, 140); }}
           onHandleStart={() => { setHandleDragging(true); Keyboard.dismiss(); cancelAnimation(position); }}
@@ -222,7 +229,7 @@ export function Shell({ blocked = false, hostActivityBlocked = blocked, initialW
       </View>
       <WorkspaceFullscreenContext value={fullscreen}>{footer}</WorkspaceFullscreenContext>
       <DiscoveryAccessReview review={discovery.review} decide={discovery.decide} />
-      {menuSession && <WorkspaceMenu title={menuSession.title} disabled={navigationBlocked} onNappletSettings={openNappletSettings}
+      {menuSession && <WorkspaceMenu pinned={isPinned(workspace, menuSession)} onPin={() => togglePin(menuSession)} title={menuSession.title} disabled={navigationBlocked} onNappletSettings={openNappletSettings}
         onResetZoom={() => resetZoom(menuSession)} zoomResetDisabled={!zoomResetAvailable}
         onDismiss={dismissMenu} onOverview={() => { clearMenu(); openOverview(); }}
         onSettings={() => { clearMenu(); openSettings(); }} onClose={() => { clearMenu(); requestClose(menuSession.id); }} />}

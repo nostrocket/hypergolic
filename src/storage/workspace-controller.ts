@@ -21,7 +21,7 @@ export interface WorkspaceController {
 function immutable(workspace: Workspace): Workspace {
   if (typeof workspace.overview !== 'boolean') throw new Error('Invalid overview state');
   const saved = snapshot(snapshotWorkspace(workspace));
-  return Object.freeze({ ...restoreWorkspace(saved), sessions: saved.sessions, overview: workspace.overview });
+  return Object.freeze({ ...restoreWorkspace(saved), sessions: saved.sessions, pins: saved.pins, overview: workspace.overview });
 }
 
 export async function openWorkspaceController(
