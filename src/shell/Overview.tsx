@@ -10,7 +10,6 @@ import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 
 export interface OverviewHandle { focusCard: (id: string | null) => void; revealCard: (id: string | null) => void }
 interface Props {
-  hidden?: boolean;
   sessions: readonly NappletDescriptor[];
   geometry: OverviewGeometry;
   size: Size;
@@ -36,12 +35,13 @@ function focusView(view: ViewInstance | TextInstance | null | undefined) {
 const sessionKey = (session: NappletDescriptor): string => session.id;
 
 /** Only transparent controls virtualize; the live native views stay in WorkspaceStage. */
-export const Overview = forwardRef<OverviewHandle, Props>(function Overview({ hidden = false, sessions, geometry, size, visible, busy, focusedId, progress, scrollY, swipeId, swipeY, pending, onFocus, onClose, onOpen, onDragEnd, onMeasure }, ref) {
+export const Overview = forwardRef<OverviewHandle, Props>(function Overview({ sessions, geometry, size, visible, busy, focusedId, progress, scrollY, swipeId, swipeY, pending, onFocus, onClose, onOpen, onDragEnd, onMeasure }, ref) {
   const { styles } = useShellStyles(createStyles);
   const scroll = useRef<FlatList<NappletDescriptor>>(null);
   const heading = useRef<TextInstance>(null);
   const cardRefs = useRef(new Map<string, ViewInstance>());
-  const scrollGesture = useMemo(() => Gesture.Native(), []);
+  const inactive = busy || !visible;
+  const scrollGesture = useMemo(() => Gesture.Native().enabled(!inactive), [inactive]);
   const setCardRef = useCallback((id: string, view: ViewInstance | null) => {
     if (view) cardRefs.current.set(id, view); else cardRefs.current.delete(id);
   }, []);
@@ -65,10 +65,10 @@ export const Overview = forwardRef<OverviewHandle, Props>(function Overview({ hi
   const stride = cardHeight + geometry.captionHeight + 20;
   const renderCard = useCallback(({ item, index }: { item: NappletDescriptor; index: number }) => (
     <OverviewCard session={item} rect={geometry.cards[index]} captionHeight={geometry.captionHeight}
-      busy={busy} selected={focusedId === item.id} pending={pending.has(item.id)} swipeId={swipeId} swipeY={swipeY} scrollGesture={scrollGesture}
+      busy={inactive} selected={focusedId === item.id} pending={pending.has(item.id)} swipeId={swipeId} swipeY={swipeY} scrollGesture={scrollGesture}
       setRef={setCardRef} onFocus={onFocus} onClose={onClose} onDragEnd={onDragEnd} onMeasure={onMeasure} />
-  ), [busy, focusedId, geometry, onClose, onDragEnd, onFocus, onMeasure, pending, scrollGesture, setCardRef, swipeId, swipeY]);
-  return <Animated.View style={[StyleSheet.absoluteFill, styles.layer, opacity, hidden && styles.hidden]} pointerEvents={visible && !busy ? 'auto' : 'none'} accessibilityElementsHidden={!visible} importantForAccessibility={visible ? 'auto' : 'no-hide-descendants'}>
+  ), [inactive, focusedId, geometry, onClose, onDragEnd, onFocus, onMeasure, pending, scrollGesture, setCardRef, swipeId, swipeY]);
+  return <Animated.View style={[StyleSheet.absoluteFill, styles.layer, opacity]} pointerEvents={visible && !busy ? 'auto' : 'none'} accessibilityElementsHidden={!visible} importantForAccessibility={visible ? 'auto' : 'no-hide-descendants'}>
     <GestureDetector gesture={scrollGesture}>
       <Animated.FlatList ref={scroll} data={sessions} numColumns={2} keyExtractor={sessionKey} testID="napplet-overview"
         initialNumToRender={6} windowSize={5} removeClippedSubviews={false} scrollEnabled={visible && !busy}
@@ -89,7 +89,6 @@ export const Overview = forwardRef<OverviewHandle, Props>(function Overview({ hi
   </Animated.View>;
 });
 const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.create({
-  hidden: {display: 'none'},
   layer: { zIndex: 10 }, row: { gap: 16 },
   headingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   heading: { fontFamily: fonts.strong, fontSize: 19, color: colors.text, flexShrink: 1 },
