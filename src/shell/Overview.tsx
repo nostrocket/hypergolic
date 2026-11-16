@@ -10,6 +10,7 @@ import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 
 export interface OverviewHandle { focusCard: (id: string | null) => void; revealCard: (id: string | null) => void }
 interface Props {
+  hidden?: boolean;
   sessions: readonly NappletDescriptor[];
   geometry: OverviewGeometry;
   size: Size;
@@ -35,7 +36,7 @@ function focusView(view: ViewInstance | TextInstance | null | undefined) {
 const sessionKey = (session: NappletDescriptor): string => session.id;
 
 /** Only transparent controls virtualize; the live native views stay in WorkspaceStage. */
-export const Overview = forwardRef<OverviewHandle, Props>(function Overview({ sessions, geometry, size, visible, busy, focusedId, progress, scrollY, swipeId, swipeY, pending, onFocus, onClose, onOpen, onDragEnd, onMeasure }, ref) {
+export const Overview = forwardRef<OverviewHandle, Props>(function Overview({ hidden = false, sessions, geometry, size, visible, busy, focusedId, progress, scrollY, swipeId, swipeY, pending, onFocus, onClose, onOpen, onDragEnd, onMeasure }, ref) {
   const { styles } = useShellStyles(createStyles);
   const scroll = useRef<FlatList<NappletDescriptor>>(null);
   const heading = useRef<TextInstance>(null);
@@ -67,7 +68,7 @@ export const Overview = forwardRef<OverviewHandle, Props>(function Overview({ se
       busy={busy} selected={focusedId === item.id} pending={pending.has(item.id)} swipeId={swipeId} swipeY={swipeY} scrollGesture={scrollGesture}
       setRef={setCardRef} onFocus={onFocus} onClose={onClose} onDragEnd={onDragEnd} onMeasure={onMeasure} />
   ), [busy, focusedId, geometry, onClose, onDragEnd, onFocus, onMeasure, pending, scrollGesture, setCardRef, swipeId, swipeY]);
-  return <Animated.View style={[StyleSheet.absoluteFill, styles.layer, opacity]} pointerEvents={visible && !busy ? 'auto' : 'none'} accessibilityElementsHidden={!visible} importantForAccessibility={visible ? 'auto' : 'no-hide-descendants'}>
+  return <Animated.View style={[StyleSheet.absoluteFill, styles.layer, opacity, hidden && styles.hidden]} pointerEvents={visible && !busy ? 'auto' : 'none'} accessibilityElementsHidden={!visible} importantForAccessibility={visible ? 'auto' : 'no-hide-descendants'}>
     <GestureDetector gesture={scrollGesture}>
       <Animated.FlatList ref={scroll} data={sessions} numColumns={2} keyExtractor={sessionKey} testID="napplet-overview"
         initialNumToRender={6} windowSize={5} removeClippedSubviews={false} scrollEnabled={visible && !busy}
@@ -75,12 +76,12 @@ export const Overview = forwardRef<OverviewHandle, Props>(function Overview({ se
         columnWrapperStyle={styles.row} contentContainerStyle={{ minHeight: geometry.contentHeight, paddingHorizontal: 12, paddingBottom: 24 }}
         getItemLayout={(_data, row) => ({ index: row, length: stride, offset: headerHeight + row * stride })}
         ListHeaderComponent={sessions.length > 0 ? <View style={[styles.headingRow, { height: headerHeight }]}>
-          <Text ref={heading} accessibilityRole="header" style={styles.heading}>Your napplets</Text>
+          <Text ref={heading} accessibilityRole="header" style={styles.heading}>All napplets</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Discover napplets" testID="overview-open" onPress={onOpen} style={styles.open}><Text style={styles.openText}>Discover</Text></Pressable>
         </View> : undefined}
         ListEmptyComponent={<View style={[styles.empty, { paddingTop: Math.min(size.height * 0.42, 260) }]}><Text style={styles.emptyLabel}>Your space</Text>
-          <Text accessibilityRole="header" style={styles.emptyTitle}>A place for{'\n'}your napplets.</Text>
-          <Text style={styles.emptyDetail}>Find a Napplet to try. Your identity stays with Hypergolic.</Text>
+          <Text accessibilityRole="header" style={styles.emptyTitle}>No open napplets.</Text>
+          <Text style={styles.emptyDetail}>Your pinned napplets are on Home. Tap the Hypergolic logo to return.</Text>
           <Pressable accessibilityRole="button" testID="empty-open-napplet" onPress={onOpen} style={styles.emptyButton}><Text style={styles.emptyButtonText}>Discover napplets</Text></Pressable>
         </View>}
         renderItem={renderCard} />
@@ -88,6 +89,7 @@ export const Overview = forwardRef<OverviewHandle, Props>(function Overview({ se
   </Animated.View>;
 });
 const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.create({
+  hidden: {display: 'none'},
   layer: { zIndex: 10 }, row: { gap: 16 },
   headingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   heading: { fontFamily: fonts.strong, fontSize: 19, color: colors.text, flexShrink: 1 },

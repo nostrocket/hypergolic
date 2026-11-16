@@ -6,13 +6,13 @@ import { ShellPressable } from './ShellPressable';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 
 interface Props {
-  title: string; disabled: boolean;
+  title: string; disabled: boolean; pinned?: boolean; onPin?(): void;
   onResetZoom?(): void; zoomResetDisabled?: boolean;
   onDismiss(): void; onOverview(): void; onSettings(): void; onNappletSettings?(): void; onClose(): void;
 }
 
 /** An in-shell overlay keeps menu dismissal and close/review dialogs in one navigation flow. */
-export function WorkspaceMenu({ title, disabled, onDismiss, onOverview, onSettings, onNappletSettings, onResetZoom, zoomResetDisabled, onClose }: Props) {
+export function WorkspaceMenu({ title, disabled, pinned, onPin, onDismiss, onOverview, onSettings, onNappletSettings, onResetZoom, zoomResetDisabled, onClose }: Props) {
   const { styles } = useShellStyles(createStyles);
   const insets = useSafeAreaInsets();
   const done = useRef<ViewInstance>(null);
@@ -32,6 +32,7 @@ export function WorkspaceMenu({ title, disabled, onDismiss, onOverview, onSettin
           <ShellPressable ref={done} testID="shell-menu-done" accessibilityRole="button" onPress={onDismiss} style={styles.done}><Text style={styles.doneText}>Done</Text></ShellPressable>
         </View>
         <ScrollView contentContainerStyle={styles.actions}>
+          {onPin && <ShellPressable testID="shell-pin" accessibilityRole="button" disabled={disabled} onPress={onPin} style={styles.action}><Text style={styles.actionText}>{pinned ? 'Unpin from Home' : 'Pin to Home'}</Text></ShellPressable>}
           <ShellPressable testID="shell-menu-overview" accessibilityRole="button" disabled={disabled} onPress={onOverview} style={styles.action}><Text style={styles.actionText}>All napplets</Text><Text accessible={false} style={styles.symbol}>›</Text></ShellPressable>
           {onNappletSettings && <ShellPressable testID="shell-menu-napplet-settings" accessibilityRole="button" disabled={disabled} onPress={onNappletSettings} style={styles.action}><Text style={styles.actionText}>Napplet settings</Text><Text accessible={false} style={styles.symbol}>›</Text></ShellPressable>}
           {Platform.OS === 'ios' && onResetZoom && <ShellPressable testID="shell-reset-zoom" accessibilityRole="button" disabled={disabled || zoomResetDisabled}

@@ -1,3 +1,5 @@
+import { pinArtwork } from '../shell/pin-artwork.ts';
+import { pinKey } from '../shell/pins.ts';
 import { supportsLegacyReadOnly } from '../napplets/legacy-read-only.ts';
 import {matchesPublishedAppKey} from '../napplets/published-identity.ts';
 import { fail, LIMITS } from './ports.ts';
@@ -50,9 +52,10 @@ function descriptor(value: unknown): NappletDescriptor {
   const sourceField = Object.getOwnPropertyDescriptor(value, 'source');
   const source = sourceField && Object.hasOwn(sourceField, 'value') ? sourceField.value : undefined;
   const legacy = source === 'published' && (Object.hasOwn(value, 'legacyReadOnly') || Object.hasOwn(value, 'legacyReadOnlyUser'));
+  const artwork = Object.hasOwn(value, 'icon') ? ['icon'] : [];
   const item = object(value, source === 'published'
-    ? ['id', 'title', 'publisher', 'appId', 'version', 'source', 'eventId', ...(legacy ? ['legacyReadOnly', 'legacyReadOnlyUser'] : [])]
-    : ['id', 'title', 'publisher', 'appId', 'version', 'source']);
+    ? [...artwork, 'id', 'title', 'publisher', 'appId', 'version', 'source', 'eventId', ...(legacy ? ['legacyReadOnly', 'legacyReadOnlyUser'] : [])]
+    : [...artwork, 'id', 'title', 'publisher', 'appId', 'version', 'source']);
   // Preserve the current workspace model, including the explicitly unsigned bundled fixture.
   const id = identifier(item.id);
   function field(value: unknown, characters: number): string {
@@ -67,13 +70,17 @@ function descriptor(value: unknown): NappletDescriptor {
       !matchesPublishedAppKey(appId,item.eventId))) return fail('INVALID_INPUT');
   if (legacy && (item.legacyReadOnly !== true || !supportsLegacyReadOnly({publisher, appId,
       version: selectedVersion, eventId: item.eventId as string}))) return fail('INVALID_INPUT');
-  return Object.freeze({ id, title, publisher, appId, version: selectedVersion, source: item.source,
+  let icon;
+  try { icon = item.icon === undefined ? undefined : pinArtwork(item.icon); } catch { return fail('INVALID_INPUT'); }
+  return Object.freeze({ ...(icon ? {icon} : {}), id, title, publisher, appId, version: selectedVersion, source: item.source,
     ...(item.source === 'published' ? { eventId: item.eventId as string } : {}),
     ...(legacy ? {legacyReadOnly: true as const, legacyReadOnlyUser: publicKey(item.legacyReadOnlyUser)} : {}) });
 }
 export function snapshot(value: unknown): WorkspaceSnapshot {
-  const item = object(value, ['schema', 'sessions', 'lastActiveId']);
-  if (item.schema !== 1 || !Array.isArray(item.sessions) || item.sessions.length > 64 || Object.getPrototypeOf(item.sessions) !== Array.prototype || Reflect.ownKeys(item.sessions).length !== item.sessions.length + 1) return fail('INVALID_INPUT');
+  const schemaField = value && typeof value === 'object' ? Object.getOwnPropertyDescriptor(value, 'schema') : undefined;
+  const modern = schemaField?.value === 2;
+  const item = object(value, ['schema', 'sessions', 'lastActiveId', ...(modern ? ['pins', 'home'] : [])]);
+  if ((item.schema !== 1 && item.schema !== 2) || !Array.isArray(item.sessions) || item.sessions.length > 64 || Object.getPrototypeOf(item.sessions) !== Array.prototype || Reflect.ownKeys(item.sessions).length !== item.sessions.length + 1) return fail('INVALID_INPUT');
   const sessions: NappletDescriptor[] = [];
   const ids = new Set<string>();
   for (let i = 0; i < item.sessions.length; i++) {
@@ -84,6 +91,12 @@ export function snapshot(value: unknown): WorkspaceSnapshot {
     ids.add(next.id); sessions.push(next);
   }
   if (item.lastActiveId !== null && (typeof item.lastActiveId !== 'string' || !ids.has(item.lastActiveId))) return fail('INVALID_INPUT');
+  if (modern) {
+    if (typeof item.home !== 'boolean') return fail('INVALID_INPUT');
+    const pins = snapshot({schema: 1, sessions: item.pins, lastActiveId: null}).sessions;
+    if (new Set(pins.map(pinKey)).size !== pins.length) return fail('INVALID_INPUT');
+    return Object.freeze({schema: 2, sessions: Object.freeze(sessions), lastActiveId: item.lastActiveId, pins, home: item.home});
+  }
   return Object.freeze({ schema: 1, sessions: Object.freeze(sessions), lastActiveId: item.lastActiveId });
 }
 export function encodeSnapshot(value: unknown): string {

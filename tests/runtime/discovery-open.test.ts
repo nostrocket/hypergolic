@@ -82,7 +82,7 @@ function setup(initial = openNapplet(emptyWorkspace(), source), reviews = new Ro
     mayDeliver: (generation, candidate, domain) => available && generation === registration.generation && candidate === revision && domain === 'published-open',
     mayReview: generation => generation === targetGeneration && mounted && focused && available,
     reviewRevision: generation => generation === registration.generation ? focusRevision : null,
-    send: () => false, newChannelId: () => 'channel', subscribe: lifecycle.subscribe,
+    send: () => false, newChannelId: () => '33333333-3333-4333-8333-333333333333', subscribe: lifecycle.subscribe,
   };
   const held = new Map<string, string>(), responses = new Map<string, DiscoveryOpenOutcome | null>();
   const broker = createDiscoveryOpenBroker({
@@ -114,7 +114,7 @@ function setup(initial = openNapplet(emptyWorkspace(), source), reviews = new Ro
       discardPublished: id => { discarded.push(id); },
     }),
   });
-  const run = (token: string, options: { message?: typeof request; origin?: typeof registration; source?: typeof source } = {}) => {
+  const run = (token: string, options: { message?: typeof request & {action?: 'pin'}; origin?: typeof registration; source?: typeof source } = {}) => {
     held.set(token, JSON.stringify({
       registration: options.origin ?? registration,
       request: JSON.stringify({ type: 'routing.call', id: token, message: options.message ?? request, revision: 2, focusRevision: 7 }),
@@ -356,4 +356,35 @@ test('a changed native focus revision takes precedence over a late lookup diagno
   await pending;
   assert.equal(env.responses.get('stale-diagnostic'), 'cancelled');
   assert.equal(env.reviews.getSnapshot(), null);
+});
+
+test('Discover pin saves only a shortcut after trusted review and keeps Discover focused', async () => {
+  const env = setup();
+  const pending = env.run('pin', {message: {...request, action: 'pin'}});
+  const review = await env.review();
+  assert.equal(review.request.kind, 'published-open');
+  assert.equal(review.request.kind === 'published-open' && review.request.pinOnly, true);
+  env.decide(review.id, true); await pending;
+  assert.equal(env.responses.get('pin'), 'pinned');
+  assert.equal(env.staged(), 0);
+  assert.equal(env.state().focusedId, source.id);
+  assert.deepEqual(env.state().sessions, [source]);
+  assert.equal(env.state().pins?.[1]?.eventId, signed.id);
+});
+test('declined or revoked Discover pin never writes a shortcut', async () => {
+  for (const revoke of [false, true]) {
+    const env = setup();
+    const pending = env.run('pin', {message: {...request, action: 'pin'}});
+    const review = await env.review();
+    if (revoke) env.background();
+    env.decide(review.id, revoke); await pending;
+    assert.equal(env.state().pins?.length, 1);
+    assert.equal(env.staged(), 0);
+  }
+});
+test('pin request rejects unknown actions and extra authority fields', () => {
+  assert.equal(parseDiscoveryOpen({...request, action: 'pin'}).action, 'pin');
+  for (const extra of [{action: 'unpin'}, {action: 'pin', approved: true}, {action: true}]) {
+    assert.throws(() => parseDiscoveryOpen({...request, ...extra}));
+  }
 });

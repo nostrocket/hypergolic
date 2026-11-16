@@ -8,7 +8,7 @@ import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 export interface ShellIdentity { npub: string; avatar?: ImageProps['source']; avatarKey?: string }
 interface Props {
   title: string; identity?: ShellIdentity; compact?: boolean; disabled?: boolean;
-  onSettings(): void; onOverview?(): void; onMenu?(): void; menuAnchor?: Ref<ViewInstance>;
+  onSettings(): void; onHome?(): void; onOverview?(): void; onMenu?(): void; menuAnchor?: Ref<ViewInstance>;
 }
 
 function Avatar({ identity }: { identity: ShellIdentity }) {
@@ -19,11 +19,11 @@ function Avatar({ identity }: { identity: ShellIdentity }) {
     : <View style={styles.avatar} accessible={false}><Text style={styles.avatarText}>{identity.npub.slice(-2).toUpperCase()}</Text></View>;
 }
 
-export function Header({ title, identity, compact = false, disabled = false, onSettings, onOverview, onMenu, menuAnchor }: Props) {
+export function Header({ title, identity, compact = false, disabled = false, onSettings, onHome, onOverview, onMenu, menuAnchor }: Props) {
   const { styles } = useShellStyles(createStyles);
   return (
     <View testID="shell-header" style={[styles.header, compact && styles.compact]}>
-      {onOverview ? <Pressable testID="shell-overview" accessibilityRole="button" accessibilityLabel="All napplets" disabled={disabled} onPress={onOverview} style={styles.iconButton}>
+      {onHome ? <Pressable testID="shell-home-button" accessibilityRole="button" accessibilityLabel="Home" disabled={disabled} onPress={onHome} style={styles.iconButton}><Image source={require('../../assets/brand/hypergolic-logo.png')} style={compact ? styles.compactLogo : styles.logo} contentFit="contain" accessible={false} /></Pressable> : onOverview ? <Pressable testID="shell-overview" accessibilityRole="button" accessibilityLabel="All napplets" disabled={disabled} onPress={onOverview} style={styles.iconButton}>
         <Image source={require('../../assets/brand/hypergolic-logo.png')} style={styles.compactLogo} contentFit="contain" accessible={false} />
       </Pressable> : <Image source={require('../../assets/brand/hypergolic-logo.png')} style={styles.logo} contentFit="contain" accessibilityLabel="Hypergolic" />}
       {onMenu ? <View style={styles.focusedTitle}>

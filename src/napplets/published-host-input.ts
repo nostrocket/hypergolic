@@ -1,3 +1,4 @@
+import { verifiedLaunchMetadata } from './verified-launch-metadata.ts';
 import {captureLegacyReadOnly, LEGACY_READ_ONLY_PROFILE} from './legacy-read-only.ts';
 import {appDataContextForArtifact} from '../app-data/app-data-source.ts';
 import type { NappletDescriptor } from '../shell/workspace.ts';
@@ -26,7 +27,8 @@ export function descriptorForPublishedArtifact(artifactInput: unknown, sessionId
   const artifact: VerifiedNappletArtifact = artifactInput;
   if (!SESSION.test(sessionId)) return fail();
   const verified = claims(artifact);
-  return Object.freeze({ id: sessionId, title: verified.title, publisher: verified.publisher, appId: verified.appId,
+  const {icon} = verifiedLaunchMetadata(artifact);
+  return Object.freeze({ ...(icon ? {icon} : {}), id: sessionId, title: verified.title, publisher: verified.publisher, appId: verified.appId,
     version: verified.version, source: 'published', eventId: verified.eventId });
 }
 

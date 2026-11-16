@@ -61,6 +61,11 @@ logging contributors. Both installed `@noble/ciphers` versions retain their
 original licenses. Dependency metadata and bundle/source-map digests are bound
 in each manifest.
 
+The pinned-napplet Home change re-exported both production JavaScript bundles
+after the development-only Hono overrides. All 58 contributor identities,
+55 original notice files and four shared-original mappings remain unchanged.
+The manifests bind the new exports and dependency-input fingerprints.
+
 The Android archive inventory was refreshed for five Expo AAR versions. The
 SQLite AAR contains newly built native bytes with the same recorded SQLite
 source ID; its vendored C/header files and notice ranges remain byte-identical.

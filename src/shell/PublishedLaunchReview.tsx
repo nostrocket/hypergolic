@@ -180,7 +180,7 @@ function TechnicalDetails({ target, source }: { target: ReviewTarget; source: La
   </View>;
 }
 
-export function PublishedLaunchReview({ target, source, changesAccess, onAccept, onCancel, ids, title = 'Open this napplet?', approveLabel, children }: {
+export function PublishedLaunchReview({ target, source, changesAccess, onAccept, onCancel, ids, title = 'Open this napplet?', approveLabel, pinOnly = false, children }: {
   target: ReviewTarget;
   source?: LaunchSource;
   changesAccess: boolean;
@@ -189,6 +189,7 @@ export function PublishedLaunchReview({ target, source, changesAccess, onAccept,
   ids: Readonly<{ review: string; approve: string; cancel: string }>;
   title?: string;
   approveLabel?: string;
+  pinOnly?: boolean;
   children?: ReactNode;
 }) {
   const { styles } = useShellStyles(createStyles);
@@ -199,11 +200,11 @@ export function PublishedLaunchReview({ target, source, changesAccess, onAccept,
   }}>
     <View style={[styles.backdrop, { paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right }]}>
       <View accessibilityViewIsModal testID={ids.review} style={styles.sheet}>
-        <TrustedBand label="Launch review" />
+        <TrustedBand label={pinOnly ? "Pin to Home" : "Launch review"} />
         <ScrollView testID="published-review-content" contentContainerStyle={styles.content} style={styles.scroll}>
           <Text ref={heading} accessibilityRole="header" style={styles.heading}>{title}</Text>
           <LaunchIdentity key={target.eventId} target={target} source={source} />
-          <RequestedAccess target={target} changesAccess={changesAccess} />
+          {pinOnly ? <Text style={styles.body}>Save a shortcut for this identity. Pinning does not open the napplet or grant access. You will review access when you open it.</Text> : <RequestedAccess target={target} changesAccess={changesAccess} />}
           {children}
           <TechnicalDetails key={target.eventId} target={target} source={source} />
         </ScrollView>

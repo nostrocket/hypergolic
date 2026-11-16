@@ -5,16 +5,16 @@ import type { NappletDescriptor } from './workspace';
 import { useShellStyles } from './theme';
 
 const noStyles = () => ({});
-export function WorkspaceHeader({ fullscreen, overview, focused, identity, disabled, menuAnchor, onSettings, onOverview, onMenu }: {
+export function WorkspaceHeader({ fullscreen, overview, focused, identity, disabled, menuAnchor, onSettings, onHome, onOverview, onMenu }: {
   fullscreen: boolean; overview: boolean; focused: NappletDescriptor | undefined; identity?: ShellIdentity; disabled: boolean;
-  menuAnchor: Ref<ViewInstance>; onSettings(): void; onOverview(): void; onMenu(): void;
+  menuAnchor: Ref<ViewInstance>; onSettings(): void; onHome(): void; onOverview(): void; onMenu(): void;
 }) {
   const { isDark } = useShellStyles(noStyles);
   const compact = !overview && focused !== undefined;
   return <>
     <StatusBar hidden={Platform.OS === 'ios' ? fullscreen : undefined} barStyle={isDark ? 'light-content' : 'dark-content'} />
     {!fullscreen && <Header title={overview ? 'Hypergolic' : focused?.title ?? 'Hypergolic'} identity={identity} disabled={disabled}
-      compact={compact} menuAnchor={menuAnchor} onSettings={onSettings}
+      compact={compact} menuAnchor={menuAnchor} onSettings={onSettings} onHome={onHome}
       onOverview={compact ? onOverview : undefined} onMenu={compact ? onMenu : undefined} />}
   </>;
 }
