@@ -43,7 +43,7 @@ export async function buildPreflight() {
  try {
  await build({
  stdin:{contents:`export { fixture } from 'test:fixture'; export {startIdentity,getIdentityState,subscribeIdentity} from './src/security/identity-state'; export {openTrustedIdentityOwner} from './src/security/trusted-identity-owner'; export {IdentityEntry} from './src/shell/IdentityEntry'; export {IdentityDeviceRequired} from './src/security/identity-device-required';`,resolveDir:fileURLToPath(new URL('../../',import.meta.url))},
- loader:{'.png':'dataurl'},jsx:'automatic',bundle:true,format:'esm',platform:'node',target:'node24',outfile,
+ loader:{'.png':'dataurl','.jpg':'dataurl'},jsx:'automatic',bundle:true,format:'esm',platform:'node',target:'node24',outfile,
  banner:{js:"import {createRequire as nodeRequire} from 'node:module'; const require=nodeRequire(import.meta.url);"},
  plugins:[{name:'explicit-test-only-native-ports',setup(builder){
   builder.onResolve({filter:/.*/},args=>{
