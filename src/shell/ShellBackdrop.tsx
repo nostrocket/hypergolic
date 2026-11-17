@@ -2,16 +2,23 @@ import { Image } from 'expo-image';
 import { StyleSheet, View } from 'react-native';
 import { useShellStyles, type ShellPalette } from './theme';
 
-type Mood = 'shelf' | 'entry' | 'running' | 'quiet' | 'failed';
+type Mood = 'home' | 'shelf' | 'entry' | 'running' | 'quiet' | 'failed';
 const artwork = {
-  dark: { sky: require('../../assets/shell/sky-dark.png'), planet: require('../../assets/shell/planet-dark.png'), beam: require('../../assets/shell/beam-dark.png'), flare: require('../../assets/shell/flare-dark.png') },
-  light: { sky: require('../../assets/shell/sky-light.png'), planet: require('../../assets/shell/planet-light.png'), beam: require('../../assets/shell/beam-light.png'), flare: require('../../assets/shell/flare-light.png') },
+  dark: { launch: require('../../assets/shell/launch-night.jpg'), sky: require('../../assets/shell/sky-dark.png'), planet: require('../../assets/shell/planet-dark.png'), beam: require('../../assets/shell/beam-dark.png'), flare: require('../../assets/shell/flare-dark.png') },
+  light: { launch: require('../../assets/shell/launch-morning.jpg'), sky: require('../../assets/shell/sky-light.png'), planet: require('../../assets/shell/planet-light.png'), beam: require('../../assets/shell/beam-light.png'), flare: require('../../assets/shell/flare-light.png') },
 };
+
+export function WorkspaceBackdrop({ home, overview }: { home: boolean; overview: boolean }) {
+  return <ShellBackdrop mood={home ? 'home' : overview ? 'shelf' : 'running'} />;
+}
 
 /** Static light carries the visual identity without motion, blur or guest compositing. */
 export function ShellBackdrop({ mood = 'shelf' }: { mood?: Mood }) {
   const { styles, isDark } = useShellStyles(createStyles);
   const source = artwork[isDark ? 'dark' : 'light'];
+  if (mood === 'home') return <View pointerEvents="none" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.backdrop}>
+    <Image source={source.launch} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} accessible={false} />
+  </View>;
   const horizon = mood === 'entry' ? '42%' : '30%';
   const planet = mood !== 'running' && mood !== 'quiet';
   return <View pointerEvents="none" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.backdrop}>

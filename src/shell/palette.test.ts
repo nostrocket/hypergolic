@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { darkPalette, lightPalette, shellPalette } from './palette.ts';
+import { darkPalette, homePalette, lightPalette, shellPalette } from './palette.ts';
 
 function luminance(hex: string): number {
   const channels = [1, 3, 5].map(offset => parseInt(hex.slice(offset, offset + 2), 16) / 255)
@@ -26,4 +26,16 @@ for (const [name, palette] of Object.entries({ dark: darkPalette, light: lightPa
 test('system light appearance uses the light palette, unknown appearances use dark', () => {
   assert.equal(shellPalette('light'), lightPalette);
   for (const scheme of ['dark', null, undefined, 'unspecified']) assert.equal(shellPalette(scheme), darkPalette);
+});
+
+test('Home text retains normal-text contrast against the morning blue sky and warm horizon', () => {
+  const palette = homePalette('light');
+  for (const sky of ['#A7B8C9', '#C8D1DE', '#F5D7BE']) {
+    for (const ink of [palette.text, palette.muted, palette.accent]) {
+      assert.ok(contrast(ink, sky) >= 4.5, `${ink} on ${sky}: ${contrast(ink, sky)}`);
+    }
+  }
+  assert.equal(shellPalette('light'), lightPalette);
+  assert.notEqual(palette.muted, lightPalette.muted);
+  for (const scheme of ['dark', null, undefined]) assert.equal(homePalette(scheme), darkPalette);
 });

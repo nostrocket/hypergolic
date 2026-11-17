@@ -18,3 +18,9 @@ export const lightPalette: ShellPalette = {
 export function shellPalette(scheme: string | null | undefined): ShellPalette {
   return scheme === 'light' ? lightPalette : darkPalette;
 }
+
+/** The morning wallpaper needs stronger secondary text than opaque white surfaces. */
+const morningHomePalette: ShellPalette = { ...lightPalette, muted: '#394754', accent: '#743006' };
+export function homePalette(scheme: string | null | undefined): ShellPalette {
+  return scheme === 'light' ? morningHomePalette : darkPalette;
+}

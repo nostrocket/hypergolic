@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo } from 'react';
 import { Platform, useColorScheme } from 'react-native';
-import { shellPalette, type ShellPalette } from './palette';
+import { homePalette, shellPalette, type ShellPalette } from './palette';
 
 // Static palette retained for isolated native test fixtures. Product UI uses the hook.
 export { darkPalette as colors } from './palette';
@@ -17,9 +17,9 @@ export const fallbackFonts: ShellFonts = {
 export const ShellFontContext = createContext(fallbackFonts);
 
 /** Styles update on an OS appearance change without remounting live napplets. */
-export function useShellStyles<T>(createStyles: (colors: ShellPalette, fonts: ShellFonts) => T) {
+export function useShellStyles<T>(createStyles: (colors: ShellPalette, fonts: ShellFonts) => T, wallpaper = false) {
   const scheme = useColorScheme();
-  const colors = shellPalette(scheme);
+  const colors = wallpaper ? homePalette(scheme) : shellPalette(scheme);
   const fonts = useContext(ShellFontContext);
   const styles = useMemo(() => createStyles(colors, fonts), [colors, fonts, createStyles]);
   return { colors, styles, isDark: scheme !== 'light' };

@@ -1,5 +1,5 @@
 import { Home } from './Home';
-import { isPinned } from './pins';
+import { homeVisible, isPinned } from './pins';
 import { useHomeNavigation } from './useHomeNavigation';
 import { developerToolsEnabled } from '../config/build-info';
 import { initialWorkspaceForBuild } from './initial-workspace';
@@ -15,7 +15,7 @@ import { OwnerContext } from './IdentityOwnerContext';
 import { useWorkspaceBack } from './useWorkspaceBack';
 import { useBundledNapplets } from './useBundledNapplets';
 import { publishedSettingsActions } from './published-settings-actions';
-import { ShellBackdrop } from './ShellBackdrop';
+import { ShellBackdrop, WorkspaceBackdrop } from './ShellBackdrop';
 import {snapshotEventId} from '../napplets/published-identity';
 import {useCloseChecks} from './useCloseChecks';
 import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
@@ -215,10 +215,10 @@ export function Shell({ blocked = false, hostActivityBlocked = blocked, initialW
     closing: closingId !== null, reviewing: discovery.review !== null}, clearMenu);
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'right', 'bottom', 'left']}>
-      <ShellBackdrop mood={workspace.overview ? 'shelf' : 'running'} />
+      <WorkspaceBackdrop home={homeVisible(workspace)} overview={workspace.overview} />
       <ReviewFocus sessionId={workspace.focusedId} overview={workspace.overview} busy={busy} dragging={handleDragging} blocked={blocked} settings={obscured} closing={closingId !== null} />
       <View accessibilityElementsHidden={obscured} importantForAccessibility={obscured ? 'no-hide-descendants' : 'auto'} style={styles.content}>
-        <WorkspaceHeader fullscreen={fullscreen} overview={workspace.overview} focused={focused} identity={identity} disabled={navigationBlocked || handleDragging}
+        <WorkspaceHeader home={homeVisible(workspace)} fullscreen={fullscreen} overview={workspace.overview} focused={focused} identity={identity} disabled={navigationBlocked || handleDragging}
           menuAnchor={menuAnchor} onSettings={openSettings} onHome={openHome} onOverview={openOverview} onMenu={openMenu} />
         <WorkspaceStage home={<Home workspace={workspace} disabled={stageBlocked} onOpen={openPin}
           onUnpin={unpin} onOverview={openOverview} onDiscover={openDiscovery} />} fullscreen={fullscreen} onZoomTarget={registerZoomTarget} closeCheck={closeCheck} workspace={workspace} progress={progress} position={position} scrollY={scrollY} swipeY={swipeY} swipeId={swipeId} busy={busy} blocked={stageBlocked} hostActivityBlocked={isHostActivityBlocked(hostActivityBlocked, obscured)} interactive={!handleDragging}

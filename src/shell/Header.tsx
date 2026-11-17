@@ -7,7 +7,7 @@ import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 /** Supplied by the trusted identity service. This component never resolves profile URLs. */
 export interface ShellIdentity { npub: string; avatar?: ImageProps['source']; avatarKey?: string }
 interface Props {
-  title: string; identity?: ShellIdentity; compact?: boolean; disabled?: boolean;
+  title: string; identity?: ShellIdentity; compact?: boolean; wallpaper?: boolean; disabled?: boolean;
   onSettings(): void; onHome?(): void; onOverview?(): void; onMenu?(): void; menuAnchor?: Ref<ViewInstance>;
 }
 
@@ -19,8 +19,8 @@ function Avatar({ identity }: { identity: ShellIdentity }) {
     : <View style={styles.avatar} accessible={false}><Text style={styles.avatarText}>{identity.npub.slice(-2).toUpperCase()}</Text></View>;
 }
 
-export function Header({ title, identity, compact = false, disabled = false, onSettings, onHome, onOverview, onMenu, menuAnchor }: Props) {
-  const { styles } = useShellStyles(createStyles);
+export function Header({ title, identity, compact = false, wallpaper = false, disabled = false, onSettings, onHome, onOverview, onMenu, menuAnchor }: Props) {
+  const { styles } = useShellStyles(createStyles, wallpaper);
   return (
     <View testID="shell-header" style={[styles.header, compact && styles.compact]}>
       {onHome ? <Pressable testID="shell-home-button" accessibilityRole="button" accessibilityLabel="Home" disabled={disabled} onPress={onHome} style={styles.iconButton}><Image source={require('../../assets/brand/hypergolic-logo.png')} style={compact ? styles.compactLogo : styles.logo} contentFit="contain" accessible={false} /></Pressable> : onOverview ? <Pressable testID="shell-overview" accessibilityRole="button" accessibilityLabel="All napplets" disabled={disabled} onPress={onOverview} style={styles.iconButton}>
