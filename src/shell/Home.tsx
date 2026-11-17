@@ -8,7 +8,7 @@ import type { NappletDescriptor, Workspace } from './workspace';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 
 function PinIcon({pin}: {pin: NappletDescriptor}) {
-  const {styles} = useShellStyles(createStyles);
+  const {styles} = useShellStyles(createStyles, true);
   const owner = useContext(OwnerContext);
   const [uri, setUri] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -31,7 +31,7 @@ export function Home({workspace, disabled, onOpen, onUnpin, onOverview, onDiscov
   workspace: Workspace; disabled: boolean; onOpen(pin: NappletDescriptor): void;
   onUnpin(pin: NappletDescriptor): void; onOverview(): void; onDiscover(): void;
 }) {
-  const {styles} = useShellStyles(createStyles);
+  const {styles} = useShellStyles(createStyles, true);
   const [editing, setEditing] = useState(false);
   const {fontScale} = useWindowDimensions();
   const pins = pinnedNapplets(workspace);
