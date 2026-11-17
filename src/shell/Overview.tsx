@@ -4,13 +4,13 @@ import { ShellPressable as Pressable } from './ShellPressable';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedScrollHandler, useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 import { OverviewCard } from './OverviewCard';
+import { createOverviewScrollRestorer, overviewScrollOffset } from './overview-scroll';
 import type { OverviewGeometry, CardMeasurement, Size } from './motion';
 import type { NappletDescriptor } from './workspace';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 
 export interface OverviewHandle { focusCard: (id: string | null) => void; revealCard: (id: string | null) => void }
 interface Props {
-  hidden?: boolean;
   sessions: readonly NappletDescriptor[];
   geometry: OverviewGeometry;
   size: Size;
@@ -36,28 +36,27 @@ function focusView(view: ViewInstance | TextInstance | null | undefined) {
 const sessionKey = (session: NappletDescriptor): string => session.id;
 
 /** Only transparent controls virtualize; the live native views stay in WorkspaceStage. */
-export const Overview = forwardRef<OverviewHandle, Props>(function Overview({ hidden = false, sessions, geometry, size, visible, busy, focusedId, progress, scrollY, swipeId, swipeY, pending, onFocus, onClose, onOpen, onDragEnd, onMeasure }, ref) {
+export const Overview = forwardRef<OverviewHandle, Props>(function Overview({ sessions, geometry, size, visible, busy, focusedId, progress, scrollY, swipeId, swipeY, pending, onFocus, onClose, onOpen, onDragEnd, onMeasure }, ref) {
   const { styles } = useShellStyles(createStyles);
   const scroll = useRef<FlatList<NappletDescriptor>>(null);
   const heading = useRef<TextInstance>(null);
   const cardRefs = useRef(new Map<string, ViewInstance>());
-  const scrollGesture = useMemo(() => Gesture.Native(), []);
+  const inactive = busy || !visible;
+  const scrollGesture = useMemo(() => Gesture.Native().enabled(!inactive), [inactive]);
   const setCardRef = useCallback((id: string, view: ViewInstance | null) => {
     if (view) cardRefs.current.set(id, view); else cardRefs.current.delete(id);
   }, []);
+  const restoreScroll = useMemo(() => createOverviewScrollRestorer(), []);
+  const revealCard = useCallback((id: string | null) => {
+    const index = sessions.findIndex(session => session.id === id);
+    const next = overviewScrollOffset(geometry, index, scrollY.get(), size.height);
+    scroll.current?.scrollToOffset({ offset: next, animated: false });
+    scrollY.set(next);
+  }, [geometry, scrollY, sessions, size.height]);
   useImperativeHandle(ref, () => ({
     focusCard: id => focusView(id ? cardRefs.current.get(id) ?? heading.current : heading.current),
-    revealCard: id => {
-      const index = sessions.findIndex(session => session.id === id);
-      const rect = geometry.cards[index];
-      if (!rect) return;
-      const top = scrollY.get();
-      const bottom = rect.y + rect.height + geometry.captionHeight;
-      const next = rect.y < top ? Math.max(0, rect.y - 12) : bottom > top + size.height ? bottom - size.height + 12 : top;
-      scroll.current?.scrollToOffset({ offset: next, animated: false });
-      scrollY.set(next);
-    },
-  }), [geometry, scrollY, sessions, size.height]);
+    revealCard,
+  }), [revealCard]);
   const opacity = useAnimatedStyle(() => ({ opacity: progress.get() }));
   const onScroll = useAnimatedScrollHandler(event => { scrollY.set(event.contentOffset.y); });
   const headerHeight = geometry.cards[0]?.y ?? 72;
@@ -65,13 +64,15 @@ export const Overview = forwardRef<OverviewHandle, Props>(function Overview({ hi
   const stride = cardHeight + geometry.captionHeight + 20;
   const renderCard = useCallback(({ item, index }: { item: NappletDescriptor; index: number }) => (
     <OverviewCard session={item} rect={geometry.cards[index]} captionHeight={geometry.captionHeight}
-      busy={busy} selected={focusedId === item.id} pending={pending.has(item.id)} swipeId={swipeId} swipeY={swipeY} scrollGesture={scrollGesture}
+      busy={inactive} selected={focusedId === item.id} pending={pending.has(item.id)} swipeId={swipeId} swipeY={swipeY} scrollGesture={scrollGesture}
       setRef={setCardRef} onFocus={onFocus} onClose={onClose} onDragEnd={onDragEnd} onMeasure={onMeasure} />
-  ), [busy, focusedId, geometry, onClose, onDragEnd, onFocus, onMeasure, pending, scrollGesture, setCardRef, swipeId, swipeY]);
-  return <Animated.View style={[StyleSheet.absoluteFill, styles.layer, opacity, hidden && styles.hidden]} pointerEvents={visible && !busy ? 'auto' : 'none'} accessibilityElementsHidden={!visible} importantForAccessibility={visible ? 'auto' : 'no-hide-descendants'}>
+  ), [inactive, focusedId, geometry, onClose, onDragEnd, onFocus, onMeasure, pending, scrollGesture, setCardRef, swipeId, swipeY]);
+  return <Animated.View style={[StyleSheet.absoluteFill, styles.layer, opacity]} pointerEvents={visible && !busy ? 'auto' : 'none'} accessibilityElementsHidden={!visible} importantForAccessibility={visible ? 'auto' : 'no-hide-descendants'}>
     <GestureDetector gesture={scrollGesture}>
       <Animated.FlatList ref={scroll} data={sessions} numColumns={2} keyExtractor={sessionKey} testID="napplet-overview"
         initialNumToRender={6} windowSize={5} removeClippedSubviews={false} scrollEnabled={visible && !busy}
+        onLayout={() => restoreScroll('layout', () => revealCard(focusedId))}
+        onContentSizeChange={() => restoreScroll('content', () => revealCard(focusedId))}
         onScroll={onScroll} scrollEventThrottle={16} bounces={false} overScrollMode="never" keyboardShouldPersistTaps="handled"
         columnWrapperStyle={styles.row} contentContainerStyle={{ minHeight: geometry.contentHeight, paddingHorizontal: 12, paddingBottom: 24 }}
         getItemLayout={(_data, row) => ({ index: row, length: stride, offset: headerHeight + row * stride })}
@@ -89,7 +90,6 @@ export const Overview = forwardRef<OverviewHandle, Props>(function Overview({ hi
   </Animated.View>;
 });
 const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.create({
-  hidden: {display: 'none'},
   layer: { zIndex: 10 }, row: { gap: 16 },
   headingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   heading: { fontFamily: fonts.strong, fontSize: 19, color: colors.text, flexShrink: 1 },

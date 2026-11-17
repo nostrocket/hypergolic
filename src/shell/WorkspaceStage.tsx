@@ -107,7 +107,7 @@ export const WorkspaceStage = forwardRef<OverviewHandle, StageProps>(function Wo
       {workspace.sessions.map((session, index) => <LiveSession hidden={homeVisible(workspace)} key={session.id} gutter={fullscreen ? 0 : HANDLE_GUTTER} onZoomTarget={onZoomTarget} session={session} closeCheck={closeCheck?.sessionId === session.id ? JSON.stringify({id: closeCheck.id, generation: closeCheck.generation}) : ''} index={index} size={size} rect={resolveCardRect(geometry.cards[index], measured[session.id])}
         progress={progress} position={position} scrollY={scrollY} swipeY={swipeY} swipeId={swipeId} {...workspaceSessionActivity({focused: workspace.focusedId === session.id, overview: workspace.overview, busy, interactive, blocked, checkingClose: closeCheck !== null, hostActivityBlocked})}
         raised={workspace.focusedId === session.id} onHostEvent={onHostEvent} />)}
-      <Overview hidden={homeVisible(workspace)} ref={ref} sessions={workspace.sessions} geometry={geometry} size={size} visible={workspace.overview && !homeVisible(workspace)} busy={disabled} focusedId={workspace.focusedId}
+      {!homeVisible(workspace) && <Overview ref={ref} sessions={workspace.sessions} geometry={geometry} size={size} visible={workspace.overview && !homeVisible(workspace)} busy={disabled} focusedId={workspace.focusedId}
         progress={progress} scrollY={scrollY} swipeId={swipeId} swipeY={swipeY} pending={pending} onFocus={onFocus} onClose={onClose} onOpen={onOpen}
         onDragEnd={onDragEnd}
         onMeasure={(id, measurement) => setMeasured(previous => {
@@ -115,7 +115,7 @@ export const WorkspaceStage = forwardRef<OverviewHandle, StageProps>(function Wo
           return prior && resolveCardRect(measurement.expected, prior) === prior.actual
             && prior.actual.width === measurement.actual.width && prior.actual.height === measurement.actual.height
             ? previous : { ...previous, [id]: measurement };
-        })} />
+        })} />}
       {homeVisible(workspace) && <View style={styles.home} pointerEvents={disabled ? 'none' : 'auto'}>{home}</View>}
       <Handles width={size.width} position={position} index={Math.max(0, workspace.sessions.findIndex(session => session.id === workspace.focusedId))} count={workspace.sessions.length} top={clamp(size.height * 0.62, 40, Math.max(40, size.height - 104))} disabled={fullscreen || workspace.overview || disabled}
         canPrevious={adjacentNapplet(workspace, -1) !== null} canNext={adjacentNapplet(workspace, 1) !== null}
