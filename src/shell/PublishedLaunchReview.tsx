@@ -26,9 +26,9 @@ type ReviewTarget = Readonly<{
 
 type LaunchSource = Readonly<{ label: string; publisher?: string }>;
 
-function CapabilityMark({domain}: {domain: string}) {
+function CapabilityMark({domain, tone}: {domain: string; tone: 'accessSupported' | 'accessRequiredUnavailable' | 'accessOptionalUnavailable'}) {
   const {colors, styles} = useShellStyles(createStyles);
-  return <Image source={{uri: accessIconUri(domain, colors.muted)}} accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+  return <Image source={{uri: accessIconUri(domain, colors[tone])}} accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
     style={styles.capabilityMark} contentFit="contain" />;
 }
 
@@ -39,9 +39,11 @@ function CapabilityGroup({ kind, domains, unavailable }: { kind: 'required' | 'o
   return <View style={styles.group}>
     {kind === 'required' && <Text accessibilityRole="header" style={styles.sectionTitle}>Required access</Text>}
     {domains.map(domain => {
-      const {name, description} = launchAccessCopy(domain, missing.has(domain));
+      const unsupported = missing.has(domain);
+      const {name, description} = launchAccessCopy(domain, unsupported);
+      const tone = unsupported ? (kind === 'required' ? 'accessRequiredUnavailable' : 'accessOptionalUnavailable') : 'accessSupported';
       return <View key={domain} style={styles.capability}>
-        <CapabilityMark domain={domain} />
+        <CapabilityMark domain={domain} tone={tone} />
         <View style={styles.capabilityCopy}><Text testID={`published-review-${kind}-${domain}`} style={styles.name}>{name}</Text>
         <Text style={styles.detail}>{description}</Text></View>
       </View>;
