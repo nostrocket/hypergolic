@@ -306,7 +306,10 @@ enum PublishedRelayWebSocketQuery {
         self.total += data.count
         guard self.total <= PublishedRelayWebSocketQuery.maxWireBytes else { self.finish(.failure(Failure.limit)); return }
         if let parts {
-          do { try PublishedRelayWebSocketHandshake.validate(parts.headers, nonce: self.nonce) }
+          do {
+            if try PublishedRelayWebSocketHandshake.isServiceUnavailable(parts.headers) { self.finish(.failure(Failure.unreachable)); return }
+            try PublishedRelayWebSocketHandshake.validate(parts.headers, nonce: self.nonce)
+          }
           catch { self.finish(.failure(error)); return }
           do {
             let frame = try PublishedRelayWebSocketClientFrames.textReq(self.subscription)

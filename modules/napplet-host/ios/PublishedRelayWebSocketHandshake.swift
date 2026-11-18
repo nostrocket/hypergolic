@@ -6,6 +6,33 @@ enum PublishedRelayWebSocketHandshake {
     static let maxHeaderBytes = 16_384
     private static let guid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
+    /// A complete, bounded HTTP 503 precedes any WebSocket or Nostr response.
+    static func isServiceUnavailable(_ response: Data) throws -> Bool {
+        guard !response.isEmpty, response.count <= maxHeaderBytes,
+              let raw = String(bytes: response, encoding: .ascii),
+              let marker = raw.range(of: "\r\n\r\n"), marker.upperBound == raw.endIndex else { throw invalid() }
+        let lines = raw[..<marker.lowerBound].components(separatedBy: "\r\n")
+        guard validStatus(lines[0], code: "503") else { return false }
+        var length = false, transfer = false
+        for line in lines.dropFirst() {
+            guard let colon = line.firstIndex(of: ":"), colon != line.startIndex else { throw invalid() }
+            let name = String(line[..<colon])
+            guard name.utf8.allSatisfy(isTokenByte) else { throw invalid() }
+            let value = trimOWS(String(line[line.index(after: colon)...]))
+            guard !value.utf8.contains(where: isForbiddenControl) else { throw invalid() }
+            if name.lowercased() == "content-length" {
+                guard !length, !value.isEmpty, value.utf8.allSatisfy({ $0 >= 48 && $0 <= 57 }) else { throw invalid() }
+                length = true
+            }
+            if name.lowercased() == "transfer-encoding" {
+                guard !transfer, value.lowercased() == "chunked" else { throw invalid() }
+                transfer = true
+            }
+        }
+        guard !(length && transfer) else { throw invalid() }
+        return true
+    }
+
     static func validate(_ response: Data, nonce: Data) throws {
         guard nonce.count == 16, !response.isEmpty, response.count <= maxHeaderBytes,
               let raw = String(bytes: response, encoding: .ascii),
@@ -47,9 +74,10 @@ enum PublishedRelayWebSocketHandshake {
         }
     }
 
-    private static func validStatus(_ value: String) -> Bool {
-        guard value.hasPrefix("HTTP/1.1 101") else { return false }
-        let suffix = value.dropFirst("HTTP/1.1 101".count)
+    private static func validStatus(_ value: String, code: String = "101") -> Bool {
+        let prefix = "HTTP/1.1 \(code)"
+        guard value.hasPrefix(prefix) else { return false }
+        let suffix = value.dropFirst(prefix.count)
         return suffix.isEmpty || (suffix.first == " " && suffix.utf8.allSatisfy { $0 >= 0x20 && $0 <= 0x7e })
     }
     private static func expectedAccept(_ nonce: Data) -> String {

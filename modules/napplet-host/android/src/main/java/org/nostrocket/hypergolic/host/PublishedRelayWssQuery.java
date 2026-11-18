@@ -115,7 +115,10 @@ public final class PublishedRelayWssQuery {
         RANDOM.nextBytes(nonce);
         sendHandshake(output, relay, nonce);
         byte[] headers = readHandshake(input, abort);
-        try { PublishedRelayWebSocketHandshake.validate(headers, nonce); }
+        try {
+          if (PublishedRelayWebSocketHandshake.isServiceUnavailable(headers)) throw new TransportFailure("Relay service unavailable", null);
+          PublishedRelayWebSocketHandshake.validate(headers, nonce);
+        }
         catch (IllegalArgumentException invalid) { throw new IOException("Relay rejected WebSocket upgrade", invalid); }
         abort.check();
         if (cancellation instanceof PublicationControl) {

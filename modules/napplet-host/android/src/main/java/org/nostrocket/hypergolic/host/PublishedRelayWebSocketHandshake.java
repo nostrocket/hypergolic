@@ -13,6 +13,28 @@ public final class PublishedRelayWebSocketHandshake {
 
   private PublishedRelayWebSocketHandshake() {}
 
+  /** A complete, bounded HTTP 503 precedes any WebSocket or Nostr response. */
+  public static boolean isServiceUnavailable(byte[] response) {
+    if (response == null || response.length == 0 || response.length > MAX_HEADER_BYTES) fail();
+    String raw = ascii(response);
+    int end = raw.indexOf("\r\n\r\n");
+    if (end < 0 || end + 4 != raw.length()) fail();
+    String[] lines = raw.substring(0, end).split("\r\n", -1);
+    if (!lines[0].matches("HTTP/1\\.1 503(?: [\\x20-\\x7e]*)?")) return false;
+    boolean length = false, transfer = false;
+    for (int i = 1; i < lines.length; i++) {
+      int colon = lines[i].indexOf(':');
+      if (colon <= 0 || !lines[i].substring(0, colon).matches("[!#$%&'*+.^_`|~0-9A-Za-z-]+")) fail();
+      String key = lines[i].substring(0, colon).toLowerCase(Locale.ROOT);
+      String value = trimOws(lines[i].substring(colon + 1));
+      if (hasForbiddenControls(value)) fail();
+      if (key.equals("content-length")) {if (length || !value.matches("[0-9]+")) fail(); length = true;}
+      if (key.equals("transfer-encoding")) {if (transfer || !value.equalsIgnoreCase("chunked")) fail(); transfer = true;}
+    }
+    if (length && transfer) fail();
+    return true;
+  }
+
   public static void validate(byte[] response, byte[] nonce) {
     if (response == null || nonce == null || nonce.length != 16) fail();
     if (response.length == 0 || response.length > MAX_HEADER_BYTES) fail();

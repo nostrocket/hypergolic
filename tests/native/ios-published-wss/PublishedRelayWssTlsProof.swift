@@ -65,10 +65,10 @@ private final class ResultBox: @unchecked Sendable {
       guard envelopes == ["[\"AUTH\",\"first\"]", "[\"AUTH\",\"rotated\"]", "[\"EOSE\",\"proof\"]"] else {
         throw NSError(domain: "wrong AUTH relay envelopes", code: 1)
       }
-    case ("empty-close", .failure(let error)):
+    case ("empty-close", .failure(let error)), ("service-unavailable", .failure(let error)):
       guard case PublishedRelayWebSocketQuery.Failure.unreachable = error else { throw NSError(domain: "empty transport close was not classified", code: 1) }
     case ("untrusted", .failure(let error)), ("wrong-host", .failure(let error)), ("redirect", .failure(let error)),
-         ("bad-accept", .failure(let error)), ("oversize", .failure(let error)), ("partial-close", .failure(let error)):
+         ("bad-accept", .failure(let error)), ("oversize", .failure(let error)), ("partial-close", .failure(let error)), ("malformed-503", .failure(let error)):
       if case PublishedRelayWebSocketQuery.Failure.unreachable = error { throw NSError(domain: "invalid or partial response classified as transport", code: 1) }
     case ("short-deadline", .failure(let error)):
       guard case PublishedRelayWebSocketQuery.Failure.timeout = error else {
