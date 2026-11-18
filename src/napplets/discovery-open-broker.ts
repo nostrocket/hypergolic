@@ -1,4 +1,4 @@
-import { pinNapplet, isPinned } from '../shell/pins.ts';
+import { pinNapplet, isPinned, pinnedNapplets, unpinNapplet } from '../shell/pins.ts';
 import { descriptorForPublishedArtifact } from './published-host-input.ts';
 import { verifiedLaunchMetadata } from './verified-launch-metadata.ts';
 import { ReviewBusyError } from '../shell/review-slot.ts';
@@ -133,7 +133,7 @@ function reviewLaunch(ports: Ports, launch: Launch, target: Extract<RoutingRevie
   return async (changesAccess: boolean, legacyReadOnlyAvailable = false) => {
     active();
     const decision = await ports.reviews.ask(Object.freeze({ kind: 'published-open', origin: launch.captured.origin,
-      source: launch.source, changesAccess, target, ...(launch.captured.request.action === 'pin' ? {pinOnly: true as const} : {}), ...(legacyReadOnlyAvailable ? {legacyReadOnlyAvailable: true as const} : {}) }), active, () => true);
+      source: launch.source, changesAccess, target, ...(legacyReadOnlyAvailable ? {legacyReadOnlyAvailable: true as const} : {}) }), active, () => true);
     active();
     attempt.declined = !decision.allow;
     return decision.allow && decision.legacyReadOnly ? 'legacy-read-only-v1' as const : decision.allow;
@@ -179,7 +179,6 @@ async function openExact(ports: Ports, launch: Launch, attempt: Attempt, active:
   const review = reviewLaunch(ports, launch, Object.freeze({ publisher, appId, eventId, version, metadata: verifiedLaunchMetadata(artifact),
     requiredDomains, optionalDomains, unsupportedDomains, unsupportedOptionalDomains }), attempt, active);
   if (request.action === 'pin') {
-    if (!await review(false)) return 'rejected';
     active();
     const shortcut = existing ?? descriptorForPublishedArtifact(artifact, ports.native.newChannelId());
     workspace.change(pinNapplet(workspace.getSnapshot().workspace, shortcut));
@@ -212,6 +211,18 @@ async function openExact(ports: Ports, launch: Launch, attempt: Attempt, active:
   return waitForMount(ports, launch, next, active, signal);
 }
 
+async function localPin(launch: Launch, active: () => void): Promise<DiscoveryOpenOutcome> {
+  const {workspace, coordinate, captured} = launch;
+  const saved = () => pinnedNapplets(workspace.getSnapshot().workspace).find(pin =>
+    pin.source === 'published' && pin.publisher === coordinate.pubkey && pin.appId === coordinate.identifier);
+  active();
+  const pin = saved();
+  if (captured.request.action === 'unpin' && pin) workspace.change(unpinNapplet(workspace.getSnapshot().workspace, pin));
+  await workspace.flush();
+  active();
+  return saved() ? 'pinned' : 'unpinned';
+}
+
 async function runLaunch(ports: Ports, launch: Launch): Promise<DiscoveryOpenOutcome> {
   const { source, workspace, captured, live } = launch;
   const { origin, revision, focusRevision } = captured;
@@ -236,7 +247,9 @@ async function runLaunch(ports: Ports, launch: Launch): Promise<DiscoveryOpenOut
   try {
     release.push(ports.identity.subscribe(check), workspace.subscribe(check));
     release.push(ports.native.subscribe(check));
-    active(); ports.reviews.assertAvailable();
+    active();
+    if (captured.request.action === 'pin-state' || captured.request.action === 'unpin') return await localPin(launch, active);
+    if (captured.request.action !== 'pin') ports.reviews.assertAvailable();
     status = await openExact(ports, launch, attempt, active, signal);
     if (status === 'opened' || status === 'pinned') active();
     return status;

@@ -32,12 +32,41 @@ export function injectDiscoveryOpen(html: string, token: string, catalogEnabled 
         const id = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
         const timer = setTimeout(() => { pending = undefined; resolve({ status: 'unavailable' }); }, ${DISCOVERY_LEASE_MS + 5_000});
         pending = { id, timer, resolve };
-        parent.postMessage({ type, id, address, expectedEventId, token, ...(action === 'pin' ? {action} : {}) }, '*');
+        parent.postMessage({ type, id, address, expectedEventId, token, ...(action ? {action} : {}) }, '*');
       });
+    };
+    const operations = [];
+    let operating = false, opening = false;
+    const pump = () => {
+      if (operating || !operations.length) return;
+      operating = true;
+      const job = operations.shift();
+      open(job.address, job.eventId, job.action).then(job.resolve, () => job.resolve({status: 'unavailable'}))
+        .finally(() => {operating = false; pump();});
+    };
+    const schedule = (address, eventId, action) => new Promise(resolve => {
+      const read = action === 'pin-state';
+      if (operations.filter(job => (job.action === 'pin-state') === read).length >= (read ? 32 : 4)) {
+        resolve({status: read ? 'unavailable' : 'busy'}); return;
+      }
+      const job = {address, eventId, action, resolve};
+      const firstRead = operations.findIndex(job => job.action === 'pin-state');
+      if (!read && firstRead >= 0) operations.splice(firstRead, 0, job);
+      else operations.push(job);
+      pump();
+    });
+    const launch = (address, eventId) => {
+      if (opening) return Promise.resolve({status: 'busy'});
+      opening = true;
+      return schedule(address, eventId).finally(() => { opening = false; });
+    };
+    const pinState = (address, eventId) => {
+      return schedule(address, eventId, 'pin-state').then(result =>
+        result.status === 'pinned' || result.status === 'unpinned' ? result : {status: 'unavailable'});
     };
     ${catalogEnabled ? catalogPagePrelude + (bundled ? recommendationsPrelude : '') : ''}
     Object.defineProperty(window, 'hypergolic', { value: Object.freeze({
-      publishedOpen: Object.freeze({ version: 1, open: (address, eventId) => open(address, eventId), pin: (address, eventId) => open(address, eventId, 'pin') })${catalogEnabled ? (bundled ? ', catalogPage, recommendations' : ', catalogPage') : ''}
+      publishedOpen: Object.freeze({ version: 1, open: launch, pin: (address, eventId) => schedule(address, eventId, 'pin'), unpin: (address, eventId) => schedule(address, eventId, 'unpin'), pinState })${catalogEnabled ? (bundled ? ', catalogPage, recommendations' : ', catalogPage') : ''}
     }) });
   })();</script>`;
   return html.replace(/(<meta\s+http-equiv=["']Content-Security-Policy["'][^>]*>)/i, match => match + script);

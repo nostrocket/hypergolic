@@ -7,11 +7,11 @@ const type = 'hypergolic.publishedOpen';
 const address = naddrEncode({kind: 35129, pubkey: 'a'.repeat(64), identifier: 'discovery-open-test'});
 const expectedEventId = 'b'.repeat(64);
 const target = {address, expectedEventId};
-type Request = {type: string; id: string; address: string; expectedEventId: string};
-type State = { ready: boolean; calls: Request[]; catalogCalls: object[]; catalogEvents: object[]; finish?: (status: string) => void };
+type Request = {type: string; id: string; address: string; expectedEventId: string; action?: 'pin' | 'unpin' | 'pin-state'};
+type State = { ready: boolean; calls: Request[]; catalogCalls: object[]; catalogEvents: object[]; pinStateCalls: Request[]; pinned: string[]; holdPinReads: boolean; releasePinRead?: (status: string) => void; finish?: (status: string) => void };
 type TestWindow = Window & { discoveryOpenTest: State; HypergolicHost: object };
 type GuestWindow = Window & { hypergolic?: { publishedOpen?: {
-  version: number; open(address: string, expectedEventId: string): Promise<{status: string; reason?: string}>;
+  version: number; pinState(address: string, expectedEventId: string): Promise<{status: string}>; pin(address: string, expectedEventId: string): Promise<{status: string}>; unpin(address: string, expectedEventId: string): Promise<{status: string}>; open(address: string, expectedEventId: string): Promise<{status: string; reason?: string}>;
 }; catalogPage?: {
   version: number; read(reset: boolean, round: string, after: number): Promise<unknown>;
 } }; receivedOpenStatus?: string; receivedOpenResult?: {status: string; reason?: string} };
@@ -20,7 +20,7 @@ async function openRuntime(page: Page, fixture: string, catalogEvents: object[] 
   await page.addInitScript(catalogEvents => {
     if (window !== window.top) return;
     const root = window as unknown as TestWindow;
-    const state: State = { ready: false, calls: [], catalogCalls: [], catalogEvents };
+    const state: State = { ready: false, calls: [], catalogCalls: [], catalogEvents, pinStateCalls: [], pinned: [], holdPinReads: false };
     const listeners = new Set<(event: {data: string}) => void>();
     root.discoveryOpenTest = state;
     root.HypergolicHost = {
@@ -37,8 +37,20 @@ async function openRuntime(page: Page, fixture: string, catalogEvents: object[] 
           listeners.forEach(listener => listener({data}));
         };
         if (request.type === 'routing.call' && request.message.type === 'hypergolic.publishedOpen') {
-          state.calls.push(request.message);
-          state.finish = status => respond({type: 'routing.call.result', id: request.id, response: status});
+          const message = request.message;
+          if (message.action === 'pin-state') {
+            state.pinStateCalls.push(message);
+            const reply = (status: string) => respond({type: 'routing.call.result', id: request.id, response: status});
+            if (state.holdPinReads) state.releasePinRead = reply;
+            else reply(state.pinned.includes(message.address) ? 'pinned' : 'unpinned');
+            return;
+          }
+          state.calls.push(message);
+          state.finish = status => {
+            if (status === 'pinned' && !state.pinned.includes(message.address)) state.pinned.push(message.address);
+            if (status === 'unpinned') state.pinned = state.pinned.filter(address => address !== message.address);
+            respond({type: 'routing.call.result', id: request.id, response: status});
+          };
         }
         if (request.type === 'relay.catalogPage') {
           state.catalogCalls.push(request);
@@ -188,7 +200,7 @@ for (const declaration of ['R', 'O']) {
   });
 }
 
-test('packaged Discover pins from listing and details without opening', async ({page}) => {
+test('packaged Discover pins then unpins from listing and details without opening', async ({page}) => {
   const event = finalizeEvent({kind: 35129, created_at: Math.floor(Date.now() / 1000) - 10,
     content: 'Pin test', tags: [['d', 'pin-control'], ['title', 'Pin control'], ['x', 'c'.repeat(64)]]}, new Uint8Array(32).fill(1));
   const guest = await openRuntime(page, 'napplet-discovery', [{event}]);
@@ -201,9 +213,44 @@ test('packaged Discover pins from listing and details without opening', async ({
   await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.finish?.('pinned'));
   await expect(guest.locator('#row-open-status')).toHaveText('Pinned to Home.');
   await guest.getByRole('button', {name: 'Details for Pin control', exact: true}).click();
-  await guest.getByRole('button', {name: 'Pin to Home', exact: true}).click();
+  await guest.getByRole('button', {name: 'Unpin from Home', exact: true}).click();
   await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length)).toBe(2);
-  await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.finish?.('rejected'));
-  await expect(guest.locator('.detail-actions .feedback')).toHaveText('Pinning was declined in Hypergolic.');
+  await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.finish?.('unpinned'));
+  await expect(guest.locator('.detail-actions .feedback')).toHaveText('Unpinned from Home.');
   await expect(guest.getByRole('button', {name: 'Pin to Home', exact: true})).not.toHaveAttribute('aria-disabled', 'true');
+});
+
+
+test('pin state is bounded and foreground pin/unpin bypasses queued background reads', async ({page}) => {
+  const guest = await openRuntime(page, 'napplet-discovery');
+  await page.evaluate(() => {(window as unknown as TestWindow).discoveryOpenTest.holdPinReads = true;});
+  await guest.evaluate(({address, expectedEventId}) => {
+    const root = window as GuestWindow & {pinResults?: {status: string}[]};
+    root.pinResults = [];
+    const api = root.hypergolic!.publishedOpen!;
+    for (let index = 0; index < 100; index++) void api.pinState(address, expectedEventId).then(value => root.pinResults!.push(value));
+    void api.pin(address, expectedEventId).then(value => {root.receivedOpenStatus = value.status;});
+  }, target);
+  await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.pinStateCalls.length)).toBe(1);
+  await expect.poll(() => guest.evaluate(() => (window as GuestWindow & {pinResults: {status: string}[]}).pinResults.length)).toBe(67);
+  await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.releasePinRead?.('unpinned'));
+  await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length)).toBe(1);
+  expect((await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls))[0]).toMatchObject({...target, action:'pin'});
+  await page.evaluate(() => {
+    const state = (window as unknown as TestWindow).discoveryOpenTest;
+    state.holdPinReads = false;
+    state.finish?.('pinned');
+  });
+  await expect.poll(() => guest.evaluate(() => (window as GuestWindow).receivedOpenStatus)).toBe('pinned');
+  await expect.poll(() => guest.evaluate(() => (window as GuestWindow & {pinResults: {status: string}[]}).pinResults.length)).toBe(100);
+  expect(await guest.evaluate(({address, expectedEventId}) => (window as GuestWindow).hypergolic!.publishedOpen!.pinState(address, expectedEventId), target)).toEqual({status:'pinned'});
+  await guest.evaluate(({address, expectedEventId}) => {
+    const root = window as GuestWindow; root.receivedOpenStatus = undefined;
+    void root.hypergolic!.publishedOpen!.unpin(address, expectedEventId).then(result => {root.receivedOpenStatus = result.status;});
+  }, target);
+  await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length)).toBe(2);
+  expect((await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls))[1]).toMatchObject({...target, action:'unpin'});
+  await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.finish?.('unpinned'));
+  await expect.poll(() => guest.evaluate(() => (window as GuestWindow).receivedOpenStatus)).toBe('unpinned');
+  expect(await guest.evaluate(({address, expectedEventId}) => (window as GuestWindow).hypergolic!.publishedOpen!.pinState(address, expectedEventId), target)).toEqual({status:'unpinned'});
 });
