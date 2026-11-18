@@ -45,7 +45,7 @@ export interface ApprovalEffects extends SigningHandoffReader {
   publishEvent(event: VerifiedSignedEvent, destinations: readonly string[], execution: EffectAuthority): Promise<readonly RelayOutcome[]>;
 }
 export interface TrustedApprovalOwner { assertActive(origin: ApprovalOrigin,domain?:'outbox'|'common'): void }
-export type ApprovalItem = Readonly<{ recommendation?: string; id: string; origin: ApprovalOrigin; event: EventSnapshot; outbox?:OutboxPublicationPlan;common?:CommonSocialPlan;appData?:AppDataPlan }>;
+export type ApprovalItem = Readonly<{ recommendation?: string; recommendationExcludedRelays?: readonly string[]; id: string; origin: ApprovalOrigin; event: EventSnapshot; outbox?:OutboxPublicationPlan;common?:CommonSocialPlan;appData?:AppDataPlan }>;
 export type ApprovalSnapshot = Readonly<{ focusedSessionId: string | null; reviewPaused: boolean; current: ApprovalItem | null; pending: number; pendingSessionIds: readonly string[] }>;
 type Entry = ApprovalItem & { revalidateRecommendation?: CatalogRecommendationGuard; requestId: string; lease: NativeApprovalLease; controller: AbortController | null; signingPending?: boolean; publicationStarted?: boolean };
 const PER_SESSION = 4, GLOBAL = 16;
@@ -56,10 +56,20 @@ function captureOrigin(origin: ApprovalOrigin): ApprovalOrigin {
   return Object.freeze({ sessionId: origin.sessionId, generation: origin.generation, epoch: origin.epoch, user: origin.user,
     publisher: origin.publisher, appId: origin.appId, version: origin.version, instanceId: origin.instanceId });
 }
+function recommendationScope(event: EventSnapshot, guard: CatalogRecommendationGuard): Pick<ApprovalItem, 'event' | 'recommendationExcludedRelays'> {
+  if (guard.destinations === undefined && guard.excludedRelays === undefined) return {event};
+  const narrowed = captureEventSnapshot(event.event, event.selectedPubkey, guard.destinations);
+  const excluded = captureEventSnapshot(event.event, event.selectedPubkey, guard.excludedRelays).destinations;
+  const kept = new Set(narrowed.destinations), omitted = new Set(excluded);
+  if (kept.size + omitted.size !== event.destinations.length || narrowed.destinations.some(relay => omitted.has(relay)) ||
+      JSON.stringify(event.destinations.filter(relay => kept.has(relay))) !== JSON.stringify(narrowed.destinations) ||
+      JSON.stringify(event.destinations.filter(relay => omitted.has(relay))) !== JSON.stringify(excluded)) denied();
+  return {event: narrowed, recommendationExcludedRelays: excluded};
+}
 function current(entries: readonly Entry[], focus: string | null, paused: boolean, native: NativeApprovalLeasePort): ApprovalItem | null {
   if (paused || focus === null) return null;
   const entry = entries.find(item => item.origin.sessionId === focus && item.controller === null && native.mayReview(item.lease));
-  return entry ? Object.freeze({ id: entry.id, origin: entry.origin, event: entry.event,...(entry.recommendation ? {recommendation:entry.recommendation} : {}),...(entry.outbox?{outbox:entry.outbox}:{}),...(entry.common?{common:entry.common}:{}),...(entry.appData?{appData:entry.appData}:{}) }) : null;
+  return entry ? Object.freeze({ id: entry.id, origin: entry.origin, event: entry.event,...(entry.recommendation ? {recommendation:entry.recommendation} : {}),...(entry.recommendationExcludedRelays ? {recommendationExcludedRelays:entry.recommendationExcludedRelays} : {}),...(entry.outbox?{outbox:entry.outbox}:{}),...(entry.common?{common:entry.common}:{}),...(entry.appData?{appData:entry.appData}:{}) }) : null;
 }
 
 /** Presentation-only approval queue. Native code owns admission, expiry, keys, and lifecycle authority. */
@@ -132,6 +142,7 @@ export class ApprovalService {
     let taken: NativeTakenApproval | null;
     try { taken = this.native.take(token); } catch { return false; }
     if (!taken) return false;
+    let revalidateRecommendation: CatalogRecommendationGuard | undefined;
     try {
       if (expectedOrigin && Object.keys(captureOrigin(expectedOrigin)).some(key => taken.origin[key as keyof ApprovalOrigin] !== expectedOrigin[key as keyof ApprovalOrigin])) denied();
       this.owner.assertActive(taken.origin,taken.commonRequest?'common':taken.outboxRequest?'outbox':undefined);
@@ -140,18 +151,20 @@ export class ApprovalService {
       if(claimsAppDataTemplate(taken.event)){if(!this.appDataPreparing.start(taken))denied();return true;}
       if(taken.commonRequest){if(!this.commonPreparing.start(taken))denied();return true;}
       if(taken.outboxRequest){if(!this.preparing.start(taken))denied();return true;}
-      const event = captureEventSnapshot(taken.event, taken.origin.user, destinationsFromTrustedConfig);
+      let event = captureEventSnapshot(taken.event, taken.origin.user, destinationsFromTrustedConfig);
       if (event.event.kind === 22242 || event.event.kind === 24242 || this.entries.length >= GLOBAL || this.entries.filter(entry => entry.origin.sessionId === taken!.origin.sessionId).length >= PER_SESSION) denied();
       if (nextPresentationId >= Number.MAX_SAFE_INTEGER) denied();
       let recommendation: string | undefined;
-      let revalidateRecommendation: CatalogRecommendationGuard | undefined;
+      let recommendationExcludedRelays: readonly string[] | undefined;
       if (bindRecommendation && event.event.kind === 30267 && event.event.tags.some(tag => tag[0] === 'd' && tag[1] === 'napplets')) {
         revalidateRecommendation = bindRecommendation(event) ?? denied();
         recommendation = event.event.tags.at(-1)?.[1];
+        ({event, recommendationExcludedRelays} = recommendationScope(event, revalidateRecommendation));
       }
-      this.entries.push({ recommendation, revalidateRecommendation, requestId: taken.requestId, id: `approval_${++nextPresentationId}`, origin: captureOrigin(taken.origin), event, lease: taken.lease, controller: null });
+      this.entries.push({ recommendation, recommendationExcludedRelays, revalidateRecommendation, requestId: taken.requestId, id: `approval_${++nextPresentationId}`, origin: captureOrigin(taken.origin), event, lease: taken.lease, controller: null });
       this.publish(); return true;
     } catch {
+      try { revalidateRecommendation?.release(true); } catch { /* Binding cleanup cannot skip native lease cleanup. */ }
       try { this.native.cancel(taken.lease); } catch { /* Rejecting admission must still finish the lease. */ }
       try { this.native.finish(taken.lease); } catch { /* Native cleanup failures cannot grant presentation. */ }
       return false;
