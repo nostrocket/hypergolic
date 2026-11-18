@@ -1,5 +1,6 @@
 import {captureEventSnapshot} from '../../src/security/event-snapshot';
 import {createCatalogRecommendations} from '../../src/napplets/catalog-recommendation';
+import {captureRecommendationRead} from '../src/discovery-recommendations';
 import {test,expect} from '@playwright/test';
 import {finalizeEvent,getPublicKey} from 'nostr-tools/pure';
 const key=new Uint8Array(32).fill(1),account=getPublicKey(key),coordinate='35129:'+account+':test';
@@ -15,8 +16,9 @@ async function setup(page:any,mode='success',fixture='napplet-discovery',service
       const send=(response:any)=>listeners.forEach(listener=>listener({data:JSON.stringify({type:'capability.result',sessionId:envelope.sessionId,sequence:envelope.sequence,response:response===null?null:JSON.stringify(response)})}));
       const base={type:request.type+'.result',id:request.id};
       if(request.type==='relay.catalogRecommendation'){
-        if(!request.coordinate)send({...base,result:service?.read??{status:'ready',account,revision:null,recommended:[]}});
-        else if(mode==='stale')send({...base,result:{status:'stale'}});
+        if(!request.coordinate)send({...base,result:mode==='incomplete-read'?{status:'incomplete',failedRelays:['wss://relay.example.com']}:service?.read??{status:'ready',account,revision:null,recommended:[]}});
+        else if(mode==='incomplete-peers')send({...base,result:{status:'incomplete',failedRelays:['wss://relay.example.com']}});
+        else if(mode==='stale'||mode==='incomplete')send({...base,result:{status:mode}});
         else if(mode==='hold')root.recommendTest.finish=()=>send({...base,result:{status:'prepared',event,relays:['wss://relay.example.com/']}});
         else send({...base,result:service?.prepared??{status:'prepared',event,relays:['wss://relay.example.com/']}});
       }else if(request.type==='relay.publish')send(mode==='null'?null:mode==='rejected'?{...base,ok:false,error:'no relay accepted the event'}:{...base,ok:true,event:mode==='mismatch'?{...signed,content:'forged'}:service?.signed??signed,eventId:service?.signed?.id??signed.id});
@@ -33,6 +35,18 @@ test('only verified Discover exposes recommendation transport',async({page})=>{
   const guest=await setup(page,'success','nap-support');
   expect(await guest.evaluate(()=>Boolean((window as any).hypergolic?.recommendations))).toBe(false);
 });
+test('failed relay details survive read and preparation without publishing',async({page})=>{
+  let guest=await setup(page,'incomplete-read');
+  expect(await guest.evaluate(()=>(window as any).hypergolic.recommendations.read())).toEqual({status:'incomplete',failedRelays:['wss://relay.example.com']});
+  guest=await setup(page,'incomplete-peers');
+  expect(await guest.evaluate(({coordinate,account}:any)=>(window as any).hypergolic.recommendations.recommend({coordinate,account,revision:null}),{coordinate,account})).toEqual({status:'incomplete',failedRelays:['wss://relay.example.com']});
+  expect(await page.evaluate(()=>(window as any).recommendTest.calls.filter((row:any)=>row.type==='relay.publish'))).toEqual([]);
+});
+test('failed relay details retain the native destination safety policy',()=>{
+  for(const failedRelays of [['http://relay.example.com'],['wss://127.0.0.1'],['wss://relay.example.com','wss://RELAY.example.com/']]){
+    expect(()=>captureRecommendationRead({status:'incomplete',failedRelays})).toThrow();
+  }
+});
 test('exact Discover reads selected account and publishes only the prepared event through native review',async({page})=>{
   const guest=await setup(page);
   const result=await guest.evaluate(async({coordinate,account}:any)=>{
@@ -47,10 +61,10 @@ test('exact Discover reads selected account and publishes only the prepared even
   expect(calls.some((row:any)=>row.id==='forged')).toBe(false);
   expect(calls.filter((row:any)=>row.type==='relay.publish')).toEqual([{type:'relay.publish',id:expect.any(String),event}]);
 });
-for(const mode of ['null','mismatch','stale','rejected'])test(`recommendation ${mode} cannot report publication success`,async({page})=>{
+for(const mode of ['null','mismatch','stale','incomplete','rejected'])test(`recommendation ${mode} cannot report publication success`,async({page})=>{
   const guest=await setup(page,mode);
-  expect(await guest.evaluate(({coordinate,account}:any)=>(window as any).hypergolic.recommendations.recommend({coordinate,account,revision:null}),{coordinate,account})).toEqual({status:mode==='stale'?'stale':mode==='rejected'?'failed':'uncertain'});
-  if(mode==='stale')expect(await page.evaluate(()=>(window as any).recommendTest.calls.filter((row:any)=>row.type==='relay.publish'))).toEqual([]);
+  expect(await guest.evaluate(({coordinate,account}:any)=>(window as any).hypergolic.recommendations.recommend({coordinate,account,revision:null}),{coordinate,account})).toEqual({status:mode==='stale'||mode==='incomplete'?mode:mode==='rejected'?'failed':'uncertain'});
+  if(mode==='stale'||mode==='incomplete')expect(await page.evaluate(()=>(window as any).recommendTest.calls.filter((row:any)=>row.type==='relay.publish'))).toEqual([]);
 });
 
 test('a pending native prepare cannot start a second recommendation review',async({page})=>{

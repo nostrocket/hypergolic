@@ -5,7 +5,7 @@ import {normalizeRelayUrl} from '../../src/network/relay-settings';
 
 export const RECOMMENDATION = 'relay.catalogRecommendation';
 const hex = /^[0-9a-f]{64}$/;
-const terminal = new Set(['already-recommended','cancelled','stale','account-changed','read-only','unavailable','uncertain','failed']);
+const terminal = new Set(['already-recommended','cancelled','stale','account-changed','read-only','unavailable','incomplete','uncertain','failed']);
 function record(value:unknown): Record<string,unknown> {
   if(!value||typeof value!=='object'||Array.isArray(value))throw Error('Invalid recommendation');
   return value as Record<string,unknown>;
@@ -19,6 +19,11 @@ function requestFields(value:unknown) {
 }
 export function captureRecommendationRead(value:unknown) {
   const row=record(value);
+  if(row.status==='incomplete'&&Object.keys(row).length===2&&Array.isArray(row.failedRelays)&&row.failedRelays.length>0&&row.failedRelays.length<=16&&row.failedRelays.every(relay=>typeof relay==='string'&&relay.length<=512)) {
+    const relays=(row.failedRelays as string[]).map(normalizeRelayUrl);
+    if(new Set(relays).size!==relays.length)throw Error('Invalid failed relays');
+    return {status:'incomplete',failedRelays:relays};
+  }
   if(['read-only','unavailable','incomplete'].includes(String(row.status))&&Object.keys(row).length===1)return {status:row.status};
   if(row.status!=='ready'||Object.keys(row).length!==4||typeof row.account!=='string'||!hex.test(row.account)||
     row.revision!==null&&(typeof row.revision!=='string'||!hex.test(row.revision))||!Array.isArray(row.recommended)||row.recommended.length>512||
@@ -84,6 +89,7 @@ export function createRecommendationsReceiver(source:Window,native:ReturnType<ty
       const result='result'in response?response.result:undefined;
       if(!request){send(captureRecommendationRead(result));return;}
       const reply=record(result);
+      if(reply.status==='incomplete'){send(captureRecommendationRead(reply));return;}
       if(terminal.has(String(reply.status))&&Object.keys(reply).length===1){send(reply);return;}
       const plan=prepared(result,request.coordinate);
       if(!live())return;

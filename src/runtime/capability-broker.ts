@@ -103,11 +103,11 @@ async function readCatalog(value: unknown, paging: ReturnType<typeof createCatal
   const key = JSON.stringify([type, id]);
   const reply = {type: type + '.result', id};
   const failure = page ? {...reply, error: 'Catalog paging unavailable'} : {...reply, result: {status: 'unavailable'}};
-  if (seen.has(key) || seen.size >= CAPABILITY_LIMITS.sessionRequests || pending.size >= 2) return failure;
+  if (seen.has(key) || seen.size >= CAPABILITY_LIMITS.sessionRequests || page && pending.size >= 2) return failure;
   seen.add(key);
   try {
-    const result = await pending.run(active, signal => page
-      ? paging(page, signal, active) : recommendations!.dispatch(value, signal, active));
+    const work = (signal: AbortSignal) => page ? paging(page, signal, active) : recommendations!.dispatch(value, signal, active);
+    const result = await (page ? pending.run(active, work) : pending.schedule(active, work));
     return {...reply, result};
   } catch {return failure;}
 }

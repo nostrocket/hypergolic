@@ -259,3 +259,84 @@ test('optional AUTH and rotated challenges preserve verified public reads withou
     assert.equal(denied.calls.length, 1);
   }
 });
+
+test('complete-relay reads bound concurrency and recover one transient connection failure per peer', async () => {
+  const attempts = new Map<string, number>();
+  let active = 0, maximum = 0;
+  const relays = Array.from({length: 7}, (_, i) => `wss://peer-${i}.example.com`);
+  const h = harness(relays, async (url, sub) => {
+    attempts.set(url, (attempts.get(url) ?? 0) + 1);
+    active++; maximum = Math.max(maximum, active);
+    await new Promise(resolve => setImmediate(resolve));
+    active--;
+    if (attempts.get(url) === 1) throw Error('transient connection failure');
+    return [JSON.stringify(['EVENT', sub, signed(url)]), JSON.stringify(['EOSE', sub])];
+  });
+  const result = await h.create().queryDetailed(parseQueryFilters([{}]), signal(), () => {}, {completeRelays: true});
+  assert.equal(result.incomplete, false);
+  assert.equal(result.events.length, relays.length);
+  assert.equal(maximum, 2);
+  assert.equal(h.calls.length, relays.length * 2);
+});
+
+test('a silent first peer cannot prevent later peers being read and remains incomplete after its bounded retry', async () => {
+  const h = harness(['wss://silent.example.com', 'wss://one.example.com', 'wss://two.example.com'], async (url, sub) => {
+    if (url.includes('silent')) return new Promise(() => {});
+    return [JSON.stringify(['EVENT', sub, signed(url)]), JSON.stringify(['EOSE', sub])];
+  });
+  const pending = h.create(120).queryDetailed(parseQueryFilters([{}]), signal(), () => {}, {completeRelays: true});
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.calls.length, 3);
+  const result = await pending;
+  assert.equal(result.incomplete, true);
+  assert.equal(result.events.length, 2);
+  assert.deepEqual(result.failedRelays, ['wss://silent.example.com']);
+  assert.equal(h.calls.length, 4);
+  assert.deepEqual(h.cancelled, [h.calls[0]!.id, h.calls[3]!.id]);
+});
+
+test('complete-relay reads never retry malformed signed data or confuse it with empty EOSE', async () => {
+  const event = clean(signed()); event.content = 'forged';
+  const h = harness(['wss://forged.example.com', 'wss://empty.example.com'], async (url, sub) =>
+    url.includes('forged') ? [JSON.stringify(['EVENT', sub, event]), JSON.stringify(['EOSE', sub])] : [JSON.stringify(['EOSE', sub])]);
+  const result = await h.create().queryDetailed(parseQueryFilters([{}]), signal(), () => {}, {completeRelays: true});
+  assert.deepEqual(result, {events: [], incomplete: true, failedRelays: ['wss://forged.example.com']});
+  assert.equal(h.calls.length, 2);
+});
+
+test('an entirely unreachable complete-relay read identifies every failed peer without asserting an empty list', async () => {
+  const h = harness(['wss://one.example.com', 'wss://two.example.com'], async () => {throw Error('offline');});
+  assert.deepEqual(await h.create().queryDetailed(parseQueryFilters([{}]), signal(), () => {}, {completeRelays:true}), {
+    events: [], incomplete: true, failedRelays: ['wss://one.example.com', 'wss://two.example.com'],
+  });
+  assert.equal(h.calls.length, 4);
+});
+
+test('complete-relay cancellation cancels every in-flight native peer and does not retry or return partial data', async () => {
+  const h = harness(['wss://one.example.com', 'wss://two.example.com', 'wss://three.example.com'], async () => new Promise(() => {}));
+  const controller = new AbortController();
+  const pending = h.create().queryDetailed(parseQueryFilters([{}]), controller.signal, () => {}, {completeRelays: true});
+  assert.equal(h.calls.length, 2);
+  controller.abort();
+  await assert.rejects(pending);
+  assert.deepEqual(h.cancelled, h.calls.map(call => call.id));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.calls.length, 2);
+});
+
+test('late frames from a timed-out complete-relay attempt cannot become the list replacement base', async () => {
+  let finish!: () => void, calls = 0;
+  const h = harness(undefined, async (_, sub) => {
+    if (++calls === 1) return new Promise(resolve => {finish = () => resolve([
+      JSON.stringify(['EVENT', sub, signed('late-newer', 999)]), JSON.stringify(['EOSE', sub]),
+    ]);});
+    return [JSON.stringify(['EVENT', sub, signed('retried', 100)]), JSON.stringify(['EOSE', sub])];
+  });
+  const result = await h.create(100).queryDetailed(parseQueryFilters([{}]), signal(), () => {}, {completeRelays: true});
+  assert.equal(result.incomplete, false);
+  assert.deepEqual(result.events.map(row => row.event.content), ['retried']);
+  finish();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(result.events.map(row => row.event.content), ['retried']);
+  assert.deepEqual(h.cancelled, [h.calls[0]!.id]);
+});

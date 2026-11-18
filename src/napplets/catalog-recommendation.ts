@@ -18,7 +18,8 @@ export type CatalogRecommendationGuard = ((signal: AbortSignal, active: () => vo
 type Prepared = Readonly<{snapshot: EventSnapshot; revision: string | null; network: string; ticket: number}>;
 class RecommendationError extends Error {
   readonly status: 'unavailable' | 'incomplete' | 'stale' | 'read-only';
-  constructor(status: RecommendationError['status']) {super(status); this.status = status;}
+  readonly failedRelays?: readonly string[];
+  constructor(status: RecommendationError['status'], failedRelays?: readonly string[]) {super(status); this.status = status; this.failedRelays = failedRelays;}
 }
 function request(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) throw Error('Invalid recommendation');
@@ -73,9 +74,9 @@ function createRecommendationReader(account: string, queries: RelayQueryService)
     const check = () => lifecycle(signal, active, expected);
     check();
     if (!queries.queryDetailed) throw new RecommendationError('unavailable');
-    const result = await queries.queryDetailed(filters, signal, check);
+    const result = await queries.queryDetailed(filters, signal, check, {completeRelays: true});
     check();
-    if (result.incomplete) throw new RecommendationError('incomplete');
+    if (result.incomplete) throw new RecommendationError('incomplete', result.failedRelays);
     if (result.events.length > QUERY_LIMITS.events) throw new RecommendationError('incomplete');
     const now = Math.floor(Date.now() / 1000);
     const events = result.events.map(row => verifyQueryEvent(row.event, filters));
@@ -130,7 +131,8 @@ class CatalogRecommendations {
       return Object.freeze({status: 'prepared', event: snapshot.event, relays: snapshot.destinations});
     } catch (error) {
       this.reader.lifecycle(signal, active);
-      return Object.freeze({status: error instanceof RecommendationError ? error.status : 'unavailable'});
+      return Object.freeze({status: error instanceof RecommendationError ? error.status : 'unavailable',
+        ...(error instanceof RecommendationError && error.failedRelays?.length ? {failedRelays: error.failedRelays} : {})});
     } finally {this.running = false;}
   }
   bind(event: EventSnapshot): CatalogRecommendationGuard | null {

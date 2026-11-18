@@ -17,9 +17,10 @@ function fixture(events: NostrEvent[] = []) {
   const queries: RelayQueryService = {
     catalog: {destinations:()=>state.relays, async read(){throw Error('Unexpected unscoped read');}},
     async query(){throw Error('Unexpected incomplete query');},
-    async queryDetailed(filters, signal, active): Promise<RelayQueryResult> {
+    async queryDetailed(filters, signal, active, options): Promise<RelayQueryResult> {
       state.calls++;
       assert.deepEqual(filters,[{kinds:[30267],authors:[account],'#d':['napplets'],limit:32}]);
+      assert.deepEqual(options, {completeRelays: true});
       if(state.beforeQuery) await state.beforeQuery();
       active();
       assert.equal(signal.aborted,false);
@@ -69,6 +70,13 @@ test('read-only, unavailable routes and incomplete network never produce replace
 
 test('absent detailed coverage fails closed instead of falling back to query',async()=>{
   const f=fixture();delete f.queries.queryDetailed;assert.deepEqual(await f.dispatch(),{status:'unavailable'});
+});
+test('an incomplete list exposes failed configured relays without producing a replacement',async()=>{
+  const f=fixture();
+  f.queries.queryDetailed=async()=>({events:[],incomplete:true,failedRelays:['wss://relay.example.org/']});
+  assert.deepEqual(await f.dispatch(),{status:'incomplete',failedRelays:['wss://relay.example.org/']});
+  assert.deepEqual(await f.prepare(),{status:'incomplete',failedRelays:['wss://relay.example.org/']});
+  assert.equal(f.service.bind(captureEventSnapshot({kind:30267,created_at:1,content:'',tags:[['d','napplets']]},account,['wss://relay.example.org'])),null);
 });
 
 test('account mismatch, stale revision and duplicate recommendation are terminal without preparation',async()=>{
