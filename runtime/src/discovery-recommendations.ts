@@ -10,20 +10,47 @@ function record(value:unknown): Record<string,unknown> {
   if(!value||typeof value!=='object'||Array.isArray(value))throw Error('Invalid recommendation');
   return value as Record<string,unknown>;
 }
-function requestFields(value:unknown) {
-  const row=record(value);
-  if(Object.keys(row).length!==3||typeof row.account!=='string'||!hex.test(row.account)||
-    row.revision!==null&&(typeof row.revision!=='string'||!hex.test(row.revision))||
-    typeof row.coordinate!=='string'||row.coordinate.length>512||!/^35129:[0-9a-f]{64}:.+$/u.test(row.coordinate)||/[\u0000-\u001f\u007f]/.test(row.coordinate))throw Error('Invalid recommendation');
-  return {account:row.account,revision:row.revision as string|null,coordinate:row.coordinate};
+const offerToken = /^[a-f0-9]{32}$/;
+
+function listIdentity(row: Record<string, unknown>) {
+  if (typeof row.account !== 'string' || !hex.test(row.account) ||
+      (row.revision !== null && (typeof row.revision !== 'string' || !hex.test(row.revision)))) {
+    throw Error('Invalid recommendation list identity');
+  }
+  return {account: row.account, revision: row.revision};
 }
+
+function requestFields(value: unknown) {
+  const row = record(value);
+  const scoped = Object.hasOwn(row, 'reachableToken');
+  if (Object.keys(row).length !== (scoped ? 4 : 3) || typeof row.coordinate !== 'string' ||
+      row.coordinate.length > 512 || !/^35129:[0-9a-f]{64}:.+$/u.test(row.coordinate) ||
+      /[\u0000-\u001f\u007f]/.test(row.coordinate)) throw Error('Invalid recommendation');
+  const target = {...listIdentity(row), coordinate: row.coordinate};
+  if (!scoped) return target;
+  if (typeof row.reachableToken !== 'string' || !offerToken.test(row.reachableToken)) throw Error('Invalid recommendation offer');
+  return {...target, reachableToken: row.reachableToken};
+}
+
+function incompleteRead(row: Record<string, unknown>) {
+  const hasOffer = Object.hasOwn(row, 'offer');
+  if (Object.keys(row).length !== (hasOffer ? 3 : 2) || !Array.isArray(row.failedRelays) ||
+      !row.failedRelays.length || row.failedRelays.length > 16 ||
+      !row.failedRelays.every(relay => typeof relay === 'string' && relay.length <= 2048)) throw Error('Invalid failed relays');
+  const failedRelays = (row.failedRelays as string[]).map(normalizeRelayUrl);
+  if (new Set(failedRelays).size !== failedRelays.length) throw Error('Invalid failed relays');
+  const result = {status: 'incomplete', failedRelays};
+  if (!hasOffer) return result;
+  const offer = record(row.offer);
+  if (Object.keys(offer).length !== 3 || typeof offer.token !== 'string' || !offerToken.test(offer.token)) {
+    throw Error('Invalid recommendation offer');
+  }
+  return {...result, offer: {...listIdentity(offer), token: offer.token}};
+}
+
 export function captureRecommendationRead(value:unknown) {
   const row=record(value);
-  if(row.status==='incomplete'&&Object.keys(row).length===2&&Array.isArray(row.failedRelays)&&row.failedRelays.length>0&&row.failedRelays.length<=16&&row.failedRelays.every(relay=>typeof relay==='string'&&relay.length<=512)) {
-    const relays=(row.failedRelays as string[]).map(normalizeRelayUrl);
-    if(new Set(relays).size!==relays.length)throw Error('Invalid failed relays');
-    return {status:'incomplete',failedRelays:relays};
-  }
+  if (row.status === 'incomplete' && Object.hasOwn(row, 'failedRelays')) return incompleteRead(row);
   if(['read-only','unavailable','incomplete'].includes(String(row.status))&&Object.keys(row).length===1)return {status:row.status};
   if(row.status!=='ready'||Object.keys(row).length!==4||typeof row.account!=='string'||!hex.test(row.account)||
     row.revision!==null&&(typeof row.revision!=='string'||!hex.test(row.revision))||!Array.isArray(row.recommended)||row.recommended.length>512||
@@ -84,7 +111,8 @@ export function createRecommendationsReceiver(source:Window,native:ReturnType<ty
     try{if(row.request!==undefined)request=requestFields(row.request);}catch{send({status:'unavailable'});return;}
     pending=true;
     void(async()=>{
-      const response=await native.request({type:RECOMMENDATION,id:'recommendation-'+crypto.randomUUID(),...request} as NappletMessage,undefined,26_000);
+      const command = {type:RECOMMENDATION, id:'recommendation-'+crypto.randomUUID(), ...request};
+      const response = await native.request(command, undefined, 26_000);
       if(!live())return;
       const result='result'in response?response.result:undefined;
       if(!request){send(captureRecommendationRead(result));return;}

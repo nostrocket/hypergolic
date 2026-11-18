@@ -42,6 +42,55 @@ test('failed relay details survive read and preparation without publishing',asyn
   expect(await guest.evaluate(({coordinate,account}:any)=>(window as any).hypergolic.recommendations.recommend({coordinate,account,revision:null}),{coordinate,account})).toEqual({status:'incomplete',failedRelays:['wss://relay.example.com']});
   expect(await page.evaluate(()=>(window as any).recommendTest.calls.filter((row:any)=>row.type==='relay.publish'))).toEqual([]);
 });
+test('a reachable offer crosses the bridge without forwarding any guest-selected destinations', async ({page}) => {
+  const offer = {account, revision: null, token: 'ab'.repeat(16)};
+  const read = {status: 'incomplete', failedRelays: ['wss://offline.example.org'], offer};
+  const app = finalizeEvent({kind:35129,created_at:1790000000,content:'',tags:[['d','test']]}, key);
+  const guest = await setup(page, 'success', 'napplet-discovery', {read, app, signed,
+    prepared: {status:'prepared', event, relays:['wss://relay.example.com/']}});
+  expect(await guest.evaluate(() => (window as any).hypergolic.recommendations.read())).toEqual(read);
+  const attempt = {account, revision:null, coordinate, reachableToken:offer.token};
+  expect(await guest.evaluate((input: typeof attempt) => (window as any).hypergolic.recommendations.recommend({...input, relays:['wss://other.example.org']}), attempt)).toEqual({status:'unavailable'});
+  expect(await guest.evaluate((input: typeof attempt) => (window as any).hypergolic.recommendations.recommend(input), attempt)).toEqual({status:'published'});
+  const calls = await page.evaluate(() => (window as any).recommendTest.calls);
+  expect(calls.filter((row:any) => row.coordinate)).toEqual([{type:'relay.catalogRecommendation', id:expect.any(String), ...attempt}]);
+  expect(calls.filter((row:any) => row.type==='relay.publish')).toEqual([{type:'relay.publish', id:expect.any(String), event}]);
+});
+
+test('malformed offers never become actionable', () => {
+  const offer = {account, revision:null, token:'ab'.repeat(16)};
+  for (const changed of [{...offer, token:0}, {...offer, revision:'bad'}, {...offer, relays:[]}, {...offer, account:'wrong'}]) {
+    expect(() => captureRecommendationRead({status:'incomplete', failedRelays:['wss://offline.example.org'], offer:changed})).toThrow();
+  }
+  expect(() => captureRecommendationRead({status:'incomplete', offer})).toThrow();
+});
+
+test('packaged Discover waits for a separate tap before asking for scoped publication', async ({page}) => {
+  const target = '35129:' + account + ':scoped';
+  const app = finalizeEvent({kind:35129, created_at:Math.floor(Date.now()/1000)-20, content:'',
+    tags:[['d','scoped'],['title','Scoped app'],['x','f'.repeat(64)]]}, key);
+  const offer = {account, revision:null, token:'ab'.repeat(16)};
+  const template = {...event, tags:[['d','napplets'],['a',target]]};
+  const guest = await setup(page, 'success', 'napplet-discovery', {
+    read:{status:'incomplete', failedRelays:['wss://offline.example.org'], offer},
+    prepared:{status:'prepared', event:template, relays:['wss://relay.example.com/']},
+    app, signed:finalizeEvent({...template}, key)
+  });
+  await guest.getByRole('button', {name:'Details for Scoped app'}).click();
+  await guest.getByRole('button', {name:'Recommend publicly', exact:true}).click();
+  const choice = guest.getByRole('button', {name:'Use reachable relays this time'});
+  await expect(choice).toBeVisible();
+  await expect(guest.getByRole('button', {name:'Retry all relays'})).toBeVisible();
+  await expect(guest.locator('.recommend-status')).toContainText('offline.example.org');
+  const requests = () => page.evaluate(() => (window as any).recommendTest.calls.filter((row:any) => row.coordinate || row.type==='relay.publish'));
+  expect(await requests()).toEqual([]);
+  await choice.click();
+  await expect(guest.locator('.recommend-status')).toHaveText('Recommended publicly.');
+  expect(await requests()).toEqual([
+    {type:'relay.catalogRecommendation', id:expect.any(String), coordinate:target, account, revision:null, reachableToken:offer.token},
+    {type:'relay.publish', id:expect.any(String), event:template}
+  ]);
+});
 test('failed relay details retain the native destination safety policy',()=>{
   for(const failedRelays of [['http://relay.example.com'],['wss://127.0.0.1'],['wss://relay.example.com','wss://RELAY.example.com/']]){
     expect(()=>captureRecommendationRead({status:'incomplete',failedRelays})).toThrow();
