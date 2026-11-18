@@ -108,6 +108,10 @@ def serve(mode: str, key: Path, cert: Path, listener: socket.socket,
                 errors.append("wrong masked REQ payload")
             if mode in {"cancel", "short-deadline"}:
                 time.sleep(1.4 if mode == "short-deadline" else 0.8)
+            elif mode == "empty-close":
+                return
+            elif mode == "partial-close":
+                peer.sendall(b"\x81\x28\x01")
             elif mode == "oversize":
                 peer.sendall(b"\x81\x7f" + (66_561).to_bytes(8, "big"))
             elif mode == "auth-announcement":
@@ -146,7 +150,7 @@ def main() -> None:
             *(str(NATIVE / source) for source in SOURCES), str(PROOF),
         ], cwd=ROOT, env=compiler_environment, check=True)
         for mode in ("valid", "auth-announcement", "failover", "untrusted", "wrong-host", "redirect",
-                     "bad-accept", "oversize", "cancel", "short-deadline"):
+                     "bad-accept", "oversize", "cancel", "short-deadline", "empty-close", "partial-close"):
             key, cert, anchor = (
                 (wrong_key, wrong_cert, wrong_der) if mode == "wrong-host"
                 else (valid_key, valid_cert, valid_der)

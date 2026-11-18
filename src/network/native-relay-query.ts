@@ -12,7 +12,7 @@ export interface RelayQueryService {
   query(filters: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void): Promise<readonly Readonly<{ event: NostrEvent }>[]>;
   queryDetailed?(filters: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void, options?: DetailedQueryOptions): Promise<RelayQueryResult>;
 }
-export type RelayQueryResult = Readonly<{ events: readonly Readonly<{ event: NostrEvent }>[]; incomplete: boolean; relayHints?: Readonly<Record<string, readonly string[]>>; failedRelays?: readonly string[] }>;
+export type RelayQueryResult = Readonly<{ events: readonly Readonly<{ event: NostrEvent }>[]; incomplete: boolean; relayHints?: Readonly<Record<string, readonly string[]>>; failedRelays?: readonly string[]; reachableRelays?: readonly string[] }>;
 type DetailedQueryOptions = Readonly<{maximumFilters?: number; timeoutMs?: number; allowPartialOnLimit?: boolean; allowSearch?: boolean; completeRelays?: true}>;
 export interface DetailedRelayQueryService extends RelayQueryService {
   queryDetailed(filters: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void, options?: DetailedQueryOptions): Promise<RelayQueryResult>;
@@ -21,6 +21,10 @@ type NativeQueryPort = Pick<NativePublishedRelayPort, 'newInstanceId' | 'cancelP
   queryPublishedRelay(operationId: string, url: string, request: string, subId: string, timeoutMs?: number): Promise<string[]>;
 };
 type PeerRequest = Readonly<{operation: string; relay: string; wire: string; subscription: string}>;
+function knownTransportFailure(error: unknown): boolean {
+  return typeof error === 'object' && error !== null &&
+    'code' in error && error.code === 'ERR_RELAY_TRANSPORT';
+}
 async function boundedPeerRead(port: NativeQueryPort, request: PeerRequest, budget: number, signal: AbortSignal): Promise<string[]> {
   const {operation, relay, wire, subscription} = request;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -30,6 +34,7 @@ async function boundedPeerRead(port: NativeQueryPort, request: PeerRequest, budg
     signal.addEventListener('abort', stop, {once: true});
     timer = setTimeout(() => {
       try {port.cancelPublishedRelay(operation);} catch { /* The native operation's own deadline remains the backstop. */ }
+      // The opaque native call might already hold partial response bytes.
       reject(new RelayQueryError('relay peer timed out'));
     }, budget);
   });
@@ -99,15 +104,20 @@ function retainEvent(events:Map<string,NostrEvent>,hints:Map<string,Set<string>>
 }
 function queryCollection(filters: readonly QueryFilter[], relays: readonly string[], aggregation: Aggregation, completeRelays: boolean) {
   const events = new Map<string, NostrEvent>(), hints = new Map<string, Set<string>>(), completed = new Set<string>();
+  const transportFailures = new Set<string>();
+  let invalid = false;
   const result = (incomplete: boolean): RelayQueryResult => Object.freeze({events: aggregation.ranked
     ? Object.freeze(Array.from(events.values(),event => Object.freeze({event})))
     : selectQueryEvents([...events.values()],filters),incomplete,
     ...(hints.size ? {relayHints:Object.freeze(Object.fromEntries([...hints].map(([id,relays]) => [id,Object.freeze([...relays])]))) } : {}),
     ...(completeRelays && incomplete && completed.size < relays.length
-      ? {failedRelays:Object.freeze(relays.filter(relay => !completed.has(relay)))} : {})});
+      ? {failedRelays:Object.freeze(relays.filter(relay => !completed.has(relay)))} : {}),
+    ...(completeRelays && incomplete && completed.size > 0 && !invalid && !aggregation.limited && completed.size + transportFailures.size === relays.length
+      ? {reachableRelays:Object.freeze(relays.filter(relay => completed.has(relay)))} : {})});
   return {
     result,
     completed: () => completed.size,
+    failed(relay: string, malformed: boolean) {if (malformed) invalid = true; else transportFailures.add(relay);},
     accept(relay: string, batch: NostrEvent[]) {
       // Select before charging aggregate budgets: older rows outside the requested
       // newest results do not make that selected output partial.
@@ -117,6 +127,7 @@ function queryCollection(filters: readonly QueryFilter[], relays: readonly strin
         retainEvent(events,hints,event,relay,aggregation);
       }
       completed.add(relay);
+      transportFailures.delete(relay);
     },
   };
 }
@@ -245,6 +256,9 @@ export function createNativeRelayQuery(port: NativeQueryPort,
             } catch (error) {
               active();
               if (lifetime.aborted()) throw new RelayQueryError();
+              // Native rejection may also mean malformed or over-limit frames.
+              // Only an explicit transport outcome can authorize excluding it.
+              collection.failed(relay, !knownTransportFailure(error));
               return error instanceof RelayQueryDataError ? 'invalid' : 'failed';
             } finally { lifetime.complete(operation); }
             collection.accept(relay, batch);

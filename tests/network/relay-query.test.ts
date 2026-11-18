@@ -291,6 +291,7 @@ test('a silent first peer cannot prevent later peers being read and remains inco
   assert.equal(result.incomplete, true);
   assert.equal(result.events.length, 2);
   assert.deepEqual(result.failedRelays, ['wss://silent.example.com']);
+  assert.equal(result.reachableRelays, undefined);
   assert.equal(h.calls.length, 4);
   assert.deepEqual(h.cancelled, [h.calls[0]!.id, h.calls[3]!.id]);
 });
@@ -300,8 +301,46 @@ test('complete-relay reads never retry malformed signed data or confuse it with 
   const h = harness(['wss://forged.example.com', 'wss://empty.example.com'], async (url, sub) =>
     url.includes('forged') ? [JSON.stringify(['EVENT', sub, event]), JSON.stringify(['EOSE', sub])] : [JSON.stringify(['EOSE', sub])]);
   const result = await h.create().queryDetailed(parseQueryFilters([{}]), signal(), () => {}, {completeRelays: true});
+  assert.equal(result.reachableRelays,undefined);
   assert.deepEqual(result, {events: [], incomplete: true, failedRelays: ['wss://forged.example.com']});
   assert.equal(h.calls.length, 2);
+});
+
+test('reachable-only eligibility requires at least one complete EOSE and exclusively transport failures',async()=>{
+  const h=harness(['wss://empty.example.com','wss://offline.example.com'],async(url,sub)=>{
+    if(url.includes('offline'))throw Object.assign(Error('offline'),{code:'ERR_RELAY_TRANSPORT'});
+    return [JSON.stringify(['EOSE',sub])];
+  });
+  const result=await h.create().queryDetailed(parseQueryFilters([{}]),signal(),()=>{},{completeRelays:true});
+  assert.deepEqual(result,{events:[],incomplete:true,failedRelays:['wss://offline.example.com'],reachableRelays:['wss://empty.example.com']});
+  const invalid=harness(['wss://empty.example.com','wss://invalid.example.com'],async(url,sub)=>url.includes('invalid')?[]:[JSON.stringify(['EOSE',sub])]);
+  assert.equal((await invalid.create().queryDetailed(parseQueryFilters([{}]),signal(),()=>{},{completeRelays:true})).reachableRelays,undefined);
+  const unknown=harness(['wss://empty.example.com','wss://unknown.example.com'],async(url,sub)=>{
+    if(url.includes('unknown'))throw Error('unknown native rejection, possibly invalid frames');
+    return [JSON.stringify(['EOSE',sub])];
+  });
+  assert.equal((await unknown.create().queryDetailed(parseQueryFilters([{}]),signal(),()=>{},{completeRelays:true})).reachableRelays,undefined);
+});
+
+test('deadline with unattempted or unfinished peers never grants reachable-only eligibility',async t=>{
+  t.mock.timers.enable({apis:['setTimeout']});
+  const h=harness(['wss://empty.example.com','wss://slow.example.com','wss://later.example.com','wss://unattempted.example.com'],async(url,sub)=>
+    url.includes('empty')?[JSON.stringify(['EOSE',sub])]:new Promise(()=>{}));
+  const pending=h.create(100).queryDetailed(parseQueryFilters([{}]),signal(),()=>{},{completeRelays:true});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(h.calls.length,3);
+  t.mock.timers.tick(100);
+  const result=await pending;
+  assert.equal(result.incomplete,true);assert.equal(result.reachableRelays,undefined);
+});
+
+test('aggregate truncation forbids reachable-only eligibility even with healthy peer EOSEs',async()=>{
+  const h=harness(['wss://one.example.com','wss://two.example.com','wss://offline.example.com'],async(url,sub)=>{
+    if(url.includes('offline'))throw Error('offline');
+    return [...Array.from({length:16},(_,i)=>signed(url+i+'x'.repeat(40_000))).map(event=>JSON.stringify(['EVENT',sub,event])),JSON.stringify(['EOSE',sub])];
+  });
+  const result=await h.create(15000).queryDetailed(parseQueryFilters([{}]),signal(),()=>{},{completeRelays:true,allowPartialOnLimit:true});
+  assert.equal(result.incomplete,true);assert.equal(result.reachableRelays,undefined);
 });
 
 test('an entirely unreachable complete-relay read identifies every failed peer without asserting an empty list', async () => {
