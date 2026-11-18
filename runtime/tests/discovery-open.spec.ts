@@ -213,11 +213,11 @@ test('packaged Discover pins then unpins from listing and details without openin
   await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.finish?.('pinned'));
   await expect(guest.locator('#row-open-status')).toHaveText('Pinned to Home.');
   await guest.getByRole('button', {name: 'Details for Pin control', exact: true}).click();
-  await guest.getByRole('button', {name: 'Unpin from Home', exact: true}).click();
+  await guest.getByRole('button', {name: 'Unpin Pin control from Home', exact: true}).click();
   await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length)).toBe(2);
   await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.finish?.('unpinned'));
   await expect(guest.locator('.detail-actions .feedback')).toHaveText('Unpinned from Home.');
-  await expect(guest.getByRole('button', {name: 'Pin to Home', exact: true})).not.toHaveAttribute('aria-disabled', 'true');
+  await expect(guest.getByRole('button', {name: 'Pin Pin control to Home', exact: true})).not.toHaveAttribute('aria-disabled', 'true');
 });
 
 
