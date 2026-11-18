@@ -1,4 +1,4 @@
-const { withDangerousMod, withAndroidStyles, IOSConfig } = require('expo/config-plugins');
+const { withDangerousMod, withAndroidStyles, AndroidConfig, IOSConfig } = require('expo/config-plugins');
 const { copyFile, mkdir, readFile, writeFile } = require('node:fs/promises');
 const path = require('node:path');
 const sky = require('../assets/shell/launch-sky.json');
@@ -11,6 +11,10 @@ async function writeResource(root, relative, contents) {
 
 function androidLaunch(config) {
   config = withAndroidStyles(config, result => {
+    // MainActivity switches to AppTheme before React has drawn its first frame.
+    result.modResults = AndroidConfig.Styles.assignStylesValue(result.modResults, {
+      add: true, parent: AndroidConfig.Styles.getAppThemeGroup(), name: 'android:windowBackground', value: '@color/launch_sky',
+    });
     const theme = result.modResults.resources.style.find(style => style.$.name === 'Theme.App.SplashScreen');
     if (!theme) throw new Error('Android launch theme is missing.');
     theme.item = [
