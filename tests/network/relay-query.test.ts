@@ -321,6 +321,27 @@ test('reachable-only eligibility requires at least one complete EOSE and exclusi
   });
   assert.equal((await unknown.create().queryDetailed(parseQueryFilters([{}]),signal(),()=>{},{completeRelays:true})).reachableRelays,undefined);
 });
+test('five-relay reads allow the native 3s idle outcome without delaying healthy peers',async t=>{
+  t.mock.timers.enable({apis:['setTimeout']});
+  const relays=['wss://one.example.com','wss://two.example.com','wss://slow.example.com','wss://three.example.com','wss://offline.example.com'];
+  const h=harness(relays,async(url,sub)=>{
+    const unavailable=()=>Object.assign(Error('native connection timeout before response'),{code:'ERR_RELAY_TRANSPORT'});
+    if(url.includes('slow'))return new Promise((_,reject)=>setTimeout(()=>reject(unavailable()),3000));
+    if(url.includes('offline'))throw unavailable();
+    return [JSON.stringify(['EOSE',sub])];
+  });
+  const pending=h.create(15000).queryDetailed(parseQueryFilters([{}]),signal(),()=>{},{completeRelays:true});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(h.calls.filter(call=>call.url.includes('offline')).length,2);
+  t.mock.timers.tick(3000);
+  await new Promise(resolve=>setImmediate(resolve));
+  t.mock.timers.tick(3000);
+  const result=await pending;
+  assert.equal(result.incomplete,true);
+  assert.deepEqual(result.failedRelays,['wss://slow.example.com','wss://offline.example.com']);
+  assert.deepEqual(result.reachableRelays,['wss://one.example.com','wss://two.example.com','wss://three.example.com']);
+  assert.equal(h.calls.filter(call=>call.url.includes('slow')).length,2);
+});
 
 test('deadline with unattempted or unfinished peers never grants reachable-only eligibility',async t=>{
   t.mock.timers.enable({apis:['setTimeout']});

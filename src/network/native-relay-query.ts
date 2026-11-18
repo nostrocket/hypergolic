@@ -21,6 +21,13 @@ type NativeQueryPort = Pick<NativePublishedRelayPort, 'newInstanceId' | 'cancelP
   queryPublishedRelay(operationId: string, url: string, request: string, subId: string, timeoutMs?: number): Promise<string[]>;
 };
 type PeerRequest = Readonly<{operation: string; relay: string; wire: string; subscription: string}>;
+function completePeerBudget(budget: number, peers: number, remaining: number): number {
+  const share = Math.floor(budget / (Math.ceil(peers / 2) * 2));
+  // Small sets need room for the native 3s idle timer plus connection setup.
+  // The query's unchanged total deadline still bounds retries and queued peers.
+  const nativeWindow = peers <= 5 ? Math.min(4000, Math.floor(budget / 3)) : 0;
+  return Math.max(1, Math.min(5000, Math.max(share, nativeWindow), remaining));
+}
 function knownTransportFailure(error: unknown): boolean {
   return typeof error === 'object' && error !== null &&
     'code' in error && error.code === 'ERR_RELAY_TRANSPORT';
@@ -236,7 +243,7 @@ export function createNativeRelayQuery(port: NativeQueryPort,
               checkDeadline?.();
               const frames = completeRelays
                 ? await boundedPeerRead(port, {operation, relay, wire, subscription},
-                  Math.max(1, Math.min(5000, Math.floor(budget / (Math.ceil(relays.length / 2) * 2)), lifetime.remaining())), lifetime.signal)
+                  completePeerBudget(budget, relays.length, lifetime.remaining()), lifetime.signal)
                 : options.outbox
                   ? await port.queryPublishedRelay(operation,relay,wire,subscription,lifetime.peerBudget(relays.length - index))
                   : await port.queryPublishedRelay(operation,relay,wire,subscription);
