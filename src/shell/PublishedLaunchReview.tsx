@@ -151,7 +151,7 @@ function TechnicalDetails({ target, source }: { target: ReviewTarget; source: La
   </View>;
 }
 
-export function PublishedLaunchReview({ target, source, changesAccess, onAccept, onCancel, ids, title, approveLabel, pinOnly = false, readOnly = false, children }: {
+export function PublishedLaunchReview({ target, source, changesAccess, onAccept, onCancel, ids, title, approveLabel, readOnly = false, children }: {
   target: ReviewTarget;
   source?: LaunchSource;
   changesAccess: boolean;
@@ -160,7 +160,6 @@ export function PublishedLaunchReview({ target, source, changesAccess, onAccept,
   ids: Readonly<{ review: string; approve: string; cancel: string }>;
   title?: string;
   approveLabel?: string;
-  pinOnly?: boolean;
   readOnly?: boolean;
   children?: ReactNode;
 }) {
@@ -172,11 +171,11 @@ export function PublishedLaunchReview({ target, source, changesAccess, onAccept,
   }}>
     <View style={[styles.backdrop, { paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right }]}>
       <View accessibilityViewIsModal testID={ids.review} style={styles.sheet}>
-        <TrustedBand label={pinOnly ? "Pin to Home" : "Launch review"} />
+        <TrustedBand label="Launch review" />
         <ScrollView testID="published-review-content" contentContainerStyle={styles.content} style={styles.scroll}>
           <Text ref={heading} accessibilityRole="header" style={styles.heading}>{title ?? `Open ${target.metadata.title}?`}</Text>
           <LaunchIdentity key={`${target.publisher}:${target.eventId}:${target.metadata.icon ?? ''}`} target={target} source={source} />
-          {pinOnly ? <Text style={styles.body}>Save a shortcut for this identity. Pinning does not open the napplet or grant access. You will review access when you open it.</Text> : readOnly ? <Text style={styles.body}>Legacy read-only mode supplies compatibility libraries and bounded public content. Declared capability access is not granted. Signing, publishing and uploads are unavailable.</Text> : <RequestedAccess key={`access:${target.eventId}`} target={target} changesAccess={changesAccess} />}
+          {readOnly ? <Text style={styles.body}>Legacy read-only mode supplies compatibility libraries and bounded public content. Declared capability access is not granted. Signing, publishing and uploads are unavailable.</Text> : <RequestedAccess key={`access:${target.eventId}`} target={target} changesAccess={changesAccess} />}
           {children}
           <TechnicalDetails key={`technical:${target.eventId}`} target={target} source={source} />
         </ScrollView>

@@ -135,7 +135,6 @@ function RoutingPublishedLaunchReview({ request, onAccept, onCancel }: {
     : { label: `Requested by ${source.title}`, publisher: request.origin.publisher };
   return <PublishedLaunchReview target={request.target} source={origin} changesAccess={request.changesAccess}
     onCancel={onCancel} onAccept={() => onAccept(legacyReadOnly)} ids={publishedReviewIds} readOnly={legacyReadOnly}
-    {...(request.pinOnly ? {title: 'Pin this napplet?', approveLabel: 'Pin to Home', pinOnly: true} : {})}
     {...(legacyReadOnly && { approveLabel: 'Open read-only' })}>
     {request.legacyReadOnlyAvailable && <View style={styles.group}>
       <Pressable testID="routing-legacy-read-only" accessibilityRole="checkbox" accessibilityState={{checked: legacyReadOnly}}

@@ -9,7 +9,7 @@ export type RoutingReviewRequest = Readonly<{ kind: 'intent'; origin: NativeRegi
   | Readonly<{ kind: 'topic'; origin: NativeRegistration; topic: string }>
   | Readonly<{ kind: 'channel'; origin: NativeRegistration; peer: NativeRegistration }>
   | Readonly<{ kind: 'permissions'; origin: NativeRegistration; consent: NappletConsentReview }>
-  | Readonly<{ kind: 'published-open'; pinOnly?: true; origin: NativeRegistration; source: NappletDescriptor; changesAccess: boolean; legacyReadOnlyAvailable?: true;
+  | Readonly<{ kind: 'published-open'; origin: NativeRegistration; source: NappletDescriptor; changesAccess: boolean; legacyReadOnlyAvailable?: true;
       target: Readonly<{ publisher: string; appId: string; eventId: string; version: string; metadata: VerifiedLaunchMetadata;
         requiredDomains: readonly string[]; optionalDomains: readonly string[];
         unsupportedDomains: readonly string[]; unsupportedOptionalDomains: readonly string[] }> }>;

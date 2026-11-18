@@ -21,7 +21,8 @@ async function setup(page:any,mode='success',fixture='napplet-discovery',service
         else if(mode==='stale'||mode==='incomplete')send({...base,result:{status:mode}});
         else if(mode==='hold')root.recommendTest.finish=()=>send({...base,result:{status:'prepared',event,relays:['wss://relay.example.com/']}});
         else send({...base,result:service?.prepared??{status:'prepared',event,relays:['wss://relay.example.com/']}});
-      }else if(request.type==='relay.publish')send(mode==='null'?null:mode==='rejected'?{...base,ok:false,error:'no relay accepted the event'}:{...base,ok:true,event:mode==='mismatch'?{...signed,content:'forged'}:service?.signed??signed,eventId:service?.signed?.id??signed.id});
+      }else if(request.type==='routing.call' && request.message?.action==='pin-state')send({...base,response:'unpinned'});
+      else if(request.type==='relay.publish')send(mode==='null'?null:mode==='rejected'?{...base,ok:false,error:'no relay accepted the event'}:{...base,ok:true,event:mode==='mismatch'?{...signed,content:'forged'}:service?.signed??signed,eventId:service?.signed?.id??signed.id});
       else if(request.type==='relay.catalogPage')send({...base,result:{page:1,until:Math.floor(Date.now()/1000),events:service?[{event:service.app}]:[],more:false,partial:false,gap:false,bounded:false}});
       else if(request.type==='relay.query')send({...base,events:[]});
     }};
