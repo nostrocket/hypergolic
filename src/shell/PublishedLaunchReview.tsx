@@ -1,4 +1,5 @@
 import { useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { accessIconUri } from './access-icon';
 import { Image } from 'expo-image';
 import { AccessibilityInfo, AppState, ScrollView, StyleSheet, Text, View, type TextInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,12 +27,9 @@ type ReviewTarget = Readonly<{
 type LaunchSource = Readonly<{ label: string; publisher?: string }>;
 
 function CapabilityMark({domain}: {domain: string}) {
-  const {styles} = useShellStyles(createStyles);
-  return <View accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.capabilityMark}>
-    {domain === 'identity' ? <><View style={styles.profileHead} /><View style={styles.profileShoulders} /></>
-      : domain === 'relay' || domain === 'outbox' ? <View style={styles.relayRing}><View style={styles.relayCore} /></View>
-      : <View style={[styles.toolMark, domain === 'cvm' && styles.toolDiamond]} />}
-  </View>;
+  const {colors, styles} = useShellStyles(createStyles);
+  return <Image source={{uri: accessIconUri(domain, colors.muted)}} accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+    style={styles.capabilityMark} contentFit="contain" />;
 }
 
 function CapabilityGroup({ kind, domains, unavailable }: { kind: 'required' | 'optional'; domains: readonly string[]; unavailable: readonly string[] }) {
@@ -213,13 +211,7 @@ const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.cre
   mono: { fontFamily: fonts.mono, fontSize: 12, color: colors.text },
   capability: { flexDirection: 'row', alignItems: 'flex-start', gap: 18, paddingVertical: 18, borderBottomWidth: 1, borderColor: colors.border },
   capabilityCopy: {flex: 1, gap: 7},
-  capabilityMark: {width: 34, height: 38, alignItems: 'center', justifyContent: 'center'},
-  profileHead: {width: 13, height: 13, borderWidth: 2, borderRadius: 7, borderColor: colors.muted},
-  profileShoulders: {width: 29, height: 15, marginTop: 4, borderWidth: 2, borderBottomWidth: 0, borderTopLeftRadius: 15, borderTopRightRadius: 15, borderColor: colors.muted},
-  relayRing: {width: 29, height: 29, borderWidth: 2, borderRadius: 15, borderColor: colors.muted, alignItems: 'center', justifyContent: 'center'},
-  relayCore: {width: 11, height: 11, borderWidth: 2, borderRadius: 6, borderColor: colors.muted},
-  toolMark: {width: 23, height: 23, borderWidth: 2, borderColor: colors.muted},
-  toolDiamond: {transform: [{rotate: '30deg'}]},
+  capabilityMark: {width: 32, height: 32, marginTop: 2},
   technical: { gap: 6, borderTopWidth: 1, borderColor: colors.border },
   disclosure: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 48, gap: 8 },
   disclosureText: { flexShrink: 1, fontFamily: fonts.strong, fontSize: 15, color: colors.accent },

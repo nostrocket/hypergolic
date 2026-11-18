@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import {accessIconPath} from './access-icon.ts';
 import {launchAccessCopy} from './launch-access-copy.ts';
 import {SUPPORTED_CAPABILITY_DOMAINS} from '../runtime/capability-protocol.ts';
 
@@ -29,4 +30,12 @@ test('sensitive access retains foreground, per-operation and free-tool limits', 
   assert.match(launchAccessCopy('upload', false).description, /Each upload needs your approval/);
   assert.match(launchAccessCopy('cvm', false).description, /free tools/);
   assert.match(launchAccessCopy('media', false).description, /15 minutes and 32 MiB/);
+});
+
+test('each named access type has distinct artwork, including unavailable direct messages', () => {
+  const domains = [...SUPPORTED_CAPABILITY_DOMAINS, 'shell', 'dm'];
+  const paths = domains.map(accessIconPath);
+  assert.equal(new Set(paths).size, domains.length);
+  assert.ok(!paths.includes(accessIconPath('unknown-future-capability')));
+  assert.equal(accessIconPath('__proto__'), accessIconPath('unknown-future-capability'));
 });

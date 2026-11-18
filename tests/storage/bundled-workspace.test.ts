@@ -98,6 +98,7 @@ test('the exact prior Support descriptor survives upgrade without reseeding or c
 });
 
 for (const version of [
+  'beedd15987c54107612ed736a1118097c20838fb46dd45381c745b1e79f09f8e',
   'c19ed96d4b7e1ea3cd6ac57b447fff9521bceaa2723e7e8d7dc4c2dd58049a13',
   '1360132bc9b4ea9a29ce5d4783ce04b862d776fbc214d2083186fb228267d7ed',
   '6eb956ead5bc710d70c3511715bf1dab281314d4979ff4bd99d9d1785176655c',
