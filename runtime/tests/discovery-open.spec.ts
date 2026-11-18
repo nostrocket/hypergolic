@@ -171,9 +171,13 @@ for (const declaration of ['R', 'O']) {
       new Uint8Array(32).fill(1));
     const guest = await openRuntime(page, 'napplet-discovery', [{event}]);
     await guest.getByRole('button', {name: 'Details for Independent Outbox', exact: true}).click();
-    await expect(guest.locator('.compat-state')).toHaveText('Requirements available');
-    await expect(guest.locator('.compat-detail')).not.toContainText('Outbox also needs relay access');
-    await expect(guest.locator('.capabilities .cap-row')).toHaveCount(1);
+    await expect(guest.locator('.access-summary')).toHaveText(declaration === 'R' ? 'Uses Nostr relays.' : 'No required access declared.');
+    await expect(guest.locator('.access-consequence')).toHaveCount(0);
+    await guest.getByText('Access details', {exact: true}).click();
+    const capability = guest.locator('.access-details .cap-row');
+    await expect(capability).toHaveCount(1);
+    await expect(capability).toContainText('Outbox routing');
+    await expect(capability).not.toContainText('unavailable');
     await guest.getByRole('button', {name: 'Open Napplet', exact: true}).click();
     await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length)).toBe(1);
     const calls = await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls);

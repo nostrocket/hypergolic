@@ -37,3 +37,11 @@ and acknowledgement of the page by its original guest. Failed or truncated
 coverage remains visible. Refresh starts a fresh bounded pass. Other shells
 can use the portable guest with standard NAP Relay queries. Search covers the
 publications loaded so far.
+
+## Details and public recommendations
+
+Details use the signed app title, publisher and available artwork. Open requests the displayed revision and Pin to Home saves a private shortcut. Native launch review identifies the verified app and discloses required access. Its optional section lists the additional capabilities granted on opening. Pin-only and legacy read-only reviews describe their own actions.
+
+Bundled Discover can also add a named kind-35129 app to the selected account’s public kind-30267 list with identifier `napplets`. The host reads the signed list across the configured Network relays, preserves its other entries and content, and presents a separate native publication review. It checks the list revision again before signing and before sending. A partial read blocks replacement. A positive relay acknowledgement confirms publication. An uncertain result offers an explicit check. Recommendations use the address of the app across releases.
+
+These reads cover the configured Network relays. A newer copy held only elsewhere is outside that scope, and Nostr relays cannot atomically compare revisions across clients. The recommendation action is available in the packaged catalog. Opening and private pinning remain independent of publication.

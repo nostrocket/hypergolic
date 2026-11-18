@@ -183,3 +183,25 @@ test('a timed-out lane retains its cursor and cancels without discarding a match
   assert.equal((await paging(request(1), signal, () => {})).partial, false);
   assert.deepEqual(cursors, [100, 100]);
 });
+
+test('recommendation reads require an eligible Discover binding and exact registration', async t => {
+  const {database} = await setup(t);
+  const native = new NativeLeases(), f = fixture();
+  const registered: NativeRegistration = {sessionId: 'discover-1', generation: 'discover-generation', epoch: 1,
+    user: hex(1), publisher: hex(2), appId: 'napplet-discovery', version: hex(3), instanceId: 'discover-1',
+    fixture: 'napplet-discovery', domains: ['relay']};
+  const input = {type: 'relay.catalogRecommendation', id: 'read-one'};
+  const recommendations = {async dispatch() {return {status: 'read-only'};}, bind() {return null;}};
+  for (const [configured, owner, sender, expected] of [
+    [false, registered, registered, null],
+    [true, {...registered, domains: []}, {...registered, domains: []}, null],
+    [true, registered, {...registered, epoch: 2}, null],
+    [true, registered, registered, {type: input.type + '.result', id: input.id, result: {status: 'read-only'}}],
+  ] as const) {
+    const broker = createCapabilityBroker(database, native, {registration: owner, assertActive() {}},
+      f.service, undefined, undefined, undefined, undefined, undefined, configured, recommendations);
+    const token = native.add(sender, input);
+    await broker.dispatch(token);
+    assert.deepEqual(native.results.get(token), expected);
+  }
+});

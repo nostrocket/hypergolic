@@ -1,3 +1,4 @@
+import type {CatalogRecommendationGuard} from '../napplets/catalog-recommendation.ts';
 import {AppDataApprovalPreparation} from '../app-data/app-data-preparation.ts';
 import {appDataFailure,type AppDataPlan,type AppDataPlanner} from '../app-data/app-data-plan.ts';
 import {claimsAppDataTemplate} from '../app-data/app-data-contract.ts';
@@ -44,9 +45,9 @@ export interface ApprovalEffects extends SigningHandoffReader {
   publishEvent(event: VerifiedSignedEvent, destinations: readonly string[], execution: EffectAuthority): Promise<readonly RelayOutcome[]>;
 }
 export interface TrustedApprovalOwner { assertActive(origin: ApprovalOrigin,domain?:'outbox'|'common'): void }
-export type ApprovalItem = Readonly<{ id: string; origin: ApprovalOrigin; event: EventSnapshot; outbox?:OutboxPublicationPlan;common?:CommonSocialPlan;appData?:AppDataPlan }>;
+export type ApprovalItem = Readonly<{ recommendation?: string; id: string; origin: ApprovalOrigin; event: EventSnapshot; outbox?:OutboxPublicationPlan;common?:CommonSocialPlan;appData?:AppDataPlan }>;
 export type ApprovalSnapshot = Readonly<{ focusedSessionId: string | null; reviewPaused: boolean; current: ApprovalItem | null; pending: number; pendingSessionIds: readonly string[] }>;
-type Entry = ApprovalItem & { requestId: string; lease: NativeApprovalLease; controller: AbortController | null; signingPending?: boolean; publicationStarted?: boolean };
+type Entry = ApprovalItem & { revalidateRecommendation?: CatalogRecommendationGuard; requestId: string; lease: NativeApprovalLease; controller: AbortController | null; signingPending?: boolean; publicationStarted?: boolean };
 const PER_SESSION = 4, GLOBAL = 16;
 let nextPresentationId = 0;
 
@@ -58,7 +59,7 @@ function captureOrigin(origin: ApprovalOrigin): ApprovalOrigin {
 function current(entries: readonly Entry[], focus: string | null, paused: boolean, native: NativeApprovalLeasePort): ApprovalItem | null {
   if (paused || focus === null) return null;
   const entry = entries.find(item => item.origin.sessionId === focus && item.controller === null && native.mayReview(item.lease));
-  return entry ? Object.freeze({ id: entry.id, origin: entry.origin, event: entry.event,...(entry.outbox?{outbox:entry.outbox}:{}),...(entry.common?{common:entry.common}:{}),...(entry.appData?{appData:entry.appData}:{}) }) : null;
+  return entry ? Object.freeze({ id: entry.id, origin: entry.origin, event: entry.event,...(entry.recommendation ? {recommendation:entry.recommendation} : {}),...(entry.outbox?{outbox:entry.outbox}:{}),...(entry.common?{common:entry.common}:{}),...(entry.appData?{appData:entry.appData}:{}) }) : null;
 }
 
 /** Presentation-only approval queue. Native code owns admission, expiry, keys, and lifecycle authority. */
@@ -111,6 +112,7 @@ export class ApprovalService {
     if (!this.entries.includes(entry)) return;
     if (response === null && entry.publicationStarted) this.closeRisks.set(entry.origin.sessionId, entry.origin.epoch);
     this.entries = this.entries.filter(item => item !== entry);
+    entry.revalidateRecommendation?.release(!entry.publicationStarted);
     if(entry.common)this.commonPlanner?.release(entry.common);
     if(entry.appData)this.appDataPlanner?.release(entry.appData);
     try { if (cancel) this.native.cancel(entry.lease); } catch { /* Native lease remains authoritative. */ }
@@ -124,7 +126,8 @@ export class ApprovalService {
     for (const entry of this.entries) { try { if (!this.handoffPending(entry) && !this.native.isLive(entry.lease)) this.end(entry, false); } catch { this.end(entry, true); } }
     this.publish();
   }
-  enqueue(token: string, destinationsFromTrustedConfig: unknown, expectedOrigin?: ApprovalOrigin): boolean {
+  enqueue(token: string, destinationsFromTrustedConfig: unknown, expectedOrigin?: ApprovalOrigin,
+    bindRecommendation?: (event: EventSnapshot) => CatalogRecommendationGuard | null): boolean {
     this.refresh();
     let taken: NativeTakenApproval | null;
     try { taken = this.native.take(token); } catch { return false; }
@@ -140,7 +143,13 @@ export class ApprovalService {
       const event = captureEventSnapshot(taken.event, taken.origin.user, destinationsFromTrustedConfig);
       if (event.event.kind === 22242 || event.event.kind === 24242 || this.entries.length >= GLOBAL || this.entries.filter(entry => entry.origin.sessionId === taken!.origin.sessionId).length >= PER_SESSION) denied();
       if (nextPresentationId >= Number.MAX_SAFE_INTEGER) denied();
-      this.entries.push({ requestId: taken.requestId, id: `approval_${++nextPresentationId}`, origin: captureOrigin(taken.origin), event, lease: taken.lease, controller: null });
+      let recommendation: string | undefined;
+      let revalidateRecommendation: CatalogRecommendationGuard | undefined;
+      if (bindRecommendation && event.event.kind === 30267 && event.event.tags.some(tag => tag[0] === 'd' && tag[1] === 'napplets')) {
+        revalidateRecommendation = bindRecommendation(event) ?? denied();
+        recommendation = event.event.tags.at(-1)?.[1];
+      }
+      this.entries.push({ recommendation, revalidateRecommendation, requestId: taken.requestId, id: `approval_${++nextPresentationId}`, origin: captureOrigin(taken.origin), event, lease: taken.lease, controller: null });
       this.publish(); return true;
     } catch {
       try { this.native.cancel(taken.lease); } catch { /* Rejecting admission must still finish the lease. */ }
@@ -222,20 +231,22 @@ export class ApprovalService {
     let releaseAppData:(()=>void)|undefined;
     try {
       this.owner.assertActive(entry.origin,entry.common?'common':entry.outbox?'outbox':undefined);
-      if(entry.appData){
-        releaseAppData=this.appDataPlanner!.retain(entry.appData);
-        entry.controller=new AbortController();this.publish();
-        await this.appDataPlanner!.revalidate(entry.appData,entry.controller.signal,()=>{
-          this.owner.assertActive(entry.origin,entry.outbox?'outbox':undefined);
-          if(!this.foregroundState.active||this.reviewPaused||this.focusedSessionId!==entry.origin.sessionId||entry.controller!.signal.aborted||!this.entries.includes(entry)||!this.native.isLive(entry.lease))denied();
-        });
-      }
-      if(entry.common){
-        entry.controller=new AbortController();this.publish();
-        await this.commonPlanner!.revalidate(entry.common,entry.controller.signal,()=>{
-          this.owner.assertActive(entry.origin,'common');
-          if(!this.foregroundState.active||this.reviewPaused||this.focusedSessionId!==entry.origin.sessionId||entry.controller!.signal.aborted||!this.entries.includes(entry)||!this.native.isLive(entry.lease))denied();
-        });
+      if (entry.appData || entry.common || entry.revalidateRecommendation) {
+        entry.controller = new AbortController();
+        const {signal} = entry.controller;
+        this.publish();
+        const active = () => {
+          this.owner.assertActive(entry.origin, entry.common ? 'common' : entry.outbox ? 'outbox' : undefined);
+          if (!this.foregroundState.active || this.reviewPaused || this.focusedSessionId !== entry.origin.sessionId ||
+              signal.aborted || !this.entries.includes(entry) || !this.native.isLive(entry.lease)) denied();
+        };
+        active();
+        if (entry.appData) {
+          releaseAppData = this.appDataPlanner!.retain(entry.appData);
+          await this.appDataPlanner!.revalidate(entry.appData, signal, active);
+        } else if (entry.common) await this.commonPlanner!.revalidate(entry.common, signal, active);
+        else await entry.revalidateRecommendation!(signal, active);
+        active();
       }
       if (this.native.prepareSigning && !this.native.prepareSigning(entry.lease, entry.event)) denied();
       if (!this.native.mayReview(entry.lease) || !this.native.approveOnce(entry.lease)) denied();
@@ -248,6 +259,10 @@ export class ApprovalService {
       execution.assertActive();
       const verified = validateSignedEvent(entry.event, signed);
       execution.assertActive();
+      if (entry.revalidateRecommendation) {
+        await entry.revalidateRecommendation(execution.signal, execution.assertActive);
+        execution.assertActive();
+      }
       if(entry.appData){
         this.appDataPlanner!.signed(entry.appData,verified);
         await this.appDataPlanner!.revalidate(entry.appData,execution.signal,execution.assertActive);execution.assertActive();
@@ -291,6 +306,7 @@ export class ApprovalService {
       const captured = captureRelayOutcomes(outcomes, entry.event.destinations, verified.id);
       if (captured.some(row => row.status === 'unknown')) this.closeRisks.set(entry.origin.sessionId, entry.origin.epoch);
       const accepted = captured.some(row => row.status === 'accepted');
+      if (entry.revalidateRecommendation && !accepted && captured.every(row => row.status !== 'unknown')) entry.publicationStarted = false;
       const completedResponse = JSON.stringify({ type: 'relay.publish.result', id: entry.requestId, ok: accepted,
         ...(accepted ? { event: verified, eventId: verified.id } : { error: captured.some(row => row.status === 'unknown') ? 'publication result unknown' : 'no relay accepted the event' }) });
       execution.assertActive();

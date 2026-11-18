@@ -1,3 +1,4 @@
+import { recommendationsPrelude } from './discovery-recommendations';
 import { catalogPagePrelude } from './discovery-catalog';
 import { DISCOVERY_LEASE_MS, DISCOVERY_OPEN, DISCOVERY_OUTCOMES, DISCOVERY_FAILURE_STATUS, discoveryOpenOutcome, parseDiscoveryOpen } from '../../src/napplets/discovery-open-contract';
 import { NativeRequestRevoked, type createNativeClient } from './native-client';
@@ -5,7 +6,7 @@ import { NativeRequestRevoked, type createNativeClient } from './native-client';
 const RESULT = DISCOVERY_OPEN + '.result';
 
 /** Install only in the verified catalog HTML. The top document still authenticates every request. */
-export function injectDiscoveryOpen(html: string, token: string, catalogEnabled = false): string {
+export function injectDiscoveryOpen(html: string, token: string, catalogEnabled = false, bundled = false): string {
   const state = JSON.stringify({ type: DISCOVERY_OPEN, outcomes: DISCOVERY_OUTCOMES, failureStatus: DISCOVERY_FAILURE_STATUS, token }).replace(/</g, '\\u003c');
   const script = `<script>(() => {
     const { type, outcomes, failureStatus, token } = ${state};
@@ -34,9 +35,9 @@ export function injectDiscoveryOpen(html: string, token: string, catalogEnabled 
         parent.postMessage({ type, id, address, expectedEventId, token, ...(action === 'pin' ? {action} : {}) }, '*');
       });
     };
-    ${catalogEnabled ? catalogPagePrelude : ''}
+    ${catalogEnabled ? catalogPagePrelude + (bundled ? recommendationsPrelude : '') : ''}
     Object.defineProperty(window, 'hypergolic', { value: Object.freeze({
-      publishedOpen: Object.freeze({ version: 1, open: (address, eventId) => open(address, eventId), pin: (address, eventId) => open(address, eventId, 'pin') })${catalogEnabled ? ', catalogPage' : ''}
+      publishedOpen: Object.freeze({ version: 1, open: (address, eventId) => open(address, eventId), pin: (address, eventId) => open(address, eventId, 'pin') })${catalogEnabled ? (bundled ? ', catalogPage, recommendations' : ', catalogPage') : ''}
     }) });
   })();</script>`;
   return html.replace(/(<meta\s+http-equiv=["']Content-Security-Policy["'][^>]*>)/i, match => match + script);

@@ -4,7 +4,7 @@ import { AccessibilityInfo, AppState, ScrollView, StyleSheet, Text, View, type T
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { boundedPublishedTitle, snapshotEventId } from '../napplets/published-identity';
 import type { VerifiedLaunchMetadata } from '../napplets/verified-launch-metadata';
-import { MEDIA_ACCESS_DETAIL } from '../runtime/support-report';
+import { launchAccessCopy } from './launch-access-copy';
 import { formatNpub } from '../security/public-identity';
 import { OwnerContext } from './IdentityOwnerContext';
 import { ShellModal } from './ShellModal';
@@ -25,38 +25,27 @@ type ReviewTarget = Readonly<{
 
 type LaunchSource = Readonly<{ label: string; publisher?: string }>;
 
-const capabilityCopy = new Map<string, readonly [string, string]>([
-  ['shell', ['Shell connection', 'Connect to Hypergolic and check which capabilities are available.']],
-  ['identity', ['Public identity', 'Read your public account information. Some public lists need separate approval.']],
-  ['storage', ['App storage', 'Save data for this napplet under your selected identity.']],
-  ['theme', ['Appearance', 'Follow Hypergolic’s light or dark theme.']],
-  ['relay', ['Nostr relays', 'Read events and ask to publish through your configured relays.']],
-  ['resource', ['Resources', 'Download bounded public resources through Hypergolic. Files stay in memory while this napplet is open.']],
-  ['upload', ['File uploads', 'Ask to upload files you choose to Blossom. Each upload needs your approval.']],
-  ['link', ['Web links', 'Ask to open public web links using your device.']],
-  ['intent', ['Actions in other napplets', 'Ask an installed napplet to perform an action. Each dispatch needs your approval.']],
-  ['inc', ['Messages between napplets', 'Exchange messages with approved peers while Hypergolic is in the foreground.']],
-  ['notify', ['Notifications', 'Show notifications inside Hypergolic.']],
-  ['config', ['Settings', 'Use and request changes to this napplet’s settings in Hypergolic.']],
-  ['outbox', ['Outbox routing', 'Read Nostr events or ask to publish using the relays associated with the accounts involved.']],
-  ['keys', ['Keyboard shortcuts', 'Use hardware shortcuts while this napplet has focus.']],
-  ['media', ['Media playback', MEDIA_ACCESS_DETAIL]],
-  ['cvm', ['External tools', 'Ask to send encrypted requests to free tools. Hypergolic asks you to review the provider and what is sent.']],
-  ['common', ['Nostr utilities', 'Use common Nostr tools. Profile lookup, public lists and social actions may need additional access.']],
-]);
+function CapabilityMark({domain}: {domain: string}) {
+  const {styles} = useShellStyles(createStyles);
+  return <View accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.capabilityMark}>
+    {domain === 'identity' ? <><View style={styles.profileHead} /><View style={styles.profileShoulders} /></>
+      : domain === 'relay' || domain === 'outbox' ? <View style={styles.relayRing}><View style={styles.relayCore} /></View>
+      : <View style={[styles.toolMark, domain === 'cvm' && styles.toolDiamond]} />}
+  </View>;
+}
 
 function CapabilityGroup({ kind, domains, unavailable }: { kind: 'required' | 'optional'; domains: readonly string[]; unavailable: readonly string[] }) {
   const { styles } = useShellStyles(createStyles);
   if (domains.length === 0) return null;
   const missing = new Set(unavailable);
   return <View style={styles.group}>
-    <Text accessibilityRole="header" style={styles.sectionTitle}>{kind === 'required' ? 'Required capabilities' : 'Optional capabilities'}</Text>
+    {kind === 'required' && <Text accessibilityRole="header" style={styles.sectionTitle}>Required access</Text>}
     {domains.map(domain => {
-      const [name, description] = capabilityCopy.get(domain) ?? [domain, 'Declared by the publisher.'];
+      const {name, description} = launchAccessCopy(domain, missing.has(domain));
       return <View key={domain} style={styles.capability}>
-        <Text testID={`published-review-${kind}-${domain}`} style={styles.name}>{name}</Text>
-        <Text style={styles.detail}>{description}</Text>
-        {missing.has(domain) && <Text style={styles.unavailable}>Unavailable in Hypergolic</Text>}
+        <CapabilityMark domain={domain} />
+        <View style={styles.capabilityCopy}><Text testID={`published-review-${kind}-${domain}`} style={styles.name}>{name}</Text>
+        <Text style={styles.detail}>{description}</Text></View>
       </View>;
     })}
   </View>;
@@ -65,15 +54,23 @@ function CapabilityGroup({ kind, domains, unavailable }: { kind: 'required' | 'o
 function RequestedAccess({ target, changesAccess }: { target: ReviewTarget; changesAccess: boolean }) {
   const { styles } = useShellStyles(createStyles);
   const { requiredDomains, optionalDomains, unsupportedDomains, unsupportedOptionalDomains } = target;
+  const [optionalExpanded, setOptionalExpanded] = useState(false);
   return <View style={styles.section}>
-    <Text accessibilityRole="header" style={styles.label}>Requested access</Text>
     {requiredDomains.length === 0 && optionalDomains.length === 0 && <Text style={styles.body}>No capabilities requested</Text>}
     <CapabilityGroup kind="required" domains={requiredDomains} unavailable={unsupportedDomains} />
     {unsupportedDomains.length > 0 && <Text testID="published-review-unavailable-required" style={styles.detail}>
       This napplet can open with limited features. Features that need unavailable capabilities will be missing.
     </Text>}
-    <CapabilityGroup kind="optional" domains={optionalDomains} unavailable={unsupportedOptionalDomains} />
-    {unsupportedOptionalDomains.length > 0 && <Text style={styles.detail}>Features that use unavailable optional capabilities will be missing.</Text>}
+    {optionalDomains.length > 0 && <View style={styles.technical}>
+      <ShellPressable accessibilityRole="button" accessibilityLabel="Optional access" accessibilityState={{expanded: optionalExpanded}}
+        testID="published-review-optional-toggle" onPress={() => setOptionalExpanded(value => !value)} style={styles.disclosure}>
+        <Text style={styles.sectionTitle}>Optional access · {optionalDomains.length}</Text>
+        <Text accessible={false} style={styles.disclosureText}>{optionalExpanded ? '−' : '+'}</Text>
+      </ShellPressable>
+      <Text style={styles.detail}>Opening also grants available optional access.</Text>
+      {unsupportedOptionalDomains.length > 0 && <Text style={styles.detail}>Unavailable optional access: {unsupportedOptionalDomains.map(domain => launchAccessCopy(domain, true).name).join(', ')}.</Text>}
+      {optionalExpanded && <CapabilityGroup kind="optional" domains={optionalDomains} unavailable={unsupportedOptionalDomains} />}
+    </View>}
     {changesAccess && requiredDomains.length + optionalDomains.length > 0 && <Text style={styles.detail}>
       Hypergolic saves the available access for this publisher and napplet under your selected identity.
     </Text>}
@@ -83,7 +80,6 @@ function RequestedAccess({ target, changesAccess }: { target: ReviewTarget; chan
 function useLaunchArtwork({ publisher, metadata: { icon } }: ReviewTarget) {
   const media = useContext(OwnerContext)?.launchReviewMedia;
   const [name, setName] = useState('');
-  const [avatar, setAvatar] = useState<string>();
   const [artwork, setArtwork] = useState<string>();
   useEffect(() => {
     if (!media || AppState.currentState !== 'active') return;
@@ -94,60 +90,35 @@ function useLaunchArtwork({ publisher, metadata: { icon } }: ReviewTarget) {
     void media.readProfile(publisher, signal, live).then(result => {
       live();
       setName(boundedPublishedTitle(result?.displayName ?? '') || boundedPublishedTitle(result?.name ?? ''));
-      if (result?.picture) return media.readAvatar(result.picture, signal, live);
-    }).then(image => {
-      if (image) { live(); setAvatar(image.uri); }
     }).catch(() => undefined);
     if (icon) void media.readIcon(icon, signal).then(uri => { live(); setArtwork(uri); }).catch(() => undefined);
     return () => { controller.abort(); subscription.remove(); };
   }, [icon, media, publisher]);
-  return { name, avatar, artwork };
+  return { name, artwork };
 }
 
-function ReviewImage({ uri, avatar = false }: { uri: string | undefined; avatar?: boolean }) {
+function ReviewImage({ uri }: { uri: string | undefined }) {
   const { styles } = useShellStyles(createStyles);
-  const [failed, setFailed] = useState(false);
-  return <View accessible={false} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={[styles.artwork, avatar && styles.avatar]}>
-    {uri && !failed
-      ? <Image source={{ uri }} style={styles.image} contentFit="cover" cachePolicy="none" autoplay={false} onError={() => setFailed(true)} />
-      : <View style={[styles.mark, avatar && styles.avatarMark]} />}
+  const [failedUri, setFailedUri] = useState<string>();
+  return <View accessible={false} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={styles.artwork}>
+    {uri && failedUri !== uri
+      ? <Image source={{ uri }} style={styles.image} contentFit="cover" cachePolicy="none" autoplay={false} onError={() => setFailedUri(uri)} />
+      : <View style={styles.mark} />}
   </View>;
 }
 
 function LaunchIdentity({ target, source }: { target: ReviewTarget; source: LaunchSource | undefined }) {
   const { styles } = useShellStyles(createStyles);
-  const { name, avatar, artwork } = useLaunchArtwork(target);
-  const { title, description } = target.metadata;
-  const [fullDescription, setFullDescription] = useState(false);
-  const summary = description.replace(/\s+/gu, ' ');
-  const hasLongDescription = summary.length > 180;
+  const { name, artwork } = useLaunchArtwork(target);
   const npub = formatNpub(target.publisher);
-  const preview = hasLongDescription ? summary.slice(0, 177).replace(/\s+\S*$/u, '') + '…' : summary;
   return <View style={styles.section}>
     <View style={styles.identityRow}>
       <ReviewImage uri={artwork} />
       <View style={styles.identityCopy}>
-        <Text accessibilityRole="header" style={styles.appName}>{title}</Text>
+        <Text testID="published-review-publisher" style={styles.name}>By {name || `${npub.slice(0, 13)}…${npub.slice(-7)}`}</Text>
         {source && <Text style={styles.detail}>{source.label}</Text>}
       </View>
     </View>
-    <View style={styles.publisherCard}>
-      <Text style={styles.label}>Publisher</Text>
-      <View style={styles.identityRow}>
-        <ReviewImage uri={avatar} avatar />
-        <View style={styles.identityCopy}>
-          {name !== '' && <Text style={styles.name}>{name}</Text>}
-          <Text selectable testID="published-review-publisher" style={styles.mono}>{npub.slice(0, 13)}…{npub.slice(-7)}</Text>
-        </View>
-      </View>
-    </View>
-    {description !== '' && <View style={styles.group}>
-      <Text style={styles.detail}>{fullDescription ? description : preview}</Text>
-      {hasLongDescription && <ShellPressable accessibilityRole="button" accessibilityState={{ expanded: fullDescription }}
-        onPress={() => setFullDescription(value => !value)} style={styles.descriptionToggle}>
-        <Text style={styles.disclosureText}>{fullDescription ? 'Show less' : 'Read full description'}</Text>
-      </ShellPressable>}
-    </View>}
   </View>;
 }
 
@@ -180,7 +151,7 @@ function TechnicalDetails({ target, source }: { target: ReviewTarget; source: La
   </View>;
 }
 
-export function PublishedLaunchReview({ target, source, changesAccess, onAccept, onCancel, ids, title = 'Open this napplet?', approveLabel, pinOnly = false, children }: {
+export function PublishedLaunchReview({ target, source, changesAccess, onAccept, onCancel, ids, title, approveLabel, pinOnly = false, readOnly = false, children }: {
   target: ReviewTarget;
   source?: LaunchSource;
   changesAccess: boolean;
@@ -190,6 +161,7 @@ export function PublishedLaunchReview({ target, source, changesAccess, onAccept,
   title?: string;
   approveLabel?: string;
   pinOnly?: boolean;
+  readOnly?: boolean;
   children?: ReactNode;
 }) {
   const { styles } = useShellStyles(createStyles);
@@ -202,11 +174,11 @@ export function PublishedLaunchReview({ target, source, changesAccess, onAccept,
       <View accessibilityViewIsModal testID={ids.review} style={styles.sheet}>
         <TrustedBand label={pinOnly ? "Pin to Home" : "Launch review"} />
         <ScrollView testID="published-review-content" contentContainerStyle={styles.content} style={styles.scroll}>
-          <Text ref={heading} accessibilityRole="header" style={styles.heading}>{title}</Text>
-          <LaunchIdentity key={target.eventId} target={target} source={source} />
-          {pinOnly ? <Text style={styles.body}>Save a shortcut for this identity. Pinning does not open the napplet or grant access. You will review access when you open it.</Text> : <RequestedAccess target={target} changesAccess={changesAccess} />}
+          <Text ref={heading} accessibilityRole="header" style={styles.heading}>{title ?? `Open ${target.metadata.title}?`}</Text>
+          <LaunchIdentity key={`${target.publisher}:${target.eventId}:${target.metadata.icon ?? ''}`} target={target} source={source} />
+          {pinOnly ? <Text style={styles.body}>Save a shortcut for this identity. Pinning does not open the napplet or grant access. You will review access when you open it.</Text> : readOnly ? <Text style={styles.body}>Legacy read-only mode supplies compatibility libraries and bounded public content. Declared capability access is not granted. Signing, publishing and uploads are unavailable.</Text> : <RequestedAccess key={`access:${target.eventId}`} target={target} changesAccess={changesAccess} />}
           {children}
-          <TechnicalDetails key={target.eventId} target={target} source={source} />
+          <TechnicalDetails key={`technical:${target.eventId}`} target={target} source={source} />
         </ScrollView>
         <View style={[styles.actions, { paddingBottom: Math.max(12, insets.bottom) }]}>
           <ShellPressable accessibilityRole="button" testID={ids.cancel} onPress={onCancel} style={styles.button}>
@@ -223,30 +195,31 @@ export function PublishedLaunchReview({ target, source, changesAccess, onAccept,
 
 const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.create({
   backdrop: { flex: 1, justifyContent: 'flex-end', alignItems: 'center', backgroundColor: colors.shade },
-  sheet: { maxHeight: '100%', width: '100%', maxWidth: 680, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-  scroll: { flexGrow: 0, flexShrink: 1 },
-  content: { padding: 20, gap: 16 },
-  heading: { fontFamily: fonts.display, fontSize: 26, color: colors.text },
+  sheet: { flex: 1, maxHeight: '100%', width: '100%', maxWidth: 680, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  scroll: { flex: 1 },
+  content: { padding: 22, gap: 24 },
+  heading: { fontFamily: fonts.display, fontSize: 30, color: colors.text },
   identityRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   identityCopy: { flex: 1, gap: 3 },
-  artwork: { width: 52, height: 52, backgroundColor: colors.raised, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  artwork: { width: 68, height: 68, borderRadius: 10, backgroundColor: colors.raised, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   image: { width: '100%', height: '100%' },
-  avatar: { width: 40, height: 40, borderRadius: 20 },
   mark: { width: 16, height: 16, backgroundColor: colors.accent, transform: [{ rotate: '45deg' }] },
-  avatarMark: { width: 12, height: 12, borderRadius: 6 },
-  appName: { fontFamily: fonts.strong, fontSize: 23, color: colors.text },
-  name: { fontFamily: fonts.strong, fontSize: 16, color: colors.text },
-  publisherCard: { gap: 6, paddingVertical: 10, paddingHorizontal: 12, backgroundColor: colors.raised },
+  name: { fontFamily: fonts.strong, fontSize: 18, color: colors.text },
   section: { gap: 10 },
   group: { gap: 4 },
-  sectionTitle: { fontFamily: fonts.strong, fontSize: 16, color: colors.text },
-  label: { fontFamily: fonts.mono, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: colors.muted },
+  sectionTitle: { fontFamily: fonts.strong, fontSize: 21, color: colors.text },
   body: { fontFamily: fonts.body, fontSize: 16, color: colors.text },
-  detail: { fontFamily: fonts.body, fontSize: 14, color: colors.muted },
+  detail: { fontFamily: fonts.body, fontSize: 16, lineHeight: 23, color: colors.muted },
   mono: { fontFamily: fonts.mono, fontSize: 12, color: colors.text },
-  capability: { gap: 3, paddingVertical: 9, borderBottomWidth: 1, borderColor: colors.border },
-  unavailable: { fontFamily: fonts.strong, fontSize: 14, color: colors.accent },
-  descriptionToggle: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
+  capability: { flexDirection: 'row', alignItems: 'flex-start', gap: 18, paddingVertical: 18, borderBottomWidth: 1, borderColor: colors.border },
+  capabilityCopy: {flex: 1, gap: 7},
+  capabilityMark: {width: 34, height: 38, alignItems: 'center', justifyContent: 'center'},
+  profileHead: {width: 13, height: 13, borderWidth: 2, borderRadius: 7, borderColor: colors.muted},
+  profileShoulders: {width: 29, height: 15, marginTop: 4, borderWidth: 2, borderBottomWidth: 0, borderTopLeftRadius: 15, borderTopRightRadius: 15, borderColor: colors.muted},
+  relayRing: {width: 29, height: 29, borderWidth: 2, borderRadius: 15, borderColor: colors.muted, alignItems: 'center', justifyContent: 'center'},
+  relayCore: {width: 11, height: 11, borderWidth: 2, borderRadius: 6, borderColor: colors.muted},
+  toolMark: {width: 23, height: 23, borderWidth: 2, borderColor: colors.muted},
+  toolDiamond: {transform: [{rotate: '30deg'}]},
   technical: { gap: 6, borderTopWidth: 1, borderColor: colors.border },
   disclosure: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 48, gap: 8 },
   disclosureText: { flexShrink: 1, fontFamily: fonts.strong, fontSize: 15, color: colors.accent },

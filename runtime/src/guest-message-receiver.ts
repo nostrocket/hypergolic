@@ -1,3 +1,4 @@
+import {RECOMMENDATION, type createRecommendationsReceiver} from './discovery-recommendations';
 import { CATALOG_PAGE } from '../../src/napplets/catalog-page-contract';
 import { DISCOVERY_OPEN } from '../../src/napplets/discovery-open-contract';
 import type { createCatalogPageReceiver } from './discovery-catalog';
@@ -10,6 +11,7 @@ import type { createNativeClient } from './native-client';
 type GuestMessageRoutes = Readonly<{
   routing: ReturnType<typeof createGuestRouting>;
   discoveryOpen: ReturnType<typeof createDiscoveryOpenReceiver> | null;
+  recommendations?: ReturnType<typeof createRecommendationsReceiver> | null;
   catalogPage: ReturnType<typeof createCatalogPageReceiver> | null;
   keys: ReturnType<typeof createKeysSession> | null;
   sendMedia: ReturnType<typeof createNativeClient>['sendMedia'] | null;
@@ -33,6 +35,7 @@ export function guestMessageReceiver(frame: HTMLIFrameElement, source: Window, r
       routes.discoveryOpen?.(event.data);
       return;
     }
+    if (event.data?.type === RECOMMENDATION) {routes.recommendations?.(event.data);return;}
     if (event.data?.type === CATALOG_PAGE) {
       routes.catalogPage?.(event.data);
       return;

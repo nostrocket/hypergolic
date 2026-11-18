@@ -42,6 +42,7 @@ function commonTargets(common:NonNullable<ApprovalItem['common']>):string{
 }
 
 function requestedAction(item: ApprovalItem): string {
+  if (item.recommendation) return 'Recommend publicly';
   if (item.appData) {
     const body = item.appData.record.body;
     if (body.deleted) return 'Unpublish public record';
@@ -86,6 +87,8 @@ function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismis
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text accessibilityRole="header" style={styles.eyebrow}>Approve signing request</Text>
           <Text style={styles.title}>{requestedAction(item)}</Text>
+          {item.recommendation && <><Text style={styles.value}>Add this napplet to your public list on the Network relays below.</Text>
+            <Text selectable style={styles.mono}>{item.recommendation}</Text></>}
           {record && <AppDataRecordReview record={record} content={item.event.event.content}/>}
           {item.common && <><Text style={styles.label}>Targets</Text><Text selectable style={styles.mono}>{commonTargets(item.common)}</Text></>}
           {item.common?.request.type==='common.report'&&<><Text style={styles.label}>Report reason</Text><Text style={styles.value}>{item.common.request.reason}</Text></>}
