@@ -324,6 +324,7 @@ class NappletHostModule : Module() {
       Prop("sessionId") { view: NappletHostView, id: String -> view.startSession(id) }
       Prop("closeCheck") { view: NappletHostView, raw: String -> view.setCloseCheck(raw) }
       Prop("active") { view: NappletHostView, active: Boolean -> view.setActive(active) }
+      Prop("gameControls") { view: NappletHostView, enabled: Boolean -> view.setGameControls(enabled) }
       Prop("inputBlocked") { view: NappletHostView, blocked: Boolean -> view.setInputBlocked(blocked) }
       OnViewDestroys { view: NappletHostView -> view.destroySession() }
     }

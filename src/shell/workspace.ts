@@ -27,12 +27,24 @@ export function samePublishedPin(left: NappletDescriptor, right: NappletDescript
 
 export interface Workspace {
   readonly home?: boolean;
+  readonly gameControls?: readonly string[];
   readonly pins?: readonly NappletDescriptor[];
   readonly sessions: readonly NappletDescriptor[];
   readonly focusedId: string | null;
   readonly overview: boolean;
 }
 export const emptyWorkspace = (): Workspace => ({ sessions: [], focusedId: null, overview: true, home: true, pins: defaultPins() });
+
+export function usesGameControls(state: Workspace, session: NappletDescriptor): boolean {
+  return state.gameControls?.includes(pinKey(session)) ?? false;
+}
+export function setGameControls(state: Workspace, session: NappletDescriptor, enabled: boolean): Workspace {
+  const keys = new Set(state.gameControls);
+  const key = pinKey(session);
+  if (enabled) keys.add(key);
+  else keys.delete(key);
+  return {...state, gameControls: [...keys]};
+}
 
 export function openNapplet(state: Workspace, descriptor: NappletDescriptor): Workspace {
   if (state.sessions.some(session => session.id === descriptor.id)) return focusNapplet(state, descriptor.id);
@@ -71,13 +83,14 @@ export function showOverview(state: Workspace): Workspace { return { ...state, o
 
 export interface WorkspaceSnapshot {
   readonly schema: 1 | 2;
+  readonly gameControls?: readonly string[];
   readonly pins?: readonly NappletDescriptor[];
   readonly home?: boolean;
   readonly sessions: readonly NappletDescriptor[];
   readonly lastActiveId: string | null;
 }
 export function snapshotWorkspace(state: Workspace): WorkspaceSnapshot {
-  return { schema: 2, sessions: state.sessions.map(item => ({ ...item })), lastActiveId: state.focusedId,
+  return { schema: 2, ...(state.gameControls?.length ? {gameControls: state.gameControls} : {}), sessions: state.sessions.map(item => ({ ...item })), lastActiveId: state.focusedId,
     pins: pinnedNapplets(state).map(item => ({...item})), home: state.home ?? state.sessions.length === 0 };
 }
 const bounded = (value: unknown, max: number): value is string => typeof value === 'string' && value.length > 0 && value.length <= max;
@@ -111,5 +124,7 @@ export function restoreWorkspace(value: unknown): Workspace {
     if (new Set(pins.map(pinKey)).size !== pins.length) throw new Error('Duplicate shortcut');
     home = snapshot.home;
   }
-  return { sessions, pins, home, focusedId: snapshot.lastActiveId as string | null, overview: home || sessions.length === 0 || snapshot.lastActiveId === null };
+  const controls = snapshot.gameControls;
+  if (controls !== undefined && (!Array.isArray(controls) || !controls.every(key => bounded(key, 2400)))) throw new Error('Invalid game controls');
+  return { ...(controls?.length ? {gameControls: Object.freeze([...controls])} : {}), sessions, pins, home, focusedId: snapshot.lastActiveId as string | null, overview: home || sessions.length === 0 || snapshot.lastActiveId === null };
 }

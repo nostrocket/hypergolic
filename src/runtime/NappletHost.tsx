@@ -19,6 +19,7 @@ interface Props extends ViewProps {
   onZoomTarget?: ZoomResetRegistration;
   active?: boolean;
   inputBlocked?: boolean;
+  gameControls?: boolean;
   onHostEvent: (event: NativeSyntheticEvent<HostEvent>) => void;
 }
 type NativeEvent = HostEvent | NativeCapabilityEvent | NativeZoomReply;
@@ -31,6 +32,7 @@ interface NativeProps extends ViewProps {
   publishedArtifact?: string;
   active?: boolean;
   inputBlocked?: boolean;
+  gameControls?: boolean;
   onHostEvent: (event: NativeSyntheticEvent<NativeEvent>) => void;
 }
 const NativeHost = (Platform.OS === 'android' || Platform.OS === 'ios') ? requireNativeView<NativeProps>('HypergolicNappletHost') : null;

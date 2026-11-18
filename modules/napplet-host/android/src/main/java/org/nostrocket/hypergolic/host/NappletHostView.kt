@@ -42,6 +42,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
   @Volatile private var ready = false
   @Volatile private var disposed = false
   @Volatile private var active = false
+  private var gameControlsEnabled = false
   private var inputBlocked = false
   private var expectedUrl: String? = null
   private var closeCheckId: String? = null
@@ -341,6 +342,11 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     onHostEvent(mapOf("type" to "close-check", "sessionId" to (sessionId ?: ""), "generation" to generation, "id" to id, "state" to guarded))
   }
 
+  fun setGameControls(enabled: Boolean) {
+    gameControlsEnabled = enabled
+    updateInputActivity()
+  }
+
   fun setInputBlocked(blocked: Boolean) {
     if (disposed || inputBlocked == blocked) return
     inputBlocked = blocked
@@ -355,7 +361,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
   private fun updateInputActivity() {
     if (!disposed && loaded) {
       val allowed = active && !inputBlocked && mediaForeground
-      webView.evaluateJavascript("window.__hypergolicInputActive?.($allowed)", null)
+      webView.evaluateJavascript("window.__hypergolicInputActive?.($allowed, $gameControlsEnabled)", null)
     }
   }
 

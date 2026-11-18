@@ -41,6 +41,30 @@ async function open(page: Page, sessionId = 'test-session', holdReady = false): 
 }
 const messages = (frame: Frame) => frame.evaluate(() => (window as any).__received);
 
+test('game controls toggle live on game buttons and preserve the running document', async ({ page }) => {
+  const frame = await open(page);
+  await frame.evaluate(() => {
+    const panel = document.createElement('section');
+    panel.innerHTML = '<div id="gas" role="button"><span>Gas</span></div><p id="help">Help</p><textarea id="chat"></textarea><button style="touch-action:none">Steer</button>';
+    document.body.append(panel);
+  });
+  const button = frame.locator('#gas');
+  const label = button.locator('span');
+  const menuAllowed = (target: typeof label) => target.evaluate(element =>
+    element.dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true})));
+  expect(await menuAllowed(label)).toBe(true);
+  await page.evaluate(() => (window as any).__hypergolicInputActive(true, true));
+  await expect(button).toHaveCSS('touch-action', 'manipulation');
+  await expect(label).toHaveCSS('user-select', 'none');
+  await expect(frame.getByText('Steer', {exact: true})).toHaveCSS('touch-action', 'none');
+  expect(await menuAllowed(label)).toBe(false);
+  expect(await menuAllowed(frame.locator('#help'))).toBe(true);
+  expect(await menuAllowed(frame.locator('#chat'))).toBe(true);
+  await page.evaluate(() => (window as any).__hypergolicInputActive(true, false));
+  await expect(button).toHaveCSS('touch-action', 'auto');
+  expect(await menuAllowed(label)).toBe(true);
+});
+
 // This reads the built delivery artifact, independently of the host's build implementation.
 test('delivery has two assets and the original fixture bytes plus original unsigned manifest', async () => {
   expect(readdirSync('dist').sort()).toEqual(['host.js', 'index.html']);

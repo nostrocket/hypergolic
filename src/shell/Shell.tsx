@@ -32,7 +32,7 @@ import type { OverviewHandle } from './Overview';
 import { WorkspaceStage } from './WorkspaceStage';
 import {useZoomReset} from './useZoomReset';
 import { directionForHandle, type HandleSide } from './motion';
-import { adjacentNapplet, closeNapplet, focusNapplet, showOverview, type NappletDescriptor, type Workspace } from './workspace';
+import { usesGameControls, setGameControls, adjacentNapplet, closeNapplet, focusNapplet, showOverview, type NappletDescriptor, type Workspace } from './workspace';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 import { RuntimeContext } from '../runtime/RuntimeContext';
 import { ReviewFocus } from './ReviewFocus';
@@ -229,7 +229,8 @@ export function Shell({ blocked = false, hostActivityBlocked = blocked, initialW
       </View>
       <WorkspaceFullscreenContext value={fullscreen}>{footer}</WorkspaceFullscreenContext>
       <DiscoveryAccessReview review={discovery.review} decide={discovery.decide} />
-      {menuSession && <WorkspaceMenu pinned={isPinned(workspace, menuSession)} onPin={() => togglePin(menuSession)} title={menuSession.title} disabled={navigationBlocked} onNappletSettings={openNappletSettings}
+      {menuSession && <WorkspaceMenu gameControls={usesGameControls(workspace, menuSession)}
+        onGameControls={enabled => change(setGameControls(current.current, menuSession, enabled))} pinned={isPinned(workspace, menuSession)} onPin={() => togglePin(menuSession)} title={menuSession.title} disabled={navigationBlocked} onNappletSettings={openNappletSettings}
         onResetZoom={() => resetZoom(menuSession)} zoomResetDisabled={!zoomResetAvailable}
         onDismiss={dismissMenu} onOverview={() => { clearMenu(); openOverview(); }}
         onSettings={() => { clearMenu(); openSettings(); }} onClose={() => { clearMenu(); requestClose(menuSession.id); }} />}
