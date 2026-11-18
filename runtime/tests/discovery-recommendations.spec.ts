@@ -68,7 +68,7 @@ test('malformed offers never become actionable', () => {
 
 test('packaged Discover waits for a separate tap before asking for scoped publication', async ({page}) => {
   const target = '35129:' + account + ':scoped';
-  const app = finalizeEvent({kind:35129, created_at:Math.floor(Date.now()/1000)-20, content:'',
+  const app = finalizeEvent({kind:35129, created_at:Math.floor(Date.now()/1000)-20, content:'Public test listing.',
     tags:[['d','scoped'],['title','Scoped app'],['x','f'.repeat(64)]]}, key);
   const offer = {account, revision:null, token:'ab'.repeat(16)};
   const template = {...event, tags:[['d','napplets'],['a',target]]};
