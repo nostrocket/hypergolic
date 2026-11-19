@@ -60,7 +60,8 @@
         }
       ],
       "./plugins/withNativeCodecPatches.cjs",
-      "./plugins/withSceneLifecycle.cjs"
+      "./plugins/withSceneLifecycle.cjs",
+      "./plugins/withLaunchAppearance.cjs"
     ],
     "userInterfaceStyle": "automatic"
   }

@@ -27,7 +27,10 @@ const mocks = {
  'expo-secure-store': `import {forbidden} from 'test:fixture'; export const WHEN_UNLOCKED_THIS_DEVICE_ONLY='when-unlocked-device-only'; export const isAvailableAsync=()=>forbidden('secure-store'); export const getItemAsync=()=>forbidden('config-read'); export const setItemAsync=()=>forbidden('config-write'); export const deleteItemAsync=()=>forbidden('config-delete');`,
  'expo-image': `export const Image='Image';`,
  'react-native-safe-area-context': `export const SafeAreaView='SafeAreaView',SafeAreaProvider='SafeAreaProvider';`,
- 'react': `export * from '${root}/node_modules/react/index.js'; export function useEffect() {} export function useMemo(create) { return create(); } export function useContext(context) { return context._currentValue; } export function useSyncExternalStore(subscribe,getState) { return getState(); }`,
+ 'react': `export * from '${root}/node_modules/react/index.js'; import {fixture} from 'test:fixture';
+ export function useEffect(effect) { fixture.hooks?.effect(effect); }
+ export function useState(initial) { return fixture.hooks.state(initial); }
+ export function useMemo(create) { return create(); } export function useContext(context) { return context._currentValue; } export function useSyncExternalStore(subscribe,getState) { return getState(); }`,
  'native-identity-owner': `import {fixture} from 'test:fixture'; export function claimIdentityOwner(){fixture.calls.push('claim');return fixture.claim;}`,
  'crypto-bootstrap': `import {fixture} from 'test:fixture'; export function initializeNativeRandom(){fixture.calls.push('initialize-random');}`,
  'identity-crypto': `import {forbidden} from 'test:fixture'; export const identityCrypto={generateSecretKey:()=>forbidden('generate-key'),derivePublicKey:()=>forbidden('derive-key'),parseNsec:()=>forbidden('parse-nsec'),newId:()=>forbidden('random-id'),now:()=>forbidden('clock')}; export const formatNpub=()=>forbidden('format-npub'); export const publicKeyFromNsec=()=>forbidden('import-key');`,
