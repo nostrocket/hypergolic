@@ -116,6 +116,19 @@ Signed content-addressed artwork uses the existing bounded native image loader;
 missing or unavailable artwork uses a title monogram. Discover uses bundled brand
 artwork. No arbitrary remote image URL is passed to the native image component.
 
+### Game controls
+
+The napplet menu offers a Game controls switch below Pin to Home. Each identity
+remembers the enabled games by source, publisher and app identifier in its
+workspace snapshot. Missing preferences default to off. Changing the switch
+updates the running game immediately. The preference survives closing the game,
+reopening it and accepting a new revision of the same publication.
+
+The runtime suppresses text selection and touch callouts on HTML buttons, button
+inputs and elements with a button role. It disables browser double-tap zoom on
+these controls while respecting the game's explicit touch-action styles.
+Custom unmarked controls need markup from the game author.
+
 ### Follow-up
 
 - Long-press actions to rearrange and unpin Home shortcuts. The first version uses

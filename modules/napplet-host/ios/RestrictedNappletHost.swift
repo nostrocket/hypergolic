@@ -38,6 +38,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
 #endif
   // A newly mounted hidden host cannot claim focus before the trusted active prop.
   private var active = false
+  private var gameControls = false
   private var inputBlocked = false
   private lazy var finiteVideo: NativeFiniteVideo = {
     let generation = self.generation
@@ -131,6 +132,10 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     onEvent?(["type": "close-check", "sessionId": sessionId ?? "", "generation": generation, "id": id, "state": guarded])
   }
 
+  func setGameControls(_ enabled: Bool) {
+    gameControls = enabled
+    updateInputActivity()
+  }
   func setInputBlocked(_ blocked: Bool) {
     guard inputBlocked != blocked else { return }
     inputBlocked = blocked
@@ -140,7 +145,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
   private func updateInputActivity(foreground: Bool? = nil) {
     guard loaded, !disposed, let view = webView else { return }
     let allowed = active && !inputBlocked && (foreground ?? (UIApplication.shared.applicationState == .active))
-    view.evaluateJavaScript("window.__hypergolicInputActive?.(\(allowed))", completionHandler: nil)
+    view.evaluateJavaScript("window.__hypergolicInputActive?.(\(allowed), \(gameControls))", completionHandler: nil)
   }
 
   func setActive(_ isActive: Bool) {

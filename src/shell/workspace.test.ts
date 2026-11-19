@@ -1,6 +1,7 @@
+import { decodeSnapshot, encodeSnapshot } from '../storage/codec.ts';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { adjacentNapplet, closeNapplet, emptyWorkspace, focusNapplet, openNapplet, replacePublishedNapplet, restoreWorkspace, showOverview, snapshotWorkspace } from './workspace.ts';
+import { setGameControls, usesGameControls, adjacentNapplet, closeNapplet, emptyWorkspace, focusNapplet, openNapplet, replacePublishedNapplet, restoreWorkspace, showOverview, snapshotWorkspace } from './workspace.ts';
 import type { NappletDescriptor } from './workspace.ts';
 const descriptor = (id: string): NappletDescriptor => ({ id, title: id, publisher: 'bundled', appId: 'ux-lab', version: 'hash', source: 'bundled' });
 const three = () => ['a', 'b', 'c'].reduce((state, id) => openNapplet(state, descriptor(id)), emptyWorkspace());
@@ -131,4 +132,18 @@ test('saved Discover uses the packaged replacement with the same capabilities', 
     assert.deepEqual(resolveBundledSession(saved).domains, ['relay', 'resource', 'theme']);
   }
   assert.throws(() => resolveBundledSession({...latest, version: '0'.repeat(64)}));
+});
+
+test('game controls survive close and restart for the same publisher and app', () => {
+  const app = descriptor('game');
+  const older = restoreWorkspace({schema: 1, sessions: [], lastActiveId: null});
+  assert.equal(usesGameControls(older, app), false);
+  const opened = openNapplet(older, app);
+  const closed = closeNapplet(setGameControls(opened, app, true), app.id);
+  const restored = restoreWorkspace(decodeSnapshot(encodeSnapshot(snapshotWorkspace(closed))));
+  assert.equal(usesGameControls(restored, {...app, id: 'reopened', version: 'new'}), true);
+  assert.equal(usesGameControls(restored, {...app, publisher: 'another'}), false);
+  assert.equal(usesGameControls(restored, {...app, appId: 'another'}), false);
+  assert.equal(usesGameControls(emptyWorkspace(), app), false);
+  assert.equal(snapshotWorkspace(setGameControls(restored, app, false)).gameControls, undefined);
 });

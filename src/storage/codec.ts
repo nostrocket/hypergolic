@@ -79,7 +79,8 @@ function descriptor(value: unknown): NappletDescriptor {
 export function snapshot(value: unknown): WorkspaceSnapshot {
   const schemaField = value && typeof value === 'object' ? Object.getOwnPropertyDescriptor(value, 'schema') : undefined;
   const modern = schemaField?.value === 2;
-  const item = object(value, ['schema', 'sessions', 'lastActiveId', ...(modern ? ['pins', 'home'] : [])]);
+  const hasControls = modern && value != null && Object.hasOwn(value, 'gameControls');
+  const item = object(value, [...(hasControls ? ['gameControls'] : []), 'schema', 'sessions', 'lastActiveId', ...(modern ? ['pins', 'home'] : [])]);
   if ((item.schema !== 1 && item.schema !== 2) || !Array.isArray(item.sessions) || item.sessions.length > 64 || Object.getPrototypeOf(item.sessions) !== Array.prototype || Reflect.ownKeys(item.sessions).length !== item.sessions.length + 1) return fail('INVALID_INPUT');
   const sessions: NappletDescriptor[] = [];
   const ids = new Set<string>();
@@ -95,7 +96,17 @@ export function snapshot(value: unknown): WorkspaceSnapshot {
     if (typeof item.home !== 'boolean') return fail('INVALID_INPUT');
     const pins = snapshot({schema: 1, sessions: item.pins, lastActiveId: null}).sessions;
     if (new Set(pins.map(pinKey)).size !== pins.length) return fail('INVALID_INPUT');
-    return Object.freeze({schema: 2, sessions: Object.freeze(sessions), lastActiveId: item.lastActiveId, pins, home: item.home});
+    const keys: string[] = [];
+    if (hasControls) {
+      if (!Array.isArray(item.gameControls) || Object.getPrototypeOf(item.gameControls) !== Array.prototype ||
+          Reflect.ownKeys(item.gameControls).length !== item.gameControls.length + 1) return fail('INVALID_INPUT');
+      for (let index = 0; index < item.gameControls.length; index++) {
+        const field = Object.getOwnPropertyDescriptor(item.gameControls, String(index));
+        keys.push(text(field?.value, 2400));
+      }
+      if (new Set(keys).size !== keys.length) return fail('INVALID_INPUT');
+    }
+    return Object.freeze({...(keys.length ? {gameControls: Object.freeze(keys)} : {}), schema: 2, sessions: Object.freeze(sessions), lastActiveId: item.lastActiveId, pins, home: item.home});
   }
   return Object.freeze({ schema: 1, sessions: Object.freeze(sessions), lastActiveId: item.lastActiveId });
 }

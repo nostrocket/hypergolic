@@ -4,26 +4,33 @@ import {installMappletsTouchSelection, mappletsTouchStyle} from './reviewed-mapp
 let mediaActive = true;
 let inputActive = false;
 let inputAllowed = true;
+let gameControls = false;
 let surface: HTMLIFrameElement | null = null;
 export const isRuntimeInputActive = (): boolean => inputActive;
 let recipient: Window | null = null;
 const controlType = 'hypergolic.private.media-active';
 const publish = (): void => {
   if (surface) surface.inert = !mediaActive || !inputAllowed;
-  recipient?.postMessage({type:controlType,active:mediaActive,inputActive,inputBlocked:!mediaActive || !inputAllowed}, '*');
+  recipient?.postMessage({type:controlType,active:mediaActive,inputActive,gameControls,inputBlocked:!mediaActive || !inputAllowed}, '*');
 };
 Object.defineProperty(window, '__hypergolicMediaActive', {
   value(active: boolean) { mediaActive = active === true; inputActive = mediaActive && inputAllowed; publish(); }, writable: false, configurable: false,
 });
 Object.defineProperty(window, '__hypergolicInputActive', {
-  value(active: boolean) { inputAllowed = active === true; inputActive = mediaActive && inputAllowed; publish(); }, writable: false, configurable: false,
+  value(active: boolean, controls = false) { gameControls = controls === true; inputAllowed = active === true; inputActive = mediaActive && inputAllowed; publish(); }, writable: false, configurable: false,
 });
 export function bindResourceMedia(source: Window, frame: HTMLIFrameElement): Readonly<{refresh: () => void; close: () => void}> {
   recipient = source; surface = frame;
   return {refresh:publish,close(){mediaActive=false;inputActive=false;publish();recipient=null;surface=null;}};
 }
+function gameControlSelectors() {
+  const buttons = ':is(button, [role="button"], input:is([type="button"], [type="submit"], [type="reset"]))';
+  const editable = ':is(textarea, [contenteditable]:not([contenteditable="false"]), input:not([type="button"], [type="submit"], [type="reset"]))';
+  return [buttons, editable] as const;
+}
 /** Executes before publisher scripts in the opaque guest. Captures the parent and DOM methods. */
-function guestMediaGate(installInput?: (allowed: () => boolean) => () => void): void {
+function guestMediaGate(selectors: readonly [string, string], installInput?: (allowed: () => boolean) => () => void): void {
+  const [buttonSelector, editableSelector] = selectors;
   const owner = window.parent;
   const sourceOf = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(MessageEvent.prototype,'source')!.get!);
   const dataOf = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(MessageEvent.prototype,'data')!.get!);
@@ -48,6 +55,11 @@ function guestMediaGate(installInput?: (allowed: () => boolean) => () => void): 
     'gesturestart','gesturechange','gestureend','focusin']) {
     window.addEventListener(type,blockInput,{capture:true,passive:false});
   }
+  window.addEventListener('contextmenu', event => {
+    if (document.documentElement.hasAttribute('data-hypergolic-game-controls') &&
+        event.target instanceof Element && event.target.closest(buttonSelector) &&
+        !event.target.closest(editableSelector)) event.preventDefault();
+  }, true);
   const cancelInput = installInput?.(() => !inputBlocked && !inputEnded && !document.hidden);
   const prototype = HTMLMediaElement.prototype;
   const play = prototype.play, pause = prototype.pause;
@@ -73,6 +85,7 @@ function guestMediaGate(installInput?: (allowed: () => boolean) => () => void): 
       try { blur(activeElement(document)); } catch { /* Not an HTML focus target. */ }
     }
     if (!active) stop();
+    document.documentElement.toggleAttribute('data-hypergolic-game-controls', data.gameControls === true);
   }, true);
   document.addEventListener('play', event => {
     if (!mayPlay() && event.target instanceof HTMLMediaElement && !getPaused.call(event.target)) pause.call(event.target);
@@ -89,5 +102,11 @@ export function injectResourceMediaGate(html: string, mappletsTouch = false): st
   const head = /<meta http-equiv="Content-Security-Policy" content="[^"]*">/;
   if (!head.test(html)) throw Error('Resource gate requires the leading host CSP');
   const install = mappletsTouch ? installMappletsTouchSelection.toString() : '';
-  return html.replace(head, value => `${value}${mappletsTouch ? mappletsTouchStyle : ''}<script>(${guestMediaGate.toString()})(${install});</script>`);
+  const [buttons, editable] = gameControlSelectors();
+  const controls = `:root[data-hypergolic-game-controls] ${buttons}`;
+  const style = `<style>${controls}:not(${editable}, ${editable} *), ${controls} :not(${editable}, ${editable} *) {
+    -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important;
+  }
+  @layer hypergolic { ${controls}:not(${editable}, ${editable} *) { touch-action: manipulation; } }</style>`;
+  return html.replace(head, value => `${value}${style}${mappletsTouch ? mappletsTouchStyle : ''}<script>(${guestMediaGate.toString()})((${gameControlSelectors.toString()})()${install ? `, ${install}` : ''});</script>`);
 }

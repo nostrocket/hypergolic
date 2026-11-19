@@ -8,13 +8,14 @@ import { NappletHost, type HostEvent } from '../runtime/NappletHost';
 import { Handles } from './Handles';
 import { Overview, type OverviewHandle } from './Overview';
 import { cardTransform, clamp, overviewGeometry, resolveCardRect, type HandleSide, type CardMeasurement, type Rect, type Size } from './motion';
-import { adjacentNapplet, type NappletDescriptor, type Workspace } from './workspace';
+import { usesGameControls, adjacentNapplet, type NappletDescriptor, type Workspace } from './workspace';
 import { useShellStyles, type ShellPalette, type ShellFonts, HANDLE_GUTTER } from './theme';
 import { runtimeStatus } from './runtime-status';
 import type {ZoomResetRegistration} from './zoom-reset';
 
 interface LiveProps {
   hidden: boolean;
+  gameControls: boolean;
   gutter: number;
   session: NappletDescriptor;
   closeCheck: string;
@@ -32,7 +33,7 @@ interface LiveProps {
   onZoomTarget: ZoomResetRegistration;
   onHostEvent?: (event: HostEvent) => void;
 }
-const LiveSession = memo(function LiveSession({ hidden, gutter, session, closeCheck, index, size, rect, progress, position, scrollY, swipeY, swipeId, active, inputBlocked, raised, onZoomTarget, onHostEvent }: LiveProps) {
+const LiveSession = memo(function LiveSession({ hidden, gameControls, gutter, session, closeCheck, index, size, rect, progress, position, scrollY, swipeY, swipeId, active, inputBlocked, raised, onZoomTarget, onHostEvent }: LiveProps) {
   const { styles } = useShellStyles(createStyles);
   // A keyed session starts when first focused and stays mounted until close or identity change.
   const [loaded, setLoaded] = useState(raised);
@@ -58,7 +59,7 @@ const LiveSession = memo(function LiveSession({ hidden, gutter, session, closeCh
   return (
     <Animated.View collapsable={false} pointerEvents={active && !inputBlocked ? 'auto' : 'none'} importantForAccessibility={active && !inputBlocked ? 'auto' : 'no-hide-descendants'} accessibilityElementsHidden={!active || inputBlocked}
       style={[styles.live, { width, height, zIndex: raised ? 2 : 1, opacity: Number(!hidden) }, movement]}>
-      {loaded ? <NappletHost onZoomTarget={onZoomTarget} closeCheck={closeCheck} active={active} inputBlocked={inputBlocked} session={session} onHostEvent={onNativeEvent} style={[styles.host, {marginHorizontal: gutter}]} />
+      {loaded ? <NappletHost gameControls={gameControls} onZoomTarget={onZoomTarget} closeCheck={closeCheck} active={active} inputBlocked={inputBlocked} session={session} onHostEvent={onNativeEvent} style={[styles.host, {marginHorizontal: gutter}]} />
         : <View style={styles.unloaded}><Text style={styles.reopen}>Open to load</Text></View>}
       <Text testID={`runtime-status-${session.id}`} importantForAccessibility={active ? 'auto' : 'no-hide-descendants'} accessibilityElementsHidden={!active} accessibilityLiveRegion={active ? 'polite' : 'none'} style={[styles.runtimeStatus, loaded && status === 'Runtime connected' && styles.connected]}>{loaded ? status : 'Not loaded'}</Text>
     </Animated.View>
@@ -104,7 +105,7 @@ export const WorkspaceStage = forwardRef<OverviewHandle, StageProps>(function Wo
     setSize(previous => previous.width === width && previous.height === height ? previous : { width, height });
   }}>
     {size.width > 0 && size.height > 0 && <>
-      {workspace.sessions.map((session, index) => <LiveSession hidden={homeVisible(workspace)} key={session.id} gutter={fullscreen ? 0 : HANDLE_GUTTER} onZoomTarget={onZoomTarget} session={session} closeCheck={closeCheck?.sessionId === session.id ? JSON.stringify({id: closeCheck.id, generation: closeCheck.generation}) : ''} index={index} size={size} rect={resolveCardRect(geometry.cards[index], measured[session.id])}
+      {workspace.sessions.map((session, index) => <LiveSession gameControls={usesGameControls(workspace, session)} hidden={homeVisible(workspace)} key={session.id} gutter={fullscreen ? 0 : HANDLE_GUTTER} onZoomTarget={onZoomTarget} session={session} closeCheck={closeCheck?.sessionId === session.id ? JSON.stringify({id: closeCheck.id, generation: closeCheck.generation}) : ''} index={index} size={size} rect={resolveCardRect(geometry.cards[index], measured[session.id])}
         progress={progress} position={position} scrollY={scrollY} swipeY={swipeY} swipeId={swipeId} {...workspaceSessionActivity({focused: workspace.focusedId === session.id, overview: workspace.overview, busy, interactive, blocked, checkingClose: closeCheck !== null, hostActivityBlocked})}
         raised={workspace.focusedId === session.id} onHostEvent={onHostEvent} />)}
       {!homeVisible(workspace) && <Overview ref={ref} sessions={workspace.sessions} geometry={geometry} size={size} visible={workspace.overview && !homeVisible(workspace)} busy={disabled} focusedId={workspace.focusedId}
