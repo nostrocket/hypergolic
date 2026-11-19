@@ -6,7 +6,7 @@ import Security
 /// One bounded, pinned WSS subscription against one public relay. The caller owns
 /// event structure and decides when a validated EOSE ends the operation.
 enum PublishedRelayWebSocketQuery {
-  enum Failure: Error { case invalidURL, resolution, connection, handshake, frame, closed, timeout, cancelled, limit }
+  enum Failure: Error { case invalidURL, resolution, connection, handshake, frame, closed, timeout, cancelled, limit, unreachable }
   static let maxWireBytes = 2 * 1024 * 1024
   static let maxEvents = 32
   static let maxTextMessages = 64
@@ -168,6 +168,9 @@ enum PublishedRelayWebSocketQuery {
     private var nonce = Data()
     private var handshake = HandshakeAccumulator()
     private var total = 0
+    private var responseStarted = false
+    private var trustFailed = false
+    private var unknownConnectionFailure = false
     private var collector: TextCollector
     private let readAuthorized: @Sendable () -> Bool
     private let timeoutMs: Int
@@ -227,7 +230,7 @@ enum PublishedRelayWebSocketQuery {
 
     private func connectNext() {
       guard readAuthorized(), publication?.mayContinue() != false else { finish(.failure(Failure.cancelled)); return }
-      guard let address = addresses?.next() else { finish(.failure(Failure.connection)); return }
+      guard let address = addresses?.next() else { finish(.failure(trustFailed || unknownConnectionFailure ? Failure.connection : Failure.unreachable)); return }
       connection?.stateUpdateHandler = nil
       connection?.cancel()
       connection = nil
@@ -249,16 +252,18 @@ enum PublishedRelayWebSocketQuery {
         let trust = sec_trust_copy_ref(peerTrust).takeRetainedValue()
         let policy = SecPolicyCreateSSL(true, expectedHost as CFString)
         guard SecTrustSetPolicies(trust, policy) == errSecSuccess,
-              SecTrustSetNetworkFetchAllowed(trust, false) == errSecSuccess else { verify(false); return }
+              SecTrustSetNetworkFetchAllowed(trust, false) == errSecSuccess else { self.trustFailed = true; verify(false); return }
 #if HYPERGOLIC_NETWORK_PROOF
         if let proofAnchorDER {
           guard let anchor = SecCertificateCreateWithData(nil, proofAnchorDER as CFData),
                 SecTrustSetAnchorCertificates(trust, [anchor] as CFArray) == errSecSuccess,
                 SecTrustSetAnchorCertificatesOnly(trust, true) == errSecSuccess
-          else { verify(false); return }
+          else { self.trustFailed = true; verify(false); return }
         }
 #endif
-        verify(SecTrustEvaluateWithError(trust, nil))
+        let trusted = SecTrustEvaluateWithError(trust, nil)
+        if !trusted { self.trustFailed = true }
+        verify(trusted)
       }, queue)
       let parameters = NWParameters(tls: tls, tcp: NWProtocolTCP.Options())
       guard let port = NWEndpoint.Port(rawValue: request.port) else { finish(.failure(Failure.invalidURL)); return }
@@ -276,7 +281,12 @@ enum PublishedRelayWebSocketQuery {
               if error != nil { self.finish(.failure(Failure.connection)) } else { self.receiveHandshake() }
             })
           } catch { self.finish(.failure(error)) }
-        case .failed, .cancelled, .waiting: self.connectNext()
+        case .failed(let error), .waiting(let error):
+          if case .posix = error {} else { self.unknownConnectionFailure = true }
+          self.connectNext()
+        case .cancelled:
+          self.unknownConnectionFailure = true
+          self.connectNext()
         default: break
         }
       }
@@ -287,14 +297,19 @@ enum PublishedRelayWebSocketQuery {
       guard !ended, let connection else { return }
       connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { data, _, complete, error in
         guard !self.ended else { return }
-        guard error == nil, !complete, let data, !data.isEmpty else { self.finish(.failure(Failure.handshake)); return }
+        guard error == nil, !complete, let data, !data.isEmpty else {
+          self.finish(.failure(self.total == 0 && (data?.isEmpty ?? true) ? Failure.unreachable : Failure.handshake)); return
+        }
         let parts: (headers: Data, prefetchedFrames: Data)?
         do { parts = try self.handshake.append(data) }
         catch { self.finish(.failure(error)); return }
         self.total += data.count
         guard self.total <= PublishedRelayWebSocketQuery.maxWireBytes else { self.finish(.failure(Failure.limit)); return }
         if let parts {
-          do { try PublishedRelayWebSocketHandshake.validate(parts.headers, nonce: self.nonce) }
+          do {
+            if try PublishedRelayWebSocketHandshake.isServiceUnavailable(parts.headers) { self.finish(.failure(Failure.unreachable)); return }
+            try PublishedRelayWebSocketHandshake.validate(parts.headers, nonce: self.nonce)
+          }
           catch { self.finish(.failure(error)); return }
           do {
             let frame = try PublishedRelayWebSocketClientFrames.textReq(self.subscription)
@@ -316,7 +331,9 @@ enum PublishedRelayWebSocketQuery {
       guard !ended, let connection else { return }
       connection.receive(minimumIncompleteLength: 1, maximumLength: PublishedRelayWebSocketFrames.maxRead) { data, _, complete, error in
         guard !self.ended else { return }
-        guard error == nil, !complete, let data, !data.isEmpty else { self.finish(.failure(Failure.connection)); return }
+        guard error == nil, !complete, let data, !data.isEmpty else {
+          self.finish(.failure(!self.responseStarted && (data?.isEmpty ?? true) ? Failure.unreachable : Failure.connection)); return
+        }
         if self.streamDelivery == nil {
           self.total += data.count
           guard self.total <= PublishedRelayWebSocketQuery.maxWireBytes else { self.finish(.failure(Failure.limit)); return }
@@ -333,6 +350,7 @@ enum PublishedRelayWebSocketQuery {
     private func consumeFrames(_ data: Data) {
       guard !ended, let connection else { return }
       guard readAuthorized() else { finish(.failure(Failure.cancelled)); return }
+      responseStarted = true
       let events = frames.feed(data)
       if events.contains(where: { if case .error = $0 { return true }; return false }) {
         finish(.failure(Failure.frame)); return

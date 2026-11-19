@@ -42,6 +42,7 @@ function commonTargets(common:NonNullable<ApprovalItem['common']>):string{
 }
 
 function requestedAction(item: ApprovalItem): string {
+  if (item.recommendation) return 'Recommend publicly';
   if (item.appData) {
     const body = item.appData.record.body;
     if (body.deleted) return 'Unpublish public record';
@@ -86,6 +87,16 @@ function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismis
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text accessibilityRole="header" style={styles.eyebrow}>Approve signing request</Text>
           <Text style={styles.title}>{requestedAction(item)}</Text>
+          {item.recommendation && <><Text style={styles.value}>{item.recommendationExcludedRelays
+            ? 'Add this napplet to your public list on the reachable Network relays below for this request only.'
+            : 'Add this napplet to your public list on the Network relays below.'}</Text>
+            <Text selectable style={styles.mono}>{item.recommendation}</Text>
+            {item.recommendationExcludedRelays && <View testID="approval-recommendation-limited" style={styles.record}>
+              <Text style={styles.value}>The excluded relays could hold a newer list. This replacement may miss changes that were not returned by the reachable relays.</Text>
+              <Text style={styles.value}>This approval applies only to this publication. Your Network relay settings stay unchanged.</Text>
+              <Text style={styles.label}>Excluded from this publication</Text>
+              <Text testID="approval-recommendation-excluded" selectable style={styles.destination}>{item.recommendationExcludedRelays.join('\n')}</Text>
+            </View>}</>}
           {record && <AppDataRecordReview record={record} content={item.event.event.content}/>}
           {item.common && <><Text style={styles.label}>Targets</Text><Text selectable style={styles.mono}>{commonTargets(item.common)}</Text></>}
           {item.common?.request.type==='common.report'&&<><Text style={styles.label}>Report reason</Text><Text style={styles.value}>{item.common.request.reason}</Text></>}
@@ -98,7 +109,7 @@ function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismis
           <Text testID="approval-sheet-publisher" selectable style={styles.mono}>{item.origin.publisher}{'\n'}{publisherNpub}</Text>
           <Text style={styles.label}>Selected identity</Text>
           <Text testID="approval-sheet-identity" selectable style={styles.mono}>{identityNpub}</Text>
-          {item.outbox ? <OutboxReview plan={item.outbox}/> : <><Text style={styles.label}>Publish to</Text><Text selectable style={styles.destination}>{item.event.destinations.join('\n')}</Text></>}
+          {item.outbox ? <OutboxReview plan={item.outbox}/> : <><Text style={styles.label}>{item.recommendationExcludedRelays ? 'Publish to reachable relays' : 'Publish to'}</Text><Text testID="approval-sheet-destinations" selectable style={styles.destination}>{item.event.destinations.join('\n')}</Text></>}
           <Pressable testID="approval-sheet-details" accessibilityRole="button" accessibilityState={{ expanded: details, disabled: busy }} disabled={busy} onPress={() => setDetails(value => !value)} style={({ pressed }) => [styles.details, pressed && styles.pressed]}>
             <Text style={styles.detailsText}>{details ? 'Hide exact event' : 'Show exact event'}</Text>
           </Pressable>

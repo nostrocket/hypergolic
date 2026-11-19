@@ -12,14 +12,55 @@ export interface RelayQueryService {
   query(filters: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void): Promise<readonly Readonly<{ event: NostrEvent }>[]>;
   queryDetailed?(filters: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void, options?: DetailedQueryOptions): Promise<RelayQueryResult>;
 }
-export type RelayQueryResult = Readonly<{ events: readonly Readonly<{ event: NostrEvent }>[]; incomplete: boolean; relayHints?: Readonly<Record<string, readonly string[]>> }>;
-type DetailedQueryOptions = Readonly<{maximumFilters?: number; timeoutMs?: number; allowPartialOnLimit?: boolean; allowSearch?: boolean}>;
+export type RelayQueryResult = Readonly<{ events: readonly Readonly<{ event: NostrEvent }>[]; incomplete: boolean; relayHints?: Readonly<Record<string, readonly string[]>>; failedRelays?: readonly string[]; reachableRelays?: readonly string[] }>;
+type DetailedQueryOptions = Readonly<{maximumFilters?: number; timeoutMs?: number; allowPartialOnLimit?: boolean; allowSearch?: boolean; completeRelays?: true}>;
 export interface DetailedRelayQueryService extends RelayQueryService {
   queryDetailed(filters: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void, options?: DetailedQueryOptions): Promise<RelayQueryResult>;
 }
 type NativeQueryPort = Pick<NativePublishedRelayPort, 'newInstanceId' | 'cancelPublishedRelay'> & {
   queryPublishedRelay(operationId: string, url: string, request: string, subId: string, timeoutMs?: number): Promise<string[]>;
 };
+type PeerRequest = Readonly<{operation: string; relay: string; wire: string; subscription: string}>;
+function completePeerBudget(budget: number, peers: number, remaining: number): number {
+  const share = Math.floor(budget / (Math.ceil(peers / 2) * 2));
+  // Small sets need room for the native 3s idle timer plus connection setup.
+  // The query's unchanged total deadline still bounds retries and queued peers.
+  const nativeWindow = peers <= 5 ? Math.min(4000, Math.floor(budget / 3)) : 0;
+  return Math.max(1, Math.min(5000, Math.max(share, nativeWindow), remaining));
+}
+function knownTransportFailure(error: unknown): boolean {
+  return typeof error === 'object' && error !== null &&
+    'code' in error && error.code === 'ERR_RELAY_TRANSPORT';
+}
+async function boundedPeerRead(port: NativeQueryPort, request: PeerRequest, budget: number, signal: AbortSignal): Promise<string[]> {
+  const {operation, relay, wire, subscription} = request;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let stop!: () => void;
+  const expired = new Promise<never>((_, reject) => {
+    stop = () => reject(new RelayQueryError('relay query cancelled'));
+    signal.addEventListener('abort', stop, {once: true});
+    timer = setTimeout(() => {
+      try {port.cancelPublishedRelay(operation);} catch { /* The native operation's own deadline remains the backstop. */ }
+      // The opaque native call might already hold partial response bytes.
+      reject(new RelayQueryError('relay peer timed out'));
+    }, budget);
+  });
+  try {return await Promise.race([port.queryPublishedRelay(operation, relay, wire, subscription), expired]);}
+  finally {clearTimeout(timer); signal.removeEventListener('abort', stop);}
+}
+type PeerRead = (relay: string, index: number) => Promise<'complete' | 'invalid' | 'failed'>;
+async function readCompleteRelays(relays: readonly string[], readRelay: PeerRead): Promise<void> {
+  // Two peers leave native capacity for other reads. A failed connection gets
+  // one fresh attempt; invalid frames never retry or contribute partial data.
+  let next = 0;
+  const worker = async () => {
+    while (next < relays.length) {
+      const index = next++, relay = relays[index]!;
+      if (await readRelay(relay, index) === 'failed') await readRelay(relay, index);
+    }
+  };
+  await Promise.all(Array.from({length: Math.min(2, relays.length)}, worker));
+}
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 type QueryCounts = Readonly<{events: number; frames: number}>;
 async function parseFrames(input: unknown, subscription: string, filters: readonly QueryFilter[], counts: QueryCounts, checkDeadline?: () => void, verify?: (events: readonly NostrEvent[]) => Promise<void>): Promise<NostrEvent[]> {
@@ -68,18 +109,47 @@ function retainEvent(events:Map<string,NostrEvent>,hints:Map<string,Set<string>>
     forgetEvent(events, hints, last.id, state);
   }
 }
+function queryCollection(filters: readonly QueryFilter[], relays: readonly string[], aggregation: Aggregation, completeRelays: boolean) {
+  const events = new Map<string, NostrEvent>(), hints = new Map<string, Set<string>>(), completed = new Set<string>();
+  const transportFailures = new Set<string>();
+  let invalid = false;
+  const result = (incomplete: boolean): RelayQueryResult => Object.freeze({events: aggregation.ranked
+    ? Object.freeze(Array.from(events.values(),event => Object.freeze({event})))
+    : selectQueryEvents([...events.values()],filters),incomplete,
+    ...(hints.size ? {relayHints:Object.freeze(Object.fromEntries([...hints].map(([id,relays]) => [id,Object.freeze([...relays])]))) } : {}),
+    ...(completeRelays && incomplete && completed.size < relays.length
+      ? {failedRelays:Object.freeze(relays.filter(relay => !completed.has(relay)))} : {}),
+    ...(completeRelays && incomplete && completed.size > 0 && !invalid && !aggregation.limited && completed.size + transportFailures.size === relays.length
+      ? {reachableRelays:Object.freeze(relays.filter(relay => completed.has(relay)))} : {})});
+  return {
+    result,
+    completed: () => completed.size,
+    failed(relay: string, malformed: boolean) {if (malformed) invalid = true; else transportFailures.add(relay);},
+    accept(relay: string, batch: NostrEvent[]) {
+      // Select before charging aggregate budgets: older rows outside the requested
+      // newest results do not make that selected output partial.
+      if (!aggregation.ranked) batch = selectBatch(events, hints, batch, filters, aggregation);
+      for (const event of batch) {
+        if (aggregation.ranked && (aggregation.limited || events.size >= (filters[0]!.limit as number))) break;
+        retainEvent(events,hints,event,relay,aggregation);
+      }
+      completed.add(relay);
+      transportFailures.delete(relay);
+    },
+  };
+}
 function queryLifetime(signal: AbortSignal, active: () => void, budget: number, enforceClock: boolean,
   cancelOperation: (operation: string) => void, partialResult: () => RelayQueryResult | undefined) {
   const controller = new AbortController();
   const expiresAt = enforceClock ? performance.now() + budget : 0;
-  let pending: string | null = null;
+  const pending = new Set<string>();
   let deadline = false;
   const cancel = () => {
     controller.abort();
-    const operation = pending; pending = null;
-    if (operation !== null) {
+    for (const operation of pending) {
       try { cancelOperation(operation); } catch { /* Native deadline remains the backstop. */ }
     }
+    pending.clear();
   };
   const expire = () => {deadline = true; cancel();};
   const timer = setTimeout(expire, budget);
@@ -106,8 +176,8 @@ function queryLifetime(signal: AbortSignal, active: () => void, budget: number, 
       // Reserve half for the next peer, with no overlap or renewed total deadline.
       return Math.max(1,Math.min(10_000,Math.floor(remaining / Math.min(2,peers))));
     },
-    track(operation: string) { pending = operation; },
-    complete(operation: string) { if (pending === operation) pending = null; },
+    track(operation: string) { pending.add(operation); },
+    complete(operation: string) { pending.delete(operation); },
     checkDeadline: enforceClock ? () => {
       if (performance.now() < expiresAt) return;
       expire();
@@ -148,19 +218,16 @@ export function createNativeRelayQuery(port: NativeQueryPort,
       active();
       concurrent++;
       const used = new Set<string>();
-      const events = new Map<string, NostrEvent>(), hints = new Map<string, Set<string>>();
-      const result = (incomplete: boolean): RelayQueryResult => Object.freeze({events:ranked
-        ? Object.freeze(Array.from(events.values(),event => Object.freeze({event})))
-        : selectQueryEvents([...events.values()],filters),incomplete,...(hints.size ? {relayHints:Object.freeze(Object.fromEntries([...hints].map(([id,relays]) => [id,Object.freeze([...relays])]))) } : {})});
-      let successes = 0, invalidData = false;
+      let invalidData = false;
       const aggregation:Aggregation={maximumEvents:counts.events,bytes:0,limited:false,sizes:new Map(),ranked,
         partial:partialAtDeadline && (detailed?.allowPartialOnLimit ?? options.allowPartialOnLimit) === true};
-      const lifetime = queryLifetime(signal, active, budget, options.outbox === true,
-        operation => port.cancelPublishedRelay(operation), () => partialAtDeadline && successes > 0 ? result(true) : undefined);
+      const completeRelays = detailed?.completeRelays === true;
+      const collection = queryCollection(filters, relays, aggregation, completeRelays), {result} = collection;
+      const lifetime = queryLifetime(signal, active, budget, options.outbox === true || completeRelays,
+        operation => port.cancelPublishedRelay(operation), () => partialAtDeadline && (collection.completed() > 0 || completeRelays) ? result(true) : undefined);
       const {checkDeadline} = lifetime;
       try {
-        const work = async () => {
-          for (const [index,relay] of relays.entries()) {
+        const readRelay: PeerRead = async (relay, index) => {
             active();
             checkDeadline?.();
             if (lifetime.aborted()) throw new RelayQueryError();
@@ -174,9 +241,12 @@ export function createNativeRelayQuery(port: NativeQueryPort,
             try {
               active();
               checkDeadline?.();
-              const frames = options.outbox
-                ? await port.queryPublishedRelay(operation,relay,wire,subscription,lifetime.peerBudget(relays.length - index))
-                : await port.queryPublishedRelay(operation,relay,wire,subscription);
+              const frames = completeRelays
+                ? await boundedPeerRead(port, {operation, relay, wire, subscription},
+                  completePeerBudget(budget, relays.length, lifetime.remaining()), lifetime.signal)
+                : options.outbox
+                  ? await port.queryPublishedRelay(operation,relay,wire,subscription,lifetime.peerBudget(relays.length - index))
+                  : await port.queryPublishedRelay(operation,relay,wire,subscription);
               active();
               if (lifetime.aborted()) throw new RelayQueryError();
               try {
@@ -190,24 +260,29 @@ export function createNativeRelayQuery(port: NativeQueryPort,
                 invalidData = true;
                 throw new RelayQueryDataError();
               }
-            } catch {
+            } catch (error) {
               active();
               if (lifetime.aborted()) throw new RelayQueryError();
-              continue;
+              // Native rejection may also mean malformed or over-limit frames.
+              // Only an explicit transport outcome can authorize excluding it.
+              collection.failed(relay, !knownTransportFailure(error));
+              return error instanceof RelayQueryDataError ? 'invalid' : 'failed';
             } finally { lifetime.complete(operation); }
-            // Apply exact per-filter selection before charging aggregate budgets. Rows outside
-            // the requested newest results do not make that selected output partial.
-            if (!ranked) batch = selectBatch(events, hints, batch, filters, aggregation);
-            for (const event of batch) {
-              if (ranked && (aggregation.limited || events.size >= (structuredFilter.limit as number))) break;
-              retainEvent(events,hints,event,relay,aggregation);
-            }
-            successes++;
+            collection.accept(relay, batch);
+            return 'complete';
+        };
+        const work = async () => {
+          if (completeRelays) await readCompleteRelays(relays, readRelay);
+          else {
+            for (const [index, relay] of relays.entries()) await readRelay(relay, index);
           }
           active();
           checkDeadline?.();
-          if (successes === 0) {if (invalidData) throw new RelayQueryDataError(); throw new RelayQueryError();}
-          return result(aggregation.limited || successes !== relays.length);
+          if (collection.completed() === 0) {
+            if (completeRelays) return result(true);
+            if (invalidData) throw new RelayQueryDataError(); throw new RelayQueryError();
+          }
+          return result(aggregation.limited || collection.completed() !== relays.length);
         };
         return await Promise.race([work(), lifetime.cancelled]);
       } finally {

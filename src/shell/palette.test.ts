@@ -13,6 +13,11 @@ function contrast(a: string, b: string) {
 }
 
 for (const [name, palette] of Object.entries({ dark: darkPalette, light: lightPalette })) {
+  test(`${name}: access status icons are distinct and meet graphical contrast`, () => {
+    const tones = [palette.accessSupported, palette.accessRequiredUnavailable, palette.accessOptionalUnavailable];
+    assert.equal(new Set(tones).size, 3);
+    for (const tone of tones) assert.ok(contrast(tone, palette.surface) >= 3);
+  });
   test(`${name}: body, secondary and orange text meet normal-text contrast on opaque surfaces`, () => {
     for (const ink of [palette.text, palette.muted, palette.accent]) {
       for (const surface of [palette.background, palette.surface, palette.raised]) {

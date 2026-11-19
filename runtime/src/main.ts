@@ -1,3 +1,4 @@
+import {createRecommendationsReceiver} from './discovery-recommendations';
 import {createLegacyImageMount} from './legacy-image-mount';
 import {injectLegacyImages} from './legacy-image-guest';
 import {injectReviewedPresentation} from './reviewed-presentation';
@@ -289,7 +290,7 @@ function mount(artifact: RuntimeMetadata) {
   const deadline = window.setTimeout(() => fail('runtime-timeout'), 10_000);
 
   const receiveGuest = guestMessageReceiver(frame, source, {
-    routing, discoveryOpen, catalogPage, keys, sendMedia: hasMedia ? native.sendMedia : null,
+    routing, discoveryOpen, catalogPage, recommendations: discoveryToken && !artifact.published && artifact.domains.includes('relay') ? createRecommendationsReceiver(source,native,discoveryToken,live) : null, keys, sendMedia: hasMedia ? native.sendMedia : null,
     cvm:artifact.domains.includes('cvm')?createCvmGuestReceiver(source,native.cvm,live):null,
     closed: () => stopped, live,
     dispatch(event) {
@@ -351,7 +352,7 @@ function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
     return;
   }
   const presentation = injectReviewedPresentation(injectEmojiImages(withCsp, artifact), artifact);
-  const html = discoveryToken ? injectDiscoveryOpen(presentation, discoveryToken, artifact.domains.includes('relay')) : presentation;
+  const html = discoveryToken ? injectDiscoveryOpen(presentation, discoveryToken, artifact.domains.includes('relay'), !artifact.published) : presentation;
   const guest = injectAndroidGuestHelpers(injectResourceMediaGate(html, supportsMappletsTouchSelection(artifact)));
   const injected = injectNappletNamespacePrelude(injectCreatorUpload(injectSupportReport(guest), artifact), {
     ...environment.capabilities,

@@ -62,6 +62,13 @@ import { IdentityTransition } from './identity-transition';
 import { initialWorkspaceForBuild } from '../shell/initial-workspace';
 import { assertWorkspaceAvailability } from '../shell/fixtures';
 
+async function selectedSigner(vault: NativeIdentityVault, user: string, active?: () => void) {
+  active?.();
+  const methods = await vault.getSigningMethods(user);
+  active?.();
+  return methods.selectedMethod !== null;
+}
+
 export interface TrustedIdentityOwner {
   readonly profileAvatar?: ProfileAvatarStore;
   readonly launchReviewMedia?: LaunchReviewMedia;
@@ -112,7 +119,7 @@ async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android
     notifyPermissions = await openNotifyPermissions(SQLite, platform);
     identityCache = await openIdentityCache(SQLite, platform);
     outboxCache = await openOutboxRelayListCache(SQLite, platform);
-    const outbox = loadNativeOutboxReadService(outboxCache, () => relaySettings?.getSettings() ?? {networkRelays: [], lookupRelays: []},async(user,active)=>{active();const methods=await vault.getSigningMethods(user);active();return methods.selectedMethod!==null;});
+    const outbox = loadNativeOutboxReadService(outboxCache, () => relaySettings?.getSettings() ?? {networkRelays: [], lookupRelays: []},(user, active) => selectedSigner(vault, user, active));
     const queries = loadNativeRelayQuery(() => relaySettings?.getSettings().networkRelays ?? []);
     const transition = await IdentityTransition.open({ vault, database, seed: initialWorkspaceForBuild, assertAvailable: assertWorkspaceAvailability });
     releaseRouting = bindRoutingOwner(transition, requireNativeModule<NativeRoutingOwner>('HypergolicNappletHost'));
@@ -151,7 +158,7 @@ async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android
     const launchReviewMedia = createLaunchReviewMedia(identityData, readAvatar, publishedSource, () => resourceSettings?.servers() ?? []);
     releaseAvatar = bindProfileAvatarOwner(transition, profileAvatar);
     runtime = createRuntimeOwner(database, transition, capability,
-      { service: approvals, destinations: () => relaySettings?.getSettings().networkRelays ?? [], closeReview: id => slot.close(id) },
+      { service: approvals, destinations: () => relaySettings?.getSettings().networkRelays ?? [], canSign: user => selectedSigner(vault, user), closeReview: id => slot.close(id) },
       { sqlite: SQLite, source: publishedSource, native: loadNativePublishedTransferPort(),
         lookupRelays: () => relaySettings?.getSettings().lookupRelays ?? [],
         networkRelays: () => relaySettings?.getSettings().networkRelays ?? [] },

@@ -12,7 +12,28 @@ public final class PublishedRelayWssQueryProof {
     urls();
     dns();
     collector();
+    serviceUnavailable();
     System.out.println("PublishedRelayWssQueryProof: " + checks + " checks passed");
+  }
+  private static void serviceUnavailable() {
+    check(PublishedRelayWebSocketHandshake.isServiceUnavailable("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nServer: cloudflare\r\n\r\n".getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
+    check(PublishedRelayWebSocketHandshake.isServiceUnavailable("HTTP/1.1 503 Service Unavailable\r\nTransfer-Encoding: chunked\r\n\r\n".getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
+    check(!PublishedRelayWebSocketHandshake.isServiceUnavailable("HTTP/1.1 302 Found\r\nLocation: https://elsewhere.example.org\r\n\r\n".getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
+    check(!PublishedRelayWebSocketHandshake.isServiceUnavailable("HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n".getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
+    check(!PublishedRelayWebSocketHandshake.isServiceUnavailable("HTTP/1.1 5030 Unavailable\r\nContent-Length: 0\r\n\r\n".getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
+    for (String malformed : new String[] {
+        "HTTP/1.1 503 Unavailable\r\nBroken header\r\n\r\n",
+        "HTTP/1.1 503 Unavailable\r\n Folded: no\r\n\r\n",
+        "HTTP/1.1 503 Unavailable\r\nContent-Length: invalid\r\n\r\n",
+        "HTTP/1.1 503 Unavailable\r\nContent-Length: 0\r\nContent-Length: 1\r\n\r\n",
+        "HTTP/1.1 503 Unavailable\r\nContent-Length: 0\r\nTransfer-Encoding: chunked\r\n\r\n",
+        "HTTP/1.1 503 Unavailable\r\nX: injected\nvalue\r\n\r\n",
+        "HTTP/1.1 503 Unavailable\r\nContent-Length: 0\r\n",
+        "HTTP/1.1 503 Unavailable\r\nX: " + repeat('x', 16_384) + "\r\n\r\n",
+    }) {
+      try { PublishedRelayWebSocketHandshake.isServiceUnavailable(malformed.getBytes(java.nio.charset.StandardCharsets.US_ASCII)); throw new AssertionError("Malformed 503 accepted"); }
+      catch (IllegalArgumentException expected) {checks++;}
+    }
   }
 
   private static void urls() throws Exception {

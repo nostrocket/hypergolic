@@ -183,3 +183,46 @@ test('a timed-out lane retains its cursor and cancels without discarding a match
   assert.equal((await paging(request(1), signal, () => {})).partial, false);
   assert.deepEqual(cursors, [100, 100]);
 });
+
+test('recommendation reads require an eligible Discover binding and exact registration', async t => {
+  const {database} = await setup(t);
+  const native = new NativeLeases(), f = fixture();
+  const registered: NativeRegistration = {sessionId: 'discover-1', generation: 'discover-generation', epoch: 1,
+    user: hex(1), publisher: hex(2), appId: 'napplet-discovery', version: hex(3), instanceId: 'discover-1',
+    fixture: 'napplet-discovery', domains: ['relay']};
+  const input = {type: 'relay.catalogRecommendation', id: 'read-one'};
+  const recommendations = {async dispatch() {return {status: 'read-only'};}, bind() {return null;}};
+  for (const [configured, owner, sender, expected] of [
+    [false, registered, registered, null],
+    [true, {...registered, domains: []}, {...registered, domains: []}, null],
+    [true, registered, {...registered, epoch: 2}, null],
+    [true, registered, registered, {type: input.type + '.result', id: input.id, result: {status: 'read-only'}}],
+  ] as const) {
+    const broker = createCapabilityBroker(database, native, {registration: owner, assertActive() {}},
+      f.service, undefined, undefined, undefined, undefined, undefined, configured, recommendations);
+    const token = native.add(sender, input);
+    await broker.dispatch(token);
+    assert.deepEqual(native.results.get(token), expected);
+  }
+});
+test('a recommendation waits for active catalog reads instead of failing while Discover is busy', async t => {
+  const {database} = await setup(t);
+  const native = new NativeLeases(), f = fixture(), held = deferred();
+  const registered: NativeRegistration = {sessionId:'discover-1',generation:'discover-generation',epoch:1,
+    user:hex(1),publisher:hex(2),appId:'napplet-discovery',version:hex(3),instanceId:'discover-1',fixture:'napplet-discovery',domains:['relay']};
+  f.service = {...f.service, query:async()=>{await held.promise;return [];}};
+  let recommendationsRead = 0;
+  const recommendations = {async dispatch(){recommendationsRead++;return {status:'read-only'};},bind(){return null;}};
+  const broker = createCapabilityBroker(database,native,{registration:registered,assertActive(){}},
+    f.service,undefined,undefined,undefined,undefined,undefined,true,recommendations);
+  const reads = [1,2].map(index => broker.dispatch(native.add(registered,{type:'relay.query',id:'held-'+index,filters:[{}]})));
+  const token = native.add(registered,{type:'relay.catalogRecommendation',id:'recommendation'});
+  const pending = broker.dispatch(token);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(recommendationsRead,0);
+  assert.equal(native.results.has(token),false);
+  held.resolve();
+  await Promise.all([...reads,pending]);
+  assert.equal(recommendationsRead,1);
+  assert.deepEqual(native.results.get(token),{type:'relay.catalogRecommendation.result',id:'recommendation',result:{status:'read-only'}});
+});

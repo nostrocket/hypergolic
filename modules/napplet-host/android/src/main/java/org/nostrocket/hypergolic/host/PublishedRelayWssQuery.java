@@ -39,6 +39,19 @@ import javax.net.ssl.SSLSocketFactory;
 
 /** Bounded public-DNS WSS REQ; the trusted caller validates text structure and EOSE. */
 public final class PublishedRelayWssQuery {
+  public static final class TransportFailure extends IOException {
+    private static final long serialVersionUID = 1L;
+    TransportFailure(String message, Throwable cause) { super(message, cause); }
+  }
+  static IOException connectivityFailure(IOException failure) {
+    Throwable cause = failure;
+    for (int depth = 0; cause != null && depth < 8; depth++, cause = cause.getCause()) {
+      if (cause instanceof java.net.SocketException || cause instanceof SocketTimeoutException || cause instanceof java.net.UnknownHostException) {
+        return new TransportFailure("Relay connection unavailable", failure);
+      }
+    }
+    return failure;
+  }
   public static final int TOTAL_TIMEOUT_MS = 10_000;
   public static final int MAX_EVENTS = 32;
   public static final int MAX_TEXT_MESSAGES = 64;
@@ -89,9 +102,12 @@ public final class PublishedRelayWssQuery {
     Deadline deadline = Deadline.start(timeoutMs);
     AbortMonitor abort = new AbortMonitor(cancellation, deadline);
     try {
-      InetAddress[] addresses = resolve(relay.host, deadline, abort, resolver, executor);
-      addresses = PublishedHttpsTransport.checkedAddresses(addresses, policy);
-      SSLSocket tls = connect(relay, addresses, policy, abort, deadline, socketFactory, hostnameVerifier);
+      SSLSocket tls;
+      try {
+        InetAddress[] addresses = resolve(relay.host, deadline, abort, resolver, executor);
+        addresses = PublishedHttpsTransport.checkedAddresses(addresses, policy);
+        tls = connect(relay, addresses, policy, abort, deadline, socketFactory, hostnameVerifier);
+      } catch (IOException failure) { throw connectivityFailure(failure); }
       try (SSLSocket closeable = tls) {
         DeadlineInput input = new DeadlineInput(closeable.getInputStream(), closeable, deadline);
         OutputStream output = closeable.getOutputStream();
@@ -99,7 +115,10 @@ public final class PublishedRelayWssQuery {
         RANDOM.nextBytes(nonce);
         sendHandshake(output, relay, nonce);
         byte[] headers = readHandshake(input, abort);
-        try { PublishedRelayWebSocketHandshake.validate(headers, nonce); }
+        try {
+          if (PublishedRelayWebSocketHandshake.isServiceUnavailable(headers)) throw new TransportFailure("Relay service unavailable", null);
+          PublishedRelayWebSocketHandshake.validate(headers, nonce);
+        }
         catch (IllegalArgumentException invalid) { throw new IOException("Relay rejected WebSocket upgrade", invalid); }
         abort.check();
         if (cancellation instanceof PublicationControl) {
@@ -292,8 +311,13 @@ public final class PublishedRelayWssQuery {
     int match = 0;
     while (bytes.size() < MAX_HANDSHAKE_BYTES) {
       abort.check();
-      int value = input.read();
-      if (value < 0) throw new IOException("Relay closed during WebSocket upgrade");
+      int value;
+      try { value = input.read(); }
+      catch (IOException failure) { throw bytes.size() == 0 ? connectivityFailure(failure) : failure; }
+      if (value < 0) {
+        if (bytes.size() == 0) throw new TransportFailure("Relay closed before WebSocket upgrade", null);
+        throw new IOException("Relay closed during WebSocket upgrade");
+      }
       bytes.write(value);
       if ((byte) value == CRLFCRLF[match]) match++;
       else match = (byte) value == CRLFCRLF[0] ? 1 : 0;
@@ -307,10 +331,17 @@ public final class PublishedRelayWssQuery {
     PublishedRelayWebSocketFrames frames = new PublishedRelayWebSocketFrames();
     byte[] buffer = new byte[PublishedRelayWebSocketFrames.MAX_READ];
     ResponseCollector collector = new ResponseCollector(shouldStop);
+    int responseBytes = 0;
     while (!collector.complete()) {
       abort.check();
-      int count = input.read(buffer);
-      if (count < 0) throw new IOException("Relay closed before EOSE");
+      int count;
+      try { count = input.read(buffer); }
+      catch (IOException failure) { throw responseBytes == 0 ? connectivityFailure(failure) : failure; }
+      if (count < 0) {
+        if (responseBytes == 0) throw new TransportFailure("Relay closed before response", null);
+        throw new IOException("Relay closed before EOSE");
+      }
+      responseBytes += count;
       byte[] chunk = new byte[count];
       System.arraycopy(buffer, 0, chunk, 0, count);
       List<PublishedRelayWebSocketFrames.Event> batch = frames.feed(chunk);

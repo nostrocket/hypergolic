@@ -109,16 +109,13 @@ ordinary standalone Android and iOS with Metro stopped.
 
 ## Pinning from Discover
 
-The optional `publishedOpen.pin(address, expectedEventId)` method uses the same
-exact-Discover transport, document token, native focus revision and account-bound
-lease as Open. Its wire request adds only `action: "pin"`; ordinary Open requests
-retain their four-field shape. Both native hosts reject other actions and extra
-fields. Guests feature-detect `pin` before displaying the action.
+The optional `publishedOpen.pinState(address, expectedEventId)`, `pin` and `unpin`
+methods use the same verified Discover transport, document token, native focus
+revision and account-bound lease as Open. Each takes the displayed publication's
+bare address and event ID. Check for the corresponding method before calling it.
 
-Hypergolic verifies the displayed signed publication and artifact, then presents a
-trusted **Pin to Home** confirmation. Approval persists the exact descriptor in
-the selected identity's shortcuts and returns `pinned`. It does not stage a view,
-change focus, request capabilities or save an access grant. Decline and revocation
-before commit leave shortcuts unchanged. Duplicate pins are idempotent; pinning
-does not silently accept a different saved revision. The ordinary launch and
-update reviews still apply when the shortcut is opened.
+Pin state belongs to the selected identity and the stable publication address.
+A newer listing for the same app still shows **Unpin** if its shortcut is on Home.
+Tapping **Pin** verifies the signed publication and artifact, then saves the
+shortcut. Tapping **Unpin** removes the shortcut. Both actions are local and
+take one tap. Opening a shortcut follows the ordinary launch and grant review.
