@@ -9,11 +9,13 @@ enum CvmForegroundAuthorityProof {
     let relay = "wss://relay.example"
     let message = #"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#
 
-    func register(_ card: String, epoch: Int64 = 1) throws -> Authority.Registration {
-      let source = try Authority.Source(endpoint: card, generation: card, user: user, epoch: epoch,
+    func source(_ card: String, epoch: Int64) throws -> Authority.Source {
+      try Authority.Source(endpoint: card, generation: card, user: user, epoch: epoch,
         publisher: String(repeating: "c", count: 64), appId: card,
         version: String(repeating: "d", count: 64), instance: card)
-      guard let registration = authority.register(source) else { fatalError("Could not register " + card) }
+    }
+    func register(_ card: String, epoch: Int64 = 1) throws -> Authority.Registration {
+      guard let registration = try authority.register(source(card, epoch: epoch)) else { fatalError("Could not register " + card) }
       return registration
     }
     func request(_ card: Authority.Registration) -> Authority.Request? {
@@ -50,13 +52,27 @@ enum CvmForegroundAuthorityProof {
 
     let reopened = try register("second")
     let beforeSwitch = approve(reopened)
+    guard let queuedBeforeSwitch = request(reopened) else { fatalError("Expected a queued request") }
+    let oldSource = try source("second", epoch: 1)
+    authority.account(user: user, epoch: 1, available: false)
+    authority.setForeground(true)
+    precondition(authority.register(oldSource) == nil && !consume(beforeSwitch) && authority.approve(queuedBeforeSwitch) == nil)
     authority.account(user: String(repeating: "e", count: 64), epoch: 2)
+    precondition(authority.register(oldSource) == nil)
     authority.account(user: user, epoch: 3)
     precondition(!consume(beforeSwitch) && request(reopened) == nil)
 
     let fresh = try register("second", epoch: 3)
     let accepted = approve(fresh)
     precondition(consume(accepted) && !consume(accepted) && authority.finish(accepted))
+    authority.setForeground(false)
+    authority.account(user: user, epoch: 3, available: false)
+    authority.account(user: user, epoch: 4)
+    let backgroundSource = try source("second", epoch: 4)
+    precondition(authority.register(backgroundSource) == nil)
+    authority.setForeground(true)
+    let afterBackground = try register("second", epoch: 4)
+    precondition(consume(approve(afterBackground)) && request(fresh) == nil)
     print("CVM foreground authority lifecycle passed")
   }
 }

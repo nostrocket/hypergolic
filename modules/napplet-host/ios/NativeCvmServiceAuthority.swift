@@ -55,6 +55,7 @@ public final class NativeCvmServiceAuthority: @unchecked Sendable {
   private var epoch: Int64 = -1, lastTime: Int64 = -1
   private var revision: UInt64 = 0
   private var foreground = false, closed = false, clockFailed = false
+  private var accountAvailable = false
   public init(clock: @escaping @Sendable () -> Int64) { self.clock = clock }
   private func locked<T>(_ body: () throws -> T) rethrows -> T { lock.lock(); defer { lock.unlock() }; return try body() }
   private static func hex(_ value: String) -> Bool {
@@ -73,7 +74,10 @@ public final class NativeCvmServiceAuthority: @unchecked Sendable {
   }
   private func live(_ registration: Registration) -> Bool {
     let source = registration.source
-    return !closed && !clockFailed && foreground && registrations[source.generation] === registration && source.user == user && source.epoch == epoch
+    return canRegister(source) && registrations[source.generation] === registration
+  }
+  private func canRegister(_ source: Source) -> Bool {
+    !closed && !clockFailed && foreground && accountAvailable && source.user == user && source.epoch == epoch
   }
   private func prune() {
     let now = time()
@@ -82,18 +86,17 @@ public final class NativeCvmServiceAuthority: @unchecked Sendable {
       permit.cancelled = true; active.removeValue(forKey: id)
     }
   }
-  public func account(user: String, epoch: Int64) {
+  public func account(user: String, epoch: Int64, available: Bool = true) {
     locked {
       guard Self.hex(user), (0...9_007_199_254_740_991).contains(epoch) else { close(); return }
-      if self.user != user || self.epoch != epoch {
-        revision &+= 1; waiting.removeAll(); for permit in active.values { permit.cancelled = true }; active.removeAll(); registrations.removeAll()
-      }
-      self.user = user; self.epoch = epoch; prune()
+      if self.user != user || self.epoch != epoch || !available { invalidateRegistrations() }
+      self.user = user; self.epoch = epoch; accountAvailable = available
+      prune()
     }
   }
   public func register(_ source: Source) -> Registration? {
     locked {
-      prune(); guard !closed, !clockFailed, registrations.count < 64, registrations[source.generation] == nil else { return nil }
+      prune(); guard canRegister(source), registrations.count < 64, registrations[source.generation] == nil else { return nil }
       let registration = Registration(source); registrations[source.generation] = registration; return registration
     }
   }
@@ -141,9 +144,16 @@ public final class NativeCvmServiceAuthority: @unchecked Sendable {
   public func setForeground(_ value: Bool) {
     locked {
       foreground = value
-      if !value { revision &+= 1; waiting.removeAll(); for permit in active.values { permit.cancelled = true }; active.removeAll(); registrations.removeAll() }
+      if !value { invalidateRegistrations() }
       prune()
     }
+  }
+  private func invalidateRegistrations() {
+    revision &+= 1
+    waiting.removeAll()
+    for permit in active.values { permit.cancelled = true }
+    active.removeAll()
+    registrations.removeAll()
   }
   public func close() { locked { closed = true; setForeground(false); registrations.removeAll() } }
 }

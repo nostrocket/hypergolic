@@ -66,11 +66,16 @@ final class CvmTransport: @unchecked Sendable {
     locked {
       let changed = accountUser != user || accountEpoch != epoch || !available
       accountUser=user; accountEpoch=epoch
-      if changed { closeAll() }; authority.account(user:user,epoch:epoch)
-      if !available { authority.setForeground(false) }
+      authority.account(user: user, epoch: epoch, available: available)
+      if changed { closeAll() }
     }
   }
-  func foreground(_ value: Bool) { authority.setForeground(value); if !value { closeAll() } }
+  func foreground(_ value: Bool) {
+    locked {
+      authority.setForeground(value)
+      if !value { closeAll() }
+    }
+  }
   private func closeAll() {
     let action = locked { () -> ([Pending], (@Sendable (String?, String?) -> Void)?) in
       let rows = Array(pending.values); pending.removeAll(); for delivery in deliveries.values { delivery.cancelled=true }
