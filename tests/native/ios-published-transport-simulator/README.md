@@ -11,8 +11,10 @@ python3 tests/native/ios-published-transport-simulator/runner.py \
   --simulator BOOTED_SIMULATOR_UDID --output /private/tmp/hypergolic-ios-transport-proof
 ```
 
-HTTPS covers six TLS socket cases plus four DNS answer-set checks. WSS covers
-eight TLS socket cases. The runners build standalone proof binaries with the
+HTTPS covers seven TLS socket cases, including an artifact redirect chain,
+plus four DNS answer-set checks. WSS covers fourteen TLS socket cases,
+including short deadlines, empty and partial closes, and well-formed and
+malformed 503 responses. The runners build standalone proof binaries with the
 `HYPERGOLIC_NETWORK_PROOF` flag; the normal Expo app does not define that
 flag. These checks exercise iOS Simulator's Network.framework and the owning
 Swift transports, not the Expo app lifecycle or a physical iPhone. Local

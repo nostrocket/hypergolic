@@ -27,11 +27,13 @@ SOURCES = [
 RUNNERS = [
     ("https", HTTPS / "tls_runner.py", {
         "valid": 1, "failover": 1, "untrusted": 1, "wrong-host": 1,
-        "redirect": 1, "cancel": 1, "mixed-dns": 4,
+        "redirect": 1, "artifact-redirect": 1, "cancel": 1, "mixed-dns": 4,
     }),
     ("wss", WSS / "tls_runner.py", {
         "valid": 1, "failover": 1, "untrusted": 1, "wrong-host": 1,
         "redirect": 1, "bad-accept": 1, "oversize": 1, "cancel": 1, "auth-announcement": 1,
+        "short-deadline": 1, "empty-close": 1, "partial-close": 1,
+        "service-unavailable": 1, "malformed-503": 1,
     }),
 ]
 
