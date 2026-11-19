@@ -123,6 +123,9 @@ final class NativeCvmSessions: @unchecked Sendable {
           let transport = context.transport, context.acknowledgements.count < 4,
           let event = NativeCvmProtocol.object(prepared.prepared.wire), let id = event["id"] as? String else { throw Failure.denied }
         try self.check(context, approved: prepared.approved); prepared.committed = true
+        if prepared.purpose == "initialize" {
+          try context.proto.initialization.commit(eventId: prepared.prepared.innerEventId)
+        }
         context.acknowledgements[id] = continuation
         transport.send("[\"EVENT\"," + prepared.prepared.wire + "]", beforeSend: {
           try self.check(context, approved: prepared.approved)
@@ -146,6 +149,7 @@ final class NativeCvmSessions: @unchecked Sendable {
         let bytes = try JSONSerialization.data(withJSONObject:event)
         let decoded = try envelope.decode(signed:String(decoding:bytes,as:UTF8.self),now:UInt64(Date().timeIntervalSince1970))
         try current(context)
+        context.proto.initialization.receive(decoded.message, references: decoded.references)
         var payload: [String:Any] = ["session":context.id,"message":decoded.message,"eventId":decoded.eventId,"references":decoded.references]
         if let mode = decoded.paymentInteraction { payload["paymentInteraction"] = mode }; emitValue("onCvmMessage",payload)
       case "EOSE": guard frame.count == 2, frame[1] as? String == context.subscription else { throw Failure.denied }

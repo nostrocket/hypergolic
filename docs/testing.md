@@ -59,6 +59,7 @@ pnpm run test:shell
 pnpm run test:security
 pnpm run test:storage
 pnpm run test:capabilities
+node --experimental-strip-types --test tests/cvm/*.test.ts tests/napplets/first-open-consent.test.ts tests/napplets/published-session.test.ts
 pnpm run test:relay
 pnpm run test:query
 pnpm run test:subscriptions
