@@ -34,3 +34,13 @@ Logical close acknowledges revocation, not physical resource destruction. A brid
 Shared and browser fixtures cover contracts, wrappers, long-lived native projection, sender/generation binding, explicit review denial, deadline and close races. Native module compiles include the actual host views and Expo routes. Owned native proofs use programmatic test approvals, controlled/in-memory transport and disposable generated test keys; they do not prove a real native consent gesture, provider behavior or public effects. Ordinary final Android/iOS consent, paired-source unfocused operation, foreground/background/revocation and an explicitly approved provider request remain acceptance work on the final ordinary builds.
 
 The exact original Kipinä agent publication also uses `ws://localhost:3334` for its journal. That is an independent publisher destination dependency; this profile does not reroute it or authorize local/private networking. Its prompt/history workflow may publish journal records before CVM. A local-only controlled CVM proof is not a successful ordinary paired-agent primary workflow.
+
+### Running ordinary acceptance
+
+Use the standalone Release app, a disposable account and a verified publication that calls a free read-only tool. Funclet's **Artists** search exercises `search_artists`. Record the artifact digest, publication event, provider, relay, arguments and observed result on each platform.
+
+1. Open the publication and review its requested CVM access. Submit an artist search, compare the native review to the intended query, then cancel. Check the guest's outcome. A controlled transport or provider observation can independently establish whether the request was sent.
+2. Submit a fresh search and approve it. Verify that the provider's matching result renders in the requesting card. For the focus check, switch cards while a request is outstanding, then return to the source and inspect its result. Record the order of the card switch and reply.
+3. Exercise backgrounding, account switching and closing the source in separate runs. Use a delayed response where timing matters. After each transition verify that the old result cannot reach a reopened card or the new account, then confirm that a fresh reviewed request works.
+
+The shared CI job runs the CVM and published-consent suites. The iOS compile job also checks the native initialization and foreground-authority lifecycles. The [Android native harness](../tests/native/cvm/android/README.md) exercises the host, session and encrypted envelopes with controlled inputs.

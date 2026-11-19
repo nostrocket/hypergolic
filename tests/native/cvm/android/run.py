@@ -44,6 +44,7 @@ def main():
         proofs[label]={'exit':result.returncode};assert result.returncode==0,label
     sdk=tools/'.tools/android-sdk/platforms/android-37.0/android.jar'
     cp=[classes,sdk]+[abi/(module+'-'+language)for module in ['signer-core','napplet-host','identity-owner']for language in ['kotlin','java']]
+    cp.append(extract('androidx.core','core','1.18.0','androidx-core'))
     cp += [abi/'expo-core.jar',abi/'react-android.jar',abi/'expo-modules-v2-react.jar',extract('androidx.webkit','webkit','1.17.0','webkit'),
            jar('org.jetbrains.kotlin','kotlin-stdlib','2.2.21'),jar('org.jetbrains','annotations','23.0.0'),jar('androidx.annotation','annotation-jvm','1.9.1'),
            jar('org.jetbrains.kotlinx','kotlinx-coroutines-core-jvm','1.8.0')]
