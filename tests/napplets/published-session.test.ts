@@ -270,9 +270,11 @@ test('unsupported requested capabilities warn without granting unsupported domai
     source: { query: async () => [event], readHtml: async () => new Uint8Array(html) },
   });
   const link = naddrEncode({ kind: 35129, pubkey: event.pubkey, identifier: appId });
+  const deniedDomains: (readonly string[])[] = [];
   await assert.rejects(service.openLink(link, new AbortController().signal, async review => {
-    assert.deepEqual(review.unsupportedDomains, ['webrtc']); return false;
-  }));
+    deniedDomains.push(review.unsupportedDomains); return false;
+  }), { code: 'PUBLISHED_SESSION_FAILED' });
+  assert.deepEqual(deniedDomains, [['webrtc']]);
   assert.deepEqual(calls, []);
   const opened = await service.openLink(link, new AbortController().signal, async review => {
     assert.deepEqual(review.domains, ['cvm', 'webrtc']);
@@ -530,11 +532,22 @@ test('changed update access needs a second review before any new native session'
   assert.equal(calls.filter(call => call.startsWith('register:')).length, 2);
   latest = signedFixture(1_800_000_022, appId, html, ['relay', 'theme', 'cvm'], key);
   const registrations = calls.filter(call => call.startsWith('register:')).length;
+  const updateDomains: (readonly string[])[] = [];
+  const consentReviews: { domains: readonly string[]; unsupported: readonly string[] }[] = [];
   await assert.rejects(service.prepareUpdate(accepted.descriptor, new AbortController().signal,
-    async request => { assert.deepEqual(request.domains, ['cvm', 'relay', 'theme']); return true; },
-    async request => { assert.deepEqual(request.unsupportedDomains, ['cvm']); return false; }));
+    async request => { updateDomains.push(request.domains); return true; },
+    async request => { consentReviews.push({ domains: request.domains, unsupported: request.unsupportedDomains }); return false; }),
+    { code: 'PUBLISHED_SESSION_FAILED' });
+  assert.deepEqual(updateDomains, [['cvm', 'relay', 'theme']]);
+  assert.deepEqual(consentReviews, [{ domains: ['cvm', 'relay', 'theme'], unsupported: [] }]);
   assert.equal(calls.filter(call => call.startsWith('register:')).length, registrations);
-  opened.revoke(); accepted.revoke();
+  const withCvm = await service.prepareUpdate(accepted.descriptor, new AbortController().signal,
+    async () => true, async request => { assert.deepEqual(request.domains, ['cvm', 'relay', 'theme']); return true; });
+  assert(withCvm);
+  const registration = JSON.parse(JSON.parse(withCvm.hostInput).configuration);
+  assert.equal(registration.cvmProfile, 'free-foreground-v1');
+  assert.ok(registration.domains.includes('cvm'));
+  opened.revoke(); accepted.revoke(); withCvm.revoke();
 });
 
 
