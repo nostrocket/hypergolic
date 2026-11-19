@@ -1377,7 +1377,7 @@
     "suppliedOriginalFileCount": 55,
     "sharedOriginalPackageCount": 4,
     "dependencyInputs": {
-      "package.json": "4b3b3fbcc90577e69e4ee99776517a5dbd405c4c77f8e719f3eb47d4db458966",
+      "package.json": "dd9fce2927b18ea50e073f5b038c837ecc4ad93f69394aa9d88c0cca55a2b58b",
       "pnpm-lock.yaml": "85fbc48ad55786262c490044e826b6282e45dadd459ca692bb6ca4db3a283b6c",
       "node_modules/.pnpm/@expo+cli@58.1.20_@expo+dom-webview@58.0.2_expo-constants@58.0.16_expo@58.0.24_react-na_9e33ccae367f67a78635be2cb8b90a55/node_modules/@expo/cli/package.json": "98f35dbe2ac27fd7ee90905352ab6215fc157f80094f6e7c2bce87ebd1e85c39",
       "node_modules/.pnpm/@react-native+js-polyfills@0.88.1/node_modules/@react-native/js-polyfills/package.json": "4b540e4c8ea9920faeefdaa16a7da7dd49ff5521fd168153ef52aa5e975f837b",
