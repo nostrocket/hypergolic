@@ -292,3 +292,32 @@ for (const state of [null, undefined, 'unrecognized-native-state']) {
     assert.deepEqual(native.responses, [null]);
   });
 }
+
+test('Discover recommendations bind the reviewed list and recheck before signing and sending', async () => {
+  const coordinate = '35129:' + '1'.repeat(64) + ':battleship';
+  const template = {...event(30267), tags: [['d', 'napplets'], ['a', coordinate]]};
+  for (const stopAt of [0, 1, 2]) {
+    const native = new Native(), owned = origin('discover');
+    native.issue('recommend', owned, 'recommend', template);
+    let checks = 0, signed = 0, sent = 0, retry: boolean | undefined;
+    const service = make(native, {
+      sign: async snapshot => { signed++; return sign(snapshot); },
+      publishEvent: async (verified, destinations) => { sent++; return destinations.map(url =>
+        ({relay: url, eventId: verified.id, status: 'accepted' as const, reason: ''})); },
+    });
+    const guard = Object.assign(async () => { if (++checks === stopAt) throw Error('List changed'); },
+      {release: (allowed: boolean) => { retry = allowed; }});
+    assert.equal(service.enqueue('recommend', [relay], owned, snapshot => snapshot.event.tags[1]?.[1] === coordinate ? guard : null), true);
+    service.focus('discover');
+    const review = service.getSnapshot().current!;
+    assert.equal(review.recommendation, coordinate);
+    if (stopAt) await assert.rejects(service.approve(review.id));
+    else await service.approve(review.id);
+    assert.equal(signed, stopAt === 1 ? 0 : 1);
+    assert.equal(sent, stopAt ? 0 : 1);
+    assert.equal(retry, Boolean(stopAt));
+  }
+  const native = new Native(), owner = origin('discover');
+  native.issue('unprepared', owner, 'request', template);
+  assert.equal(make(native).enqueue('unprepared', [relay], owner, () => null), false);
+});

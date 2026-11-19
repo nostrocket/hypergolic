@@ -1,3 +1,4 @@
+import {createCatalogRecommendations} from '../napplets/catalog-recommendation.ts';
 import {createLegacyImageBroker} from './legacy-image-broker.ts';
 import {createLegacySubscriptionBroker} from './legacy-subscription-broker.ts';
 import type {CvmService} from '../cvm/cvm-service';
@@ -63,12 +64,22 @@ function configurationUser(ready: PreparedPublishedSession): string {
   return configuration.user;
 }
 
+type ApprovalPorts = Readonly<{
+  service: ApprovalService;
+  destinations(): readonly string[];
+  canSign?(user: string): Promise<boolean>;
+  closeReview?(sessionId: string): void;
+}>;
+
 function capabilityReceiver(database: ShellDatabase, native: RuntimeNativePort,
-  approvals: Readonly<{ service: ApprovalService; destinations: () => readonly string[] }> | undefined,
+  approvals: ApprovalPorts | undefined,
   sessionId: string, configuration: Omit<NativeRegistration, 'generation'>, assertActive: () => void, queries?: RelayQueryService, subscriptions?: ReturnType<typeof createRelaySubscriptions>, resources?: ResourceHost, uploads?: UploadService, identityData?: IdentityDataPort, routing?: RoutingBroker, notify?: NotifyBroker, config?: ConfigBroker, outbox?: OutboxReadService, outboxStreams?:ReturnType<typeof createOutboxSubscriptions>,
   discovery?: Readonly<{ broker: DiscoveryOpenBroker; source: NappletDescriptor }>, cvm?:CvmService) {
   let generation: string | null = null;
   let broker: ReturnType<typeof createCapabilityBroker> | null = null;
+  const canSign = approvals?.canSign;
+  const recommendations = discovery && configuration.fixture === 'napplet-discovery' && configuration.domains.includes('relay') && queries && canSign
+    ? createCatalogRecommendations(configuration.user, queries, () => canSign(configuration.user)) : undefined;
   let streams:ReturnType<typeof createRelaySubscriptionBroker>|null=null;
   let legacyStreams:ReturnType<typeof createLegacySubscriptionBroker>|null=null;
   let legacyImages:ReturnType<typeof createLegacyImageBroker>|null=null;
@@ -88,7 +99,7 @@ function capabilityReceiver(database: ShellDatabase, native: RuntimeNativePort,
           if(configuration.legacyReadOnly && configuration.domains.length === 0 && native.subscriptions && subscriptions) legacyStreams=createLegacySubscriptionBroker(native.subscriptions,native,subscriptions,owner);
           if(configuration.domains.includes('relay')&&native.subscriptions&&subscriptions)streams=createRelaySubscriptionBroker(native.subscriptions,subscriptions,owner);
           if(configuration.domains.includes('outbox')&&native.subscriptions&&outboxStreams)outboxSubscriptions=createOutboxSubscriptionBroker(native.subscriptions,outboxStreams,owner);
-          broker = createCapabilityBroker(database, native, owner, queries, request=>streams?.close(request), resources, identityData, outbox,request=>outboxSubscriptions?.close(request), discovery !== undefined);
+          broker = createCapabilityBroker(database, native, owner, queries, request=>streams?.close(request), resources, identityData, outbox,request=>outboxSubscriptions?.close(request), discovery !== undefined, recommendations);
         }
         if (event.generation !== generation) return;
         if(event.lane==='legacy-image')void legacyImages?.dispatch(event.token);
@@ -108,7 +119,7 @@ function capabilityReceiver(database: ShellDatabase, native: RuntimeNativePort,
           if (configuration.domains.includes('upload')) uploads?.enqueue(event.token, {...configuration, generation});
         } else if (event.lane === 'approval') {
           if (!configuration.domains.includes('relay') && !configuration.domains.includes('outbox')) return;
-          approvals?.service.enqueue(event.token, approvals.destinations(), { ...configuration, generation });
+          approvals?.service.enqueue(event.token, approvals.destinations(), { ...configuration, generation }, recommendations?.bind);
         } else if(event.lane==='outbox-subscription')outboxSubscriptions?.dispatch(event.token);
         else if(event.lane==='subscription')streams?.dispatch(event.token);
         else if (event.lane === undefined) void broker!.dispatch(event.token);
@@ -119,7 +130,7 @@ function capabilityReceiver(database: ShellDatabase, native: RuntimeNativePort,
 /** The process-owned database and identity authority remain outside React/WebView props. */
 export function createRuntimeOwner(database: ShellDatabase,
   identity: Pick<IdentityTransition, 'getSnapshot' | 'sessionAuthority'>, native: RuntimeNativePort,
-  approvals?: Readonly<{ service: ApprovalService; destinations: () => readonly string[]; closeReview?(sessionId: string): void }>,
+  approvals?: ApprovalPorts,
   published?: Omit<PublishedSessionDependencies, 'identity' | 'database' | 'newInstanceId'>, queries?: RelayQueryService, subscriptions?: ReturnType<typeof createRelaySubscriptions>, resources?: ResourceHost, uploads?: UploadService, identityData?: IdentityDataPort, routing?: Readonly<{broker: RoutingBroker; catalog: RoutingCatalog}>, notify?: NotifyBroker, config?: ConfigBroker, outbox?: OutboxReadService, outboxStreams?:ReturnType<typeof createOutboxSubscriptions>, discovery?: DiscoveryOpenBroker,cvm?:CvmService): RuntimeOwner {
   const coordinator = published ? createPublishedSessionCoordinator({
     ...published, identity, database, newInstanceId: () => native.newInstanceId(),

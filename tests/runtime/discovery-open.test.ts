@@ -17,7 +17,12 @@ import { ReviewSlot } from '../../src/shell/review-slot.ts';
 import type { TransitionSnapshot } from '../../src/security/identity-transition.ts';
 import { bundledDescriptor, resolveBundledSession } from '../../src/shell/fixtures.ts';
 import { emptyWorkspace, openNapplet, showOverview, type NappletDescriptor } from '../../src/shell/workspace.ts';
-import type { WorkspaceController } from '../../src/storage/workspace-controller.ts';
+import { openWorkspaceController, type WorkspaceController } from '../../src/storage/workspace-controller.ts';
+import { pinNapplet, pinnedNapplets } from '../../src/shell/pins.ts';
+import { createRuntimeOwner, type RuntimeOwner } from '../../src/runtime/runtime-owner.ts';
+import { NativeLeases } from './native-leases.ts';
+import { setup as diskSetup } from '../storage/harness.ts';
+import type { IdentityTransition } from '../../src/security/identity-transition.ts';
 
 const secret = Uint8Array.from([...new Uint8Array(31), 7]);
 const publisher = getPublicKey(secret);
@@ -57,8 +62,9 @@ function subscriptions() {
   };
 }
 
-function setup(initial = openNapplet(emptyWorkspace(), source), reviews = new RoutingReviewService()) {
+function setup(initial = openNapplet(emptyWorkspace(), source), reviews = new RoutingReviewService(), persisted?: WorkspaceController) {
   let workspace = initial;
+  let suppliedRuntime: Pick<RuntimeOwner, 'resolveDiscovered' | 'prepareDiscovered' | 'publishedReadyGeneration' | 'discardPublished'> | null = null;
   let revision = 2;
   let focusRevision = 7;
   let available = true;
@@ -71,7 +77,7 @@ function setup(initial = openNapplet(emptyWorkspace(), source), reviews = new Ro
   let lookupError: PublishedLoadError | null = null;
   const discarded: string[] = [];
   const changes = subscriptions(), lifecycle = subscriptions(), account = subscriptions();
-  const controller: WorkspaceController = {
+  const controller: WorkspaceController = persisted ?? {
     getSnapshot: () => ({ workspace, saving: false, error: null }), subscribe: changes.subscribe,
     change: state => { workspace = state; changes.emit(); }, flush: async () => {},
     freeze() {}, resume() {}, revoke() {},
@@ -94,7 +100,7 @@ function setup(initial = openNapplet(emptyWorkspace(), source), reviews = new Ro
         responses.set(token, response === null ? null : JSON.parse(response).response as DiscoveryOpenOutcome);
       },
     },
-    runtime: () => ({
+    runtime: () => suppliedRuntime ?? ({
       async resolveDiscovered(link, expected, _signal, active) {
         lookups.push({ address: link, expectedEventId: expected });
         if (paused) await paused;
@@ -114,7 +120,7 @@ function setup(initial = openNapplet(emptyWorkspace(), source), reviews = new Ro
       discardPublished: id => { discarded.push(id); },
     }),
   });
-  const run = (token: string, options: { message?: typeof request & {action?: 'pin'}; origin?: typeof registration; source?: typeof source } = {}) => {
+  const run = (token: string, options: { message?: typeof request & {action?: 'pin' | 'unpin' | 'pin-state'}; origin?: typeof registration; source?: typeof source } = {}) => {
     held.set(token, JSON.stringify({
       registration: options.origin ?? registration,
       request: JSON.stringify({ type: 'routing.call', id: token, message: options.message ?? request, revision: 2, focusRevision: 7 }),
@@ -127,11 +133,12 @@ function setup(initial = openNapplet(emptyWorkspace(), source), reviews = new Ro
   };
   const decide = (id: string, allow: boolean) => reviews.decide(id, { allow });
   return {
-    run, review, decide, reviews, responses, discarded,
-    state: () => workspace, staged: () => staged, lookups,
+    run, review, decide, reviews, responses, discarded, controller, transition,
+    useRuntime: (runtime: NonNullable<typeof suppliedRuntime>) => { suppliedRuntime = runtime; },
+    state: () => controller.getSnapshot().workspace, staged: () => staged, lookups,
     ready: () => { mounted = true; lifecycle.emit(); },
     focusTarget: () => { focused = true; lifecycle.emit(); },
-    overview: () => controller.change(showOverview(workspace)),
+    overview: () => controller.change(showOverview(controller.getSnapshot().workspace)),
     unfocus: (notify = true) => { focusRevision++; if (notify) lifecycle.emit(); },
     background: () => { available = false; revision++; lifecycle.emit(); },
     holdLookup: (promise: Promise<void>) => { paused = promise; },
@@ -358,33 +365,138 @@ test('a changed native focus revision takes precedence over a late lookup diagno
   assert.equal(env.reviews.getSnapshot(), null);
 });
 
-test('Discover pin saves only a shortcut after trusted review and keeps Discover focused', async () => {
+test('one-tap Discover pin saves only a shortcut without review, staging or focus changes', async () => {
   const env = setup();
-  const pending = env.run('pin', {message: {...request, action: 'pin'}});
-  const review = await env.review();
-  assert.equal(review.request.kind, 'published-open');
-  assert.equal(review.request.kind === 'published-open' && review.request.pinOnly, true);
-  env.decide(review.id, true); await pending;
+  await env.run('pin', {message: {...request, action: 'pin'}});
   assert.equal(env.responses.get('pin'), 'pinned');
+  assert.equal(env.reviews.getSnapshot(), null);
   assert.equal(env.staged(), 0);
   assert.equal(env.state().focusedId, source.id);
   assert.deepEqual(env.state().sessions, [source]);
   assert.equal(env.state().pins?.[1]?.eventId, signed.id);
+  await env.run('pin-again', {message: {...request, action: 'pin'}});
+  assert.equal(env.responses.get('pin-again'), 'pinned');
+  assert.equal(env.state().pins?.length, 2);
 });
-test('declined or revoked Discover pin never writes a shortcut', async () => {
-  for (const revoke of [false, true]) {
-    const env = setup();
-    const pending = env.run('pin', {message: {...request, action: 'pin'}});
-    const review = await env.review();
-    if (revoke) env.background();
-    env.decide(review.id, revoke); await pending;
-    assert.equal(env.state().pins?.length, 1);
-    assert.equal(env.staged(), 0);
-  }
+
+test('revoked exact pin lookup never writes a shortcut', async () => {
+  const env = setup();
+  let resume!: () => void;
+  env.holdLookup(new Promise<void>(resolve => {resume = resolve;}));
+  const pending = env.run('pin', {message: {...request, action: 'pin'}});
+  env.background(); resume(); await pending;
+  assert.equal(env.state().pins?.length, 1);
+  assert.equal(env.staged(), 0);
+  assert.equal(env.responses.get('pin'), null);
 });
-test('pin request rejects unknown actions and extra authority fields', () => {
-  assert.equal(parseDiscoveryOpen({...request, action: 'pin'}).action, 'pin');
-  for (const extra of [{action: 'unpin'}, {action: 'pin', approved: true}, {action: true}]) {
+
+test('pin state and unpin use the saved coordinate across listing versions and preserve running sessions', async () => {
+  const older = {...target, eventId: '9'.repeat(64)};
+  const initial = pinNapplet(openNapplet(openNapplet(emptyWorkspace(), older), source), older);
+  const env = setup(initial);
+  env.failLookup(new PublishedLoadError('PUBLISHED_LOOKUP_UNAVAILABLE'));
+  await env.run('state', {message: {...request, action: 'pin-state'}});
+  assert.equal(env.responses.get('state'), 'pinned');
+  await env.run('unpin', {message: {...request, action: 'unpin'}});
+  assert.equal(env.responses.get('unpin'), 'unpinned');
+  assert.deepEqual(env.state().sessions, initial.sessions);
+  assert.equal(env.state().focusedId, source.id);
+  assert.deepEqual(pinnedNapplets(env.state()).map(pin => pin.appId), ['napplet-discovery']);
+  await env.run('again', {message: {...request, action: 'unpin'}});
+  await env.run('state-after', {message: {...request, action: 'pin-state'}});
+  assert.equal(env.responses.get('again'), 'unpinned');
+  assert.equal(env.responses.get('state-after'), 'unpinned');
+  assert.deepEqual(env.lookups, []);
+  assert.equal(env.reviews.getSnapshot(), null);
+});
+
+test('pin requests accept only explicit actions and no caller-supplied authority', () => {
+  for (const action of ['pin', 'unpin', 'pin-state'] as const) assert.equal(parseDiscoveryOpen({...request, action}).action, action);
+  for (const extra of [{action: 'grant'}, {action: 'pin', approved: true}, {action: true}]) {
     assert.throws(() => parseDiscoveryOpen({...request, ...extra}));
   }
+});
+
+test('ordinary Home first-open of a one-tap pin still requires consent before any grant or native staging', async t => {
+  const {database, sqlite} = await diskSetup(t);
+  const env = setup();
+  const calls: string[] = [];
+  const native = Object.assign(new NativeLeases(), {
+    registerPublishedSession: () => {calls.push('register'); return true;},
+    beginPublishedArtifact: () => {calls.push('begin'); return 'upload';},
+    appendPublishedArtifact: () => {calls.push('append'); return true;},
+    finishPublishedArtifact: () => {calls.push('finish'); return 'a'.repeat(64);},
+    cancelPublishedArtifact() {}, revokePublishedSession() {}, revokeAllPublishedArtifacts() {},
+  });
+  const identity = {getSnapshot: () => env.transition, sessionAuthority: () => ({user, epoch: 1, assertActive() {}})} as unknown as Pick<IdentityTransition, 'getSnapshot' | 'sessionAuthority'>;
+  const runtime = createRuntimeOwner(database, identity, native, undefined, {
+    sqlite, native, lookupRelays: () => ['wss://relay.example.org'],
+    source: {query: async () => [wire], readHtml: async () => html},
+  });
+  env.useRuntime(runtime);
+  await env.run('pin', {message: {...request, action: 'pin'}});
+  assert.equal(env.responses.get('pin'), 'pinned');
+  assert.equal(env.reviews.getSnapshot(), null);
+  assert.deepEqual(calls, []);
+  const app = database.bindApp({user, publisher, appId, assertActive() {}});
+  assert.equal(await app.port.readAccessGrant(), null);
+  assert.equal(await app.port.selectedVersion(), null);
+  const shortcut = pinnedNapplets(env.state()).find(pin => pin.source === 'published')!;
+  // Home navigation inserts the saved descriptor; NappletHost then uses ordinary openPublished.
+  env.controller.change(openNapplet(env.state(), shortcut));
+  let reviews = 0;
+  await assert.rejects(runtime.openPublished(shortcut, new AbortController().signal, async review => {
+    reviews++; assert.deepEqual(review.domains, ['relay']); return false;
+  }));
+  assert.equal(reviews, 1);
+  assert.equal(await app.port.readAccessGrant(), null);
+  assert.deepEqual(calls, []);
+  const binding = await runtime.openPublished(shortcut, new AbortController().signal, async () => {reviews++; return true;});
+  assert.equal(reviews, 2);
+  assert.deepEqual(calls, ['register', 'begin', 'append', 'finish']);
+  assert.deepEqual((await app.port.readAccessGrant())?.domains, ['keys', 'relay']);
+  binding.revoke(); app.revoke();
+});
+
+
+test('pin and unpin receipts follow durable account-scoped workspace saves and reload', async t => {
+  const {database} = await diskSetup(t);
+  const owner = {user, assertActive() {}};
+  const controller = await openWorkspaceController(database.bindWorkspace(owner), () => openNapplet(emptyWorkspace(), source), () => {});
+  const env = setup(undefined, new RoutingReviewService(), controller);
+  await env.run('pin', {message: {...request, action: 'pin'}});
+  assert.equal(env.responses.get('pin'), 'pinned');
+  const afterPin = await database.bindWorkspace(owner).port.load();
+  assert.equal(afterPin?.snapshot.pins?.[1]?.eventId, signed.id);
+  const other = await database.bindWorkspace({user: 'c'.repeat(64), assertActive() {}}).port.load();
+  assert.equal(other, null);
+  await env.run('unpin', {message: {...request, action: 'unpin'}});
+  assert.equal(env.responses.get('unpin'), 'unpinned');
+  const reopened = await openWorkspaceController(database.bindWorkspace(owner), () => assert.fail('No reseed'), () => {});
+  assert.deepEqual(pinnedNapplets(reopened.getSnapshot().workspace).map(pin => pin.appId), ['napplet-discovery']);
+  assert.deepEqual(reopened.getSnapshot().workspace.sessions, [source]);
+});
+
+
+test('unpin rejects stale focus and foreign native bindings without changing Home', async () => {
+  for (const foreign of [false, true]) {
+    const initial = pinNapplet(openNapplet(emptyWorkspace(), source), target);
+    const env = setup(initial);
+    if (!foreign) env.unfocus();
+    await env.run('unpin', {message: {...request, action: 'unpin'}, ...(foreign ? {origin:{...registration, generation:'foreign'}} : {})});
+    assert.equal(env.responses.get('unpin'), foreign ? null : 'cancelled');
+    assert.deepEqual(env.state(), initial);
+  }
+});
+
+test('a failed pin persistence operation never reports a successful pin receipt', async t => {
+  const {database, sqlite} = await diskSetup(t);
+  const owner = {user, assertActive() {}};
+  const controller = await openWorkspaceController(database.bindWorkspace(owner), () => openNapplet(emptyWorkspace(), source), () => {});
+  const env = setup(undefined, new RoutingReviewService(), controller);
+  sqlite.faults.push({prefix: 'UPDATE workspaces', mode: 'before'});
+  await env.run('pin', {message: {...request, action: 'pin'}});
+  assert.notEqual(env.responses.get('pin'), 'pinned');
+  assert.equal(controller.getSnapshot().error, 'STORAGE_FAILURE');
+  assert.deepEqual((await database.bindWorkspace(owner).port.load())?.snapshot.pins?.map(pin => pin.appId), ['napplet-discovery']);
 });

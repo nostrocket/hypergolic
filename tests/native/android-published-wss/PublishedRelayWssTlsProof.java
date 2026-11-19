@@ -61,6 +61,7 @@ public final class PublishedRelayWssTlsProof {
       rejectsRedirect(serverContext, trusted, dns);
       rejectsBadUpgrade(serverContext, trusted, dns);
       rejectsOversizedFrame(serverContext, trusted, dns);
+      distinguishesTransportFromTruncatedResponses(serverContext, trusted, dns);
       cancelsAfterUpgrade(serverContext, trusted, dns);
       try (LocalRelay relay = new LocalRelay(serverContext, Mode.HOLD_RESPONSE)) {
         PublishedRelayWssQuery.TimedRead deadline = new PublishedRelayWssQuery.TimedRead() {
@@ -77,6 +78,22 @@ public final class PublishedRelayWssTlsProof {
       check(dns.awaitTermination(2, TimeUnit.SECONDS));
     }
     System.out.println("PublishedRelayWssTlsProof: " + checks + " checks passed");
+  }
+  private static void distinguishesTransportFromTruncatedResponses(SSLContext context, SSLSocketFactory trusted,
+      ThreadPoolExecutor dns) throws Exception {
+    for (Mode mode : new Mode[] {Mode.EMPTY_CLOSE, Mode.PARTIAL_CLOSE, Mode.OVERSIZED_FRAME, Mode.SERVICE_UNAVAILABLE, Mode.MALFORMED_503}) {
+      try (LocalRelay relay = new LocalRelay(context, mode)) {
+        try {
+          query(relay, "relay.example.org", null, ignored -> new InetAddress[] {LOOPBACK}, dns, trusted);
+          throw new AssertionError("Unexpected successful incomplete response");
+        } catch (IOException failure) {
+          check((failure instanceof PublishedRelayWssQuery.TransportFailure) == (mode == Mode.EMPTY_CLOSE || mode == Mode.SERVICE_UNAVAILABLE));
+        }
+      }
+    }
+    check(PublishedRelayWssQuery.connectivityFailure(new java.net.ConnectException()) instanceof PublishedRelayWssQuery.TransportFailure);
+    check(!(PublishedRelayWssQuery.connectivityFailure(new IOException("Invalid relay result")) instanceof PublishedRelayWssQuery.TransportFailure));
+    check(!(PublishedRelayWssQuery.connectivityFailure(new javax.net.ssl.SSLHandshakeException("Untrusted certificate")) instanceof PublishedRelayWssQuery.TransportFailure));
   }
 
   private static void acceptsVerifiedRelayAndRetriesVettedAddress(SSLContext context, SSLSocketFactory trusted,
@@ -192,7 +209,7 @@ public final class PublishedRelayWssTlsProof {
         resolver, dns, factory, PublishedHttpsTlsProof.PROOF_HOSTNAME_VERIFIER);
   }
 
-  private enum Mode { VALID, AUTH_ANNOUNCEMENT, REDIRECT, BAD_ACCEPT, OVERSIZED_FRAME, HOLD_RESPONSE }
+  private enum Mode { VALID, AUTH_ANNOUNCEMENT, REDIRECT, BAD_ACCEPT, OVERSIZED_FRAME, HOLD_RESPONSE, EMPTY_CLOSE, PARTIAL_CLOSE, SERVICE_UNAVAILABLE, MALFORMED_503 }
 
   private static final class LocalRelay implements AutoCloseable {
     private final SSLServerSocket listener;
@@ -225,7 +242,9 @@ public final class PublishedRelayWssTlsProof {
         InputStream input = client.getInputStream();
         OutputStream output = client.getOutputStream();
         upgrade = readHeaders(input);
-        if (mode == Mode.REDIRECT) {
+        if (mode == Mode.SERVICE_UNAVAILABLE || mode == Mode.MALFORMED_503) {
+          output.write(("HTTP/1.1 503 Service Unavailable\r\n" + (mode == Mode.MALFORMED_503 ? "Broken header" : "Content-Length: 0") + "\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+        } else if (mode == Mode.REDIRECT) {
           output.write("HTTP/1.1 302 Found\r\nLocation: wss://other.example.org/\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
         } else {
           String key = header(upgrade, "Sec-WebSocket-Key");
@@ -236,9 +255,11 @@ public final class PublishedRelayWssTlsProof {
         }
         output.flush();
         responseFlushed.countDown();
-        if (mode == Mode.REDIRECT || mode == Mode.BAD_ACCEPT) return;
+        if (mode == Mode.REDIRECT || mode == Mode.BAD_ACCEPT || mode == Mode.SERVICE_UNAVAILABLE || mode == Mode.MALFORMED_503) return;
         clientRequest = readMaskedText(input);
         requestArrived.countDown();
+        if (mode == Mode.EMPTY_CLOSE) return;
+        if (mode == Mode.PARTIAL_CLOSE) {output.write(new byte[] {(byte) 0x81, 40, 1});output.flush();return;}
         if (mode == Mode.HOLD_RESPONSE) {
           release.await(3, TimeUnit.SECONDS);
           return;

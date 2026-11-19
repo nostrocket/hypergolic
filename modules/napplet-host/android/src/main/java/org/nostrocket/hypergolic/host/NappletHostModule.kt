@@ -2,6 +2,7 @@ package org.nostrocket.hypergolic.host
 
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import expo.modules.kotlin.exception.CodedException
 import com.facebook.react.common.LifecycleState
 import android.util.Base64
 import expo.modules.kotlin.functions.Coroutine
@@ -208,8 +209,10 @@ class NappletHostModule : Module() {
       subscriptionId: String ->
       val job = currentCoroutineContext()[Job]
       withContext(Dispatchers.IO) {
-        PublishedRelayWssRequestOwner.INSTANCE.query(operationId, url, requestText, subscriptionId) {
-          job?.isActive == true
+        try {
+          PublishedRelayWssRequestOwner.INSTANCE.query(operationId, url, requestText, subscriptionId) { job?.isActive == true }
+        } catch (failure: PublishedRelayWssQuery.TransportFailure) {
+          throw CodedException("ERR_RELAY_TRANSPORT", "Relay connection unavailable", failure)
         }
       }
     }

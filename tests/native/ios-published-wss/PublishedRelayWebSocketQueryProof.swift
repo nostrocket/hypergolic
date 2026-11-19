@@ -8,7 +8,29 @@ struct PublishedRelayWebSocketQueryProof {
     try coalescedUpgradeProof()
     try boundedEnvelopeDeliveryProof()
     try structuralRelayEnvelopeProof()
+    try serviceUnavailableProof()
     print("iOS relay WSS query URL, framing, bounds, and envelope proofs passed")
+  }
+  private static func serviceUnavailableProof() throws {
+    try check(PublishedRelayWebSocketHandshake.isServiceUnavailable(Data("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nServer: cloudflare\r\n\r\n".utf8)), "complete service unavailable headers")
+    try check(PublishedRelayWebSocketHandshake.isServiceUnavailable(Data("HTTP/1.1 503 Service Unavailable\r\nTransfer-Encoding: chunked\r\n\r\n".utf8)), "chunked 503 headers need no body")
+    for status in ["HTTP/1.1 302 Found", "HTTP/1.1 401 Unauthorized", "HTTP/1.1 5030 Unavailable"] {
+      try check(!PublishedRelayWebSocketHandshake.isServiceUnavailable(Data("\(status)\r\nContent-Length: 0\r\n\r\n".utf8)), "other status cannot authorize exclusion")
+    }
+    for malformed in [
+      "HTTP/1.1 503 Unavailable\r\nBroken header\r\n\r\n",
+      "HTTP/1.1 503 Unavailable\r\n Folded: no\r\n\r\n",
+      "HTTP/1.1 503 Unavailable\r\nContent-Length: invalid\r\n\r\n",
+      "HTTP/1.1 503 Unavailable\r\nContent-Length: 0\r\nContent-Length: 1\r\n\r\n",
+      "HTTP/1.1 503 Unavailable\r\nContent-Length: 0\r\nTransfer-Encoding: chunked\r\n\r\n",
+      "HTTP/1.1 503 Unavailable\r\nX: injected\nvalue\r\n\r\n",
+      "HTTP/1.1 503 Unavailable\r\nContent-Length: 0\r\n",
+      "HTTP/1.1 503 Unavailable\r\nX: " + String(repeating:"x",count:16_384) + "\r\n\r\n",
+    ] {
+      do { _ = try PublishedRelayWebSocketHandshake.isServiceUnavailable(Data(malformed.utf8)); throw ProofFailure.failed("malformed 503 accepted") }
+      catch is ProofFailure { throw ProofFailure.failed("503 rejection assertion") }
+      catch { /* expected */ }
+    }
   }
 
   private static func urlAndRequestProof() throws {

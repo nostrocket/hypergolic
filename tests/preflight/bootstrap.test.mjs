@@ -73,3 +73,31 @@ test('literal supported result reaches native persistence once without JavaScrip
  assert.equal(module.fixture.calls.filter(value=>value==='open-native-vault').length,1);
  assert(!module.fixture.calls.some(value=>/sqlite|secure-store|generate-key|Secret/.test(value)));
 });
+
+test('opening shows the Home backdrop immediately and delays visible progress', async t => {
+ const module = await fresh();
+ const Opening = module.IdentityEntry().type;
+ t.mock.timers.enable({ apis: ['setTimeout'] });
+ let visible = false;
+ let cleanup;
+ module.fixture.hooks = {
+  effect(effect) { cleanup ??= effect(); },
+  state() { return [visible, next => { visible = next; }]; },
+ };
+ const opening = Opening();
+ assert.equal(opening.props.children[0].props.mood, 'home');
+ assert.doesNotMatch(textOf(opening), /Opening your identity/);
+ t.mock.timers.tick(499);
+ assert.equal(visible, false);
+ t.mock.timers.tick(1);
+ assert.match(textOf(Opening()), /Opening your identity/);
+ cleanup();
+
+ // A fast launch unmounts the opening view before its timer fires.
+ visible = false;
+ cleanup = undefined;
+ Opening();
+ cleanup();
+ t.mock.timers.tick(500);
+ assert.equal(visible, false);
+});

@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { ActivityIndicator, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -26,27 +26,45 @@ const unavailableMessages = {
   },
 } as const;
 
+function OpeningScreen() {
+  const { styles, colors, isDark } = useShellStyles(createStyles, true);
+  const [showStatus, setShowStatus] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setShowStatus(true), 500);
+    return () => clearTimeout(timer);
+  }, []);
+  return <SafeAreaView style={styles.screen}>
+    <ShellBackdrop mood="home" /><StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+    {showStatus && <View style={styles.progress} accessibilityLiveRegion="polite">
+      <ActivityIndicator color={colors.accent} accessible={false} />
+      <Text style={styles.progressLabel}>Opening your identity…</Text>
+    </View>}
+  </SafeAreaView>;
+}
+
 export function IdentityEntry() {
-  const { styles, colors, isDark } = useShellStyles(createStyles);
+  const { styles, isDark } = useShellStyles(createStyles);
   const state = useSyncExternalStore(subscribeIdentity, getIdentityState);
   useEffect(() => { startIdentity(); }, []);
   if (state.status === 'ready') return <IdentityShell owner={state.owner} />;
-  const message = state.status === 'opening' ? null : unavailableMessages[state.status];
+  if (state.status === 'opening') return <OpeningScreen />;
+  const message = unavailableMessages[state.status];
   return <SafeAreaView style={styles.screen}>
-    <ShellBackdrop mood={message ? "failed" : "entry"} /><StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+    <ShellBackdrop mood="failed" /><StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
     <View style={styles.brand}>
       <Image source={require('../../assets/brand/hypergolic-logo.png')} style={styles.logo} contentFit="contain" accessible={false} />
       <Text style={styles.name}>Hypergolic</Text>
     </View>
     <ScrollView contentContainerStyle={styles.message} testID="identity-entry-status" accessibilityLiveRegion="polite">
-      {message === null ? <><ActivityIndicator color={colors.accent} accessibilityLabel="Opening your identity" /><Text style={styles.detail}>Opening your identity…</Text></>
-        : <><Text accessibilityRole="header" style={styles.heading}>{message.heading}</Text>
-          <Text style={styles.detail}>{message.detail}</Text></>}
+      <Text accessibilityRole="header" style={styles.heading}>{message.heading}</Text>
+      <Text style={styles.detail}>{message.detail}</Text>
     </ScrollView>
   </SafeAreaView>;
 }
 const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
+  progress: { alignSelf: 'center', alignItems: 'center', flexDirection: 'row', gap: 10, marginTop: 48, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, backgroundColor: colors.surface },
+  progressLabel: { fontFamily: fonts.body, color: colors.text, fontSize: 16 },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 72, paddingHorizontal: 20 },
   logo: { width: 32, height: 32 },
   name: { fontFamily: fonts.medium, color: colors.text, fontSize: 15, letterSpacing: 3, textTransform: 'uppercase' },

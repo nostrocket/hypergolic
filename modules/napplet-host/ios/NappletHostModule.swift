@@ -120,8 +120,12 @@ public final class NappletHostModule: Module {
     Function("revokeAllPublishedHttps") { publishedHTTPS.revokeAll() }
     AsyncFunction("queryPublishedRelay") { (operationId: String, url: String, requestText: String,
                                               subscriptionId: String) async throws -> [String] in
-      try await publishedRelay.query(operationId: operationId, url: url, requestText: requestText,
-                                      subscriptionId: subscriptionId)
+      do {
+        return try await publishedRelay.query(operationId: operationId, url: url, requestText: requestText,
+                                               subscriptionId: subscriptionId)
+      } catch PublishedRelayWebSocketQuery.Failure.unreachable {
+        throw Exception(name: "RelayTransportException", description: "Relay connection unavailable", code: "ERR_RELAY_TRANSPORT")
+      }
     }
     AsyncFunction("queryOutboxRelay") { (token: String, operationId: String, url: String, requestText: String,
                                          subscriptionId: String, timeoutMs: Double) async throws -> [String] in

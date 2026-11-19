@@ -259,3 +259,144 @@ test('optional AUTH and rotated challenges preserve verified public reads withou
     assert.equal(denied.calls.length, 1);
   }
 });
+
+test('complete-relay reads bound concurrency and recover one transient connection failure per peer', async () => {
+  const attempts = new Map<string, number>();
+  let active = 0, maximum = 0;
+  const relays = Array.from({length: 7}, (_, i) => `wss://peer-${i}.example.com`);
+  const h = harness(relays, async (url, sub) => {
+    attempts.set(url, (attempts.get(url) ?? 0) + 1);
+    active++; maximum = Math.max(maximum, active);
+    await new Promise(resolve => setImmediate(resolve));
+    active--;
+    if (attempts.get(url) === 1) throw Error('transient connection failure');
+    return [JSON.stringify(['EVENT', sub, signed(url)]), JSON.stringify(['EOSE', sub])];
+  });
+  const result = await h.create().queryDetailed(parseQueryFilters([{}]), signal(), () => {}, {completeRelays: true});
+  assert.equal(result.incomplete, false);
+  assert.equal(result.events.length, relays.length);
+  assert.equal(maximum, 2);
+  assert.equal(h.calls.length, relays.length * 2);
+});
+
+test('a silent first peer cannot prevent later peers being read and remains incomplete after its bounded retry', async () => {
+  const h = harness(['wss://silent.example.com', 'wss://one.example.com', 'wss://two.example.com'], async (url, sub) => {
+    if (url.includes('silent')) return new Promise(() => {});
+    return [JSON.stringify(['EVENT', sub, signed(url)]), JSON.stringify(['EOSE', sub])];
+  });
+  const pending = h.create(120).queryDetailed(parseQueryFilters([{}]), signal(), () => {}, {completeRelays: true});
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.calls.length, 3);
+  const result = await pending;
+  assert.equal(result.incomplete, true);
+  assert.equal(result.events.length, 2);
+  assert.deepEqual(result.failedRelays, ['wss://silent.example.com']);
+  assert.equal(result.reachableRelays, undefined);
+  assert.equal(h.calls.length, 4);
+  assert.deepEqual(h.cancelled, [h.calls[0]!.id, h.calls[3]!.id]);
+});
+
+test('complete-relay reads never retry malformed signed data or confuse it with empty EOSE', async () => {
+  const event = clean(signed()); event.content = 'forged';
+  const h = harness(['wss://forged.example.com', 'wss://empty.example.com'], async (url, sub) =>
+    url.includes('forged') ? [JSON.stringify(['EVENT', sub, event]), JSON.stringify(['EOSE', sub])] : [JSON.stringify(['EOSE', sub])]);
+  const result = await h.create().queryDetailed(parseQueryFilters([{}]), signal(), () => {}, {completeRelays: true});
+  assert.equal(result.reachableRelays,undefined);
+  assert.deepEqual(result, {events: [], incomplete: true, failedRelays: ['wss://forged.example.com']});
+  assert.equal(h.calls.length, 2);
+});
+
+test('reachable-only eligibility requires at least one complete EOSE and exclusively transport failures',async()=>{
+  const h=harness(['wss://empty.example.com','wss://offline.example.com'],async(url,sub)=>{
+    if(url.includes('offline'))throw Object.assign(Error('offline'),{code:'ERR_RELAY_TRANSPORT'});
+    return [JSON.stringify(['EOSE',sub])];
+  });
+  const result=await h.create().queryDetailed(parseQueryFilters([{}]),signal(),()=>{},{completeRelays:true});
+  assert.deepEqual(result,{events:[],incomplete:true,failedRelays:['wss://offline.example.com'],reachableRelays:['wss://empty.example.com']});
+  const invalid=harness(['wss://empty.example.com','wss://invalid.example.com'],async(url,sub)=>url.includes('invalid')?[]:[JSON.stringify(['EOSE',sub])]);
+  assert.equal((await invalid.create().queryDetailed(parseQueryFilters([{}]),signal(),()=>{},{completeRelays:true})).reachableRelays,undefined);
+  const unknown=harness(['wss://empty.example.com','wss://unknown.example.com'],async(url,sub)=>{
+    if(url.includes('unknown'))throw Error('unknown native rejection, possibly invalid frames');
+    return [JSON.stringify(['EOSE',sub])];
+  });
+  assert.equal((await unknown.create().queryDetailed(parseQueryFilters([{}]),signal(),()=>{},{completeRelays:true})).reachableRelays,undefined);
+});
+test('five-relay reads allow the native 3s idle outcome without delaying healthy peers',async t=>{
+  t.mock.timers.enable({apis:['setTimeout']});
+  const relays=['wss://one.example.com','wss://two.example.com','wss://slow.example.com','wss://three.example.com','wss://offline.example.com'];
+  const h=harness(relays,async(url,sub)=>{
+    const unavailable=()=>Object.assign(Error('native connection timeout before response'),{code:'ERR_RELAY_TRANSPORT'});
+    if(url.includes('slow'))return new Promise((_,reject)=>setTimeout(()=>reject(unavailable()),3000));
+    if(url.includes('offline'))throw unavailable();
+    return [JSON.stringify(['EOSE',sub])];
+  });
+  const pending=h.create(15000).queryDetailed(parseQueryFilters([{}]),signal(),()=>{},{completeRelays:true});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(h.calls.filter(call=>call.url.includes('offline')).length,2);
+  t.mock.timers.tick(3000);
+  await new Promise(resolve=>setImmediate(resolve));
+  t.mock.timers.tick(3000);
+  const result=await pending;
+  assert.equal(result.incomplete,true);
+  assert.deepEqual(result.failedRelays,['wss://slow.example.com','wss://offline.example.com']);
+  assert.deepEqual(result.reachableRelays,['wss://one.example.com','wss://two.example.com','wss://three.example.com']);
+  assert.equal(h.calls.filter(call=>call.url.includes('slow')).length,2);
+});
+
+test('deadline with unattempted or unfinished peers never grants reachable-only eligibility',async t=>{
+  t.mock.timers.enable({apis:['setTimeout']});
+  const h=harness(['wss://empty.example.com','wss://slow.example.com','wss://later.example.com','wss://unattempted.example.com'],async(url,sub)=>
+    url.includes('empty')?[JSON.stringify(['EOSE',sub])]:new Promise(()=>{}));
+  const pending=h.create(100).queryDetailed(parseQueryFilters([{}]),signal(),()=>{},{completeRelays:true});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(h.calls.length,3);
+  t.mock.timers.tick(100);
+  const result=await pending;
+  assert.equal(result.incomplete,true);assert.equal(result.reachableRelays,undefined);
+});
+
+test('aggregate truncation forbids reachable-only eligibility even with healthy peer EOSEs',async()=>{
+  const h=harness(['wss://one.example.com','wss://two.example.com','wss://offline.example.com'],async(url,sub)=>{
+    if(url.includes('offline'))throw Error('offline');
+    return [...Array.from({length:16},(_,i)=>signed(url+i+'x'.repeat(40_000))).map(event=>JSON.stringify(['EVENT',sub,event])),JSON.stringify(['EOSE',sub])];
+  });
+  const result=await h.create(15000).queryDetailed(parseQueryFilters([{}]),signal(),()=>{},{completeRelays:true,allowPartialOnLimit:true});
+  assert.equal(result.incomplete,true);assert.equal(result.reachableRelays,undefined);
+});
+
+test('an entirely unreachable complete-relay read identifies every failed peer without asserting an empty list', async () => {
+  const h = harness(['wss://one.example.com', 'wss://two.example.com'], async () => {throw Error('offline');});
+  assert.deepEqual(await h.create().queryDetailed(parseQueryFilters([{}]), signal(), () => {}, {completeRelays:true}), {
+    events: [], incomplete: true, failedRelays: ['wss://one.example.com', 'wss://two.example.com'],
+  });
+  assert.equal(h.calls.length, 4);
+});
+
+test('complete-relay cancellation cancels every in-flight native peer and does not retry or return partial data', async () => {
+  const h = harness(['wss://one.example.com', 'wss://two.example.com', 'wss://three.example.com'], async () => new Promise(() => {}));
+  const controller = new AbortController();
+  const pending = h.create().queryDetailed(parseQueryFilters([{}]), controller.signal, () => {}, {completeRelays: true});
+  assert.equal(h.calls.length, 2);
+  controller.abort();
+  await assert.rejects(pending);
+  assert.deepEqual(h.cancelled, h.calls.map(call => call.id));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.calls.length, 2);
+});
+
+test('late frames from a timed-out complete-relay attempt cannot become the list replacement base', async () => {
+  let finish!: () => void, calls = 0;
+  const h = harness(undefined, async (_, sub) => {
+    if (++calls === 1) return new Promise(resolve => {finish = () => resolve([
+      JSON.stringify(['EVENT', sub, signed('late-newer', 999)]), JSON.stringify(['EOSE', sub]),
+    ]);});
+    return [JSON.stringify(['EVENT', sub, signed('retried', 100)]), JSON.stringify(['EOSE', sub])];
+  });
+  const result = await h.create(100).queryDetailed(parseQueryFilters([{}]), signal(), () => {}, {completeRelays: true});
+  assert.equal(result.incomplete, false);
+  assert.deepEqual(result.events.map(row => row.event.content), ['retried']);
+  finish();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(result.events.map(row => row.event.content), ['retried']);
+  assert.deepEqual(h.cancelled, [h.calls[0]!.id]);
+});
