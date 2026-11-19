@@ -2,6 +2,10 @@
 
 Discover is the packaged napplet catalog. Open it from the workspace overview or **Settings → Discover napplets**. Opening Discover again focuses its existing workspace card. The guest reads signed publications from the selected Network relays. Hypergolic resolves an Open request separately across the selected Lookup and Network relays and presents native review for the exact target. [Published opening contract](published-open.md)
 
+The feed opens with search and recent napplets. Each row shows the app, publisher and publication age. A community recommendation can appear when a public recommendation list references a loaded app. Select the recommendation to read the same details available from the recent feed. Recent napplets keep their publication order regardless of endorsements.
+
+Discover samples up to 32 signed kind-30267 lists with the identifier `napplets` through the existing Relay read capability. It matches their exact named-app references to verified catalog entries and shows up to eight app and recommender pairs. Each pick identifies the person who signed the list, using a verified profile name when available or a shortened public key. The sample can use verified results from reachable Network relays while another relay is offline. Reading these public endorsements requires neither a follow list nor a signing identity. If there are no matches, the recent directory is available on its own.
+
 The selected Open button shows **Opening…** until Hypergolic returns a result. Discover pauses other Open actions during that request and shows the outcome beside the selected action. The bridge reports the final outcome, so the spinner stays indeterminate through lookup, download and verification.
 
 ## Build and import

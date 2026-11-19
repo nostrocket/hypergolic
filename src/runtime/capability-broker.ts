@@ -56,9 +56,23 @@ async function operateStorage(database: ShellDatabase, registration: NativeRegis
   catch (error) { return storageFailure(request, storageError(error))!; }
   finally { binding.revoke(); }
 }
-async function readQuery(request: Extract<CapabilityRequest, {type: 'relay.query'}>, queries: RelayQueryService | undefined, pending: CapabilityReadAdmission, active: () => void): Promise<CapabilityReply> {
+async function readQuery(request: Extract<CapabilityRequest, {type: 'relay.query'}>, queries: RelayQueryService | undefined, pending: CapabilityReadAdmission, active: () => void, discovery: boolean): Promise<CapabilityReply> {
   if (!queries) return queryFailure(request, 'relay query unavailable or busy')!;
-  try { return {type: 'relay.query.result', id: request.id, events: await pending.schedule(active, signal => queries.query(request.filters, signal, active))}; }
+  try {
+    const events = await pending.schedule(active, async signal => {
+      const {filters} = request;
+      const feedMetadata = discovery && filters.every(({kinds, authors, '#d': identifiers}) =>
+        Array.isArray(kinds) && kinds.length === 1 && (kinds[0] === 0 && Array.isArray(authors) ||
+          kinds[0] === 30267 && Array.isArray(identifiers) && identifiers.length === 1 && identifiers[0] === 'napplets'));
+      if (!feedMetadata || !queries.queryDetailed) return queries.query(filters, signal, active);
+      // Public feed samples can use verified replies from reachable Network peers.
+      // A slow peer must not consume the whole read before other peers get a turn.
+      const sample = await queries.queryDetailed(filters, signal, active, {completeRelays: true});
+      if (sample.incomplete && !sample.events.length) throw new Error('Incomplete feed metadata read');
+      return sample.events;
+    });
+    return {type: 'relay.query.result', id: request.id, events};
+  }
   catch (error) { return queryFailure(request, error instanceof CapabilityReadBusy ? 'relay query unavailable or busy' : 'relay query failed')!; }
 }
 async function readOutboxQuery(request: OutboxReadRequest, service: OutboxReadService | undefined, registration: NativeRegistration, pending: CapabilityReadAdmission, active: () => void, nativeToken: string): Promise<CapabilityReply> {
@@ -195,7 +209,7 @@ export function createCapabilityBroker(database: ShellDatabase, native: NativeCa
             : await work(new AbortController().signal);}
           catch {assertActive(token);result = commonFailure(request,'relay-timeout')!;}
         } else if (request.type === 'outbox.query' || request.type === 'outbox.getEvent' || request.type === 'outbox.resolveRelays') result = await readOutboxQuery(request, outbox, registration, pending, () => assertActive(token), token);
-        else if (request.type === 'relay.query') result = await readQuery(request, queries, pending, () => assertActive(token));
+        else if (request.type === 'relay.query') result = await readQuery(request, queries, pending, () => assertActive(token), discovery && registration.fixture === 'napplet-discovery');
         else if (domain === 'identity') result = await readIdentity(request as IdentityRequest, identityData, registration, pending, () => assertActive(token));
         else result = await operateStorage(database, registration, request, () => assertActive(token));
         assertActive(token);

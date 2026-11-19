@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { finalizeEvent } from 'nostr-tools/pure';
 import { createCapabilityBroker } from '../../src/runtime/capability-broker.ts';
 import type { NativeRegistration } from '../../src/runtime/capability-protocol.ts';
 import { identityResult } from '../../src/runtime/capability-protocol.ts';
@@ -8,6 +9,32 @@ import { setup, hex } from '../storage/harness.ts';
 const registration = (patch: Partial<NativeRegistration> = {}): NativeRegistration => ({ sessionId: 'feed-lab-1', generation: 'generation-1', epoch: 0,
   user: hex(1), publisher: hex(2), appId: 'feed-lab', version: hex(3), instanceId: 'feed-lab-1', fixture: 'feed-lab', domains: ['relay'], ...patch });
 const request = (id = 'query') => ({ type: 'relay.query', id, filters: [{ kinds: [1] }] });
+test('only bundled Discover samples public metadata across reachable peers and can retry incomplete empty reads', async t => {
+  const {database} = await setup(t), native = new NativeLeases();
+  const filters = [{kinds: [30267], '#d': ['napplets'], limit: 32}];
+  const signed = finalizeEvent({kind: 30267, created_at: 1, tags: [['d', 'napplets']], content: ''}, new Uint8Array(32).fill(1));
+  const event = JSON.parse(JSON.stringify(signed)); // Only wire fields cross the native boundary.
+  for (const fixture of ['napplet-discovery', 'feed-lab'] as const) {
+    const owner = registration({fixture});
+    let calls = 0;
+    const broker = createCapabilityBroker(database, native, {registration: owner, assertActive() {}}, {
+      async query() {return [];},
+      async queryDetailed(received, _signal, active, options) {
+        active(); assert.deepEqual(received, filters); assert.equal(options?.completeRelays, true);
+        return {incomplete: true, events: ++calls === 1 ? [] : [{event}]};
+      },
+    }, undefined, undefined, undefined, undefined, undefined, true);
+    const expected = fixture === 'napplet-discovery' ? [{error: 'relay query failed'}, {events: [{event}]}] : [{events: []}, {events: []}];
+    for (const [index, payload] of expected.entries()) {
+      const id = `read-${index}`;
+      const token = native.add(owner, {type: 'relay.query', id, filters});
+      await broker.dispatch(token);
+      assert.deepEqual(native.results.get(token), {type: 'relay.query.result', id, ...payload});
+    }
+    assert.equal(calls, fixture === 'napplet-discovery' ? 2 : 0);
+  }
+});
+
 test('query broker preserves native correlation and canonical empty/error semantics without SQL', async t => {
   const { database, sqlite } = await setup(t), native = new NativeLeases(), owner = registration();
   let fail = false, calls = 0;
