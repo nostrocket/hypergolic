@@ -30,7 +30,7 @@ def main():
     root = Path(__file__).resolve().parent.parent
     relatives = [
         'modules/identity-owner/android/src/main/java/org/nostrocket/hypergolic/identityowner/DeletionAuthority.java',
-        'modules/identity-owner/android/src/main/java/org/nostrocket/hypergolic/identityowner/SecureStoreIdentityRecords.java',
+        'tests/native/android-identity-atrest/src/org/nostrocket/hypergolic/identityowner/SecureStoreIdentityRecords.java',
         'modules/identity-owner/android/src/main/java/org/nostrocket/hypergolic/identityowner/BackupNsec.java',
         'tests/native/android-identity-actions/RecordsInstrumentation.java',
         'scripts/test-android-identity-records.py',
