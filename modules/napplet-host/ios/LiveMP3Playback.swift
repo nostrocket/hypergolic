@@ -49,14 +49,14 @@ final class LiveMP3Playback: @unchecked Sendable {
       }
       let timer=DispatchSource.makeTimerSource(queue:control);watch=timer
       timer.schedule(deadline:.now(),repeating:.milliseconds(25));timer.setEventHandler { [weak self] in
-        guard let self,self.token == value else { return };if !self.valid(value) { self.retire("policy") }
+        guard let self,self.token == value else { return };if !self.valid(value) { self.retire("policy", activeAttempt: value) }
       };timer.resume()
     } catch { finishFailure(value) }
   }
   private func networkFinished(_ value: UInt64,result: Result<Void,Error>) {
+    if case .failure = result { retire("error", activeAttempt: value) }
     owner.drained(value,transport:true)
     guard token == value else { return };operation=nil;receiver=nil
-    if case .failure = result,owner.phase != .stopping,terminal == nil { retire("error") }
     completeDrain()
   }
   private func finishFailure(_ value: UInt64) {
@@ -68,8 +68,8 @@ final class LiveMP3Playback: @unchecked Sendable {
       watch?.cancel();watch=nil;receiver?.cancel();decoder?.cancel();operation?.cancel();closeDecoder(token);completeDrain()
     }
   }
-  func retire(_ reason: String) {
-    guard owner.retire(reason) else { return }
+  func retire(_ reason: String, activeAttempt: UInt64? = nil) {
+    guard owner.retire(reason, activeAttempt: activeAttempt) else { return }
     control.async { [self] in
       terminal=reason;watch?.cancel();watch=nil;expiry?.cancel();expiry=nil;receiver?.cancel();decoder?.cancel();operation?.cancel();closeDecoder(token);completeDrain()
     }

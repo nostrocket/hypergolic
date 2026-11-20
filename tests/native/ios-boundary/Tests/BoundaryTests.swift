@@ -301,6 +301,17 @@ final class BoundaryTests: XCTestCase {
     XCTAssertNil(CapabilityTransport.leases.take(token))
   }
 
+  func testGuestHasNeutralBaseAndNoPeerConnectionConstructor() async throws {
+    let p = try await makeReady()
+    let policy = try await p.json("""
+      return {base: document.baseURI, peer: typeof globalThis.RTCPeerConnection,
+        legacy: typeof globalThis.webkitRTCPeerConnection};
+      """, frame: p.guest)
+    XCTAssertEqual(policy["base"] as? String, "about:blank")
+    XCTAssertEqual(policy["peer"] as? String, "undefined")
+    XCTAssertEqual(policy["legacy"] as? String, "undefined")
+  }
+
   func testGenuineKehtoHandshakeAndThemeWithVerifiedResources() async throws {
     let p = try await makeReady()
     let value = try await p.json("""

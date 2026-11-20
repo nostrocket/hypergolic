@@ -1,12 +1,14 @@
+import {secureUuidV4} from './secure-random-compat';
+
 /** The namespace is installed only for a newly reviewed effective CVM grant. Parent validates every operation. */
-function installCvmFacade():void{
+function installCvmFacade(newUuid: () => string):void{
   const guest=window as Window&{napplet?:{shell?:{ready():Promise<unknown>};cvm?:object}};
   const parent=window.parent,post=parent.postMessage.bind(parent),pending=new Map<string,{type:string;resolve:(reply:Record<string,unknown>)=>void;reject:(error:Error)=>void;timer:number;provider?:string}>();
   const closedProviders=new Set<string>();
   const handlers=new Set<((event:unknown)=>void)|((server:unknown,message:unknown)=>void)>();let closed=false;
   function call(type:string,fields:object={},timeout=30000):Promise<Record<string,unknown>>{
     if(closed||pending.size>=4)return Promise.reject(new Error('CVM unavailable'));
-    const id='cvm-'+crypto.randomUUID();
+    const id='cvm-'+newUuid();
     return new Promise((resolve,reject)=>{
       const timer=window.setTimeout(()=>{pending.delete(id);reject(new Error('relay timeout'));},Math.min(120000,Math.max(1,timeout))+2000);
       const server=(fields as {server?:{pubkey?:unknown}}).server,provider=typeof server?.pubkey==='string'?server.pubkey:undefined;
@@ -32,7 +34,7 @@ function installCvmFacade():void{
     return Object.prototype.hasOwnProperty.call(reply,'message')?reply.message as Record<string,unknown>:null;
   }
   async function mcp(server:unknown,method:string,params?:object,options?:Options):Promise<Record<string,unknown>>{
-    const reply=await request(server,{jsonrpc:'2.0',id:crypto.randomUUID(),method,...(params===undefined?{}:{params})},options);
+    const reply=await request(server,{jsonrpc:'2.0',id:newUuid(),method,...(params===undefined?{}:{params})},options);
     if(!reply||reply.error){const error=reply?.error as {message?:unknown}|undefined;throw new Error(typeof error?.message==='string'?error.message:'MCP request failed');}
     if(!reply.result||typeof reply.result!=='object'||Array.isArray(reply.result))throw new Error('invalid message');return reply.result as Record<string,unknown>;
   }
@@ -60,5 +62,5 @@ function installCvmFacade():void{
 export function injectCvmFacade(html:string):string{
   const head=/<meta http-equiv="Content-Security-Policy" content="[^"]*">/;
   if(!head.test(html))throw new Error('CVM binding requires host CSP');
-  return html.replace(head,value=>`${value}<script>(${installCvmFacade.toString()})();</script>`);
+  return html.replace(head,value=>`${value}<script>(${installCvmFacade.toString()})(${secureUuidV4.toString()});</script>`);
 }

@@ -169,7 +169,7 @@ public final class BoundaryInstrumentation extends Instrumentation {
           + "observer.onmessage=async event=>{const command=JSON.parse(event.data);if(command.nonce!==nonce)return;try{let value;"
           + "if(command.operation==='isolation'){let parentBlocked=false,storageBlocked=false;try{void parent.document.body;}catch{parentBlocked=true;}"
           + "try{localStorage.setItem('boundary-owned','literal');}catch{storageBlocked=true;}"
-          + "value={parentBlocked,storageBlocked,nativeBridge:typeof HypergolicHost,reactBridge:typeof ReactNativeWebView,"
+          + "value={parentBlocked,storageBlocked,peer:typeof RTCPeerConnection,base:document.baseURI,nativeBridge:typeof HypergolicHost,reactBridge:typeof ReactNativeWebView,"
           + "ready:document.querySelector('[data-testid=lab]')?.dataset.ready,theme:document.getElementById('theme-status')?.textContent};}"
           + "else if(command.operation==='send'){const available=typeof HypergolicHost!=='undefined';if(available)HypergolicHost.postMessage(command.wire);value={sent:available};}"
           + "else if(command.operation==='barrier'){value=await new Promise((resolve,reject)=>{const id=command.id;"
@@ -304,6 +304,8 @@ public final class BoundaryInstrumentation extends Instrumentation {
   private void isolation() throws Exception {
     step = "real-frame-and-opaque-isolation"; int before = assertions; Probe p = new Probe();
     JSONObject value = p.guest("isolation", null);
+    check("undefined".equals(value.getString("peer")), "Guest peer connections disabled");
+    check("about:blank".equals(value.getString("base")), "Guest has a neutral base URL");
     check(value.getBoolean("parentBlocked") && value.getBoolean("storageBlocked"), "Actual opaque parent and local storage denial");
     check("undefined".equals(value.getString("nativeBridge")) && "undefined".equals(value.getString("reactBridge")), "Privileged bridges absent from real opaque guest");
     check(!p.guest("send", wire(p, 1)).getBoolean("sent"), "Guest cannot invoke privileged bridge");

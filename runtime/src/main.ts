@@ -91,7 +91,7 @@ function fail(code: FailureCode): void {
 const csp = [
   "default-src 'none'", "script-src 'unsafe-inline' 'wasm-unsafe-eval'",
   "style-src 'unsafe-inline'", 'img-src data: blob:', 'font-src data:',
-  "connect-src 'none'", "worker-src blob:", "child-src 'none'", "frame-src 'none'",
+  "connect-src 'none'", "webrtc 'block'", "worker-src blob:", "child-src 'none'", "frame-src 'none'",
   "media-src 'none'", "object-src 'none'", "manifest-src 'none'", "base-uri 'none'",
   "form-action 'none'",
 ].join('; ');
@@ -242,6 +242,7 @@ function createLoadHandler(frame: HTMLIFrameElement, source: Window,
   failed: () => void): () => void {
   let frameLoaded = false;
   return (): void => {
+    if (source.length > 0) { failed(); return; }
     // A same-document legacy load must prove ownership of the original private port.
     if (legacyGuard) {legacyGuard.loaded(); media.refresh(); return;}
     if (frameLoaded) {failed(); return;}
@@ -334,7 +335,14 @@ function mount(artifact: RuntimeMetadata) {
     frame.remove();
     frame.removeAttribute('srcdoc');
   };
-  const receive = (event: MessageEvent): void => {if (legacyGuard) legacyGuard.receive(event, receiveGuest); else receiveGuest(event);};
+  const receive = (event: MessageEvent): void => {
+    if (event.isTrusted && (source.length > 0 || event.data?.type === 'hypergolic.nested-document')) {
+      fail('frame-navigation');
+      return;
+    }
+    if (legacyGuard) legacyGuard.receive(event, receiveGuest);
+    else receiveGuest(event);
+  };
   window.addEventListener('message', receive);
   frame.addEventListener('load', loaded);
   return {frame, environment, policy, discoveryToken, legacyNonce};

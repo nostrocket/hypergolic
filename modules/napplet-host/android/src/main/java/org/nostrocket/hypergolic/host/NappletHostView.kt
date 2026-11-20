@@ -68,6 +68,9 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     synchronized(publishedViews) { publishedViews.add(this) }
     webView.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
     webView.setBackgroundColor(0xff120e0a.toInt())
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      webView.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+    }
     webView.settings.apply {
       javaScriptEnabled = true
       domStorageEnabled = false
@@ -136,6 +139,15 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
       override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
         fail("renderer-stopped"); destroySession(); return true
       }
+    }
+    if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+      // This all-frame policy exposes no Java object or callback.
+      WebViewCompat.addDocumentStartJavaScript(webView, """
+      if (window.parent !== window.top) window.top.postMessage({type: 'hypergolic.nested-document'}, '*');
+      for (const name of ['RTCPeerConnection', 'webkitRTCPeerConnection', 'RTCDataChannel', 'RTCIceTransport']) {
+        Object.defineProperty(globalThis, name, {value: undefined, writable: false, configurable: false});
+      }
+      """.trimIndent(), setOf("*"))
     }
     if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
       WebViewCompat.addWebMessageListener(webView, "HypergolicHost", setOf(ORIGIN)) { view, message, origin, mainFrame, reply ->
@@ -455,7 +467,8 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     }
     val claims = parsePublishedClaims(raw) ?: run { fail("invalid-session"); return }
     sessionId = claims.sessionId
-    if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+    if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER) ||
+      !WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
       fail("webview-update-required"); return
     }
     val claimed = PublishedArtifactTransfer.INSTANCE.claimForHost(
@@ -655,7 +668,8 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     if (sessionId != null) { fail("session-reuse-blocked"); return }
     sessionId = id
     if (!id.matches(Regex("[A-Za-z0-9_-]{1,80}"))) { fail("invalid-session"); return }
-    if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+    if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER) ||
+      !WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
       fail("webview-update-required"); return
     }
     if (configuration != null && !CapabilityTransport.leases.register(generation)) { fail("capability-unavailable"); return }

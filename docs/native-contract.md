@@ -73,10 +73,13 @@ projection. [Local blob workers](local-workers.md) and their generation-isolated
 browser cache have a separate selected policy. The sandbox has no same-origin,
 popup, download, form or top-navigation grant.
 
-WebRTC transport isolation is outside these guarantees. An Android constructor-only
-probe observed available WebRTC globals and constructed and closed an
-RTCPeerConnection. ICE/STUN and data-channel egress remain untested. That diagnostic
-establishes constructor behavior only.
+Both hosts disable WebRTC connection, data-channel and ICE constructors at
+document start in every WebView frame. Android requires document-start script
+support. The runtime also sets the CSP WebRTC directive for engines that
+implement it. Packet-level ICE/STUN and data-channel isolation on supported
+mobile devices still needs independent verification. The trusted document
+sets a neutral base after loading its script so guest relative URLs do not
+inherit the native bundle path.
 
 On the trusted Android runtime origin, activation of an explicit local submit
 button can deliver a synthetic `submit` event when Chromium suppresses the

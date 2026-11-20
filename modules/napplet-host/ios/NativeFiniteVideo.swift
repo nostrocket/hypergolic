@@ -147,11 +147,11 @@ final class NativeFiniteVideo {
     if let status = row.player?.timeControlStatus, status != .paused { row.consent = nil; pause(row, reason:"user"); return }
     if row.fetch != nil { return }
     guard let receipt = permit() else { return }
+    if row.player == nil && Self.download != nil { heading?.text = "Previous video is stopping. Try Play again."; return }
     guard MediaPlaybackReservation.shared.acquire(row) else { heading?.text = MediaPlaybackReservation.shared.hint;return }
     row.reserved = true
     row.consent = receipt
     if row.player != nil { if row.prepared { resume(row) }; return }
-    guard Self.download == nil else { heading?.text = "Previous video is stopping. Try Play again."; return }
     let job = Fetch(); row.fetch = job; Self.download = job;row.networkActive = true
     play?.isEnabled = false
     heading?.text = "\(row.host) · Connecting"
@@ -309,7 +309,7 @@ final class NativeFiniteVideo {
     if let reason { row.push(["type":"media.session.ended", "sessionId":row.id, "reason":reason]) }
   }
   private static func releaseReservation(_ row: Session) {
-    if row.reserved && row.retired && !row.networkActive && row.player == nil {
+    if row.reserved && (row.retired || row.fetch == nil) && !row.networkActive && row.player == nil {
       row.reserved=false;MediaPlaybackReservation.shared.release(row)
     }
   }
