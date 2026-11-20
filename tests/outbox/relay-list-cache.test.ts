@@ -67,3 +67,16 @@ test('failed write rolls back and wrong schema closes instead of reinitializing 
   sqlite.raw(OUTBOX_CACHE_DATABASE).exec('PRAGMA user_version = 2');
   await assert.rejects(openOutboxRelayListCache(sqlite, 'android'), (e: unknown) => e instanceof ShellStorageError && e.code === 'CORRUPT_STORAGE');
 });
+
+test('clock rollback repairs the lookup time without replacing the newer signed winner', async t => {
+  const sqlite = new DiskSQLite(); t.after(() => sqlite.cleanup());
+  let now = 2000;
+  const cache = await openOutboxRelayListCache(sqlite, 'ios', () => now);
+  const newest = event(10);
+  await cache.write(user, author, { event: newest, fetchedAt: now }, () => {}, signal());
+  now = 1000;
+  await cache.write(user, author, { event: event(9), fetchedAt: now }, () => {}, signal());
+  assert.deepEqual(await cache.read(user, author, () => {}, signal()), { event: newest, fetchedAt: now });
+  await assert.rejects(cache.write(user, author, { event: null, fetchedAt: 999 }, () => {}, signal()));
+  await cache.close();
+});

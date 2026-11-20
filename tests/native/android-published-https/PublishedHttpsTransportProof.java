@@ -169,6 +169,10 @@ public final class PublishedHttpsTransportProof {
         "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n" +
             "4\r\nWiki\r\n5\r\npedia\r\n0\r\nX-Test: yes\r\n\r\n"), null);
     equal("Wikipedia", new String(chunked, StandardCharsets.US_ASCII));
+    String block = "40\r\n" + "a".repeat(64) + "\r\n";
+    byte[] manyChunks = PublishedHttpsTransport.readResponse(response(
+        "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n" + block.repeat(9000) + "0\r\n\r\n"), null);
+    equal(9000 * 64, manyChunks.length);
     throwsIo(() -> PublishedHttpsTransport.readResponse(response("HTTP/1.1 302 Found\r\nLocation: https://elsewhere.example/\r\n\r\n"), null));
     throwsIo(() -> PublishedHttpsTransport.readResponse(response("HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Length: 0\r\n\r\n"), null));
     throwsIo(() -> PublishedHttpsTransport.readResponse(response("HTTP/1.1 200 OK\r\nContent-Length: 1\r\nContent-Length: 2\r\n\r\nx"), null));
