@@ -7,6 +7,20 @@ import WebKit
 /// The iOS 18.4 deployment candidate enables public file-picker denial.
 @MainActor
 final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
+  private static let rulePrefix = "hypergolic-host-v1-"
+  private static let processRulePrefix = rulePrefix + UUID().uuidString.lowercased() + "-"
+  private static var sweptRules = false
+  static func removeAbandonedRules() {
+    guard !sweptRules else { return }
+    sweptRules = true
+    let store = WKContentRuleListStore.default()!
+    store.getAvailableContentRuleListIdentifiers { ids in
+      for id in ids ?? [] where id.hasPrefix(rulePrefix) && !id.hasPrefix(processRulePrefix) {
+        store.removeContentRuleList(forIdentifier: id) { _ in }
+      }
+    }
+  }
+
   var onEvent: (@MainActor ([String: Any]) -> Void)?
   // Native-only observation, absent in production. Never exposed through Expo.
   private let onWebViewCreated: (@MainActor (WKWebView) -> Void)?
@@ -314,7 +328,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
       deadline = timeout
       DispatchQueue.main.asyncAfter(deadline: .now() + 15, execute: timeout)
       let rules = try resourceRules(index: url, script: assets.script)
-      let ruleIdentifier = "hypergolic-host-v1-" + generation
+      let ruleIdentifier = Self.processRulePrefix + generation
       WKContentRuleListStore.default().compileContentRuleList(
         forIdentifier: ruleIdentifier,
         encodedContentRuleList: rules
@@ -804,7 +818,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     deadline = nil
     receiver?.owner = nil
     receiver = nil
-    WKContentRuleListStore.default().removeContentRuleList(forIdentifier: "hypergolic-host-v1-" + generation) { _ in }
+    WKContentRuleListStore.default().removeContentRuleList(forIdentifier: Self.processRulePrefix + generation) { _ in }
     guard let view = webView else { return }
     view.configuration.userContentController.removeScriptMessageHandler(forName: bridgeName, contentWorld: bridgeWorld)
     view.configuration.userContentController.removeAllUserScripts()

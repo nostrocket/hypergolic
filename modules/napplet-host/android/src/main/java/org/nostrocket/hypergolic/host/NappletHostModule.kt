@@ -35,6 +35,7 @@ class NappletHostModule : Module() {
     Name("HypergolicNappletHost")
     Events("onRelayStream", "onRelayLifecycle", "onUploadProgress", "onRoutingLifecycle")
     OnCreate {
+      appContext.runtime.reactContext?.cacheDir?.let(NativeFiniteVideo::removeAbandonedDownload)
       RoutingTransport.observeLifecycle { snapshot -> sendEvent("onRoutingLifecycle", mapOf("snapshot" to snapshot)) }
       UploadTransport.configureRecovery(appContext.runtime.reactContext?.noBackupFilesDir)
       UploadTransport.observeProgress { event -> sendEvent("onUploadProgress", event) }
