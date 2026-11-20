@@ -45,8 +45,33 @@ public final class UploadFileProof {
       else {check(Arrays.equals(owner.dispatch(grant), bytes)); check(owner.dispatch(grant) == null);}
     }
   }
+  private static void revokeDuringPreparation() throws Exception {
+    var started = new java.util.concurrent.CountDownLatch(1);
+    var resume = new java.util.concurrent.CountDownLatch(1);
+    var owner = new NativeUploadAuthority(() -> 1L, bytes -> {
+      started.countDown();
+      try {
+        if (!resume.await(5, java.util.concurrent.TimeUnit.SECONDS)) throw new AssertionError("Revocation blocked");
+      } catch (InterruptedException error) { throw new AssertionError(error); }
+      return UploadFileProfile.prepare(bytes);
+    });
+    var session = owner.register("during-preparation", "a".repeat(64));
+    owner.setForeground(true); owner.focus(session);
+    byte[] bytes = "attachment".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    var request = owner.admit(session, bytes.length, "https://files.example.com", "text/plain");
+    check(owner.append(request, 0, bytes));
+    var result = java.util.concurrent.CompletableFuture.supplyAsync(() -> owner.sealPreparedFile(request));
+    try {
+      check(started.await(5, java.util.concurrent.TimeUnit.SECONDS));
+      check(owner.sealPreparedFile(request) == null);
+      owner.revoke(session);
+    } finally { resume.countDown(); }
+    check(result.get(5, java.util.concurrent.TimeUnit.SECONDS) == null);
+    check(!owner.contains(request));
+  }
   public static void main(String[] args) throws Exception {
     htmlProof();
+    revokeDuringPreparation();
     Path root = Path.of(args[0]); String[][] cases = {{"wav","audio/wav"},{"mp4","video/mp4"},{"pdf","application/pdf"},{"zip","application/zip"},{"txt","text/plain"}};
     for (String[] item : cases) {
       byte[] bytes = Files.readAllBytes(root.resolve("fixture." + item[0])), original = bytes.clone();

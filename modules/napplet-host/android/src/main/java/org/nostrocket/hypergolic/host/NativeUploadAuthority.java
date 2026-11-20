@@ -35,10 +35,18 @@ public final class NativeUploadAuthority {
     public boolean acceptsDescriptorType(String type) {
       return mimeType.equals(type) || validatedWav && "audio/x-wav".equals(type);
     }
-    private Review(Row row, String hash) {
-      identity = row.session.identity; destination = row.destination; mimeType = row.mimeType; metadataPolicy = row.metadataPolicy;
-      validatedWav = "audio/wav".equals(mimeType) && "audio/wav".equals(UploadFileProfile.attachmentType(row.body));
-      sha256 = hash; size = row.body.length;
+    private Review(Row owner, UploadFileProfile.Prepared file) throws NoSuchAlgorithmException {
+      identity = owner.session.identity;
+      destination = owner.destination;
+      mimeType = file.mimeType();
+      metadataPolicy = file.metadataPolicy();
+      validatedWav = "audio/wav".equals(mimeType) && "audio/wav".equals(UploadFileProfile.attachmentType(file.bytes()));
+      StringBuilder hash = new StringBuilder(64);
+      for (byte value : MessageDigest.getInstance("SHA-256").digest(file.bytes())) {
+        hash.append(String.format(java.util.Locale.ROOT, "%02x", value & 255));
+      }
+      sha256 = hash.toString();
+      size = file.bytes().length;
     }
   }
   private static final class Row {
@@ -52,7 +60,7 @@ public final class NativeUploadAuthority {
     Review review;
     Grant grant;
     NativeSigningHold handoff;
-    boolean signingClaimed, transferClaimed, dispatched;
+    boolean preparing, signingClaimed, transferClaimed, dispatched;
     Row(SessionHandle session, String destination, String mimeType, int length, long expires) {
       this.session = session; this.destination = destination; this.mimeType = mimeType;
       body = new byte[length]; this.expires = expires;
@@ -112,28 +120,52 @@ public final class NativeUploadAuthority {
   /** Exact offset, private native handle, and bounded copied chunk. No replay or post-seal writes. */
   public synchronized boolean append(RequestHandle request, int offset, byte[] chunk) {
     prune(); Row row = live(request);
-    if (row == null || row.review != null || chunk == null || chunk.length < 1 || chunk.length > CHUNK_BYTES ||
+    if (row == null || row.preparing || row.review != null || chunk == null || chunk.length < 1 || chunk.length > CHUNK_BYTES ||
       offset != row.cursor || chunk.length > row.body.length - row.cursor) return false;
     System.arraycopy(chunk, 0, row.body, row.cursor, chunk.length); row.cursor += chunk.length; return true;
   }
   public synchronized Review seal(RequestHandle request) {
     prune(); Row row = live(request);
-    if (row == null || row.review != null || row.cursor != row.body.length) return null;
+    if (row == null || row.preparing || row.review != null || row.cursor != row.body.length) return null;
     try {
-      byte[] digest = MessageDigest.getInstance("SHA-256").digest(row.body);
-      StringBuilder hash = new StringBuilder(64); for (byte value : digest) hash.append(String.format(java.util.Locale.ROOT, "%02x", value & 255));
-      row.review = new Review(row, hash.toString()); return row.review;
-    } catch (NoSuchAlgorithmException failure) { row.clear(); requests.remove(request); return null; }
+      row.review = new Review(row, new UploadFileProfile.Prepared(row.body, row.mimeType, row.metadataPolicy));
+      return row.review;
+    } catch (NoSuchAlgorithmException failure) { cancel(request); return null; }
   }
-  /** Owning byte preparation before hashing/review; guest MIME never classifies the file. */
-  public synchronized Review sealPreparedFile(RequestHandle request) {
-    prune(); Row row = live(request);
-    if (row == null || row.review != null || row.cursor != row.body.length) return null;
-    UploadFileProfile.Prepared result = prepare.apply(row.body);
-    byte[] prepared = result == null ? null : result.bytes();
-    if (prepared == null) { cancel(request); return null; }
-    row.clear(); row.body = prepared; row.cursor = prepared.length; row.mimeType = result.mimeType(); row.metadataPolicy = result.metadataPolicy();
-    return seal(request);
+
+  public Review sealPreparedFile(RequestHandle request) {
+    final Row owner;
+    final byte[] original;
+    synchronized (this) {
+      prune();
+      owner = live(request);
+      if (owner == null || owner.preparing || owner.review != null || owner.cursor != owner.body.length) return null;
+      owner.preparing = true;
+      original = owner.body.clone();
+    }
+    UploadFileProfile.Prepared file = null;
+    boolean installed = false;
+    try {
+      file = prepare.apply(original);
+      if (file == null || file.bytes() == null) return null;
+      Review review = new Review(owner, file);
+      synchronized (this) {
+        prune();
+        if (live(request) != owner) return null;
+        owner.clear();
+        owner.body = file.bytes(); owner.cursor = owner.body.length;
+        owner.mimeType = file.mimeType(); owner.metadataPolicy = file.metadataPolicy();
+        owner.review = review; owner.preparing = false; installed = true;
+        return review;
+      }
+    } catch (NoSuchAlgorithmException failure) { return null; }
+    finally {
+      if (!installed) {
+        cancel(request);
+        if (file != null && file.bytes() != null) Arrays.fill(file.bytes(), (byte) 0);
+      }
+      if (!installed || file.bytes() != original) Arrays.fill(original, (byte) 0);
+    }
   }
   public synchronized boolean contains(RequestHandle request) { prune(); return live(request) != null; }
   public synchronized boolean mayReview(RequestHandle request, Review expected) {

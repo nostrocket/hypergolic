@@ -630,9 +630,9 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     }
     if (request?.optString("type")?.startsWith("upload.") == true) {
       if (!CapabilityTransport.leases.consumeSequence(generation, sequence) || !config.allowsUpload) { reply(null); return }
-      reply(UploadTransport.receive(generation, sequence, message, push) { token ->
+      UploadTransport.receive(generation, sequence, message, request, push, reply) { token ->
         if (live && !disposed) onHostEvent(mapOf("type" to "capability", "lane" to "upload", "sessionId" to config.sessionId, "generation" to generation, "token" to token))
-      })
+      }
       return
     }
     if (request != null && (request.optString("type") in listOf("relay.publish", "outbox.publish") || config.allowsCommonSocial(request.optString("type")))) {
