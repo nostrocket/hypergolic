@@ -128,3 +128,19 @@ test('a failed or lost-acknowledgement cache commit is not reported as a success
   const result = await service.read(request, registration, signal(), () => {});
   assert.equal(result.profile, null); assert.equal(result.error, 'identity data unavailable');
 });
+
+test('a held guest list review leaves capacity for the trusted profile', async t => {
+  const { cache } = await setup(t);
+  const held = deferred();
+  const service = createIdentityDataService(cache, { async query() { return [{ event:event({name:'Shell'}) }]; } },
+    () => 1000, { async authorize() { await held.promise; return () => {}; } });
+  const controller = new AbortController();
+  const review = service.read({type:'identity.getMutes', id:'hold'}, registration, controller.signal, () => {});
+  try {
+    assert.deepEqual(await service.readProfile(user, signal(), () => {}), {name:'Shell'});
+  } finally {
+    controller.abort();
+    held.resolve();
+    await assert.rejects(review);
+  }
+});
