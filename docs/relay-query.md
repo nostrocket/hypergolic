@@ -22,7 +22,7 @@ validation failure is never represented as an empty successful result.
 | Filter values | 1–64 entries per list, up to 1 KiB per string. Exact lowercase hex64 for ids/authors/#e/#p |
 | Request | 16 KiB; limit defaults to 32; nonnegative safe integers above 32 are capped to 32 |
 | Events | 32 raw events/relay and 32 unique aggregate events; 64 KiB per serialized event, including escaped content and tags. 512 KiB aggregate event bytes |
-| Transport | Up to 16 selected public WSS Network relays, sequentially; 64 frames/relay |
+| Transport | Up to 16 selected public WSS Network relays, two at a time with bounded peer deadlines, 64 frames/relay |
 | Lifetime | One 15-second total deadline; two concurrent queries per service and per broker |
 | Selection | Filter conditions AND; filters OR; newest timestamp first, then ascending id; per-filter limits |
 | Validation | Fresh NIP-01 fields, independent event hash and signature, filter match; no verification-cache trust |

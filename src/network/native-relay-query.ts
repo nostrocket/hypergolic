@@ -49,14 +49,14 @@ async function boundedPeerRead(port: NativeQueryPort, request: PeerRequest, budg
   finally {clearTimeout(timer); signal.removeEventListener('abort', stop);}
 }
 type PeerRead = (relay: string, index: number) => Promise<'complete' | 'invalid' | 'failed'>;
-async function readCompleteRelays(relays: readonly string[], readRelay: PeerRead): Promise<void> {
+async function readPeers(relays: readonly string[], readRelay: PeerRead, retry: boolean): Promise<void> {
   // Two peers leave native capacity for other reads. A failed connection gets
   // one fresh attempt; invalid frames never retry or contribute partial data.
   let next = 0;
   const worker = async () => {
     while (next < relays.length) {
       const index = next++, relay = relays[index]!;
-      if (await readRelay(relay, index) === 'failed') await readRelay(relay, index);
+      if (await readRelay(relay, index) === 'failed' && retry) await readRelay(relay, index);
     }
   };
   await Promise.all(Array.from({length: Math.min(2, relays.length)}, worker));
@@ -141,7 +141,7 @@ function queryCollection(filters: readonly QueryFilter[], relays: readonly strin
 function queryLifetime(signal: AbortSignal, active: () => void, budget: number, enforceClock: boolean,
   cancelOperation: (operation: string) => void, partialResult: () => RelayQueryResult | undefined) {
   const controller = new AbortController();
-  const expiresAt = enforceClock ? performance.now() + budget : 0;
+  const expiresAt = performance.now() + budget;
   const pending = new Set<string>();
   let deadline = false;
   const cancel = () => {
@@ -242,9 +242,11 @@ export function createNativeRelayQuery(port: NativeQueryPort,
             try {
               active();
               checkDeadline?.();
-              const frames = completeRelays
+              const boundedRaw = !options.outbox && relays.length > 1;
+              const frames = completeRelays || boundedRaw
                 ? await boundedPeerRead(port, {operation, relay, wire, subscription},
-                  completePeerBudget(budget, relays.length, lifetime.remaining()), lifetime.signal)
+                  completeRelays ? completePeerBudget(budget, relays.length, lifetime.remaining())
+                    : Math.max(1, Math.min(lifetime.remaining(), Math.floor(budget / (Math.ceil(relays.length / 2) + 1)))), lifetime.signal)
                 : options.outbox
                   ? await port.queryPublishedRelay(operation,relay,wire,subscription,lifetime.peerBudget(relays.length - index))
                   : await port.queryPublishedRelay(operation,relay,wire,subscription);
@@ -273,7 +275,7 @@ export function createNativeRelayQuery(port: NativeQueryPort,
             return 'complete';
         };
         const work = async () => {
-          if (completeRelays) await readCompleteRelays(relays, readRelay);
+          if (completeRelays || !options.outbox) await readPeers(relays, readRelay, completeRelays);
           else {
             for (const [index, relay] of relays.entries()) await readRelay(relay, index);
           }

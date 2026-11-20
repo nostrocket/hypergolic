@@ -23,6 +23,8 @@ test('selected core filters are cloned, bounded and match owning request fields'
   const request = parseRelayQuery({ type: 'relay.query', id: 'correlation', filters: [{ kinds: [1] }] });
   assert.deepEqual(request.filters, [{ kinds: [1], limit: 32 }]);
   assert.ok(Object.isFrozen(request.filters[0]!.kinds));
+  const multiple = parseRelayQuery({ type:'relay.query', id:'split', filters:[{kinds:[1]}, {kinds:[7]}] });
+  assert.deepEqual(multiple.filters.map(filter => filter.limit), [16, 16]);
   for (const filters of [[], [{ search: 'extra' }], [{ authors: ['abc'] }], [{ kinds: [] }], [{ limit: -1 }], [{ limit: 1.5 }], [{ limit: '32' }], [{ limit: Number.MAX_SAFE_INTEGER + 1 }], [{ since: 10, until: 1 }], [{ '#e': ['abc'] }], [{ kinds: [65536] }]]) {
     assert.throws(() => parseQueryFilters(filters));
   }
@@ -221,12 +223,12 @@ test('detailed complete empty EOSE is distinct from partial or failed discovery'
 });
 
 
-test('detailed total deadline preserves verified partial data and cancels exact pending relay; legacy still rejects', async () => {
+test('one slow relay releases its share of the deadline while a healthy peer supplies verified events', async () => {
   for (const detailed of [false,true]) {
     const h = harness(['wss://one.example.com','wss://slow.example.com'],async (url,sub) => url.includes('slow') ? new Promise(()=>{}) : [JSON.stringify(['EVENT',sub,signed()]),JSON.stringify(['EOSE',sub])]);
     const service=h.create(20), filters=parseQueryFilters([{}]);
     if(detailed){const result=await service.queryDetailed(filters,signal(),()=>{});assert.equal(result.incomplete,true);assert.equal(result.events[0]?.event.id,signed().id);}
-    else await assert.rejects(service.query(filters,signal(),()=>{}));
+    else assert.equal((await service.query(filters,signal(),()=>{}))[0]?.event.id,signed().id);
     assert.deepEqual(h.cancelled,[h.calls[1]!.id]);
   }
 });
