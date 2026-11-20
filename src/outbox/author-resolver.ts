@@ -1,6 +1,6 @@
 import type { NostrEvent } from 'nostr-tools/pure';
 import type { DetailedRelayQueryService, RelayQueryResult } from '../network/native-relay-query.ts';
-import { parseQueryFilters, QUERY_LIMITS, RelayQueryDataError, RelayQueryError } from '../network/relay-query-contract.ts';
+import { parseQueryFilters, QUERY_LIMITS, RelayQueryBusyError, RelayQueryDataError, RelayQueryError } from '../network/relay-query-contract.ts';
 import { publicKey } from '../storage/codec.ts';
 import { OUTBOX_QUERY_FILTERS } from './query-contract.ts';
 import type { OutboxRelayListCache } from './relay-list-cache.ts';
@@ -22,7 +22,7 @@ export function createOutboxAuthorResolver(cache: OutboxRelayListCache, discover
   let pending = 0;
   async function leased<T>(user: string, signal: AbortSignal, assertActive: () => void, work: (scope: ReadScope) => Promise<T>,
     timeoutMs: number = QUERY_LIMITS.timeoutMs): Promise<T> {
-    if (pending >= QUERY_LIMITS.concurrent) throw new OutboxRelayListError();
+    if (pending >= QUERY_LIMITS.concurrent) throw new RelayQueryBusyError();
     const controller = new AbortController(), stop = () => controller.abort();
     const active = () => { assertActive(); if (signal.aborted || controller.signal.aborted) throw new OutboxRelayListError(); };
     active(); pending++;
@@ -150,6 +150,7 @@ export function createOutboxAuthorResolver(cache: OutboxRelayListCache, discover
         }
         catch (error) {
           scope.active();
+          if (error instanceof RelayQueryBusyError) throw error;
           if (purpose === 'read' && cached.age !== 'expired' && error instanceof RelayQueryError && !(error instanceof RelayQueryDataError)) {
             return fromCache(cached.list, true);
           }

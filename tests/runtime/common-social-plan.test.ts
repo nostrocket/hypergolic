@@ -32,7 +32,8 @@ test('idempotent follow/unfollow and complete empty basis prepare no publication
   await assert.rejects(h.planner.plan({type:'common.follow',id:'p',pubkeys:[npub]},registration,signal(),active),/relay-timeout/);assert.equal(h.counts().publishCount,0);
 });
 test('reaction binds native signed target, address and one matching custom emoji tag',async()=>{
-  const h=harness(),plan=await h.planner.plan({type:'common.react',id:'r',targetEventId:h.target.id,reaction:':wave:',customEmojiHref:'https://emoji.example.org/wave.png'},registration,signal(),active);
+  const h=harness();h.setPartial();
+  const plan=await h.planner.plan({type:'common.react',id:'r',targetEventId:h.target.id,reaction:':wave:',customEmojiHref:'https://emoji.example.org/wave.png'},registration,signal(),active);
   assert.deepEqual(plan.publication?.event.event.tags,[['e',h.target.id],['p',user],['a',`30023:${user}:article`],['emoji','wave','https://emoji.example.org/wave.png']]);h.planner.release(plan);
   await assert.rejects(h.planner.plan({type:'common.react',id:'r2',targetEventId:h.target.id,reaction:'two words'},registration,signal(),active),/invalid-reaction/);
 });

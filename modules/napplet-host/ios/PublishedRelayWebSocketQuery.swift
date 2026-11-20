@@ -6,6 +6,9 @@ import Security
 /// One bounded, pinned WSS subscription against one public relay. The caller owns
 /// event structure and decides when a validated EOSE ends the operation.
 enum PublishedRelayWebSocketQuery {
+  private static let queryResolutionSlots = PublishedPinnedHTTPS.ResolutionSlots(4)
+  private static let streamResolutionSlots = PublishedPinnedHTTPS.ResolutionSlots(4)
+  private static let publicationResolutionSlots = PublishedPinnedHTTPS.ResolutionSlots(2)
   enum Failure: Error { case invalidURL, resolution, connection, handshake, frame, closed, timeout, cancelled, limit, unreachable }
   static let maxWireBytes = 2 * 1024 * 1024
   static let maxEvents = 32
@@ -212,8 +215,12 @@ enum PublishedRelayWebSocketQuery {
         return
       }
 #endif
+      let slots = publication != nil ? PublishedRelayWebSocketQuery.publicationResolutionSlots
+        : streamDelivery != nil ? PublishedRelayWebSocketQuery.streamResolutionSlots : PublishedRelayWebSocketQuery.queryResolutionSlots
+      guard slots.acquire() else { queue.async { self.finish(.failure(Failure.resolution)) }; return }
       DispatchQueue.global(qos: .utility).async {
         let result = Result { try PublishedPinnedHTTPS.resolve(self.request.host) }
+        slots.release()
         self.queue.async {
           guard !self.ended else { return }
           switch result {
@@ -265,7 +272,12 @@ enum PublishedRelayWebSocketQuery {
         if !trusted { self.trustFailed = true }
         verify(trusted)
       }, queue)
-      let parameters = NWParameters(tls: tls, tcp: NWProtocolTCP.Options())
+      let tcp = NWProtocolTCP.Options()
+      if streamDelivery != nil {
+        tcp.enableKeepalive = true
+        tcp.keepaliveIdle = 45; tcp.keepaliveInterval = 5; tcp.keepaliveCount = 3
+      }
+      let parameters = NWParameters(tls: tls, tcp: tcp)
       guard let port = NWEndpoint.Port(rawValue: request.port) else { finish(.failure(Failure.invalidURL)); return }
       let connection = NWConnection(host: address.host, port: port, using: parameters)
       self.connection = connection

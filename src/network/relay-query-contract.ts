@@ -11,6 +11,9 @@ export type RelayQueryRequest = Readonly<{ type: 'relay.query'; id: string; filt
 export class RelayQueryError extends Error {
   constructor(message = 'relay query failed') { super(message); this.name = 'RelayQueryError'; }
 }
+export class RelayQueryBusyError extends RelayQueryError {
+  constructor() { super('relay query busy'); }
+}
 /** Returned frames failed authentication, correlation or bounds; this is not an outage. */
 export class RelayQueryDataError extends RelayQueryError {
   constructor() {super('relay query failed'); this.name = 'RelayQueryDataError';}
@@ -82,7 +85,10 @@ export function relayQueryWire(subscription: string, filters: readonly QueryFilt
 export function parseRelayQuery(value: unknown): RelayQueryRequest {
   const data = record(value);
   if (data.type !== 'relay.query' || Object.keys(data).length !== 3 || !Object.prototype.hasOwnProperty.call(data, 'filters')) return fail();
-  return Object.freeze({ type: 'relay.query', id: text(data.id, 128), filters: parseQueryFilters(data.filters) });
+  const filters = dense(data.filters, QUERY_LIMITS.filters);
+  const share = Math.floor(QUERY_LIMITS.events / Math.max(1, filters.length));
+  return Object.freeze({ type: 'relay.query', id: text(data.id, 128),
+    filters: parseQueryFilters(filters, QUERY_LIMITS.events, QUERY_LIMITS.filters, false, share) });
 }
 type QueryPhase = 'stored' | 'live';
 export function queryMatches(event: NostrEvent, filter: QueryFilter, phase: QueryPhase = 'stored'): boolean {

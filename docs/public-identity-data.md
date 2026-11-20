@@ -77,7 +77,7 @@ refreshed. A freshness extension is a recorded future gap.
 
 | Bound | Selected limit |
 | --- | --- |
-| Identity reads | Two concurrent, one per user/category, 20 seconds each |
+| Identity reads | Two concurrent, one reserved for shell reads, one per user/category, 20 seconds each |
 | Cache | 64 rows, 4 MiB total, 256 KiB per source bundle |
 | Query | Four filters, 32 events, 64 KiB per event, 512 KiB result, 64 frames, 15 seconds |
 | Event tags | 256 tags; 1024 UTF-8 bytes per tag field |

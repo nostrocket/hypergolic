@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {RelayQueryBusyError} from '../../src/network/relay-query-contract.ts';
 import {test} from 'node:test';
 import {finalizeEvent,getPublicKey} from 'nostr-tools/pure';
 import {parseOutboxPublish,outboxPublishFailure} from '../../src/outbox/publication-contract.ts';
@@ -109,4 +110,9 @@ test('oversized existing signed relay list blocks review rather than silently dr
  const event=finalizeEvent({kind:10002,created_at:1,content:'x'.repeat(8192),tags:[['r','wss://own.nostr.net','write']]},ownKey);
  const big=parseOutboxRelayList(JSON.parse(JSON.stringify(event)),user),h=setup(async()=>({list:big,source:'cache',incomplete:false}));
  await assert.rejects(h.planner.plan(request,user,signal(),()=>{}),/publication frame too large/);
+});
+
+test('local routing contention cannot select Network fallback', async () => {
+  const h = setup(async () => { throw new RelayQueryBusyError(); });
+  await assert.rejects(h.planner.plan(request, user, signal(), () => {}), /resolution busy/);
 });

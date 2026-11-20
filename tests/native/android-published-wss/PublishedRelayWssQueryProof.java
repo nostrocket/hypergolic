@@ -9,6 +9,14 @@ public final class PublishedRelayWssQueryProof {
   private static int checks;
 
   public static void main(String[] args) throws Exception {
+    long[] clock = {1};
+    PublishedRelayWssQuery.Deadline deadline = PublishedRelayWssQuery.Deadline.atElapsed(10, () -> clock[0]);
+    deadline.persistent();
+    check(!deadline.expired() && deadline.timeoutMs(3000) == 3000);
+    deadline.awaitPong(); clock[0] += 15_000;
+    check(deadline.expired());
+    deadline.persistent(); check(!deadline.expired());
+    check(PublishedRelayWebSocketClientFrames.ping()[0] == (byte)0x89);
     urls();
     dns();
     collector();

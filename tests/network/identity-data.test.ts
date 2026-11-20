@@ -24,6 +24,7 @@ test('signed profile allowlist maps display_name and treats strings as literal d
   const signed = event({ name: '<script>literal</script>', display_name: '雪', displayName: 'deprecated', bot: true, birthday: {}, about: 'A\0B', picture: 'https://private.example/image', unknown: 'discard' });
   const verified = verifiedProfileEvents([signed], user);
   assert.deepEqual(profileFromEvents(verified), { name: '<script>literal</script>', displayName: '雪', about: 'A\0B', picture: 'https://private.example/image' });
+  assert.deepEqual(profileFromEvents(verifiedProfileEvents([event({name:'Ada', picture:[], about:'x'.repeat(8193)})], user)), { name: 'Ada' });
   assert.equal(profileFromEvents([]), null);
 });
 for (const delta of ['bad-signature', 'wrong-user', 'wrong-kind', 'mutated-content', 'invalid-json', 'array-content', 'wrong-field-type', 'oversize']) test(`profile rejects ${delta}`, () => {
@@ -92,7 +93,10 @@ test('tampered disk event cannot acquire validity from a previously verified obj
   await cache.write(user, 'profile', { fetchedAt: 1000, events: [signed] }, () => {}, signal());
   const db = sqlite.raw(IDENTITY_DATA_DATABASE); db.prepare('UPDATE identity_cache SET payload = ?').run(JSON.stringify([{ ...signed, content: '{"name":"Forged"}' }]));
   const service = createIdentityDataService(cache, { async query() { throw Error('must not query corrupt cache'); } }, () => 1001);
-  assert.equal((await service.read(request, registration, signal(), () => {})).error, 'invalid identity data');
+  assert.equal((await service.read(request, registration, signal(), () => {})).error, 'identity data unavailable');
+  const recovery = createIdentityDataService(cache, { async query() { return [{event: signed}]; } }, () => 1002);
+  assert.deepEqual((await recovery.read(request, registration, signal(), () => {})).profile, { name: 'Original' });
+  assert.equal((await cache.read(user, 'profile', () => {}, signal()))?.events[0]?.id, signed.id);
 });
 test('native revocation during SQLite commit prevents successful delivery despite durable public data', async t => {
   const { sqlite, cache } = await setup(t); let live = true;
@@ -123,4 +127,20 @@ test('a failed or lost-acknowledgement cache commit is not reported as a success
   const service = createIdentityDataService(cache, { async query() { return [{ event: event({ name: 'Known' }) }]; } }, () => 1000);
   const result = await service.read(request, registration, signal(), () => {});
   assert.equal(result.profile, null); assert.equal(result.error, 'identity data unavailable');
+});
+
+test('a held guest list review leaves capacity for the trusted profile', async t => {
+  const { cache } = await setup(t);
+  const held = deferred();
+  const service = createIdentityDataService(cache, { async query() { return [{ event:event({name:'Shell'}) }]; } },
+    () => 1000, { async authorize() { await held.promise; return () => {}; } });
+  const controller = new AbortController();
+  const review = service.read({type:'identity.getMutes', id:'hold'}, registration, controller.signal, () => {});
+  try {
+    assert.deepEqual(await service.readProfile(user, signal(), () => {}), {name:'Shell'});
+  } finally {
+    controller.abort();
+    held.resolve();
+    await assert.rejects(review);
+  }
 });

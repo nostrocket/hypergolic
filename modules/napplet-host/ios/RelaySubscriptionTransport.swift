@@ -44,7 +44,10 @@ final class RelaySubscriptionTransportRegistry: @unchecked Sendable {
     }
   }
   func hasCapacity(_ token: String) -> Bool {
-    lock.withLock { registry.mayDeliver(token) && (rows[token]?.sizes.count ?? 4) < 4 }
+    lock.withLock {
+      guard registry.mayDeliver(token), let row = rows[token] else { return false }
+      return row.sizes.count < 4 && row.sizes.values.reduce(0, +) + 66 * 1024 <= 256 * 1024
+    }
   }
   func send(_ token: String, response: String) -> Int {
     lock.withLock {

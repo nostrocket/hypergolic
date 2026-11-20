@@ -4,6 +4,7 @@ import { RelayQueryDataError, RelayQueryError } from '../network/relay-query-con
 import { identityResult, type CapabilityReply, type NativeRegistration } from '../runtime/capability-protocol.ts';
 import {identityProjection} from './identity-projection.ts';
 import { publicKey } from '../storage/codec.ts';
+import { ShellStorageError } from '../storage/ports.ts';
 import type { IdentityCache } from './identity-cache.ts';
 import { IDENTITY_LIMITS, IdentityDataError, identityFailure, latestIdentityEvent, verifiedIdentityEvents, type IdentityRequest, type ProfileData } from './identity-contract.ts';
 
@@ -19,7 +20,7 @@ export interface TrustedIdentityDataPort extends IdentityDataPort {
 }
 /** Process-owned resolver. No cache, relay port, clock or owner can be selected by guest JSON. */
 export function createIdentityDataService(cache: IdentityCache, queries: RelayQueryService, now: () => number = Date.now, permissions?: IdentityPermissionPort): TrustedIdentityDataPort {
-  let pending = 0;
+  let pending = 0, guestPending = 0;
   const activeKeys = new Set<string>();
   async function resolve(request: IdentityRequest, user: string, registration: NativeRegistration | null, signal: AbortSignal, assertActive: () => void): Promise<CapabilityReply> {
     const active = () => { if (signal.aborted) throw new IdentityDataError('identity request cancelled'); assertActive(); };
@@ -28,8 +29,9 @@ export function createIdentityDataService(cache: IdentityCache, queries: RelayQu
     let projection: ReturnType<typeof identityProjection>;
     try { projection = request.type === 'identity.getBadges' ? {key: 'badges', field: 'badges', sensitive: false, filters: BADGE_BUNDLE_FILTERS, project: events => acceptedBadges(events, user)} : identityProjection(request, user); } catch (error) { return identityFailure(request, error instanceof IdentityDataError ? error.message : 'identity data unavailable'); }
     const key = user + ':' + projection.key;
-    if (pending >= IDENTITY_LIMITS.concurrent || activeKeys.has(key)) return identityFailure(request, 'identity data busy');
-    pending++; activeKeys.add(key);
+    // Keep one of the bounded slots available to the shell during guest reviews.
+    if (pending >= IDENTITY_LIMITS.concurrent || registration && guestPending >= IDENTITY_LIMITS.concurrent - 1 || activeKeys.has(key)) return identityFailure(request, 'identity data busy');
+    pending++; if (registration) guestPending++; activeKeys.add(key);
     const controller = new AbortController();
     const stop = () => controller.abort();
     signal.addEventListener('abort', stop, { once: true });
@@ -47,12 +49,22 @@ export function createIdentityDataService(cache: IdentityCache, queries: RelayQu
       }
       const timestamp = now();
       if (!Number.isSafeInteger(timestamp) || timestamp < 0) throw new IdentityDataError();
-      const stored = await cache.read(user, projection.key, live, controller.signal);
-      live();
-      const cached = stored ? verifiedIdentityEvents(stored.events, projection.filters) : null;
-      if (cached) projection.project(cached);
+      let cached: ReturnType<typeof verifiedIdentityEvents> | null = null;
+      let age = Infinity;
+      try {
+        const stored = await cache.read(user, projection.key, live, controller.signal);
+        live();
+        if (stored) {
+          const events = verifiedIdentityEvents(stored.events, projection.filters);
+          projection.project(events);
+          cached = events;
+          age = timestamp - stored.fetchedAt;
+        }
+      } catch (error) {
+        live();
+        if (!(error instanceof IdentityDataError || error instanceof ShellStorageError && error.code === 'CORRUPT_STORAGE')) throw error;
+      }
       let selected = cached;
-      const age = stored ? timestamp - stored.fetchedAt : Infinity;
       if (cached === null || age < 0 || age >= IDENTITY_LIMITS.freshMs) {
         let fetched: readonly import('nostr-tools/pure').NostrEvent[] | undefined;
         let observed = true;
@@ -81,7 +93,7 @@ export function createIdentityDataService(cache: IdentityCache, queries: RelayQu
       return identityFailure(request, error instanceof IdentityDataError ? error.message : 'identity data unavailable');
     } finally {
       controller.signal.removeEventListener('abort', rejectCancelled);
-      activeKeys.delete(key); clearTimeout(timer); signal.removeEventListener('abort', stop); controller.abort(); pending--;
+      activeKeys.delete(key); clearTimeout(timer); signal.removeEventListener('abort', stop); controller.abort(); pending--; if (registration) guestPending--;
     }
   }
   return Object.freeze({

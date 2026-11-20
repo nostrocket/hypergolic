@@ -4,6 +4,11 @@ import Foundation
 @main
 struct PublishedRelayWebSocketQueryProof {
   static func main() throws {
+    let slots = PublishedPinnedHTTPS.ResolutionSlots(1)
+    try check(slots.acquire() && !slots.acquire(), "pending resolution occupies its slot")
+    slots.release()
+    try check(slots.acquire(), "completed resolution releases capacity")
+    slots.release()
     try urlAndRequestProof()
     try coalescedUpgradeProof()
     try boundedEnvelopeDeliveryProof()
