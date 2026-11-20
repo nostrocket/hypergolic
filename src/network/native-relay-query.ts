@@ -5,7 +5,7 @@ import type { NativePublishedRelayPort } from '../napplets/native-published-rela
 import { parsePublishedRelayMessage } from '../napplets/published-relay-wire.ts';
 import { normalizeRelayUrl, MAX_RELAYS_PER_ROLE } from './relay-settings.ts';
 import { utf8Bytes } from '../storage/codec.ts';
-import { OUTBOX_QUERY_COUNTS, parseQueryFilters, QUERY_LIMITS, RelayQueryDataError, RelayQueryError, relayQueryWire, selectQueryEvents, captureQueryEvent, verifyQueryEvent, type QueryFilter } from './relay-query-contract.ts';
+import { OUTBOX_QUERY_COUNTS, parseQueryFilters, QUERY_LIMITS, RelayQueryBusyError, RelayQueryDataError, RelayQueryError, relayQueryWire, selectQueryEvents, captureQueryEvent, verifyQueryEvent, type QueryFilter } from './relay-query-contract.ts';
 
 export interface RelayQueryService {
   readonly catalog?: CatalogRelayReader;
@@ -213,7 +213,8 @@ export function createNativeRelayQuery(port: NativeQueryPort,
       const configured = configuredRelays();
       const relays = catalogRelay === undefined ? configured : configured.filter(relay => relay === catalogRelay);
       if (ranked && relays.length !== 1) throw new RelayQueryError();
-      if (relays.length === 0 || concurrent >= QUERY_LIMITS.concurrent) throw new RelayQueryError('relay query busy');
+      if (relays.length === 0) throw new RelayQueryError('relay query unavailable');
+      if (concurrent >= QUERY_LIMITS.concurrent) throw new RelayQueryBusyError();
       const active = () => { if (signal.aborted) throw new RelayQueryError('relay query cancelled'); assertActive(); };
       active();
       concurrent++;

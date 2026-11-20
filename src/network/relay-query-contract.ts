@@ -11,6 +11,9 @@ export type RelayQueryRequest = Readonly<{ type: 'relay.query'; id: string; filt
 export class RelayQueryError extends Error {
   constructor(message = 'relay query failed') { super(message); this.name = 'RelayQueryError'; }
 }
+export class RelayQueryBusyError extends RelayQueryError {
+  constructor() { super('relay query busy'); }
+}
 /** Returned frames failed authentication, correlation or bounds; this is not an outage. */
 export class RelayQueryDataError extends RelayQueryError {
   constructor() {super('relay query failed'); this.name = 'RelayQueryDataError';}

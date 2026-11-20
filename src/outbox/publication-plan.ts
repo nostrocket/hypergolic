@@ -1,7 +1,7 @@
 import {captureEventSnapshot, type EventSnapshot} from '../security/event-snapshot.ts';
 import {validateSignedEvent, type VerifiedSignedEvent} from '../security/signed-event.ts';
 import {normalizeRelayUrl, type RelaySettingsSnapshot} from '../network/relay-settings.ts';
-import {QUERY_LIMITS} from '../network/relay-query-contract.ts';
+import {QUERY_LIMITS, RelayQueryBusyError} from '../network/relay-query-contract.ts';
 import {publicKey} from '../storage/codec.ts';
 import type {OutboxAuthorResolution, OutboxAuthorResolver} from './author-resolver.ts';
 import {OUTBOX_LIST_LIMITS, parseOutboxRelayList} from './relay-list.ts';
@@ -63,7 +63,11 @@ export function createOutboxPublicationPlanner(resolver:OutboxAuthorResolver,set
       async function worker(index:number):Promise<void>{
         if(index>=authors.length)return;active();const author=authors[index]!;
         try {results.set(author,await resolver.resolve(user,author,'publication',controller.signal,active));}
-        catch {active();results.set(author,null);}
+        catch (error) {
+          active();
+          if (error instanceof RelayQueryBusyError) throw new OutboxPublicationError('publication resolution busy');
+          results.set(author,null);
+        }
         active();return worker(index+2);
       }
       await Promise.all([worker(0),worker(1)]);active();const plan=assemble(request,user,network,results,request.options.toOutbox||ancillaryWhenSkipped==='lookup');active();return plan;
