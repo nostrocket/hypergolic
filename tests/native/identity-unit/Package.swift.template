@@ -11,7 +11,7 @@ let package = Package(
     .target(name: "IdentitySecretStore", path: "Sources/IdentityStore", exclude: [
       "HypergolicIdentityStoreModule.swift", "HypergolicIdentityActionsModule.swift", "HypergolicIdentityStore.podspec",
       "SystemDeviceAuthentication.swift", "ExpoIdentityRuntimeLifetime.swift", "ApplicationIdentityLifecycle.swift",
-      "NativeBackupPanel.swift",
+      "NativeBackupPanel.swift", "NativeSignerIdentityActions.swift",
     ]),
     .testTarget(name: "IdentitySecretStoreTests", dependencies: ["IdentitySecretStore", "HypergolicIdentityOwner"], path: "Tests"),
   ]
