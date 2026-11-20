@@ -11,7 +11,7 @@ const PUBKEY = getPublicKey(SECRET);
 const SESSION = 'published_test_1';
 const hex = (bytes: Uint8Array) => Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
 async function sha(bytes: Uint8Array): Promise<string> {
-  return hex(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)));
+  return hex(new Uint8Array(await crypto.subtle.digest('SHA-256', Uint8Array.from(bytes))));
 }
 async function verified(body = 'ok') {
   const bytes = new TextEncoder().encode(`<!doctype html><html><head><title>Test</title></head><body>${body}</body></html>`);

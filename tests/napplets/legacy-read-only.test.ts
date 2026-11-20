@@ -79,7 +79,7 @@ const origin = {...resolveBundledSession(source), user, epoch: 1, generation: 's
 function request(available: boolean): RoutingReviewRequest {
   return {kind: 'published-open', origin, source, changesAccess: false,
     ...(available ? {legacyReadOnlyAvailable: true as const} : {}),
-    target: {...recipe, requiredDomains: [], optionalDomains: [], unsupportedDomains: [], unsupportedOptionalDomains: []}};
+    target: {...recipe, metadata: {title: 'Recipe cards', description: '', reference: recipe.appId, version: recipe.version, htmlHash: recipe.htmlHash}, requiredDomains: [], optionalDomains: [], unsupportedDomains: [], unsupportedOptionalDomains: []}};
 }
 test('trusted review defaults to ordinary mode and accepts only an explicit available legacy choice', async () => {
   for (const [available, decision, expected] of [

@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
+    "target": "ES2024",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "strict": true,
@@ -13,11 +13,9 @@
   },
   "include": [
     "src/**/*.test.ts",
-    "tests/security/**/*.test.ts",
-    "tests/storage/**/*.test.ts",
-    "tests/runtime/**/*.test.ts",
-    "tests/network/**/*.test.ts",
-    "tests/presentation/**/*.test.ts",
-    "tests/outbox/**/*.test.ts"
+    "tests/**/*.test.ts"
+  ],
+  "exclude": [
+    "tests/native"
   ]
 }
