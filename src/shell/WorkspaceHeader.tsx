@@ -1,18 +1,25 @@
 import type { Ref } from 'react';
-import { Platform, StatusBar, type ViewInstance } from 'react-native';
+import { Platform, StatusBar, StyleSheet, Text, type ViewInstance } from 'react-native';
 import { Header, type ShellIdentity } from './Header';
 import type { NappletDescriptor } from './workspace';
-import { useShellStyles } from './theme';
+import { ShellPressable } from './ShellPressable';
+import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 
-const noStyles = () => ({});
+const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.create({
+  exit: {position: 'absolute', zIndex: 5, top: 4, left: 4, paddingHorizontal: 12, justifyContent: 'center',
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 6},
+  label: {fontFamily: fonts.strong, color: colors.text},
+});
 export function WorkspaceHeader({ fullscreen, overview, home = false, focused, identity, disabled, menuAnchor, onSettings, onHome, onOverview, onMenu }: {
   fullscreen: boolean; overview: boolean; home?: boolean; focused: NappletDescriptor | undefined; identity?: ShellIdentity; disabled: boolean;
   menuAnchor: Ref<ViewInstance>; onSettings(): void; onHome(): void; onOverview(): void; onMenu(): void;
 }) {
-  const { isDark } = useShellStyles(noStyles);
+  const { isDark, styles } = useShellStyles(createStyles);
   const compact = !overview && focused !== undefined;
   return <>
     <StatusBar hidden={Platform.OS === 'ios' ? fullscreen : undefined} barStyle={isDark ? 'light-content' : 'dark-content'} />
+    {fullscreen && <ShellPressable testID="fullscreen-overview" accessibilityRole="button" disabled={disabled}
+      onPress={onOverview} style={styles.exit}><Text style={styles.label}>All napplets</Text></ShellPressable>}
     {!fullscreen && <Header title={overview ? 'Hypergolic' : focused?.title ?? 'Hypergolic'} identity={identity} disabled={disabled}
       compact={compact} wallpaper={home} menuAnchor={menuAnchor} onSettings={onSettings} onHome={onHome}
       onOverview={compact ? onOverview : undefined} onMenu={compact ? onMenu : undefined} />}

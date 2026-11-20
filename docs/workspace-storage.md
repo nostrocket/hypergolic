@@ -133,3 +133,5 @@ Custom unmarked controls need markup from the game author.
 
 - Long-press actions to rearrange and unpin Home shortcuts. The first version uses
   Edit on Home and Unpin from Home in the napplet menu.
+
+A focused napplet uses the landscape viewport. **All napplets** stays available in the upper corner and returns to the overview without closing the napplet. Android Back also opens the overview after dismissing any open keyboard or shell surface.
