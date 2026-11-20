@@ -9,7 +9,7 @@ The genuine SDK sends `relay.subscribe` with original `id`, caller `subId`,
 filters and optional relay. Replies are canonical `relay.event` with
 `result: {event}`, `relay.eose`, and terminal `relay.closed`; `relay.close`
 preserves its original caller ID. There is no public subscribe/close result ACK.
-EOSE completes stored history while later matching events continue. A zero-limit
+EOSE completes stored history while later matching events continue. Idle Android streams send a WebSocket ping after 45 seconds and allow 15 seconds for its pong. iOS enables TCP keepalive after 45 idle seconds and allows three probes five seconds apart. A detected disconnect enters the existing bounded retry policy. A zero-limit
 filter starts matching live events only after its relay connection sends EOSE.
 The coordinator supplies that phase privately to the runtime because other relays
 may still be sending stored history. The runtime omits the phase from the guest

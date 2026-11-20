@@ -153,14 +153,24 @@ public final class PublishedRelayWssQuery {
         PublishedRelayWebSocketFrames frames = new PublishedRelayWebSocketFrames();
         PublishedRelayResponseClassifier classifier = new PublishedRelayResponseClassifier(subscriptionId);
         byte[] buffer = new byte[PublishedRelayWebSocketFrames.MAX_READ];
-        long window = System.nanoTime(); int frameCount = 0, wireBytes = 0;
+        long window = System.nanoTime(), lastRead = window;
+        boolean awaitingPong = false;
+        int frameCount = 0, wireBytes = 0;
         while (true) {
           abort.check();
           int count;
           try { count = input.read(buffer); }
-          catch (SocketTimeoutException idle) { if (deadline.persistent) continue; throw idle; }
+          catch (SocketTimeoutException idle) {
+            if (!deadline.persistent || deadline.expired()) throw idle;
+            if (!awaitingPong && System.nanoTime() - lastRead >= TimeUnit.SECONDS.toNanos(45)) {
+              deadline.awaitPong();
+              awaitingPong = true;
+              output.write(PublishedRelayWebSocketClientFrames.ping()); output.flush();
+            }
+            continue;
+          }
           if (count < 0) throw new IOException("Relay stream closed");
-          long current = System.nanoTime();
+          long current = System.nanoTime(); lastRead = current;
           if (current - window >= 1_000_000_000L) { window = current; frameCount = 0; wireBytes = 0; }
           wireBytes += count;
           if (wireBytes > 2 * 1024 * 1024) throw new IOException("Relay stream byte rate exceeded");
@@ -176,8 +186,10 @@ public final class PublishedRelayWssQuery {
           for (PublishedRelayWebSocketFrames.Event event : batch) {
             abort.check();
             if ("text".equals(event.type)) {
-              if (classifier.classify(event.text) == TextKind.EOSE) deadline.persistent();
+              if (!deadline.persistent && classifier.classify(event.text) == TextKind.EOSE) deadline.persistent();
               control.text(event.text);
+            } else if (awaitingPong && "pong".equals(event.type) && event.bytes.length == 0) {
+              awaitingPong = false; deadline.persistent();
             } else if ("ping".equals(event.type)) { output.write(PublishedRelayWebSocketClientFrames.pong(event.bytes)); output.flush(); }
           }
         }
@@ -422,7 +434,9 @@ public final class PublishedRelayWssQuery {
       return new Deadline(absoluteElapsedMs, elapsedClock);
     }
     void persistent() { persistent = true; expiresAt = Long.MAX_VALUE; }
+    void awaitPong() { expiresAt = nowNanos.getAsLong() + TimeUnit.SECONDS.toNanos(15); }
     int remainingMs() throws SocketTimeoutException {
+      if (expiresAt == Long.MAX_VALUE) return Integer.MAX_VALUE;
       long remaining = expiresAt - nowNanos.getAsLong();
       if (remaining <= 0) throw new SocketTimeoutException("Relay query timed out");
       return (int) Math.max(1L, Math.min(Integer.MAX_VALUE, (remaining + 999_999L) / 1_000_000L));

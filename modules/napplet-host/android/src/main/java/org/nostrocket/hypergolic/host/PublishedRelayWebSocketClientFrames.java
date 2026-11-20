@@ -41,6 +41,8 @@ public final class PublishedRelayWebSocketClientFrames {
     return encode(0x1, payload, mask, maxText, maxRaw);
   }
 
+  static byte[] ping() { return encode(0x9, new byte[0], randomMask()); }
+
   /** Encodes a pong that echoes the payload of a received ping. */
   public static byte[] pong(byte[] pingPayload) {
     return pong(pingPayload, randomMask());

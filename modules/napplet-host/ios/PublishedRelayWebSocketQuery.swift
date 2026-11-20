@@ -272,7 +272,12 @@ enum PublishedRelayWebSocketQuery {
         if !trusted { self.trustFailed = true }
         verify(trusted)
       }, queue)
-      let parameters = NWParameters(tls: tls, tcp: NWProtocolTCP.Options())
+      let tcp = NWProtocolTCP.Options()
+      if streamDelivery != nil {
+        tcp.enableKeepalive = true
+        tcp.keepaliveIdle = 45; tcp.keepaliveInterval = 5; tcp.keepaliveCount = 3
+      }
+      let parameters = NWParameters(tls: tls, tcp: tcp)
       guard let port = NWEndpoint.Port(rawValue: request.port) else { finish(.failure(Failure.invalidURL)); return }
       let connection = NWConnection(host: address.host, port: port, using: parameters)
       self.connection = connection
