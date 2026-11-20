@@ -27,7 +27,7 @@ function createMeshCodec() {
           Reflect.ownKeys(own).length !== length + 1) return error();
         consume(2 + Math.max(0, length - 1));
         result = Object.freeze(Array.from({length}, (_, i) => {
-          const field = own[String(i)]; if (!field || !Object.hasOwn(field, 'value') || !field.enumerable) return error();
+          const field = own[String(i)]; if (!field || !Object.prototype.hasOwnProperty.call(field, 'value') || !field.enumerable) return error();
           return clone(field.value, depth + 1);
         }));
       } else {
@@ -35,7 +35,7 @@ function createMeshCodec() {
         consume(2 + Math.max(0, Reflect.ownKeys(own).length - 1));
         result = Object.freeze(Object.fromEntries(Reflect.ownKeys(own).map(key => {
           const field = own[key as string];
-          if (typeof key !== 'string' || !field || !Object.hasOwn(field, 'value') || !field.enumerable) return error();
+          if (typeof key !== 'string' || !field || !Object.prototype.hasOwnProperty.call(field, 'value') || !field.enumerable) return error();
           if (key.length > maximum) return error(); consume(encode.encode(stringify(key)).length + 1);
           return [key, clone(field.value, depth + 1)];
         })));
@@ -47,7 +47,7 @@ function createMeshCodec() {
   function record(value: unknown, required: string[], optional: string[] = []): MeshMessage {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return error();
     const row = value as MeshMessage, allowed = new Set([...required, ...optional]);
-    if (required.some(key => !Object.hasOwn(row, key)) || Object.keys(row).some(key => !allowed.has(key))) return error();
+    if (required.some(key => !Object.prototype.hasOwnProperty.call(row, key)) || Object.keys(row).some(key => !allowed.has(key))) return error();
     return row;
   }
   const whole = (value: unknown, max = Number.MAX_SAFE_INTEGER): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= max;
