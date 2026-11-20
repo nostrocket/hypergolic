@@ -167,9 +167,7 @@ public final class PublicAddressPolicy {
     if ((a[0] & 0xff) == 0x20 && (a[1] & 0xff) == 0x01 && (a[2] & 0xff) == 0x0d && (a[3] & 0xff) == 0xb8) return false; // documentation
     if ((a[0] & 0xff) == 0x20 && (a[1] & 0xff) == 0x02) return false; // 6to4
     if ((a[0] & 0xff) == 0x3f && (a[1] & 0xff) == 0xff && (a[2] & 0xf0) == 0) return false; // 3fff::/20 documentation
-    // IPv4-mapped forms are rejected even when the embedded IPv4 address is public.
-    for (int i = 0; i < 10; i++) if (a[i] != 0) return true;
-    return a[10] != (byte) 0xff || a[11] != (byte) 0xff;
+    return true;
   }
 
   private static boolean prefix(byte[] a, int first, int bits) {
