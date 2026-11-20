@@ -153,8 +153,8 @@ final class NativeCvmSessions: @unchecked Sendable {
         var payload: [String:Any] = ["session":context.id,"message":decoded.message,"eventId":decoded.eventId,"references":decoded.references]
         if let mode = decoded.paymentInteraction { payload["paymentInteraction"] = mode }; emitValue("onCvmMessage",payload)
       case "EOSE": guard frame.count == 2, frame[1] as? String == context.subscription else { throw Failure.denied }
-      case "NOTICE": guard frame.count == 2, frame[1] is String else { throw Failure.denied }
-      default: throw Failure.denied // Includes relay AUTH/CLOSED: no automatic authentication or retry.
+      case "NOTICE", "AUTH": guard frame.count == 2, frame[1] is String else { throw Failure.denied }
+      default: throw Failure.denied // Includes relay CLOSED: no automatic authentication or retry.
       }
     } catch { retire(context, reason:"session closed") }
   }

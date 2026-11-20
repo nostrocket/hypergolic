@@ -102,6 +102,8 @@ public final class Nip46ProofActivity extends Activity {
       NativeSignerRelayFixture.open(url, control, control.deadline, bounds, certificate));
   }
   private void refreshPeerCases() throws Exception {
+    check(NativeRemoteBinding.sameRelays(java.util.List.of("a", "b"), java.util.List.of("b", "a")));
+    check(!NativeRemoteBinding.sameRelays(java.util.List.of("a", "b"), java.util.List.of("b", "c")));
     control(new JSONObject().put("fault", "none").put("relays", JSONObject.NULL).put("stringRelays", false));
     JSONObject before = new JSONObject(vault.publicSnapshot(owner));
     try (NativeRemoteBinding saved = vault.savedRemote(owner, user, before.getString("vaultId"), before.getLong("revision"))) {

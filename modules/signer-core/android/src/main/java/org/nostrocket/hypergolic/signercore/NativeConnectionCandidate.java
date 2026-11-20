@@ -79,7 +79,7 @@ final class NativeConnectionCandidate {
         Record existing = recordFor(current, pubkey);
         if (refresh) {
           if (!matchesRefresh(current, existing, pubkey, binding)) throw new Error("AUTHORIZATION_DENIED");
-          if (existing.remote.relays.equals(binding.relays)) throw new Error("SIGNER_UNSUPPORTED");
+          if (NativeRemoteBinding.sameRelays(existing.remote.relays, binding.relays)) throw new Error("SIGNER_UNSUPPORTED");
         } else if (existing != null && existing.remote != null) throw new Error("SIGNER_ALREADY_CONNECTED");
         if (existing == null && current.records.size() >= MAX_IDENTITIES) throw new Error("LIMIT_REACHED");
         candidate = new NativeConnectionCandidate(current, pubkey, binding, deadline, refresh);

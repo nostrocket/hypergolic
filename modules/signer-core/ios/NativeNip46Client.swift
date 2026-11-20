@@ -68,12 +68,16 @@ final class NativeNip46Client: @unchecked Sendable {
     var plaintext = try NativeNip46Protocol.request(id: id, method: method, params: params)
     defer { plaintext.resetBytes(in: 0..<plaintext.count) }
     let outer = try NativeNip46Protocol.outer(plaintext: plaintext, peer: peer, key: key, now: UInt64(Date().timeIntervalSince1970))
-    let subscription = "[\"REQ\",\(ExactSignerEvent.quote(subscriptionID)),{\"kinds\":[24133],\"authors\":[\(ExactSignerEvent.quote(peer))],\"#p\":[\(ExactSignerEvent.quote(client))],\"since\":\(UInt64(max(0, Date().timeIntervalSince1970 - 30)))}]"
+    let subscription = "[\"REQ\",\(ExactSignerEvent.quote(subscriptionID)),{\"kinds\":[24133],\"authors\":[\(ExactSignerEvent.quote(peer))],\"#p\":[\(ExactSignerEvent.quote(client))],\"since\":\(UInt64(max(0, Date().timeIntervalSince1970 - 120)))}]"
     let result = Mutex<SignerJSONValue?>(nil)
     let validate: @Sendable (String) throws -> Bool = { [peer, key, handoff] envelope in
       do {
       var parser = SignerJSONParser(envelope, maximumBytes: NativeNip46Protocol.maximumEnvelope + 256)
       guard case .array(let values) = try parser.parse(), case .string(let kind) = values.first else { throw NativeVaultFailure.signerResponseInvalid }
+      if kind == "AUTH" {
+        guard values.count == 2, case .string = values[1] else { throw NativeVaultFailure.signerResponseInvalid }
+        return false
+      }
       if ["OK", "EOSE", "NOTICE"].contains(kind) { return false }
       guard kind == "EVENT", values.count == 3, case .string(let returnedSubscription) = values[1], returnedSubscription == subscriptionID,
         case .object(let event) = values[2] else { throw NativeVaultFailure.signerResponseInvalid }

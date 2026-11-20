@@ -55,6 +55,10 @@ connection traffic are bounded. NIP-46 follows [revision a79e21d](https://github
 also selected for NIP-44; native cryptography is documented in
 [the signing core](signing-core.md#native-remote-encryption).
 
+Both clients ignore well-formed optional relay AUTH announcements. They validate each
+correlated reply against a 120-second past and 30-second future window. Relay order
+does not change the saved set. A signer error during preflight still stops the request.
+
 Signing stops when preflight reports changed relays. Explicit Settings refresh
 validates proposed destinations and requires flush/confirmation, retaining the
 client key, peer, account and selected method. On iOS, preflight relay equality

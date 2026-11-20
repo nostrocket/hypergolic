@@ -53,6 +53,8 @@ private final class EncryptedExchange: @unchecked Sendable {
                                                    now: UInt64(Date().timeIntervalSince1970))
       return "[\"EVENT\",\(ExactSignerEvent.quote(sub)),\(encrypted)]"
     }
+    let announced = try validate(#"["AUTH","fixture-challenge"]"#)
+    precondition(!announced)
     let response: Any
     switch method {
     case "get_public_key": response = try user.publicKey()

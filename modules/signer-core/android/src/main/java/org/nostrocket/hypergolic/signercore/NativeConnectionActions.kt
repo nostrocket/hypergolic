@@ -147,7 +147,7 @@ internal class NativeConnectionActions(
         }
       }
       operation.execute()
-      if (changed == saved.relays) {
+      if (NativeRemoteBinding.sameRelays(changed, saved.relays)) {
         confirmation.confirm(activity, "No relay changes", "The saved signer returned the same validated relay list.", "Done") {
           active() && session.activated && session.epoch == epoch && SystemClock.elapsedRealtime() < deadline
         }
