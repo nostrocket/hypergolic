@@ -82,7 +82,7 @@ import Network
   static func receive(_ generation: String, sequence: UInt64, raw: String, request: [String: Any],
     push: @escaping @MainActor @Sendable (String) -> Void, onReview: @escaping @MainActor @Sendable (String) -> Void,
     reply: @escaping @MainActor @Sendable (String?) -> Void) {
-    @MainActor @Sendable func finish(_ sealed: Bool) {
+    let finish: @MainActor @Sendable (Bool) -> Void = { sealed in
       reply(handle(generation, sequence: sequence, raw: raw, sealed: sealed, push: push, onReview: onReview))
     }
     guard request["type"] as? String == "upload.__seal" else { finish(false); return }
