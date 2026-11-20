@@ -48,8 +48,8 @@ and [NAP-LINK](https://github.com/napplet/naps/blob/100e5c939ae6b1ea82cc58587c6d
    event and checks the caller's expected ID before fetching the HTML. The loader
    refuses same-time conflicts and checks the original bytes against the signed
    manifest.
-3. The shell presents the requesting catalog, the target’s signed name and
-   description, its signing publisher, and the required and optional capabilities.
+3. The shell presents the requesting catalog, the target’s signed name,
+   its signing publisher, and the required and optional capabilities.
    Unavailable capabilities show which features may be missing. Public profile data
    comes from signed metadata by that publisher. The profile and the signed artwork
    load separately from the decision. Technical details expose the full publisher
