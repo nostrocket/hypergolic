@@ -634,7 +634,7 @@ test('exact discovery review binds staging, then transfers lifetime to the mount
   const releasePin = await owner.retainForPin(artifact, signal.signal, sourceActive);
   const pinRow = sqlite.raw(PUBLISHED_ARTIFACT_CACHE_DATABASE).prepare('SELECT event_id FROM verified_published_artifacts').get();
   assert.equal(pinRow?.event_id, EMBEDDED_TEST_EVENT.id);
-  assert.deepEqual(calls, []);
+  assert.equal(calls.length, 0);
   releasePin();
   const busy = new ReviewBusyError();
   await assert.rejects(owner.prepareDiscovered(artifact, signal.signal, sourceActive, async changesAccess => {
