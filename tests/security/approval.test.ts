@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { finalizeEvent } from 'nostr-tools/pure';
 import { updateApprovalAppState } from '../../src/shell/approval-lifecycle.ts';
-import { ApprovalService, type ApprovalEffects, type ApprovalOrigin, type NativeApprovalLease, type NativeApprovalLeasePort, type NativeTakenApproval } from '../../src/security/approval-service.ts';
+import { ApprovalService, PublicationUncertainError, type ApprovalEffects, type ApprovalOrigin, type NativeApprovalLease, type NativeApprovalLeasePort, type NativeTakenApproval } from '../../src/security/approval-service.ts';
 
 const secret = new Uint8Array(32); secret[31] = 2;
 const relay = 'wss://relay.example.org';
@@ -225,7 +225,8 @@ test('background after publication dispatch retains uncertainty after the pendin
   const pending = service.approve(current(service, 'one'));
   await new Promise<void>(resolve => setImmediate(resolve)); assert.equal(dispatched, true);
   service.background(); assert.equal(service.getSnapshot().pending, 0);
-  held.resolve([]); await assert.rejects(pending); service.foreground();
+  held.resolve([]); await assert.rejects(pending, PublicationUncertainError); service.foreground();
+  assert.deepEqual(JSON.parse(native.responses[0]!), {type:'relay.publish.result', id:'wire-one', ok:false, error:'publication result unknown'});
   assert.equal(service.hasCloseRisk('one'), true);
   service.close('one'); assert.equal(service.hasCloseRisk('one'), false);
 });
@@ -320,4 +321,27 @@ test('Discover recommendations bind the reviewed list and recheck before signing
   const native = new Native(), owner = origin('discover');
   native.issue('unprepared', owner, 'request', template);
   assert.equal(make(native).enqueue('unprepared', [relay], owner, () => null), false);
+});
+
+test('plain Relay prepares and consumes an exact native primary publication', async () => {
+  const native = new Native();
+  native.issue('one');
+  let prepared: readonly string[] = [];
+  const port: NativeApprovalLeasePort = Object.assign(native, {
+    prepareOutbox: ((_, plan) => {
+      prepared = plan.event.destinations;
+      assert.equal(plan.ancillary, null);
+      assert.deepEqual(plan.requiredInboxes, []);
+      return true;
+    }) satisfies NonNullable<NativeApprovalLeasePort['prepareOutbox']>,
+    publishOutbox: (async (_, group, event, destinations, execution) => {
+      execution.assertActive();
+      assert.equal(group, 'primary');
+      assert.deepEqual(destinations, prepared);
+      return destinations.map(relay => ({relay, eventId:event.id, status:'accepted', reason:''}));
+    }) satisfies NonNullable<NativeApprovalLeasePort['publishOutbox']>,
+  });
+  const service = new ApprovalService(port, {assertActive() {}}, {sign:async snapshot => sign(snapshot)});
+  const results = await service.approve(current(service, 'one'));
+  assert.equal(results[0]?.status, 'accepted');
 });

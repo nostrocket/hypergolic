@@ -22,6 +22,12 @@ dependencies {
   implementation 'com.facebook.react:react-android'
 }
 
+def embedRuntime = tasks.register('embedHypergolicRuntime', Exec) {
+  workingDir file('../../..')
+  commandLine 'node', 'scripts/build-runtime.mjs', '--android'
+}
+tasks.named('preBuild').configure { dependsOn(embedRuntime) }
+
 def archiveNoticeInventory = layout.buildDirectory.file('notice-review/selected-artifacts.json')
 def compilerNoticeInventory = layout.buildDirectory.file('notice-review/selected-compiler.json')
 gradle.projectsEvaluated {

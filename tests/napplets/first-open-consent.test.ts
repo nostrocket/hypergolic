@@ -15,7 +15,7 @@ const publisher = getPublicKey(SECRET);
 const user = '12'.repeat(32);
 const html = new TextEncoder().encode('<!doctype html><html><head><title>Consent test</title></head><body>ok</body></html>');
 const hex = (bytes: Uint8Array) => Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
-async function sha(bytes: Uint8Array): Promise<string> { return hex(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))); }
+async function sha(bytes: Uint8Array): Promise<string> { return hex(new Uint8Array(await crypto.subtle.digest('SHA-256', Uint8Array.from(bytes)))); }
 async function artifact(required = ['theme'], optional?: string[]) {
   const htmlHash = await sha(html), aggregate = await sha(new TextEncoder().encode(`${htmlHash} /index.html\n`));
   const tags = optional === undefined ? [
@@ -282,7 +282,7 @@ test('Intent requires explicit renewal while an unchanged non-Intent baseline gr
   }), FirstOpenConsentError);
   assert.deepEqual(await storage.readAccessGrant(), previous);
   await requestFirstOpenConsent(handler, owner, storage, signal, owner.assertActive, async () => true);
-  assert.match((await storage.readAccessGrant())!.supportReview, /hypergolic-native-2026-11-06-intent-v1/);
+  assert.match((await storage.readAccessGrant())!.supportReview ?? '', /hypergolic-native-2026-11-06-intent-v1/);
   await requestFirstOpenConsent(handler, owner, storage, signal, owner.assertActive, async () => assert.fail('renewed Intent grant must reopen'));
 });
 
@@ -306,7 +306,7 @@ for (const previouslyOffered of [false, true]) {
     assert.equal((await storage.readAccessGrant())?.supportReview, older);
     const accepted = await requestFirstOpenConsent(candidate, owner, storage, signal, owner.assertActive, async () => true);
     assert.deepEqual(accepted.domains, ['media','theme']);
-    assert.match((await storage.readAccessGrant())!.supportReview, /media-file-v1/);
+    assert.match((await storage.readAccessGrant())!.supportReview ?? '', /media-file-v1/);
   });
 }
 
@@ -368,7 +368,7 @@ test('a remembered Outbox and Intent grant without Relay needs consent for indep
   assert.equal((await storage.readAccessGrant())?.supportReview, prior);
   const approved = await requestFirstOpenConsent(candidate, owner, storage, signal, owner.assertActive, async () => true);
   assert.deepEqual(approved.domains, domains);
-  assert.match((await storage.readAccessGrant())!.supportReview, /hypergolic-native-2026-11-06-outbox-intent-v1/);
+  assert.match((await storage.readAccessGrant())!.supportReview ?? '', /hypergolic-native-2026-11-06-outbox-intent-v1/);
 });
 
 

@@ -3,7 +3,7 @@ import type { RuntimeOwner } from '../runtime/runtime-owner';
 import type { NappletConsentReview } from '../napplets/first-open-consent';
 import type { PublishedUpdateReview } from '../napplets/published-session';
 import { PublishedLoadError } from '../napplets/loader.ts';
-import { openNapplet, replacePublishedNapplet, samePublishedPin, type NappletDescriptor, type Workspace } from './workspace.ts';
+import { conflictsWithPublishedRevision, openNapplet, samePublishedPin, type NappletDescriptor, type Workspace } from './workspace.ts';
 
 /** Settings only presents static copy for a known loader failure. */
 export function publishedOpenFailureText(error: unknown): string {
@@ -13,6 +13,7 @@ export function publishedOpenFailureText(error: unknown): string {
         case 'PUBLISHED_LOOKUP_UNAVAILABLE': return 'Hypergolic could not complete its relay lookup. Check your Lookup relays and connection, then try again.';
         case 'PUBLISHED_NOT_FOUND': return 'No matching signed publication was found on your Lookup relays. Check the address and try again.';
         case 'PUBLISHED_UNSUPPORTED_MANIFEST': return 'The signed napplet manifest uses an unsupported format.';
+        case 'PUBLISHED_PIN_CONFLICT': return 'A different revision of this napplet is open or pinned. Open that card and check for an update.';
         case 'PUBLISHED_REVISION_CONFLICT': return 'Lookup returned conflicting signed revisions. Try again later.';
         case 'PUBLISHED_DOWNLOAD_UNAVAILABLE': return 'Hypergolic found the signed publication but could not download the napplet file. Try again.';
         case 'PUBLISHED_HASH_MISMATCH': return 'The downloaded file does not match the hash in the signed publication.';
@@ -26,22 +27,26 @@ export function publishedOpenFailureText(error: unknown): string {
 
 /** Verified publication actions share workspace navigation without changing host authority. */
 export function publishedSettingsActions({ runtime, blocked, getWorkspace, position, progress, change, setSettings, onBeforeClose }: {
-  runtime: Pick<RuntimeOwner, 'openPublishedLink' | 'preparePublishedUpdate' | 'discardPublished'> | null;
+  runtime: Pick<RuntimeOwner, 'openPublishedLink' | 'preparePublishedUpdate' | 'commitPublishedUpdate' | 'discardPublished'> | null;
   blocked: boolean; getWorkspace(): Workspace;
   position: Pick<SharedValue<number>, 'set'>; progress: Pick<SharedValue<number>, 'set'>;
   change(workspace: Workspace): void; setSettings(open: boolean): void;
   onBeforeClose?: (session: NappletDescriptor) => void;
 }) {
-  const commit = (descriptor: NappletDescriptor, signal: AbortSignal, previous?: NappletDescriptor) => {
+  const commit = async (descriptor: NappletDescriptor, signal: AbortSignal, previous?: NappletDescriptor) => {
     if (!runtime) throw new Error('Published napplet unavailable');
     let transferred = false;
     try {
       if (signal.aborted || blocked) throw new Error('Published napplet cancelled');
       const workspace = getWorkspace();
+      if (!previous && conflictsWithPublishedRevision(workspace, descriptor)) throw new PublishedLoadError('PUBLISHED_PIN_CONFLICT');
       if (!previous && workspace.sessions.length >= 64) throw new Error('Published napplet unavailable');
-      const next = previous ? replacePublishedNapplet(workspace, previous.id, descriptor) : openNapplet(workspace, descriptor);
-      if (previous) onBeforeClose?.(previous);
-      change(next);
+      if (previous) {
+        onBeforeClose?.(previous);
+        await runtime.commitPublishedUpdate(previous, descriptor, () => {
+          if (signal.aborted) throw new Error('Published update cancelled');
+        });
+      } else change(openNapplet(workspace, descriptor));
       // A frozen or failed controller may decline the synchronous change.
       const index = getWorkspace().sessions.findIndex(session => samePublishedPin(session, descriptor));
       if (index < 0) throw new Error('Published napplet could not be added to the workspace');
@@ -57,7 +62,7 @@ export function publishedSettingsActions({ runtime, blocked, getWorkspace, posit
   const openPublished = async (link: string, signal: AbortSignal, review: (request: NappletConsentReview) => Promise<boolean>) => {
     if (!runtime || blocked || signal.aborted || getWorkspace().sessions.length >= 64) throw new Error('Published napplet unavailable');
     const descriptor = await runtime.openPublishedLink(link, signal, review);
-    commit(descriptor, signal);
+    await commit(descriptor, signal);
   };
   const checkPublishedUpdate = async (session: NappletDescriptor, signal: AbortSignal,
     reviewUpdate: (request: PublishedUpdateReview) => Promise<boolean>,
@@ -65,7 +70,7 @@ export function publishedSettingsActions({ runtime, blocked, getWorkspace, posit
     if (!runtime || blocked || signal.aborted) throw new Error('Published update unavailable');
     const descriptor = await runtime.preparePublishedUpdate(session, signal, reviewUpdate, reviewConsent);
     if (!descriptor) return false;
-    commit(descriptor, signal, session);
+    await commit(descriptor, signal, session);
     return true;
   };
   return { openPublished, checkPublishedUpdate };

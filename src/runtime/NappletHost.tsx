@@ -1,10 +1,11 @@
-import { TrustedBand } from '../shell/TrustedBand';
+import { UnavailableBundledVersion } from '../shell/fixtures';
+import { PublishedLaunchReview } from '../shell/PublishedLaunchReview';
 import type { CloseCheckEvent } from '../shell/close-check';
 import { useCallback, useContext, useEffect, useRef, useState, type Ref } from 'react';
 import {useNativeZoomTarget} from './useNativeZoomTarget';
 import type {NativeZoomReply, ZoomResetRegistration} from '../shell/zoom-reset';
 import { requireNativeView } from 'expo';
-import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, View, type NativeSyntheticEvent, type ViewProps } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, Text, View, type NativeSyntheticEvent, type ViewProps } from 'react-native';
 import { ShellPressable as Pressable } from '../shell/ShellPressable';
 import type { NappletDescriptor } from '../shell/workspace';
 import type { NativeCapabilityEvent, PublishedRuntimeBinding } from './runtime-owner';
@@ -45,19 +46,28 @@ export function NappletHost(props: Props) {
 function BundledNappletHost({ session, onHostEvent, onZoomTarget, ...props }: Props) {
   const {zoomRef, zoomReady, clearZoomTarget, zoomReply, zoomNativeProps} = useNativeZoomTarget(session.id, props.active === true, onZoomTarget);
   const runtime = useContext(RuntimeContext);
-  const [binding] = useState(() => runtime?.open(session) ?? null);
-  useEffect(() => () => binding?.revoke(), [binding]);
+  const [binding] = useState(() => {
+    try { return runtime?.open(session) ?? null; }
+    catch (error) {
+      if (error instanceof UnavailableBundledVersion) return error;
+      throw error;
+    }
+  });
+  const unavailable = binding instanceof UnavailableBundledVersion;
+  const liveBinding = unavailable ? null : binding;
+  useEffect(() => () => liveBinding?.revoke(), [liveBinding]);
   const receive = useCallback((event: NativeSyntheticEvent<NativeEvent>) => {
     const message = event.nativeEvent;
     if (message.sessionId !== session.id) return;
     if (zoomReply(message)) return;
-    if (message.type === 'capability') { binding?.receive(message); return; }
+    if (message.type === 'capability') { liveBinding?.receive(message); return; }
     if (message.type === 'ready' && message.generation) zoomReady(message.generation);
-    if (message.type === 'error') {clearZoomTarget(); binding?.revoke();}
+    if (message.type === 'error') {clearZoomTarget(); liveBinding?.revoke();}
     onHostEvent(event as NativeSyntheticEvent<HostEvent>);
-  }, [binding, onHostEvent, session.id, zoomReady, clearZoomTarget, zoomReply]);
+  }, [liveBinding, onHostEvent, session.id, zoomReady, clearZoomTarget, zoomReply]);
+  if (unavailable) return <Text>This bundled version is unavailable. Close this card to open the current version.</Text>;
   if (NativeHost === null) return <Text>Napplet execution is available in the Android and iOS builds.</Text>;
-  return <NativeHost {...props} {...zoomNativeProps} ref={zoomRef} {...(binding ? { configuration: binding.configuration } : { sessionId: session.id })} onHostEvent={receive} />;
+  return <NativeHost {...props} {...zoomNativeProps} ref={zoomRef} {...(liveBinding ? { configuration: liveBinding.configuration } : { sessionId: session.id })} onHostEvent={receive} />;
 }
 
 function PublishedNappletHost({ session, onHostEvent, onZoomTarget, ...props }: Props) {
@@ -113,31 +123,16 @@ function PublishedNappletHost({ session, onHostEvent, onZoomTarget, ...props }: 
       <View style={styles.center}>{error || !runtime ? <><Text accessibilityRole="header" style={styles.heading}>Unable to open</Text><Text style={styles.detail}>The saved version could not be opened. You can try again or return to your napplets.</Text>
         <Pressable accessibilityRole="button" testID={`published-retry-${session.id}`} onPress={() => { setBinding(null); setError(false); setAttempt(value => value + 1); }} style={styles.action}><Text style={styles.actionText}>Try again</Text></Pressable></> :
         <><ActivityIndicator color={colors.accent} /><Text accessibilityLiveRegion="polite" style={styles.heading}>Opening napplet…</Text><Text style={styles.detail}>Checking the saved version and its access.</Text></>}</View>}
-    {review && <View style={styles.review} testID={`published-review-${session.id}`}>
-      <TrustedBand label="Napplet access" /><ScrollView contentContainerStyle={styles.reviewContent}><Text accessibilityRole="header" style={styles.heading}>Open this napplet?</Text>
-      <Text style={styles.detail}>Publisher</Text><Text selectable style={styles.claim}>{review.publisher}</Text>
-      <Text style={styles.detail}>Napplet</Text><Text selectable style={styles.claim}>{review.appId}</Text>
-      {(review.domains.includes('upload') || review.optionalDomains.includes('upload')) && <Text style={styles.detail}>Files you select become readable by this napplet. Every upload needs separate approval of the file, identity and server.</Text>}
-      <Text style={styles.detail}>Access: {review.domains.length ? review.domains.join(', ') : 'none'}</Text>
-      {review.optionalDomains.length > 0 && <Text style={styles.detail}>Optional access: {review.optionalDomains.join(', ')}</Text>}
-      {review.unsupportedOptionalDomains.length > 0 && <Text style={styles.detail}>Unavailable optional access: {review.unsupportedOptionalDomains.join(', ')}</Text>}
-      {(review.domains.includes('keys') || review.optionalDomains.includes('keys')) &&
-        <Text style={styles.detail}>Keys lets this napplet use hardware shortcuts while it has focus.</Text>}
-      {review.unsupportedDomains.length > 0 && <Text accessibilityLiveRegion="polite" style={styles.detail}>Unavailable: {review.unsupportedDomains.join(', ')}. This napplet can open, but features using these capabilities will not work. They will not be granted.</Text>}
-      <Pressable accessibilityRole="button" testID={`published-approve-${session.id}`} onPress={() => decide(true)} style={styles.action}><Text style={styles.actionText}>Allow and open</Text></Pressable>
-      <Pressable accessibilityRole="button" testID={`published-reject-${session.id}`} onPress={() => decide(false)} style={styles.secondary}><Text style={styles.secondaryText}>Cancel</Text></Pressable></ScrollView>
-    </View>}
+    {review && <PublishedLaunchReview target={{...review, requiredDomains: review.domains}}
+      ids={{review: `published-review-${session.id}`, approve: `published-approve-${session.id}`, cancel: `published-reject-${session.id}`}}
+      changesAccess onAccept={() => decide(true)} onCancel={() => decide(false)} />}
   </View>;
 }
 
 const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.create({
   container: { flex: 1 }, fill: { flex: 1 }, center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 20 },
-  detail: { fontFamily: fonts.body, color: colors.muted, fontSize: 15, textAlign: 'center' }, claim: { fontFamily: fonts.mono, color: colors.text, fontSize: 13 },
+  detail: { fontFamily: fonts.body, color: colors.muted, fontSize: 15, textAlign: 'center' },
   heading: { fontFamily: fonts.display, color: colors.text, fontSize: 28, },
-  review: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: colors.background },
-  reviewContent: { padding: 20, gap: 16, flexGrow: 1 },
-  secondary: { minHeight: 48, padding: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border },
-  secondaryText: { fontFamily: fonts.strong, color: colors.text, fontSize: 14, letterSpacing: 1.8, textTransform: 'uppercase' },
   action: { minHeight: 48, borderRadius: 0, backgroundColor: colors.primary, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
   actionText: { textTransform: 'uppercase', letterSpacing: 1.8, fontFamily: fonts.strong, color: colors.onPrimary, fontSize: 14 },
 });

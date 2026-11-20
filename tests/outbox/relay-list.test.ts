@@ -99,6 +99,6 @@ test('cache intervals use successful lookup time with exact expiry boundaries', 
   assert.equal(outboxListAge(checkedAt, checkedAt + OUTBOX_LIST_LIMITS.freshMs - 1), 'fresh');
   assert.equal(outboxListAge(checkedAt, checkedAt + OUTBOX_LIST_LIMITS.freshMs), 'stale');
   assert.equal(outboxListAge(checkedAt, checkedAt + OUTBOX_LIST_LIMITS.staleReadMs), 'expired');
-  assert.throws(() => outboxListAge(checkedAt + 1, checkedAt), OutboxRelayListError);
+  assert.equal(outboxListAge(checkedAt + 1, checkedAt), 'expired');
   assert.throws(() => outboxListAge(NaN, checkedAt), OutboxRelayListError);
 });

@@ -76,13 +76,13 @@ final class NativeOutboxPlan: @unchecked Sendable {
     else { throw Failure.invalid }
     let request = try object(requestText)
     try fields(plan, ["requestId", "event", "destinations", "requiredInboxes", "ownSource", "ancillary"])
-    guard (derived == nil && (domains.contains("outbox") && request["type"] as? String == "outbox.publish" || NativeAppDataPolicy.rawRelay(registration, request)) || derived != nil && NativeCommonPlan.granted(registration) && NativeCommonPlan.operations.contains(request["type"] as? String ?? "")), let id = request["id"] as? String,
+    guard (derived == nil && (domains.contains("outbox") && request["type"] as? String == "outbox.publish" || domains.contains("relay") && request["type"] as? String == "relay.publish") || derived != nil && NativeCommonPlan.granted(registration) && NativeCommonPlan.operations.contains(request["type"] as? String ?? "")), let id = request["id"] as? String,
       plan["requestId"] as? String == id, let event = plan["event"] as? [String: Any],
       let source = derived ?? request["event"] as? [String: Any], let captured = event["event"] as? [String: Any],
       event["selectedPubkey"] as? String == identity else { throw Failure.invalid }
     try fields(event, ["event", "selectedPubkey", "destinations", "hash"])
     let template = try unsigned(source, strict: true), kind = try integer(source["kind"], maximum: 65535)
-    guard bytesEqual(try unsigned(captured, strict: true), template), kind != 22242, kind != 24242 else { throw Failure.invalid }
+    guard bytesEqual(try unsigned(captured, strict: true), template), kind != 22242, kind != 24242, kind != 27235 else { throw Failure.invalid }
     let hash = try eventHash(captured, identity: identity)
     guard event["hash"] as? String == hash, let destinations = event["destinations"] as? [String],
       (1...16).contains(destinations.count), Set(destinations).count == destinations.count,
@@ -91,6 +91,10 @@ final class NativeOutboxPlan: @unchecked Sendable {
       let required = plan["requiredInboxes"] as? [String], required.allSatisfy({ destinations.contains($0) })
     else { throw Failure.invalid }
     for relay in destinations { try relayURL(relay) }
+    if request["type"] as? String == "relay.publish" {
+      try fields(request, ["type", "id", "event"])
+      guard plan["ancillary"] is NSNull, required.isEmpty else { throw Failure.invalid }
+    }
     if NativeAppDataPolicy.claims(request) {
       try NativeAppDataPolicy.validatePublication(registration, request, destinations: destinations)
       guard plan["ancillary"] is NSNull, request["type"] as? String != "relay.publish" || required.isEmpty else { throw Failure.invalid }

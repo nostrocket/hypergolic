@@ -105,3 +105,27 @@ test('several owners share two metadata slots; close removes queued intent witho
     assert.equal(resolvers.length,2);assert.equal(h.calls.length,2);
   }finally{h.manager.revokeAll();}
 });
+
+test('a refreshed subscription resumes while its sibling is still resolving', async () => {
+  const h = harness();
+  let release!: () => void;
+  const waiting = new Promise<void>(resolve => { release = resolve; });
+  try {
+    h.session.subscribe(input('first'), h.send, 'token-1');
+    h.session.subscribe(input('second'), h.send, 'token-2');
+    await flush();
+    assert.equal(h.calls.length, 2);
+    h.manager.setForeground(false);
+    const plan = h.reads.plan!;
+    h.reads.plan = async (...args) => {
+      if ((args[0] as { id: string }).id === 'request-first') await waiting;
+      return plan(...args);
+    };
+    h.manager.setForeground(true);
+    await flush();
+    assert.equal(h.calls.length, 3);
+    release();
+    await flush();
+    assert.equal(h.calls.length, 4);
+  } finally { release(); h.manager.revokeAll(); }
+});

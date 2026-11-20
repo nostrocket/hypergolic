@@ -18,7 +18,8 @@ const integer = (value: number) => Number.isSafeInteger(value) && value >= 0;
 
 /** Cache age is measured from successful lookup, never from event.created_at. */
 export function outboxListAge(fetchedAt: number, now: number): OutboxListAge {
-  if (!integer(fetchedAt) || !integer(now) || fetchedAt > now) return fail();
+  if (!integer(fetchedAt) || !integer(now)) return fail();
+  if (fetchedAt > now) return 'expired';
   const age = now - fetchedAt;
   return age < OUTBOX_LIST_LIMITS.freshMs ? 'fresh'
     : age < OUTBOX_LIST_LIMITS.staleReadMs ? 'stale' : 'expired';

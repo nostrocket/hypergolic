@@ -45,7 +45,7 @@ internal class NativeOutboxPlan private constructor(
       val identity = registration.getString("user")
       require(identity.matches(Regex("[0-9a-f]{64}")))
       val domains = strings(registration.getJSONArray("domains"))
-      require(if (derived == null) ("outbox" in domains && request.getString("type") == "outbox.publish" || NativeAppDataPolicy.rawRelay(registration, request))
+      require(if (derived == null) ("outbox" in domains && request.getString("type") == "outbox.publish" || "relay" in domains && request.getString("type") == "relay.publish")
         else NativeCommonPlan.granted(registration) && request.getString("type") in NativeCommonPlan.operations)
       val plan = JSONObject(raw)
       fields(plan, setOf("requestId", "event", "destinations", "requiredInboxes", "ownSource", "ancillary"))
@@ -56,7 +56,7 @@ internal class NativeOutboxPlan private constructor(
       val template = unsigned(original, true)
       require(unsigned(event.getJSONObject("event"), true) == template)
       val kind = original.getInt("kind")
-      require(kind != 22242 && kind != 24242)
+      require(kind != 22242 && kind != 24242 && kind != 27235)
       val hash = eventHash(event.getJSONObject("event"), identity)
       require(event.getString("hash") == hash)
       val dummy = JSONObject(template).put("id", hash).put("pubkey", identity).put("sig", "0".repeat(128))
@@ -68,6 +68,10 @@ internal class NativeOutboxPlan private constructor(
       require(reviewed.length() == destinations.size)
       for (index in destinations.indices) require(reviewed.getJSONObject(index).getString("relay") == destinations[index])
       require(strings(plan.getJSONArray("requiredInboxes")).all { it in destinations })
+      if (request.getString("type") == "relay.publish") {
+        fields(request, setOf("type", "id", "event"))
+        require(plan.isNull("ancillary") && plan.getJSONArray("requiredInboxes").length() == 0)
+      }
       if (NativeAppDataPolicy.claims(request)) {
         NativeAppDataPolicy.validatePublication(registration, request, destinations)
         require(plan.isNull("ancillary") && (request.getString("type") != "relay.publish" || plan.getJSONArray("requiredInboxes").length() == 0))

@@ -64,7 +64,7 @@ function subscriptions() {
 
 function setup(initial = openNapplet(emptyWorkspace(), source), reviews = new RoutingReviewService(), persisted?: WorkspaceController) {
   let workspace = initial;
-  let suppliedRuntime: Pick<RuntimeOwner, 'resolveDiscovered' | 'prepareDiscovered' | 'publishedReadyGeneration' | 'discardPublished'> | null = null;
+  let suppliedRuntime: Pick<RuntimeOwner, 'resolveDiscovered' | 'retainForPin' | 'prepareDiscovered' | 'publishedReadyGeneration' | 'discardPublished'> | null = null;
   let revision = 2;
   let focusRevision = 7;
   let available = true;
@@ -79,7 +79,7 @@ function setup(initial = openNapplet(emptyWorkspace(), source), reviews = new Ro
   const changes = subscriptions(), lifecycle = subscriptions(), account = subscriptions();
   const controller: WorkspaceController = persisted ?? {
     getSnapshot: () => ({ workspace, saving: false, error: null }), subscribe: changes.subscribe,
-    change: state => { workspace = state; changes.emit(); }, flush: async () => {},
+    change: state => { workspace = state; changes.emit(); }, acceptUpdate: async () => { throw Error('Unexpected update'); }, flush: async () => {},
     freeze() {}, resume() {}, revoke() {},
   };
   const transition = { phase: 'ready', session: { workspace: controller, epoch: 1, vault: { selectedPubkey: user } } } as TransitionSnapshot;
@@ -101,6 +101,7 @@ function setup(initial = openNapplet(emptyWorkspace(), source), reviews = new Ro
       },
     },
     runtime: () => suppliedRuntime ?? ({
+      async retainForPin() { return () => {}; },
       async resolveDiscovered(link, expected, _signal, active) {
         lookups.push({ address: link, expectedEventId: expected });
         if (paused) await paused;

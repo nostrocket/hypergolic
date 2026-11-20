@@ -26,7 +26,6 @@ final class RelayStreamBridgeOwner: @unchecked Sendable {
   }
   private let lock = NSLock()
   private var rows: [String: Row] = [:]
-  private var consumed: Set<String> = []
   private var foreground = false
   private var observers: [NSObjectProtocol] = []
   private init() {
@@ -50,9 +49,9 @@ final class RelayStreamBridgeOwner: @unchecked Sendable {
       let registration = row["registration"] as? [String: Any] else { return false }
     let legacy = registration["legacyReadOnly"] != nil
     let admitted = lock.withLock { () -> Bool in
-      guard foreground, !consumed.contains(id), consumed.count < 65_536, rows.count < 16, rows.values.filter({ $0.token == token }).count < RelaySubscriptionTransport.shared.registry.connectionLimit(token),
-        RelaySubscriptionTransport.shared.registry.isActive(token) else { return false }
-      consumed.insert(id); rows[id] = Row(token: token, emit: emit, history: legacy ? LegacyReadOnlyContext.HistoryBudget() : nil); return true
+      guard foreground, rows.count < 16, rows.values.filter({ $0.token == token }).count < RelaySubscriptionTransport.shared.registry.connectionLimit(token),
+        RelaySubscriptionTransport.shared.registry.isActive(token), NativeTransportTickets.shared.consume(id) else { return false }
+      rows[id] = Row(token: token, emit: emit, history: legacy ? LegacyReadOnlyContext.HistoryBudget() : nil); return true
     }
     guard admitted else { return false }
     do {
@@ -115,7 +114,7 @@ final class RelayStreamBridgeOwner: @unchecked Sendable {
   }
   func cancel(_ id: String) {
     let row = lock.withLock { () -> Row? in
-      if consumed.count < 65_536, UUID(uuidString: id)?.uuidString.lowercased() == id { consumed.insert(id) }
+      NativeTransportTickets.shared.consume(id)
       return rows.removeValue(forKey: id)
     }
     row?.operation?.cancel()

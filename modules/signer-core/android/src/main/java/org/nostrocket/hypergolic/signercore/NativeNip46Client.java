@@ -66,7 +66,7 @@ final class NativeNip46Client implements AutoCloseable {
     if (relay == null) throw new NativeVault.Error("SIGNER_UNAVAILABLE");
     JSONObject filter = new JSONObject().put("authors", new JSONArray().put(binding.peer))
       .put("kinds", new JSONArray().put(24133)).put("#p", new JSONArray().put(binding.client.publicKey()))
-      .put("since", Math.max(0, System.currentTimeMillis() / 1000 - 600));
+      .put("since", Math.max(0, System.currentTimeMillis() / 1000 - 120));
     relay.send(new JSONArray().put("REQ").put(subscription).put(filter).toString());
   }
   private static void bytes(NativeSecretBuffer out, String value) throws IOException {
@@ -135,6 +135,10 @@ final class NativeNip46Client implements AutoCloseable {
         if (!(frame instanceof JSONArray)) throw new NativeVault.Error("SIGNER_RESPONSE_INVALID");
         JSONArray envelope = (JSONArray)frame;
         if (envelope.length() == 0 || !(envelope.get(0) instanceof String)) throw new NativeVault.Error("SIGNER_RESPONSE_INVALID");
+        if ("AUTH".equals(envelope.getString(0))) {
+          if (envelope.length() != 2 || !(envelope.get(1) instanceof String)) throw new NativeVault.Error("SIGNER_RESPONSE_INVALID");
+          continue;
+        }
         if (!"EVENT".equals(envelope.getString(0))) continue;
         if (envelope.length() != 3 || !subscription.equals(envelope.get(1)) || !(envelope.get(2) instanceof JSONObject)) continue;
         JSONObject outer = envelope.getJSONObject(2);
@@ -151,6 +155,9 @@ final class NativeNip46Client implements AutoCloseable {
           JSONObject response = NativeRpcJson.object(decoded);
           if (!(response.opt("id") instanceof String)) throw new NativeVault.Error("SIGNER_RESPONSE_INVALID");
           if (!id.equals(response.getString("id"))) continue;
+          long now = System.currentTimeMillis() / 1000;
+          if (verified.event.createdAt > now + 30 || verified.event.createdAt < now - 120)
+            throw new NativeVault.Error("SIGNER_RESPONSE_INVALID");
           if (response.length() < 2 || response.length() > 3) throw new NativeVault.Error("SIGNER_RESPONSE_INVALID");
           java.util.Iterator<String> fields = response.keys();
           while (fields.hasNext()) if (!Arrays.asList("id", "result", "error").contains(fields.next())) throw new NativeVault.Error("SIGNER_RESPONSE_INVALID");
@@ -220,7 +227,7 @@ final class NativeNip46Client implements AutoCloseable {
         result.add(values.getString(index));
       }
       List<String> validated=NativeRemoteBinding.validateRelays(result);
-      if (expected != null && !expected.equals(validated)) throw new NativeVault.Error("SIGNER_RELAYS_CHANGED");
+      if (expected != null && !NativeRemoteBinding.sameRelays(expected, validated)) throw new NativeVault.Error("SIGNER_RELAYS_CHANGED");
       acceptedResult();
       return validated;
     } catch (NativeVault.Error failure) { throw failure; }

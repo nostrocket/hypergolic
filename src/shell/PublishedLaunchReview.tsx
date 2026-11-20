@@ -1,12 +1,13 @@
+import {useReviewControl} from './useReviewControl';
 import { useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { accessIconUri } from './access-icon';
 import { Image } from 'expo-image';
 import { AccessibilityInfo, AppState, ScrollView, StyleSheet, Text, View, type TextInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { boundedPublishedTitle, snapshotEventId } from '../napplets/published-identity';
+import { boundedPublishedTitle, publishedAppLabel, snapshotEventId } from '../napplets/published-identity';
 import type { VerifiedLaunchMetadata } from '../napplets/verified-launch-metadata';
 import { launchAccessCopy } from './launch-access-copy';
-import { formatNpub } from '../security/public-identity';
+import { compactPublisher, formatNpub } from '../security/public-identity';
 import { OwnerContext } from './IdentityOwnerContext';
 import { ShellModal } from './ShellModal';
 import { ShellPressable } from './ShellPressable';
@@ -110,12 +111,12 @@ function ReviewImage({ uri }: { uri: string | undefined }) {
 function LaunchIdentity({ target, source }: { target: ReviewTarget; source: LaunchSource | undefined }) {
   const { styles } = useShellStyles(createStyles);
   const { name, artwork } = useLaunchArtwork(target);
-  const npub = formatNpub(target.publisher);
   return <View style={styles.section}>
     <View style={styles.identityRow}>
       <ReviewImage uri={artwork} />
       <View style={styles.identityCopy}>
-        <Text testID="published-review-publisher" style={styles.name}>By {name || `${npub.slice(0, 13)}…${npub.slice(-7)}`}</Text>
+        <Text testID="published-review-publisher" style={styles.name}>Publisher · {compactPublisher(target.publisher)}</Text>
+        {name && <Text style={styles.detail}>Profile name · {name}</Text>}
         {source && <Text style={styles.detail}>{source.label}</Text>}
       </View>
     </View>
@@ -134,7 +135,7 @@ function TechnicalDetails({ target, source }: { target: ReviewTarget; source: La
     ['Verified artifact version', version],
     ['Verified HTML hash', htmlHash],
   ];
-  if (!snapshotEventId(target.appId)) fields.splice(1, 0, ['Publication identifier', target.appId]);
+  if (!snapshotEventId(target.appId)) fields.splice(1, 0, ['Publication identifier', publishedAppLabel(target.appId)]);
   if (source?.publisher) fields.push(['Requesting catalog key', formatNpub(source.publisher)]);
   return <View style={styles.technical}>
     <ShellPressable accessibilityRole="button" accessibilityLabel="Technical details" accessibilityState={{ expanded }} testID="published-review-technical-toggle"
@@ -166,7 +167,9 @@ export function PublishedLaunchReview({ target, source, changesAccess, onAccept,
   const { styles } = useShellStyles(createStyles);
   const insets = useSafeAreaInsets();
   const heading = useRef<TextInstance>(null);
-  return <ShellModal visible transparent animationType="none" onRequestClose={onCancel} onShow={() => {
+  const control = useReviewControl(target.eventId);
+  return <ShellModal key={target.eventId} visible transparent animationType="none" onRequestClose={onCancel} onShow={() => {
+    control.onShow();
     if (heading.current) AccessibilityInfo.sendAccessibilityEvent(heading.current, 'focus');
   }}>
     <View style={[styles.backdrop, { paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right }]}>
@@ -176,6 +179,7 @@ export function PublishedLaunchReview({ target, source, changesAccess, onAccept,
           <Text ref={heading} accessibilityRole="header" style={styles.heading}>{title ?? `Open ${target.metadata.title}?`}</Text>
           <LaunchIdentity key={`${target.publisher}:${target.eventId}:${target.metadata.icon ?? ''}`} target={target} source={source} />
           {readOnly ? <Text style={styles.body}>Legacy read-only mode supplies compatibility libraries and bounded public content. Declared capability access is not granted. Signing, publishing and uploads are unavailable.</Text> : <RequestedAccess key={`access:${target.eventId}`} target={target} changesAccess={changesAccess} />}
+          <Text style={styles.detail}>Hypergolic restricts direct network connections. Full network isolation is still being tested on mobile devices.</Text>
           {children}
           <TechnicalDetails key={`technical:${target.eventId}`} target={target} source={source} />
         </ScrollView>
@@ -183,7 +187,7 @@ export function PublishedLaunchReview({ target, source, changesAccess, onAccept,
           <ShellPressable accessibilityRole="button" testID={ids.cancel} onPress={onCancel} style={styles.button}>
             <Text style={styles.buttonText}>Cancel</Text>
           </ShellPressable>
-          <ShellPressable accessibilityRole="button" testID={ids.approve} onPress={onAccept} style={[styles.button, styles.primary]}>
+          <ShellPressable accessibilityRole="button" testID={ids.approve} disabled={!control.ready} onPress={onAccept} style={[styles.button, styles.primary]}>
             <Text style={[styles.buttonText, styles.primaryText]}>{approveLabel ?? (changesAccess ? 'Allow and open' : 'Open')}</Text>
           </ShellPressable>
         </View>

@@ -90,6 +90,27 @@ test('An existing build lock and its artifacts remain untouched', async t => {
   assert.equal(await readFile(path.join(output, '.build.lock'), 'utf8'), 'another process');
 });
 
+test('A terminated packaging process releases its reservation for the next build', async t => {
+  const f = await fixture(t);
+  const output = path.join(f.root, '.tools/tester-apks');
+  await mkdir(output, {recursive: true});
+  const {spawn} = await import('node:child_process');
+  const {once} = await import('node:events');
+  const lock = path.join(output, '.build.lock');
+  const helper = new URL('../../scripts/packaging-lock.mjs', import.meta.url).href;
+  const child = spawn(process.execPath, ['--input-type=module', '-e',
+    `import {acquirePackagingLock} from ${JSON.stringify(helper)}; await acquirePackagingLock(process.argv[1]); process.stdout.write('ready'); setInterval(() => {}, 10000)`, lock]);
+  try {
+    await once(child.stdout, 'data');
+    await assert.rejects(buildTester(f), /locked/i);
+  } finally {
+    const ended = once(child, 'exit');
+    child.kill('SIGKILL');
+    await ended;
+  }
+  assert(await buildTester(f));
+});
+
 test('Final permission verifier rejects even a version-scoped unexpected request', () => {
   const output = "uses-permission: name='android.permission.INTERNET'\n" +
     "uses-permission: name='android.permission.USE_BIOMETRIC'\n" +

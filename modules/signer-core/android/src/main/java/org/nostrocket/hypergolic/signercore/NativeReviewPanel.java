@@ -6,6 +6,8 @@ import android.graphics.Typeface;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.MotionEvent;
+import android.widget.Button;
+import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import java.util.function.BooleanSupplier;
@@ -35,9 +37,14 @@ public final class NativeReviewPanel {
     if (Looper.myLooper() != Looper.getMainLooper() || dialog != null || activity.isFinishing() || activity.isDestroyed() || !ownerActive.getAsBoolean() || !core.canReview(owner, review)) throw new NativeSignerCore.Denied();
     TextView details = new TextView(activity);
     int inset = (int)(20 * activity.getResources().getDisplayMetrics().density);
-    details.setPadding(inset, inset, inset, inset); details.setTextSize(14); details.setTypeface(Typeface.MONOSPACE);
-    details.setText("Requester\n" + requester + "\n\nSigning method\n" + method + "\n\nDestinations\n" + (destinations.isEmpty()?"None":String.join("\n",destinations)) + "\n\nAction\nSign this exact event once.\n\nEvent ID\n" + review.eventId() + "\n\nExact event\n" + review.unsignedEvent());
-    ScrollView scroll = new ScrollView(activity); scroll.addView(details);
+    details.setTextSize(14); details.setTypeface(Typeface.MONOSPACE);
+    details.setText("Requester\n" + requester + "\n\nSigning method\n" + method + "\n\nDestinations\n" + (destinations.isEmpty()?"None":String.join("\n",destinations)) + "\n\nAction\nSign this exact event once.\n\nEvent ID\n" + review.eventId() + "\n\nExact event");
+    LinearLayout content = new LinearLayout(activity);
+    content.setOrientation(LinearLayout.VERTICAL);
+    content.setPadding(inset, inset, inset, inset);
+    content.addView(details);
+    content.addView(new EventPages(activity, review.unsignedEvent()));
+    ScrollView scroll = new ScrollView(activity); scroll.addView(content);
     boolean[] settled = {false}, dispatching = {false};
     Runnable finishDenied = () -> {
       if (settled[0]) return; settled[0] = true;
@@ -83,6 +90,56 @@ public final class NativeReviewPanel {
       if(!ownerActive.getAsBoolean() || !(dispatching[0] ? core.canFinish(owner,review) : core.canReview(owner,review)))finishDenied.run();else main.postDelayed(this,200);
     } };main.postDelayed(expiration,200);
   }
+  private static final class EventPages extends LinearLayout {
+    private static final int PAGE_SIZE = 4096;
+    private final String text;
+    private final int count;
+    private final TextView event;
+    private final TextView label;
+    private final Button previous;
+    private final Button next;
+    private int page;
+
+    EventPages(Activity activity, String text) {
+      super(activity);
+      this.text = text;
+      count = Math.max(1, (text.length() + PAGE_SIZE - 1) / PAGE_SIZE);
+      setOrientation(VERTICAL);
+      previous = new Button(activity);
+      next = new Button(activity);
+      label = new TextView(activity);
+      if (count > 1) {
+        previous.setText("Previous page");
+        previous.setOnClickListener(view -> show(page - 1));
+        next.setText("Next page");
+        next.setOnClickListener(view -> show(page + 1));
+        label.setAccessibilityLiveRegion(ACCESSIBILITY_LIVE_REGION_POLITE);
+        addView(label);
+        addView(previous);
+        addView(next);
+      }
+      event = new TextView(activity);
+      event.setTextSize(14);
+      event.setTypeface(Typeface.MONOSPACE);
+      event.setTextIsSelectable(true);
+      addView(event);
+      show(0);
+    }
+
+    private int boundary(int offset) {
+      if (offset >= text.length()) return text.length();
+      return offset > 0 && Character.isSurrogatePair(text.charAt(offset - 1), text.charAt(offset)) ? offset - 1 : offset;
+    }
+
+    private void show(int index) {
+      page = index;
+      event.setText(text.substring(boundary(page * PAGE_SIZE), boundary((page + 1) * PAGE_SIZE)));
+      label.setText("Page " + (page + 1) + " of " + count);
+      previous.setEnabled(page > 0);
+      next.setEnabled(page + 1 < count);
+    }
+  }
+
   public Runnable cancellation() {
     Runnable captured = deny;
     return () -> {

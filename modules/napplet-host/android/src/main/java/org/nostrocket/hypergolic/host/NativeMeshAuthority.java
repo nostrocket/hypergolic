@@ -41,7 +41,7 @@ public final class NativeMeshAuthority {
     public final int kind, ttl; public final long createdAt; public final Long expiresAt;
     private Publication(String requestId,String user,EventTemplate template,int ttl,long created) {
       int kind=template.kind;String content=template.content;List<List<String>> tags=template.tags;
-      if(kind<0||kind>65535||kind==22242||kind==24242||content==null||content.getBytes(StandardCharsets.UTF_8).length>8192||tags==null||tags.size()>256) throw new IllegalArgumentException("Invalid Mesh template");
+      if(kind<0||kind>65535||kind==22242||kind==24242||kind==27235||content==null||content.getBytes(StandardCharsets.UTF_8).length>8192||tags==null||tags.size()>256) throw new IllegalArgumentException("Invalid Mesh template");
       String body=quote(content);int payloadBytes=body.getBytes(StandardCharsets.UTF_8).length+2;
       Long expiration=null;List<String> encoded=new ArrayList<>();
       for(List<String> tag:tags){if(tag==null||tag.isEmpty()||tag.size()>64)throw new IllegalArgumentException("Invalid Mesh tags");payloadBytes+=2+(encoded.isEmpty()?0:1);List<String> fields=new ArrayList<>();

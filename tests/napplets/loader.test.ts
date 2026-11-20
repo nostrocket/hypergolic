@@ -139,11 +139,12 @@ test('Discover selects the newest signed revision when three healthy peers repli
 
 test('an invalid replica with a matching ID cannot suppress a later valid signed manifest', async () => {
   const valid = modern(1_700_000_001);
-  const invalid = {...valid, content: 'tampered without a new signature'};
+  const invalid = Array.from({length:32}, (_, n) => ({...valid, content:String(n)}));
   const lookup = createNativePublishedRelayLookup({
     newInstanceId: randomUUID,
     async queryPublishedRelay(_id, relay, _wire, sub) {
-      return [JSON.stringify(['EVENT', sub, relay === lookupRelays[0] ? invalid : valid]), JSON.stringify(['EOSE', sub])];
+      const candidates = relay === lookupRelays[0] ? invalid : [valid];
+      return [...candidates.map(event => JSON.stringify(['EVENT', sub, event])), JSON.stringify(['EOSE', sub])];
     },
     cancelPublishedRelay() {}, revokeAllPublishedRelay() {},
   });

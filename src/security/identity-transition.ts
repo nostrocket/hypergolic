@@ -323,7 +323,7 @@ export class IdentityTransition {
   }
   private failedChange(previous: IdentitySession, error: unknown): void {
     if (this.sameVault(previous.vault) && previous.workspace.getSnapshot().error === null && error instanceof VaultError &&
-        ['INVALID_NSEC', 'NOT_FOUND', 'LIMIT_REACHED', 'PENDING_DELETION', 'AUTHORIZATION_DENIED', ...SIGNER_FAILURE_CODES].includes(error.code)) {
+        ['VAULT_READ_UNAVAILABLE', 'INVALID_NSEC', 'NOT_FOUND', 'LIMIT_REACHED', 'PENDING_DELETION', 'AUTHORIZATION_DENIED', ...SIGNER_FAILURE_CODES].includes(error.code)) {
       previous.workspace.resume();
       this.publish('ready', previous, null, error.code === 'LIMIT_REACHED' ? 'LIMIT_REACHED' : isSignerFailureCode(error.code) ? error.code : 'CHANGE_REJECTED');
     } else {

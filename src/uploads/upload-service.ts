@@ -40,7 +40,7 @@ export interface UploadEffects extends SigningHandoffReader {
   nowSeconds(): number;
 }
 export type UploadItem = Readonly<{id: string; origin: ApprovalOrigin; uploadId: string; filename: string;
-  caption: string; request: Readonly<Omit<UploadPayload, 'data'>>; review: UploadReview; previewReady: boolean; copyPreview(): Uint8Array<ArrayBuffer> | null}>;
+  caption: string; request: Readonly<Omit<UploadPayload, 'data'>>; review: UploadReview; previewReady: boolean; copyPreview(maxBytes?: number): Uint8Array<ArrayBuffer> | null}>;
 export type UploadPresentation = Readonly<{current: UploadItem | null; pending: number;
   pendingSessionIds: readonly string[]; active: readonly Readonly<{id: string; origin: ApprovalOrigin; review: UploadReview; phase: 'authorizing' | 'transferring'; bytesSent: number; bytesTotal: number}>[];
   outcomes: readonly Readonly<{id: string; origin: ApprovalOrigin; review: UploadReview; result: UploadResult; signingFailure: SignerFailureCode | null}>[]}>;
@@ -91,8 +91,8 @@ export class UploadService {
     const previous = this.snapshot.current;
     const current = shown ? previous?.id === shown.id && previous.previewReady === (shown.body !== null) ? previous : Object.freeze({id: shown.id, origin: shown.origin, uploadId: shown.uploadId,
       filename: shown.filename, caption: shown.caption, request: shown.request, review: shown.review, previewReady: shown.body !== null,
-      copyPreview: () => this.entries.includes(shown!) && this.safe(() => this.native.mayReview(shown!.lease)) && shown!.body ?
-        new Uint8Array(shown!.body) : null}) : null;
+      copyPreview: (maxBytes?: number) => this.entries.includes(shown!) && this.safe(() => this.native.mayReview(shown!.lease)) && shown!.body ?
+        new Uint8Array(shown!.body.subarray(0, maxBytes)) : null}) : null;
     const next: UploadPresentation = Object.freeze({current, pending: this.entries.filter(entry => entry.controller === null).length,
       pendingSessionIds: Object.freeze([...new Set(this.entries.filter(entry => entry.controller === null).map(entry => entry.origin.sessionId))]),
       active: Object.freeze(this.entries.filter(entry => entry.controller !== null).map(entry => Object.freeze({id: entry.id, origin: entry.origin, review: entry.review, phase: entry.phase, bytesSent: entry.bytesSent, bytesTotal: entry.review.size}))),

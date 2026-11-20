@@ -247,13 +247,14 @@ final class PublishedHttpsResponseReader {
 
   private static byte[] readChunked(InputStream input, int headersBytes, PublishedHttpsTransport.Cancellation cancellation, int maximumBytes) throws IOException {
     ByteArrayOutputStream output = new ByteArrayOutputStream(8192);
+    long framingBudget = Math.max(65536L, maximumBytes);
     int trailerBudget = PublishedHttpsTransport.MAX_RESPONSE_HEADER_BYTES - headersBytes;
     while (true) {
       PublishedHttpsTransport.checkCancellation(cancellation);
       String line = readCrlfLine(input, MAX_CHUNK_LINE_BYTES);
       requireVisibleAscii(line);
-      trailerBudget -= line.length() + 2;
-      if (trailerBudget < 0) throw new IOException("HTTPS trailers exceed 32 KiB");
+      framingBudget -= line.length() + 4L; // Include the delimiter after the chunk body.
+      if (framingBudget < 0) throw new IOException("HTTPS chunk framing exceeds its byte limit");
       int extension = line.indexOf(';');
       String sizeText = (extension < 0 ? line : line.substring(0, extension)).trim();
       if (sizeText.isEmpty() || !sizeText.matches("[0-9a-fA-F]+")) throw new IOException("Invalid HTTPS chunk size");

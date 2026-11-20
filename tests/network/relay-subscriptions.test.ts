@@ -346,7 +346,11 @@ test('ordinary raw initial deadline keeps genuine EOSE with a silent peer and cl
     if(mode!=='eose')assert.equal((h.messages.at(-1) as {reason:string}).reason,'relay timeout');
     assert.equal(h.calls[1]!.stopped,1);h.event(1,signed('after deadline'));h.eose(1);
     assert.equal(h.messages.length,before+1);
-    if(mode==='eose'){h.event(0,signed('still live'));assert.equal(h.messages.at(-1)!.type,'relay.event');}
+    if(mode==='eose'){
+      h.event(0,signed('still live'));assert.equal(h.messages.at(-1)!.type,'relay.event');
+      h.calls[0]!.frame('{');
+      assert.equal(h.messages.at(-1)!.type,'relay.closed');
+    }
     h.session.revoke();
   }
 });

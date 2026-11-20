@@ -146,13 +146,14 @@ test('counts the exact UTF-8 event size with empty tags at the manifest boundary
 
 test('reads exactly the signed SHA-256 path over manual-redirect HTTPS with streamed size limits', async () => {
   const body = BODY;
-  let request: { url: string; init: BoundedFetchInit } | null = null;
+  const requests: { url: string; init: BoundedFetchInit }[] = [];
   const source = createPublishedArtifactSource({
-    fetchPublicHttps: async (url, init) => { request = { url, init }; return new Response(body, { status: 200 }); },
+    fetchPublicHttps: async (url, init) => { requests.push({ url, init }); return new Response(body, { status: 200 }); },
     createRelayPool: unusedPool,
   });
   const bytes = await source.readHtml(HASH, ['https://blossom.example.org/'], 128, new AbortController().signal);
   assert.deepEqual(bytes, body);
+  const [request] = requests;
   assert.equal(request?.url, `https://blossom.example.org/${HASH}`);
   assert.deepEqual({ method: request?.init.method, redirect: request?.init.redirect, credentials: request?.init.credentials, cache: request?.init.cache }, {
     method: 'GET', redirect: 'manual', credentials: 'omit', cache: 'no-store',

@@ -47,14 +47,7 @@ import UIKit
     account.font = UIFontMetrics(forTextStyle: .body).scaledFont(for: UIFont.monospacedSystemFont(ofSize: 15, weight: .regular))
     account.adjustsFontForContentSizeCategory = true
     account.accessibilityIdentifier = "signer.account"
-    let details = UITextView()
-    details.text = event.canonical
-    details.isEditable = false
-    details.isScrollEnabled = false
-    details.font = UIFontMetrics(forTextStyle: .body).scaledFont(for: UIFont.monospacedSystemFont(ofSize: 15, weight: .regular))
-    details.adjustsFontForContentSizeCategory = true
-    details.backgroundColor = .secondarySystemBackground
-    details.accessibilityIdentifier = "signer.exactEvent"
+    let details = SignerEventPages(event.canonical)
     let reject = UIButton(type: .system)
     reject.setTitle("Reject", for: .normal)
     reject.accessibilityIdentifier = "signer.reject"
@@ -91,6 +84,67 @@ import UIKit
       actions.trailingAnchor.constraint(equalTo: scroll.trailingAnchor),
       actions.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -16),
     ])
+  }
+}
+
+@MainActor private final class SignerEventPages: UIStackView {
+  private static let pageSize = 4096
+  private let text: NSString
+  private let count: Int
+  private let event = UITextView()
+  private let label = UILabel()
+  private let previousButton = UIButton(type: .system)
+  private let nextButton = UIButton(type: .system)
+  private var page = 0
+
+  init(_ value: String) {
+    text = value as NSString
+    count = max(1, (text.length + Self.pageSize - 1) / Self.pageSize)
+    super.init(frame: .zero)
+    axis = .vertical
+    spacing = 8
+    if count > 1 {
+      label.font = .preferredFont(forTextStyle: .body)
+      label.adjustsFontForContentSizeCategory = true
+      addArrangedSubview(label)
+      previousButton.setTitle("Previous page", for: .normal)
+      previousButton.addTarget(self, action: #selector(previousPage), for: .touchUpInside)
+      nextButton.setTitle("Next page", for: .normal)
+      nextButton.addTarget(self, action: #selector(nextPage), for: .touchUpInside)
+      for button in [previousButton, nextButton] {
+        button.titleLabel?.font = .preferredFont(forTextStyle: .body)
+        button.titleLabel?.adjustsFontForContentSizeCategory = true
+        button.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+        addArrangedSubview(button)
+      }
+    }
+    event.isEditable = false
+    event.isScrollEnabled = false
+    event.font = UIFontMetrics(forTextStyle: .body).scaledFont(for: .monospacedSystemFont(ofSize: 15, weight: .regular))
+    event.adjustsFontForContentSizeCategory = true
+    event.backgroundColor = .secondarySystemBackground
+    event.accessibilityIdentifier = "signer.exactEvent"
+    addArrangedSubview(event)
+    showPage()
+  }
+  required init(coder: NSCoder) { fatalError("Storyboard initialization is unsupported") }
+
+  private func boundary(_ offset: Int) -> Int {
+    guard offset < text.length else { return text.length }
+    guard offset > 0, (0xdc00...0xdfff).contains(text.character(at: offset)),
+      (0xd800...0xdbff).contains(text.character(at: offset - 1)) else { return offset }
+    return offset - 1
+  }
+
+  @objc private func previousPage() { page -= 1; showPage() }
+  @objc private func nextPage() { page += 1; showPage() }
+  private func showPage() {
+    let start = boundary(page * Self.pageSize)
+    let end = boundary((page + 1) * Self.pageSize)
+    event.text = text.substring(with: NSRange(location: start, length: end - start))
+    label.text = "Page \(page + 1) of \(count)"
+    previousButton.isEnabled = page > 0
+    nextButton.isEnabled = page + 1 < count
   }
 }
 

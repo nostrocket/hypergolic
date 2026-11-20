@@ -21,7 +21,7 @@ internal fun signingRequester(registration: JSONObject): String {
     snapshot.requester(publisher)
   } else {
     require(!app.startsWith(" 5129:"))
-    "Napplet: $app\nPublisher: $publisher"
+    "Napplet: ${LinkUrl.displayIdentity(app)}\nPublisher: $publisher"
   }
   return "$label\nVersion: ${registration.getString("version")}"
 }
@@ -51,7 +51,7 @@ internal class NativeApprovalSigningData private constructor(val source: String,
       } else request.getJSONObject("event")
       val template=NativeOutboxPlan.signingTemplate(expectedEvent)
       require(NativeOutboxPlan.signingTemplate(event)==template)
-      require(event.getInt("kind")!=22242 && event.getInt("kind")!=24242)
+      require(event.getInt("kind") !in setOf(22242, 24242, 27235))
       val eventId=NativeOutboxPlan.signingHash(event,user);require(snapshot.getString("hash")==eventId)
       val rows=snapshot.getJSONArray("destinations");require(rows.length() in 1..16)
       val destinations=(0 until rows.length()).map { rows.get(it) as? String ?: error("Invalid destination") }

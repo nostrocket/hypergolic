@@ -229,7 +229,7 @@ export function Shell({ blocked = false, hostActivityBlocked = blocked, initialW
       </View>
       <WorkspaceFullscreenContext value={fullscreen}>{footer}</WorkspaceFullscreenContext>
       <DiscoveryAccessReview review={discovery.review} decide={discovery.decide} />
-      {menuSession && <WorkspaceMenu gameControls={usesGameControls(workspace, menuSession)}
+      {menuSession && <WorkspaceMenu {...(menuSession.source === 'published' && {publisher: menuSession.publisher})} gameControls={usesGameControls(workspace, menuSession)}
         onGameControls={enabled => change(setGameControls(current.current, menuSession, enabled))} pinned={isPinned(workspace, menuSession)} onPin={() => togglePin(menuSession)} title={menuSession.title} disabled={navigationBlocked} onNappletSettings={openNappletSettings}
         onResetZoom={() => resetZoom(menuSession)} zoomResetDisabled={!zoomResetAvailable}
         onDismiss={dismissMenu} onOverview={() => { clearMenu(); openOverview(); }}

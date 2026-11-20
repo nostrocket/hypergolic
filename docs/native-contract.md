@@ -67,16 +67,27 @@ Build/runtime verification checks original UTF-8 bytes, HTML SHA-256 and NIP-5A
 aggregate. CSP/namespace injection must not change the bytes used for verification.
 The outer CSP admits only its packaged script and controlled bootstrap. The child
 CSP precedes guest scripts and blocks direct fetch and WebSocket requests,
-external scripts, remote/data workers, nested frames, form submission, base
+external scripts, remote/data workers, external frames, form submission, base
 overrides and object loads. Media URLs remain restricted to selected Blob
 projection. [Local blob workers](local-workers.md) and their generation-isolated
 browser cache have a separate selected policy. The sandbox has no same-origin,
 popup, download, form or top-navigation grant.
 
-WebRTC transport isolation is outside these guarantees. An Android constructor-only
-probe observed available WebRTC globals and constructed and closed an
-RTCPeerConnection. ICE/STUN and data-channel egress remain untested. That diagnostic
-establishes constructor behavior only.
+Both hosts disable WebRTC connection, data-channel and ICE constructors at
+document start in every WebView frame. Android requires document-start script
+support. The runtime also sets the CSP WebRTC directive for engines that
+implement it. Packet-level ICE/STUN and data-channel isolation on supported
+mobile devices still needs independent verification. The trusted document
+sets a neutral base after loading its script so guest relative URLs do not
+inherit the native bundle path. The runtime retires the guest generation when
+it observes a nested document.
+
+An iOS 26.5 iPhone 17 simulator and Android WebView 133.0.6943.137 emulator
+ran the production document-start script in isolated test apps. The first
+inline script in the top document, sandboxed guest and nested frame observed
+all four constructors as undefined and non-configurable. Each frame reported
+`about:blank` as its base, and the trusted document received the nested-frame
+notification. These checks exercised the WebView APIs and policy script.
 
 On the trusted Android runtime origin, activation of an explicit local submit
 button can deliver a synthetic `submit` event when Chromium suppresses the
@@ -120,7 +131,7 @@ Web URLs and `nevent` are not selected napplet entry points.
 Verify a fresh NIP-01 ID/signature, exact kind/publisher/`d`, one `/index.html`
 SHA-256 path and original artifact bytes. Compute the aggregate from that path
 hash. `x` is optional under the pinned revisions but must match when present.
-The selected single self-contained HTML limit is 2 MiB; signed manifest is 64 KiB.
+The selected single self-contained HTML limit is 20 MiB; signed manifest is 64 KiB.
 HTTPS Blossom tags are retrieval hints, not authority. First-open publisher/access
 consent remains distinct from cryptographic validity. [Admission](nap-support.md)
 records the requested set and supported grant intersection.

@@ -38,7 +38,6 @@ final class PublishedHTTPSBridgeOwner: @unchecked Sendable {
   private var pending: [String: Pending] = [:]
   private var ready: [String: Ready] = [:]
   // Consume ids on start or early cancellation. Completed and cancelled reads cannot be replayed.
-  private var used: Set<String> = []
   private var foreground = true
   private var observers: [NSObjectProtocol] = []
 
@@ -77,8 +76,7 @@ final class PublishedHTTPSBridgeOwner: @unchecked Sendable {
       let reserved = ready.values.reduce(reply.maximumBytes) { $0 + $1.body.count } +
         pending.values.reduce(0) { $0 + $1.reply.maximumBytes }
       guard foreground, reserved <= Self.maximumReservedBodyBytes,
-            pending.count + ready.count < 4, used.count < 65_536,
-            used.insert(operationId).inserted else { return false }
+            pending.count + ready.count < 4, NativeTransportTickets.shared.consume(operationId) else { return false }
       pending[operationId] = Pending(reply: reply)
       return true
     }
@@ -130,7 +128,7 @@ final class PublishedHTTPSBridgeOwner: @unchecked Sendable {
   func cancel(operationId: String) {
     guard UUID(uuidString: operationId)?.uuidString.lowercased() == operationId else { return }
     let current = lock.withLock {
-      if used.count < 65_536 { used.insert(operationId) }
+      NativeTransportTickets.shared.consume(operationId)
       ready.removeValue(forKey: operationId)
       return cancelLocked(operationId)
     }
@@ -162,6 +160,7 @@ final class PublishedHTTPSBridgeOwner: @unchecked Sendable {
   }
 
   private func setForeground(_ value: Bool) {
+    if !value { NativeTransportTickets.shared.revokeAll() }
     lock.withLock { foreground = value }
     if !value { revokeAll() }
   }

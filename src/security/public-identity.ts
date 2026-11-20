@@ -6,6 +6,11 @@ export function formatNpub(pubkey: string): string {
   return npubEncode(pubkey);
 }
 
+export function compactPublisher(pubkey: string): string {
+  const npub = formatNpub(pubkey);
+  return `${npub.slice(0, 13)}…${npub.slice(-7)}`;
+}
+
 /** Public identifiers only. Secret-key prefixes never enter the NIP-19 decoder. */
 export function parsePublicIdentity(input: string): string {
   const trimmed = input.trim(), value = trimmed.toLowerCase();

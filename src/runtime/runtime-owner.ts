@@ -38,6 +38,7 @@ export interface PublishedRuntimeBinding { readonly publishedArtifact: string; r
 export interface RuntimeNativePort extends NativeCapabilityPort { newInstanceId(): string; subscriptions?: NativeRelaySubscriptionPort }
 export interface RuntimeOwner {
   publishedCapabilities(session: NappletDescriptor): PublishedCapabilities | null;
+  retainForPin(artifact: VerifiedNappletArtifact, signal: AbortSignal, active: () => void): Promise<() => void>;
   resolveDiscovered(link: string, expectedEventId: string, signal: AbortSignal, active: () => void): Promise<VerifiedNappletArtifact>;
   prepareDiscovered(artifact: VerifiedNappletArtifact, signal: AbortSignal, assertActive: () => void,
     reviewLaunch: (changesAccess: boolean, legacyReadOnlyAvailable?: boolean) => Promise<boolean | 'legacy-read-only-v1'>, existing?: NappletDescriptor): Promise<NappletDescriptor>;
@@ -50,6 +51,7 @@ export interface RuntimeOwner {
     reviewConsent: (request: NappletConsentReview) => Promise<boolean>): Promise<NappletDescriptor | null>;
   openPublished(session: NappletDescriptor, signal: AbortSignal, review: (request: NappletConsentReview) => Promise<boolean>): Promise<PublishedRuntimeBinding>;
   prepareInstalled(handler: CatalogHandler, signal: AbortSignal, review: (request: NappletConsentReview) => Promise<boolean>): Promise<NappletDescriptor>;
+  commitPublishedUpdate(previous: NappletDescriptor, next: NappletDescriptor, assertActive: () => void): Promise<void>;
   discardPublished(sessionId: string): void;
   revokeAllPublished(): void;
   assertPublishedApproval(origin: ApprovalOrigin,domain?:'outbox'|'common'): void;
@@ -133,13 +135,15 @@ export function createRuntimeOwner(database: ShellDatabase,
   approvals?: ApprovalPorts,
   published?: Omit<PublishedSessionDependencies, 'identity' | 'database' | 'newInstanceId'>, queries?: RelayQueryService, subscriptions?: ReturnType<typeof createRelaySubscriptions>, resources?: ResourceHost, uploads?: UploadService, identityData?: IdentityDataPort, routing?: Readonly<{broker: RoutingBroker; catalog: RoutingCatalog}>, notify?: NotifyBroker, config?: ConfigBroker, outbox?: OutboxReadService, outboxStreams?:ReturnType<typeof createOutboxSubscriptions>, discovery?: DiscoveryOpenBroker,cvm?:CvmService): RuntimeOwner {
   const coordinator = published ? createPublishedSessionCoordinator({
-    ...published, identity, database, newInstanceId: () => native.newInstanceId(),
+    ...published, identity, database, currentWorkspace: () => identity.getSnapshot().session.workspace.getSnapshot().workspace, newInstanceId: () => native.newInstanceId(),
   }) : null;
   const prepared = new Map<string, PreparedPublishedSession>();
   const running = new Map<string, PublishedRuntimeBinding>();
   const closeCapabilityReviews = (id: string) => {
     approvals?.service.close(id); uploads?.close(id); cvm?.close(id); approvals?.closeReview?.(id);
   };
+  const updating = new Set<string>();
+  const updateSources = new WeakMap<PreparedPublishedSession, NappletDescriptor>();
   const exactSession = (session: NappletDescriptor): NappletDescriptor => {
     const state = identity.getSnapshot().session.workspace.getSnapshot();
     const current = state.workspace.sessions.find(value => value.id === session.id);
@@ -155,7 +159,7 @@ export function createRuntimeOwner(database: ShellDatabase,
     const configuration = JSON.parse(host.configuration) as Omit<NativeRegistration, 'generation'>;
     const entry = discovery && isDiscoveryEntry(selected) ? { broker: discovery, source: selected } : undefined;
     const assertActive = () => {
-      if (revoked) throw new ShellStorageError('REVOKED');
+      if (revoked || updating.has(selected.id)) throw new ShellStorageError('REVOKED');
       assertPreparedActive();
       exactSession(selected);
     };
@@ -206,6 +210,10 @@ export function createRuntimeOwner(database: ShellDatabase,
       prepared.set(id, ready);
       return ready.descriptor;
     },
+    retainForPin(artifact: VerifiedNappletArtifact, signal: AbortSignal, active: () => void) {
+      if (!coordinator) throw new ShellStorageError('REVOKED');
+      return coordinator.retainForPin(artifact, signal, active);
+    },
     resolveDiscovered(link: string, expectedEventId: string, signal: AbortSignal, active: () => void) {
       if (!coordinator) throw new ShellStorageError('REVOKED');
       return coordinator.resolveExact(link, expectedEventId, signal, active);
@@ -242,6 +250,7 @@ export function createRuntimeOwner(database: ShellDatabase,
         exactSession(session);
         ready.assertActive();
         if (prepared.has(ready.descriptor.id) || running.has(ready.descriptor.id)) throw new ShellStorageError('CONFLICT');
+        updateSources.set(ready, session);
         prepared.set(ready.descriptor.id, ready);
         return ready.descriptor;
       } catch (error) { ready.revoke(); throw error; }
@@ -282,6 +291,24 @@ export function createRuntimeOwner(database: ShellDatabase,
       const ready = await coordinator.reopenPinned(descriptor, signal, review);
       if (prepared.has(id) || running.has(id)) {ready.revoke(); throw new ShellStorageError('CONFLICT');}
       prepared.set(id, ready); return ready.descriptor;
+    },
+    async commitPublishedUpdate(previous: NappletDescriptor, next: NappletDescriptor, assertActive: () => void) {
+      const ready = prepared.get(next.id);
+      const workspace = identity.getSnapshot().session.workspace;
+      const check = () => {
+        assertActive();
+        exactSession(previous);
+        const source = ready && updateSources.get(ready);
+        if (!ready || !source || !samePublishedPin(source, previous) || prepared.get(next.id) !== ready || !samePublishedPin(ready.descriptor, next)) throw new ShellStorageError('CONFLICT');
+        ready.assertActive();
+        if (workspace.getSnapshot().workspace.sessions.some(session => session.id !== previous.id && session.source === 'published' &&
+          session.publisher === previous.publisher && session.appId === previous.appId)) throw new Error('Close other cards for this napplet before updating.');
+      };
+      check();
+      if (updating.has(previous.id)) throw new ShellStorageError('BUSY');
+      updating.add(previous.id);
+      try { await workspace.acceptUpdate({previous, next, assertActive: check}); }
+      finally { updating.delete(previous.id); }
     },
     discardPublished(sessionId: string) {
       prepared.get(sessionId)?.revoke(); prepared.delete(sessionId);

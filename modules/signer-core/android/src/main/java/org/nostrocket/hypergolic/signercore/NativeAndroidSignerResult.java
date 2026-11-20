@@ -10,6 +10,13 @@ import java.util.Set;
 final class NativeAndroidSignerResult {
   static final int MAX_EVENT_BYTES = NativeAndroidSignerParcel.MAX_BYTES;
   private NativeAndroidSignerResult() {}
+  static boolean matchesRequest(Intent data, String requestId) {
+    try {
+      NativeAndroidSignerParcel.bounded(data, "SIGNER_RESPONSE_INVALID");
+      data.setExtrasClassLoader(ClassLoader.getSystemClassLoader());
+      return requestId.equals(data.getStringExtra("id"));
+    } catch (Exception invalid) { return false; }
+  }
   private static Bundle result(Intent data,int resultCode,String requestId,Set<String> fields) {
     if(resultCode!=Activity.RESULT_OK) throw new NativeVault.Error("SIGNER_APP_FAILED");
     if(data==null || data.getData()!=null || data.getClipData()!=null) throw new NativeVault.Error("SIGNER_RESPONSE_INVALID");

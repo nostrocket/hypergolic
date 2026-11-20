@@ -86,7 +86,7 @@ public final class ApprovalLeaseRegistry {
   }
   public synchronized boolean prepare(String token, Object plan) {
     Row row = rows.get(token);
-    if (plan == null || !isLive(token) || !row.requiresPlan || row.preparedPlan != null || row.approval != null) return false;
+    if (plan == null || !isLive(token) || row.preparedPlan != null || row.approval != null) return false;
     row.preparedPlan = plan; return true;
   }
   public synchronized boolean prepareSigning(String token,Object metadata) {

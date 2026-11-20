@@ -60,6 +60,7 @@ export function useDiscoveryEntry(props: Props) {
       bundled: () => runtime.descriptor('napplet-discovery', 1),
       commit: next => latest.current.commit(next),
       openPublished: (...args) => runtime.openPublishedLink(...args),
+      commitUpdate: (...args) => runtime.commitPublishedUpdate(...args),
       updatePublished: (...args) => runtime.preparePublishedUpdate(...args),
       discard: id => runtime.discardPublished(id),
       beforeClose: session => latest.current.beforeClose?.(session),

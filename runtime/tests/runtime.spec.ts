@@ -27,7 +27,7 @@ async function instrument(page: Page, holdReady = false) {
 const diagnostics = (page: Page) => page.evaluate(() => (window as any).__diagnostics);
 async function open(page: Page, sessionId = 'test-session', holdReady = false): Promise<Frame> {
   await instrument(page, holdReady);
-  await page.goto(`/assets/runtime/index.html?sessionId=${sessionId}`);
+  await page.goto(`/assets/runtime/index.html?sessionId=${sessionId}&fixture=ux-lab`);
   await expect(page.locator('#napplet')).toHaveCount(1);
   const frame = await page.locator('#napplet').contentFrame();
   await expect(frame.getByTestId('lab')).toHaveAttribute('data-ready', 'true');
@@ -294,11 +294,18 @@ test('invalid session and missing native adapter fail closed before iframe creat
   await missing.close();
 });
 
+test('omitting the fixture rejects the launch', async ({page}) => {
+  await instrument(page);
+  await page.goto('/assets/runtime/index.html?sessionId=no-fixture');
+  await expect.poll(() => diagnostics(page)).toEqual([{type: 'error', sessionId: 'no-fixture', code: 'fixture-integrity'}]);
+  await expect(page.locator('iframe')).toHaveCount(0);
+});
+
 test('runtime digest mismatch fails before fixture code runs', async ({ page }) => {
   await instrument(page);
   const script = readFileSync('dist/host.js', 'utf8').replaceAll('01ab63dbcdadab0b44fd6f3b9a6bcfbd98d8c1de1510f96c821d3efe1876909c', '0'.repeat(64));
   await page.route('**/host.js', route => route.fulfill({ body: script, contentType: 'text/javascript' }));
-  await page.goto('/assets/runtime/index.html?sessionId=modified');
+  await page.goto('/assets/runtime/index.html?sessionId=modified&fixture=ux-lab');
   await expect.poll(() => diagnostics(page)).toEqual([{ type: 'error', sessionId: 'modified', code: 'fixture-integrity' }]);
   await expect(page.locator('iframe')).toHaveCount(0);
 });
@@ -348,7 +355,7 @@ test('Kehto request IDs use secure random bytes when randomUUID is unavailable',
   expect(result.lengths).toEqual([16]);
   expect(['#F5A04B', '#AA4708']).toContain(result.theme.colors.primary);
   const requests = await page.evaluate(() => (window as any).__received.filter((value: any) => value?.type === 'theme.get'));
-  expect(requests.at(-1).id).toMatch(/^napplet-[0-9a-f]{32}$/);
+  expect(requests.at(-1).id).toMatch(/^hg-[1-9][0-9]*-[0-9a-f]{32}$/);
 });
 
 test('Kehto refuses to emit a request when secure randomness is unavailable', async ({ page }) => {

@@ -1,3 +1,4 @@
+import {useReviewControl} from './useReviewControl';
 import {useEffect,useSyncExternalStore,useRef} from 'react';
 import {AppState,ScrollView,StyleSheet,Text,View,type ViewInstance} from 'react-native';
 import {ShellModal} from './ShellModal';import {ShellPressable} from './ShellPressable';import {TrustedBand} from './TrustedBand';
@@ -21,11 +22,12 @@ export function CvmReview({service,slot,workspace}:{service:CvmService;slot?:Rev
   useEffect(()=>()=>{if(item&&slot)slot.release('cvm',item.id);},[item,slot]);
   useEffect(()=>{const state=AppState.addEventListener('change',value=>{if(value!=='active')service.pause();});return()=>{state.remove();};},[service]);
   const shown=item&&(!slot||selected?.lane==='cvm'&&selected.item.id===item.id)?item:null;
+  const control = useReviewControl(shown?.id ?? null);
   if(!shown)return null;
   const review=shown.review,method=review.message.method??'Send response';
   const manifestEventId=snapshotEventId(review.scope.appId);
-  return <ShellModal visible transparent animationType="none" onShow={()=>cancel.current?.focus()} onRequestClose={()=>service.decide(shown.id,false)}>
-    <View style={[styles.backdrop,{paddingLeft:insets.left,paddingRight:insets.right,paddingBottom:insets.bottom}]}>
+  return <ShellModal key={shown.id} visible transparent animationType="none" onShow={()=>{control.onShow();cancel.current?.focus();}} onRequestClose={()=>service.decide(shown.id,false)}>
+    <View style={[styles.backdrop,{paddingTop:insets.top,paddingLeft:insets.left,paddingRight:insets.right,paddingBottom:insets.bottom}]}>
       <View accessibilityViewIsModal testID="cvm-review" style={styles.sheet}>
         <TrustedBand/><ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <Text accessibilityRole="header" style={styles.title}>Send a provider request</Text>
@@ -41,7 +43,7 @@ export function CvmReview({service,slot,workspace}:{service:CvmService;slot?:Rev
         </ScrollView>
         <View style={styles.actions}>
           <ShellPressable ref={cancel} testID="cvm-review-cancel" accessibilityRole="button" onPress={()=>service.decide(shown.id,false)} style={styles.cancel}><Text style={styles.text}>Cancel</Text></ShellPressable>
-          <ShellPressable testID="cvm-review-send" accessibilityRole="button" onPress={()=>service.decide(shown.id,true)} style={styles.send}><Text style={styles.sendText}>{review.message.method?'Send request':'Send response'}</Text></ShellPressable>
+          <ShellPressable disabled={!control.ready} testID="cvm-review-send" accessibilityRole="button" onPress={()=>service.decide(shown.id,true)} style={styles.send}><Text style={styles.sendText}>{review.message.method?'Send request':'Send response'}</Text></ShellPressable>
         </View>
       </View>
     </View>

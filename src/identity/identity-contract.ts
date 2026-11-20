@@ -36,13 +36,15 @@ export function profileFromEvents(events: readonly NostrEvent[]): ProfileData | 
   const source = data as Record<string, unknown>;
   const fields = { name: 256, display_name: 256, about: 8192, picture: 2048, banner: 2048, nip05: 1024, lud16: 320, website: 2048 };
   const result: Partial<Record<keyof ProfileData, string>> = {};
+  let invalidField = false;
   for (const [field, maximum] of Object.entries(fields)) {
     if (!Object.hasOwn(source, field)) continue;
     const value = source[field];
-    if (typeof value !== 'string' || utf8Bytes(value) > maximum) throw new IdentityDataError('invalid profile metadata');
+    if (typeof value !== 'string' || utf8Bytes(value) > maximum) { invalidField = true; continue; }
     const name = field === 'display_name' ? 'displayName' : field as keyof ProfileData;
     result[name] = value;
   }
+  if (invalidField && Object.keys(result).length === 0) throw new IdentityDataError('invalid profile metadata');
   return Object.freeze(result);
 }
 export { identityFailure } from '../runtime/capability-protocol.ts';

@@ -33,6 +33,12 @@ export interface Workspace {
   readonly focusedId: string | null;
   readonly overview: boolean;
 }
+export function conflictsWithPublishedRevision(state: Workspace, item: Pick<NappletDescriptor, 'publisher' | 'appId' | 'eventId' | 'version'>): boolean {
+  return [...state.sessions, ...(state.pins ?? [])].some(saved => saved.source === 'published' &&
+    saved.publisher === item.publisher && saved.appId === item.appId &&
+    (saved.eventId !== item.eventId || saved.version !== item.version));
+}
+
 export const emptyWorkspace = (): Workspace => ({ sessions: [], focusedId: null, overview: true, home: true, pins: defaultPins() });
 
 export function usesGameControls(state: Workspace, session: NappletDescriptor): boolean {

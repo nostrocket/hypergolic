@@ -96,17 +96,17 @@ diff --git a/dist/index.js b/dist/index.js
    const allowed = new Set(domains);
 +  const policyJSON = JSON.stringify(appData);
 +  const policyStringify = JSON.stringify.bind(JSON);
++  let correlationSequence = 0;
    const requestTimeoutMs = 3e4;
    function id() {
 -    if (target.crypto?.randomUUID) return target.crypto.randomUUID();
 -    return `napplet-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-+    if (typeof target.crypto?.randomUUID === "function") return target.crypto.randomUUID();
-+    if (typeof target.crypto?.getRandomValues !== "function") {
-+      throw new Error("Secure randomness unavailable");
-+    }
-+    const bytes = new Uint8Array(16);
-+    target.crypto.getRandomValues(bytes);
-+    return `napplet-${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
++    if (!Number.isSafeInteger(++correlationSequence)) throw new Error("Request sequence exhausted");
++    const prefix = `hg-${correlationSequence}-`;
++    if (typeof target.crypto?.randomUUID === "function") return prefix + target.crypto.randomUUID();
++    if (typeof target.crypto?.getRandomValues !== "function") throw new Error("Secure randomness unavailable");
++    const bytes = target.crypto.getRandomValues(new Uint8Array(16));
++    return prefix + Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
    }
    function post(message) {
      target.parent.postMessage(message, "*");

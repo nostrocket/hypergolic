@@ -15,7 +15,6 @@ final class ResourceHTTPSBridgeOwner: @unchecked Sendable {
   }
   private let lock = NSLock()
   private var pending: [String: Pending] = [:]
-  private var used: Set<String> = []
   private var foreground = true
   private var observers: [NSObjectProtocol] = []
   private let timer = DispatchSource.makeTimerSource(queue: DispatchQueue(label: "org.nostrocket.hypergolic.resource-lifetime"))
@@ -51,11 +50,10 @@ final class ResourceHTTPSBridgeOwner: @unchecked Sendable {
     let generation = try Self.admission(token, url: url)
     return try await withCheckedThrowingContinuation { continuation in
       lock.lock()
-      guard foreground, !used.contains(id), used.count < 65_536, pending.count < 4,
-            CapabilityTransport.leases.isActive(token) else {
+      guard foreground, pending.count < 4,
+            CapabilityTransport.leases.isActive(token), NativeTransportTickets.shared.consume(id) else {
         lock.unlock(); continuation.resume(throwing: Failure.quota); return
       }
-      used.insert(id)
       pending[id] = Pending(token: token, generation: generation, continuation: continuation)
       lock.unlock()
       Task { [weak self] in
@@ -107,7 +105,7 @@ final class ResourceHTTPSBridgeOwner: @unchecked Sendable {
   func cancel(_ id: String) {
     guard UUID(uuidString: id)?.uuidString.lowercased() == id else { return }
     let current = lock.withLock { () -> Pending? in
-      if used.count < 65_536 { used.insert(id) }
+      NativeTransportTickets.shared.consume(id)
       return pending.removeValue(forKey: id)
     }
     current?.operation?.cancel(); current?.continuation?.resume(throwing: Failure.timeout)

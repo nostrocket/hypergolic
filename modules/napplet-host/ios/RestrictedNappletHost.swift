@@ -7,6 +7,20 @@ import WebKit
 /// The iOS 18.4 deployment candidate enables public file-picker denial.
 @MainActor
 final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
+  private static let rulePrefix = "hypergolic-host-v1-"
+  private static let processRulePrefix = rulePrefix + UUID().uuidString.lowercased() + "-"
+  private static var sweptRules = false
+  static func removeAbandonedRules() {
+    guard !sweptRules else { return }
+    sweptRules = true
+    let store = WKContentRuleListStore.default()!
+    store.getAvailableContentRuleListIdentifiers { ids in
+      for id in ids ?? [] where id.hasPrefix(rulePrefix) && !id.hasPrefix(processRulePrefix) {
+        store.removeContentRuleList(forIdentifier: id) { _ in }
+      }
+    }
+  }
+
   var onEvent: (@MainActor ([String: Any]) -> Void)?
   // Native-only observation, absent in production. Never exposed through Expo.
   private let onWebViewCreated: (@MainActor (WKWebView) -> Void)?
@@ -314,7 +328,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
       deadline = timeout
       DispatchQueue.main.asyncAfter(deadline: .now() + 15, execute: timeout)
       let rules = try resourceRules(index: url, script: assets.script)
-      let ruleIdentifier = "hypergolic-host-v1-" + generation
+      let ruleIdentifier = Self.processRulePrefix + generation
       WKContentRuleListStore.default().compileContentRuleList(
         forIdentifier: ruleIdentifier,
         encodedContentRuleList: rules
@@ -382,6 +396,12 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     configuration.dataDetectorTypes = []
     let controller = configuration.userContentController
     controller.add(rules)
+    controller.addUserScript(WKUserScript(source: """
+      if (window.parent !== window.top) window.top.postMessage({type: 'hypergolic.nested-document'}, '*');
+      for (const name of ['RTCPeerConnection', 'webkitRTCPeerConnection', 'RTCDataChannel', 'RTCIceTransport']) {
+        Object.defineProperty(globalThis, name, {value: undefined, writable: false, configurable: false});
+      }
+      """, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .page))
     let receiver = DiagnosticReceiver(owner: self)
     self.receiver = receiver
     controller.addScriptMessageHandler(receiver, contentWorld: bridgeWorld, name: bridgeName)
@@ -497,20 +517,18 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
       receiveCapability(value, reply: reply)
       return
     }
+    if value["type"] as? String == "routing-ack" {
+      guard ready, Set(value.keys) == ["type", "sessionId", "sequence", "delivery"],
+        let sequence = streamInteger(value["sequence"]), CapabilityTransport.leases.consumeSequence(generation, sequence: sequence),
+        text.utf8.count <= 2048, let delivery = streamInteger(value["delivery"]) else { reply(nil, "Routing acknowledgement rejected"); return }
+      RoutingTransport.shared.acknowledge(generation, delivery: delivery)
+      reply(nil, nil); return
+    }
     guard text.utf8.count <= 2048 else { reply(nil, "Diagnostic rejected"); return }
     switch value["type"] as? String {
     case "close-check.result":
       receiveCloseCheck(value)
       reply(nil, nil)
-    case "routing-ack":
-      guard Set(value.keys) == ["type", "sessionId", "sequence", "delivery"],
-        let sequence = value["sequence"] as? NSNumber, let delivery = value["delivery"] as? NSNumber,
-        CFGetTypeID(sequence) != CFBooleanGetTypeID(), CFGetTypeID(delivery) != CFBooleanGetTypeID(),
-        sequence.doubleValue.isFinite, delivery.doubleValue.isFinite,
-        sequence.doubleValue >= 1, sequence.doubleValue <= 9_007_199_254_740_991, sequence.doubleValue.rounded(.towardZero) == sequence.doubleValue,
-        delivery.doubleValue >= 1, delivery.doubleValue <= 9_007_199_254_740_991, delivery.doubleValue.rounded(.towardZero) == delivery.doubleValue,
-        CapabilityTransport.leases.consumeSequence(generation, sequence: sequence.uint64Value) else { return }
-      RoutingTransport.shared.acknowledge(generation, delivery: delivery.uint64Value)
     case "ready" where value.count == 2 && !ready:
       ready = true
       RoutingTransport.shared.ready(generation)
@@ -552,9 +570,8 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
   }
   private func receiveStreamAck(_ value: [String: Any]) {
     guard ready, Set(value.keys) == Set(["type", "sessionId", "sequence", "streamSequence", "delivery"]),
-      let sequence = streamInteger(value["sequence"]), let stream = streamInteger(value["streamSequence"]),
-      let delivery = streamInteger(value["delivery"]),
-      CapabilityTransport.leases.consumeSequence(generation, sequence: sequence) else { return }
+      let sequence = streamInteger(value["sequence"]), CapabilityTransport.leases.consumeSequence(generation, sequence: sequence),
+      let stream = streamInteger(value["streamSequence"]), let delivery = streamInteger(value["delivery"]) else { return }
     RelaySubscriptionTransport.shared.acknowledge(generation, streamSequence: stream, delivery: delivery)
   }
   private func receiveSubscription(_ value: [String: Any]) {
@@ -584,10 +601,10 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
   }
 
   private func receiveCvm(_ value: [String: Any], reply: @escaping @MainActor @Sendable (Any?, String?) -> Void) {
-    guard ready, publishedSource != nil, let configuration, configuration.cvmProfile == "free-foreground-v1",
-      configuration.domains.contains("cvm"), Set(value.keys) == ["type","sessionId","sequence","message"],
-      let sequence = streamInteger(value["sequence"]), let message = value["message"] as? String,
-      CapabilityTransport.leases.consumeSequence(generation, sequence: sequence),
+    guard ready, Set(value.keys) == ["type","sessionId","sequence","message"],
+      let sequence = streamInteger(value["sequence"]), CapabilityTransport.leases.consumeSequence(generation, sequence: sequence),
+      publishedSource != nil, let configuration, configuration.cvmProfile == "free-foreground-v1",
+      configuration.domains.contains("cvm"), let message = value["message"] as? String,
       let capturedView = webView, let capturedURL = expectedURL else { reply(nil, "CVM request denied"); return }
     let deliver: @MainActor @Sendable (String?) -> Void = { [weak self, weak capturedView] response in
       guard let self, let capturedView, self.live, !self.disposed, self.webView === capturedView,
@@ -609,12 +626,9 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
   }
 
   private func receiveFiniteVideo(_ value: [String: Any], text: String) {
-    guard ready, publishedSource != nil, configuration?.domains.contains("media") == true,
-      Set(value.keys) == ["type", "sessionId", "sequence", "message"],
-      let sequence = value["sequence"] as? NSNumber, CFGetTypeID(sequence) != CFBooleanGetTypeID(),
-      sequence.doubleValue.isFinite, sequence.doubleValue >= 1, sequence.doubleValue <= 9_007_199_254_740_991,
-      sequence.doubleValue.rounded(.towardZero) == sequence.doubleValue,
-      CapabilityTransport.leases.consumeSequence(generation, sequence: sequence.uint64Value),
+    guard ready, Set(value.keys) == ["type", "sessionId", "sequence", "message"],
+      let sequence = streamInteger(value["sequence"]), CapabilityTransport.leases.consumeSequence(generation, sequence: sequence),
+      publishedSource != nil, configuration?.domains.contains("media") == true,
       UploadWire.boundedJSON(text, limit: 32 * 1024),
       let request = value["message"] as? [String: Any], let capturedView = webView, let capturedURL = expectedURL else { return }
     let deliver: ([String:Any]) -> Void = { [weak self, weak capturedView] message in
@@ -660,12 +674,11 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     let fields: Set<String> = ["type", "sessionId", "sequence", "message"]
     guard ready, let configuration,
       Set(value.keys) == (deferred ? fields.union(["deferred"]) : fields),
-      let sequence = value["sequence"] as? NSNumber, CFGetTypeID(sequence) != CFBooleanGetTypeID(),
-      sequence.doubleValue.isFinite, sequence.doubleValue >= 1, sequence.doubleValue <= 9_007_199_254_740_991,
-      sequence.doubleValue.rounded(.towardZero) == sequence.doubleValue,
-      let message = value["message"] as? String, let snapshot = try? configuration.request(message)
-      else { reply(nil, "Capability rejected"); return }
-    let counter = sequence.uint64Value
+      let counter = streamInteger(value["sequence"]) else { reply(nil, "Capability rejected"); return }
+    guard let message = value["message"] as? String, let snapshot = try? configuration.request(message) else {
+      _ = CapabilityTransport.leases.consumeSequence(generation, sequence: counter)
+      reply(nil, "Capability rejected"); return
+    }
     let operation = UUID().uuidString
     let now = ProcessInfo.processInfo.systemUptime
     pendingNativeReplies = pendingNativeReplies.filter { $0.value > now }
@@ -732,9 +745,9 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     }
     if let request = try? UploadWire.object(message, limit: 400 * 1024),
       let type = request["type"] as? String, type.hasPrefix("upload.") {
-      guard configuration.domains.contains("upload"), CapabilityTransport.leases.consumeSequence(generation, sequence: counter),
+      guard CapabilityTransport.leases.consumeSequence(generation, sequence: counter), configuration.domains.contains("upload"),
         let capturedView = webView, let capturedURL = expectedURL else { respond(nil); return }
-      let result = UploadTransport.receive(generation, sequence: counter, raw: message,
+      UploadTransport.receive(generation, sequence: counter, raw: message, request: request,
         push: { [weak self, weak capturedView] envelope in
           guard let self, let capturedView, self.webView === capturedView, self.live, !self.disposed,
             capturedView.url?.absoluteString == capturedURL.absoluteString else { return }
@@ -745,8 +758,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
         }, onReview: { [weak self] token in
           guard let self, self.live, !self.disposed else { return }
           self.onEvent?(["type": "capability", "lane": "upload", "sessionId": configuration.sessionId, "generation": self.generation, "token": token])
-        })
-      respond(result)
+        }, reply: respond)
       return
     }
     let approval = configuration.approvalWireId(message)
@@ -804,7 +816,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     deadline = nil
     receiver?.owner = nil
     receiver = nil
-    WKContentRuleListStore.default().removeContentRuleList(forIdentifier: "hypergolic-host-v1-" + generation) { _ in }
+    WKContentRuleListStore.default().removeContentRuleList(forIdentifier: Self.processRulePrefix + generation) { _ in }
     guard let view = webView else { return }
     view.configuration.userContentController.removeScriptMessageHandler(forName: bridgeName, contentWorld: bridgeWorld)
     view.configuration.userContentController.removeAllUserScripts()

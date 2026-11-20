@@ -45,10 +45,16 @@ function string(value: unknown): string {
   return value;
 }
 
+/** Permit modest clock skew without allowing a far-future replacement to become the latest event. */
+export function assertSigningTime(createdAt: number): void {
+  if (createdAt > Math.floor(Date.now() / 1000) + 600) fail();
+}
+
 function event(value: unknown, selectedPubkey: string): UnsignedEventTemplate {
   const input = record(value, ['kind', 'content', 'tags', 'created_at']);
   if (typeof input.kind !== 'number' || !Number.isSafeInteger(input.kind) || input.kind < 0 || input.kind > 65535) return fail();
   if (typeof input.created_at !== 'number' || !Number.isSafeInteger(input.created_at) || input.created_at < 0) return fail();
+  assertSigningTime(input.created_at);
   const content = string(input.content);
   let capturedBytes = utf8Bytes(JSON.stringify(content));
   const rawTags = denseArray(input.tags);

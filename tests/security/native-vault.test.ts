@@ -88,14 +88,14 @@ test('ordinary signing rejects missing source, upload source and reserved auth k
   const { vault, calls } = harness(); await vault.open();
   await assert.rejects(vault.signApproved(event, { signal: new AbortController().signal, assertActive() {} }), { code: 'AUTHORIZATION_DENIED' });
   await assert.rejects(vault.signApproved(event, { ...authority(), nativeSource: { kind: 'upload', token: 'wrong-lane' } }), { code: 'AUTHORIZATION_DENIED' });
-  for (const kind of [22242, 24242]) await assert.rejects(vault.signApproved({ ...event, event: { ...event.event, kind } }, authority()), { code: 'AUTHORIZATION_DENIED' });
+  for (const kind of [22242, 24242, 27235]) await assert.rejects(vault.signApproved({ ...event, event: { ...event.event, kind } }, authority()), { code: 'AUTHORIZATION_DENIED' });
   assert.equal(calls.length, 0);
 });
 
 test('mutated native signing result is independently rejected', async () => {
   const { vault, module } = harness(); await vault.open();
   module.reviewAndSignNativeEventAsync = async (_kind, _token, wire) => JSON.stringify(finalizeEvent({ ...JSON.parse(wire), content: 'substituted' }, secret));
-  await assert.rejects(vault.signApproved(event, authority()));
+  await assert.rejects(vault.signApproved(event, authority()), { code: 'SIGNER_RESPONSE_INVALID' });
 });
 
 test('abort cancels the exact native signing request and denies late completion', async () => {
@@ -104,7 +104,7 @@ test('abort cancels the exact native signing request and denies late completion'
   module.reviewAndSignNativeEventAsync = async () => new Promise<string>(done => { resolve = done; });
   const controller = new AbortController(); const result = vault.signApproved(event, authority(controller));
   controller.abort(); resolve(JSON.stringify(finalizeEvent({ ...event.event, tags: event.event.tags.map(row => [...row]) }, secret)));
-  await assert.rejects(result, { code: 'AUTHORIZATION_DENIED' });
+  await assert.rejects(result, { code: 'SIGNER_UNCERTAIN' });
   assert.deepEqual(calls, ['cancel-sign:approval:native_source_token_0001']);
 });
 
@@ -115,7 +115,42 @@ test('selection during signing rejects the old response', async () => {
   const result = vault.signApproved(event, authority());
   const pending = await vault.prepareImport(); assert(pending); await vault.commitImport(pending);
   resolve(JSON.stringify(finalizeEvent({ ...event.event, tags: event.event.tags.map(row => [...row]) }, secret)));
-  await assert.rejects(result, { code: 'AUTHORIZATION_DENIED' });
+  await assert.rejects(result, { code: 'SIGNER_UNCERTAIN' });
+});
+
+test('opening waits for a retry signal only for known read failures', async () => {
+  const { vault, module } = harness();
+  const open = module.openNativeVaultAsync;
+  let attempts = 0;
+  module.openNativeVaultAsync = async () => {
+    if (++attempts === 1) throw { code: 'VAULT_READ_UNAVAILABLE' };
+    return open();
+  };
+  let resume!: () => void;
+  const signal = new Promise<void>(resolve => { resume = resolve; });
+  let notify!: () => void;
+  const waiting = new Promise<void>(resolve => { notify = resolve; });
+  const pending = vault.open(() => { notify(); return signal; });
+  await waiting;
+  assert.equal(attempts, 1);
+  resume();
+  assert.deepEqual(await pending, first);
+  assert.equal(attempts, 2);
+  module.openNativeVaultAsync = async () => { throw { code: 'CORRUPT_METADATA' }; };
+  await assert.rejects(vault.open(() => assert.fail('unexpected retry')), { code: 'CORRUPT_METADATA' });
+});
+
+test('a temporary signing-method read failure keeps the active snapshot and retries the read', async () => {
+  const { vault, module } = harness();
+  const before = await vault.open();
+  const read = module.getNativeSigningMethodsAsync;
+  for (const code of ['VAULT_READ_UNAVAILABLE', 'STORAGE_FAILURE']) {
+    module.getNativeSigningMethodsAsync = async () => { throw { code }; };
+    await assert.rejects(vault.getSigningMethods(pubkey), { code });
+    assert.equal(vault.getSnapshot(), before);
+  }
+  module.getNativeSigningMethodsAsync = read;
+  assert.equal((await vault.getSigningMethods(pubkey)).selectedMethod, 'local');
 });
 
 test('backup presentation cannot choose a stale or different selected identity', async () => {
@@ -138,7 +173,7 @@ test('cancellation retains the original native source even if its input object i
   const result = vault.signApproved(event, { ...authority(controller), nativeSource: source });
   source.token = 'substituted-native-source'; controller.abort();
   resolve(JSON.stringify(finalizeEvent({ ...event.event, tags: event.event.tags.map(row => [...row]) }, secret)));
-  await assert.rejects(result, { code: 'AUTHORIZATION_DENIED' });
+  await assert.rejects(result, { code: 'SIGNER_UNCERTAIN' });
   assert.deepEqual(calls, ['cancel-sign:approval:original-native-source']);
 });
 
@@ -227,7 +262,7 @@ test('same-account method change rejects a signature from the previous vault rev
   module.selectNativeSigningMethodAsync = async () => JSON.stringify({ ...first, revision: 2 });
   await vault.selectSigningMethod(pubkey, 'nip46');
   resolve(JSON.stringify(finalizeEvent({ ...event.event, tags: event.event.tags.map(row => [...row]) }, secret)));
-  await assert.rejects(result, { code: 'AUTHORIZATION_DENIED' });
+  await assert.rejects(result, { code: 'SIGNER_UNCERTAIN' });
 });
 
 test('an uncertain remote signature never falls back or reuses its approval', async () => {

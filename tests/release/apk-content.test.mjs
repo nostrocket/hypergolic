@@ -6,7 +6,7 @@ import test from 'node:test';
 // distinction between ZIP alignment and actual ELF segment alignment.
 test('APK verifier rejects 4 KB ELF segments, test config, missing notices and foreign ABIs', () => {
   const result=spawnSync('python3',['-B','-c',String.raw`
-import importlib.util, json, pathlib, struct, tempfile, zipfile
+import hashlib, importlib.util, json, pathlib, struct, tempfile, zipfile
 spec=importlib.util.spec_from_file_location('verifier','scripts/verify-release-apk.py')
 module=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
@@ -20,18 +20,21 @@ def elf(alignment=16384, relro=False):
     if relro: struct.pack_into('<IIQQQQQQ',data,120,0x6474e552,4,0,0,0,0,4096,1)
     return data
 with tempfile.TemporaryDirectory(prefix='hypergolic-apk-content-') as directory:
-    for case in ('valid','alignment','relro','config','version','notice','abi'):
+    for case in ('valid','alignment','relro','config','version','notice','abi','runtime'):
         apk=pathlib.Path(directory)/f'{case}.apk'
         config={'version':'0.1.0','android':{'package':'space.hypergolic','versionCode':1},'extra':{'hypergolic':{'variant':'production'}}}
         if case=='config': config['extra']['hypergolic']['variant']='development'
         if case=='version': config['version']='0.0.0'
         with zipfile.ZipFile(apk,'w') as archive:
             archive.writestr('assets/app.config',json.dumps(config))
+            runtime = {name: hashlib.sha256(name.encode()).hexdigest() for name in ('host.js','index.html','fixture-release.json')}
+            for name in runtime:
+                archive.writestr('assets/runtime/' + name, 'changed' if case=='runtime' else name)
             for folder in ('notices','archive-notices','cpp-notices','compiler-notices'):
                 if case!='notice' or folder!='notices': archive.writestr(f'assets/{folder}/manifest.json','{}')
             abi='x86_64' if case=='abi' else 'arm64-v8a'
             archive.writestr(f'lib/{abi}/libfixture.so',elf(4096 if case=='alignment' else 16384,case=='relro'))
-        try: module.verify_apk(apk,'0.1.0','1')
+        try: module.verify_apk(apk,'0.1.0','1',runtime)
         except (ValueError, KeyError): assert case!='valid',case
         else: assert case=='valid',case
 `],{cwd:new URL('../../',import.meta.url),encoding:'utf8'});

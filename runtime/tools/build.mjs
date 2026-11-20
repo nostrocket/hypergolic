@@ -26,8 +26,14 @@ assert.deepEqual(manifest.tags.filter(t => t[0] === 'requires'), []);
 assert(/^<!doctype html>\s*<html lang="en">\s*<head>/i.test(html), 'Only reviewed generated fixture HTML is admitted');
 assert.equal((html.match(/<head>/gi) ?? []).length, 1);
 assert(!/Content-Security-Policy|<base\b|<iframe\b|<script[^>]+src=/i.test(html));
+const variant = process.argv.includes('--development') ? 'development' : process.env.HYPERGOLIC_VARIANT ?? 'production';
+assert(['development', 'production'].includes(variant), 'Invalid runtime variant');
+const catalog = variant === 'development' ? BUNDLED_FIXTURES : {
+  'napplet-discovery': BUNDLED_FIXTURES['napplet-discovery'],
+  'nap-support': BUNDLED_FIXTURES['nap-support'],
+};
 const fixtures = {};
-for (const [name, reviewed] of Object.entries(BUNDLED_FIXTURES)) {
+for (const [name, reviewed] of Object.entries(catalog)) {
   const source = await readFile(new URL(`fixtures/${name}.html`, root));
   const content = new TextDecoder('utf-8', { fatal: true }).decode(source);
   assert(Buffer.from(content, 'utf8').equals(source));
@@ -52,9 +58,6 @@ const bundle = await build({
   root: root.pathname,
   define: {
     __BUNDLED_FIXTURES__: JSON.stringify(fixtures),
-    __UX_HTML__: JSON.stringify(html),
-    __UX_SHA256__: JSON.stringify(lock.sha256),
-    __UX_AGGREGATE__: JSON.stringify(lock.aggregateHash),
   },
   build: {
     outDir: 'dist', emptyOutDir: true, target: 'es2022', sourcemap: false,
@@ -64,9 +67,9 @@ const bundle = await build({
 });
 const document = `<!doctype html>
 <html lang="en"><head>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; worker-src blob:; child-src 'self'; frame-src 'self'; media-src blob:; object-src 'none'; manifest-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; webrtc 'block'; worker-src blob:; child-src 'self'; frame-src 'self'; media-src blob:; object-src 'none'; manifest-src 'none'; base-uri about:; form-action 'none'">
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hypergolic runtime</title><script src="host.js" defer></script>
+<title>Hypergolic runtime</title><script src="host.js" defer></script><base href="about:blank">
 </head><body><p role="status">Loading napplet…</p></body></html>\n`;
 await writeFile(new URL('dist/index.html', root), document);
 const moduleIds = [...new Set((Array.isArray(bundle) ? bundle : [bundle]).flatMap(result =>
@@ -118,5 +121,5 @@ for (const name of ['index.html', 'host.js']) {
   const value = await readFile(new URL(`dist/${name}`, root));
   files[name] = { sha256: sha256(value), bytes: value.byteLength };
 }
-await writeFile(new URL('assets-manifest.json', root), JSON.stringify({ schema: 1, fixture: lock, fixtures: BUNDLED_FIXTURES, bundledPackages: bundledPackages.map(({ name, version, license }) => ({ name, version, license })), assets: files }, null, 2) + '\n');
-console.log(JSON.stringify({ fixture: lock, assets: files }, null, 2));
+await writeFile(new URL('assets-manifest.json', root), JSON.stringify({ schema: 1, variant, fixtures: catalog, bundledPackages: bundledPackages.map(({ name, version, license }) => ({ name, version, license })), assets: files }, null, 2) + '\n');
+console.log(JSON.stringify({ variant, fixtures: Object.keys(catalog), assets: files }, null, 2));

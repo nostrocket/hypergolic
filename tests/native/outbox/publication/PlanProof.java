@@ -136,6 +136,13 @@ public final class PlanProof {
     denied(() -> NativeOutboxPlan.Companion.capture(skipped.toString(), raw));
     JSONObject noGrant = new JSONObject(snapshot); noGrant.getJSONObject("registration").put("domains", new org.json.JSONArray().put("relay"));
     denied(() -> NativeOutboxPlan.Companion.capture(noGrant.toString(), raw));
+    JSONObject relayRequest = new JSONObject(noGrant.getString("request")).put("type", "relay.publish");
+    relayRequest.remove("options");
+    noGrant.put("request", relayRequest.toString());
+    denied(() -> NativeOutboxPlan.Companion.capture(noGrant.toString(), raw));
+    JSONObject relayPlan = new JSONObject(raw).put("ancillary", JSONObject.NULL).put("requiredInboxes", new org.json.JSONArray());
+    NativeOutboxPlan rawOwner = NativeOutboxPlan.Companion.capture(noGrant.toString(), relayPlan.toString());
+    check(rawOwner.reserve("primary", primary, relay, 10).getEventId().equals(send.getEventId()));
     JSONObject credential = new JSONObject(raw); credential.getJSONObject("event").getJSONArray("destinations").put(0, "wss://user:secret@relay.damus.io/");
     denied(() -> NativeOutboxPlan.Companion.capture(snapshot, credential.toString()));
     denied(() -> NativeOutboxPlan.Companion.capture(snapshot, "[".repeat(30) + "0" + "]".repeat(30)));

@@ -12,8 +12,9 @@ import { publishedOpenFailureText } from '../../src/shell/published-settings-act
 import { registration, setup } from '../storage/harness.ts';
 import { descriptorForPublishedArtifact } from '../../src/napplets/published-host-input.ts';
 import { verifyArtifact, verifyManifest } from '../../src/napplets/verified-artifact.ts';
+import { openWorkspaceController } from '../../src/storage/workspace-controller.ts';
 import { createRuntimeOwner } from '../../src/runtime/runtime-owner.ts';
-import { emptyWorkspace, openNapplet, closeNapplet, replacePublishedNapplet, restoreWorkspace, snapshotWorkspace } from '../../src/shell/workspace.ts';
+import { emptyWorkspace, openNapplet, closeNapplet, restoreWorkspace, snapshotWorkspace } from '../../src/shell/workspace.ts';
 import { NativeLeases } from '../runtime/native-leases.ts';
 import { ReviewBusyError } from '../../src/shell/review-slot.ts';
 import type { IdentityTransition } from '../../src/security/identity-transition.ts';
@@ -69,21 +70,32 @@ test('first open verifies, reviews, caches and stages; pinned restart uses cache
       readHtml: async () => { reads++; return getEmbeddedTestHtmlBytes(); },
     },
   };
-  const service = createPublishedSessionCoordinator(ports);
+  let workspace = emptyWorkspace();
+  const service = createPublishedSessionCoordinator({...ports, currentWorkspace: () => workspace});
   const opened = await service.openLink(LINK, new AbortController().signal, async request => {
     reviews++; assert.deepEqual(request.domains, ['theme']); return true;
   });
   assert.equal(opened.descriptor.eventId, EMBEDDED_TEST_EVENT.id);
   assert.equal(JSON.parse(JSON.parse(opened.hostInput).configuration).fixture, 'published');
   assert.deepEqual(calls.slice(0, 4), [`register:${SESSION}`, 'begin', 'append', 'finish']);
+  const row = () => sqlite.raw(PUBLISHED_ARTIFACT_CACHE_DATABASE).prepare('SELECT row_id FROM verified_published_artifacts').get()?.row_id;
+  const originalRow = row();
   opened.revoke();
   const reopened = await service.reopenPinned(opened.descriptor, new AbortController().signal,
     async () => { assert.fail('saved exact grant must reopen silently'); });
   assert.equal(JSON.parse(reopened.hostInput).eventId, opened.descriptor.eventId);
+  opened.revoke();
+  assert.equal(calls.filter(call => call === `revoke:${SESSION}`).length, 1);
+  assert.equal(row(), originalRow);
   assert.equal(queries, 1);
   assert.equal(reads, 1);
   assert.equal(reviews, 1);
   reopened.revoke();
+  workspace = {...workspace, pins: [{...opened.descriptor, eventId: 'f'.repeat(64)}]};
+  const conflictingService = createPublishedSessionCoordinator({...ports, currentWorkspace: () => workspace,
+    source: {...ports.source, query: async () => [EMBEDDED_TEST_EVENT]}});
+  await assert.rejects(conflictingService.openLink(LINK, new AbortController().signal, async () =>
+    assert.fail('conflicting Home pin must be detected before review')), {code: 'PUBLISHED_PIN_CONFLICT'});
   epoch++;
   assert.throws(() => reopened.assertActive());
 });
@@ -134,7 +146,7 @@ test('explicit Settings open retains bounded loader reasons before consent or st
     active = false;
     throw downloadError;
   } }).openLink(link, new AbortController().signal, review), { code: 'PUBLISHED_SESSION_FAILED' });
-  assert.deepEqual(calls, []);
+  assert.equal(calls.length, 0);
 });
 
 test('Settings uses generic copy for unknown and untrusted errors', () => {
@@ -275,7 +287,7 @@ test('unsupported requested capabilities warn without granting unsupported domai
     deniedDomains.push(review.unsupportedDomains); return false;
   }), { code: 'PUBLISHED_SESSION_FAILED' });
   assert.deepEqual(deniedDomains, [['webrtc']]);
-  assert.deepEqual(calls, []);
+  assert.equal(calls.length, 0);
   const opened = await service.openLink(link, new AbortController().signal, async review => {
     assert.deepEqual(review.domains, ['cvm', 'webrtc']);
     assert.deepEqual(review.unsupportedDomains, ['webrtc']); return true;
@@ -301,11 +313,11 @@ test('denial and identity change during review never register a native published
     source: { query: async () => [EMBEDDED_TEST_EVENT], readHtml: async () => getEmbeddedTestHtmlBytes() },
   });
   await assert.rejects(service.openLink(LINK, new AbortController().signal, async () => false));
-  assert.deepEqual(calls, []);
+  assert.equal(calls.length, 0);
   await assert.rejects(service.openLink(LINK, new AbortController().signal, async () => {
     epoch++; return true;
   }));
-  assert.deepEqual(calls, []);
+  assert.equal(calls.length, 0);
 });
 
 test('workspace runtime consumes the reviewed artifact once and revokes it on close', async t => {
@@ -468,10 +480,11 @@ test('accepted runtime update consumes a new native session at the old workspace
   const secondHtml = new TextEncoder().encode(new TextDecoder().decode(firstHtml).replace('fixture-loaded', 'new-version-loaded'));
   const firstEvent = signedFixture(1_800_000_010, appId, firstHtml, ['theme'], key);
   const secondEvent = signedFixture(1_800_000_011, appId, secondHtml, ['theme'], key);
-  let latest = firstEvent, workspace = emptyWorkspace();
+  let latest = firstEvent;
+  const controller = await openWorkspaceController(database.bindWorkspace({user: USER, assertActive() {}}), emptyWorkspace, () => {});
   const identity = {
     sessionAuthority: () => ({ user: USER, epoch: 1, assertActive: () => undefined }),
-    getSnapshot: () => ({ session: { epoch: 1, workspace: { getSnapshot: () => ({ workspace, error: null }) } } }),
+    getSnapshot: () => ({ session: { epoch: 1, workspace: controller } }),
   } as unknown as Pick<IdentityTransition, 'sessionAuthority' | 'getSnapshot'>;
   const calls: string[] = [];
   const leases = Object.assign(new NativeLeases(), native(calls));
@@ -482,14 +495,26 @@ test('accepted runtime update consumes a new native session at the old workspace
   });
   const link = naddrEncode({ kind: 35129, pubkey: firstEvent.pubkey, identifier: appId });
   const first = await owner.openPublishedLink(link, new AbortController().signal, async () => true);
-  workspace = openNapplet(workspace, first);
+  controller.change(openNapplet(controller.getSnapshot().workspace, first));
+  await controller.flush();
+  const storageOwner = {user: USER, publisher: first.publisher, appId, version: first.version, instanceId: first.id, assertActive() {}};
+  const original = database.bindStorage(storageOwner).port;
+  await original.set('shared', 'before update');
+  await original.set('instance', 'this card', 'instance');
   const firstBinding = await owner.openPublished(first, new AbortController().signal, async () => true);
   latest = secondEvent;
   const next = await owner.preparePublishedUpdate(first, new AbortController().signal,
     async request => { assert.equal(request.nextEventId, secondEvent.id); return true; },
     async () => { assert.fail('unchanged grant must not prompt'); });
   assert(next);
-  workspace = replacePublishedNapplet(workspace, first.id, next);
+  await owner.commitPublishedUpdate(first, next, () => {});
+  const workspace = controller.getSnapshot().workspace;
+  const updated = database.bindStorage({...storageOwner, version: next.version, instanceId: next.id}).port;
+  assert.equal(await updated.get('shared'), 'before update');
+  assert.equal(await updated.get('instance', 'instance'), 'this card');
+  assert.equal(await original.get('instance', 'instance'), 'this card');
+  const reopened = await database.bindWorkspace(storageOwner).port.load();
+  assert.equal(reopened?.snapshot.sessions[0]?.id, next.id);
   owner.discardPublished(first.id);
   const secondBinding = await owner.openPublished(next, new AbortController().signal, async () => {
     assert.fail('prepared update must not reopen');
@@ -606,19 +631,24 @@ test('exact discovery review binds staging, then transfers lifetime to the mount
   const sourceActive = () => { if (!focused) throw new Error('Caller unfocused'); };
   const signal = new AbortController();
   const artifact = await owner.resolveDiscovered(LINK, EMBEDDED_TEST_EVENT.id, signal.signal, sourceActive);
+  const releasePin = await owner.retainForPin(artifact, signal.signal, sourceActive);
+  const pinRow = sqlite.raw(PUBLISHED_ARTIFACT_CACHE_DATABASE).prepare('SELECT event_id FROM verified_published_artifacts').get();
+  assert.equal(pinRow?.event_id, EMBEDDED_TEST_EVENT.id);
+  assert.equal(calls.length, 0);
+  releasePin();
   const busy = new ReviewBusyError();
   await assert.rejects(owner.prepareDiscovered(artifact, signal.signal, sourceActive, async changesAccess => {
     assert.equal(changesAccess, true);
     throw busy;
   }), error => error === busy);
-  assert.deepEqual(calls, []);
+  assert.equal(calls.length, 0);
 
   await assert.rejects(owner.prepareDiscovered(artifact, signal.signal, sourceActive, async changesAccess => {
     assert.equal(changesAccess, true);
     focused = false;
     return true;
   }));
-  assert.deepEqual(calls, []);
+  assert.equal(calls.length, 0);
 
   focused = true;
   const descriptor = await owner.prepareDiscovered(artifact, signal.signal, sourceActive, async changesAccess => {

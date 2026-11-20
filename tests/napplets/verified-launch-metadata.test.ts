@@ -62,6 +62,7 @@ test('launch artwork reuses bounded verified Blossom bytes and rejects mismatche
   const controller = new AbortController();
   const icon = { hash: hash(png), serverHints: [server], mime: 'image/png' };
   assert.equal(await media.readIcon(icon, controller.signal), 'data:image/png;base64,' + png.toString('base64'));
+  assert.equal(await media.readIcon({...icon, serverHints: []}, controller.signal), 'data:image/png;base64,' + png.toString('base64'));
   assert.deepEqual(requests, [{ hash: hash(png), mirrors: [server, fallback], maxBytes: 768 * 1024, signal: controller.signal }]);
   await assert.rejects(media.readIcon({ ...icon, mime: 'image/jpeg' }, controller.signal));
   controller.abort();

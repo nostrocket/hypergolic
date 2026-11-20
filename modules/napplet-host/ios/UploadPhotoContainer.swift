@@ -3,13 +3,30 @@ import zlib
 
 /// Reject malformed metadata before codecs can silently ignore it.
 enum UploadPhotoContainer {
-  static func validate(_ input: Data, _ type: String) -> Bool {
+  static func validatedType(_ input: Data) -> String? {
     let b = [UInt8](input)
-    if type == "public.jpeg" {return jpeg(b)}
-    if type == "public.png" {return png(b)}
-    if type == "org.webmproject.webp" {return webp(b)}
-    if type == "public.heic" {return heic(b)}
-    return type == "com.compuserve.gif" && b.count >= 14 && ["GIF87a","GIF89a"].contains(text(b,0,6)) && b.last == 59
+    guard b.count >= 12 else { return nil }
+    if b.starts(with: [0xff, 0xd8]) { return jpeg(b) ? "public.jpeg" : nil }
+    if b.starts(with: [137,80,78,71,13,10,26,10]) { return png(b) ? "public.png" : nil }
+    if ["GIF87a", "GIF89a"].contains(text(b, 0, 6)) {
+      return b.count >= 14 && b.last == 59 ? "com.compuserve.gif" : nil
+    }
+    if text(b, 0, 4) == "RIFF" { return webp(b) ? "org.webmproject.webp" : nil }
+    guard heicBrand(b), heic(b) else { return nil }
+    return "public.heic"
+  }
+
+  private static func heicBrand(_ b: [UInt8]) -> Bool {
+    guard text(b, 4, 4) == "ftyp" else { return false }
+    let size = number(b, 0, false)
+    guard size >= 16, size <= b.count, size % 4 == 0 else { return false }
+    let brands: Set<String> = ["heic", "heix", "hevc", "hevx"]
+    if brands.contains(text(b, 8, 4)) { return true }
+    return stride(from: 16, to: size, by: 4).contains { brands.contains(text(b, $0, 4)) }
+  }
+
+  static func validate(_ input: Data, _ type: String) -> Bool {
+    return validatedType(input) == type
   }
   static func cleanGeneratedPng(_ input: Data) -> Data? {
     guard validate(input, "public.png") else {return nil}

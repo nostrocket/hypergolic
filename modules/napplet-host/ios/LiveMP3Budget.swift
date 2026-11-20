@@ -25,13 +25,14 @@ final class LiveMP3Budget: @unchecked Sendable {
     self.clock = clock; self.maximum = maximum; self.duration = duration
     started = clock(); attemptStarted = started
   }
-  private func valid() throws {
+  @discardableResult private func valid() throws -> UInt64 {
     let now = clock()
     guard !cancelled, now >= started, now - started < duration else { throw Failure.retired }
     if transport && now - lastByte >= 10_000 { throw Failure.startup }
     if awaitingOutput && now - attemptStarted >= Self.startupMilliseconds { throw Failure.startup }
+    return now
   }
-  func check() throws { try lock.withLock { try valid() } }
+  func check() throws { try lock.withLock { _ = try valid() } }
   func beginAttempt() throws { try lock.withLock { try valid(); awaitingOutput = true; attemptStarted = clock();transport = true;lastByte = attemptStarted } }
   func markOutput() throws { try lock.withLock { try valid(); awaitingOutput = false } }
   func pause() throws { try lock.withLock { try valid(); awaitingOutput = false;transport = false } }
@@ -41,7 +42,7 @@ final class LiveMP3Budget: @unchecked Sendable {
       try valid(); guard bytes >= 0 && bytes <= maximum - received else { throw Failure.bytes }; received += bytes;if bytes > 0 { lastByte = clock() }
     }
   }
-  func remaining() throws -> UInt64 { try lock.withLock { try valid(); return duration - (clock() - started) } }
+  func remaining() throws -> UInt64 { try lock.withLock { let now = try valid(); return duration - (now - started) } }
   var readAllowance: Int { lock.withLock { min(8192,maximum-received+1) } }
   var count: Int { lock.withLock { received } }
   var active: Bool { (try? check()) != nil }

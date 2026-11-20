@@ -8,6 +8,7 @@ export interface Access {
 const safeCount = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 export function createConnection(db: SQLiteConnection) {
   let closed = false, poisoned = false, pending = 0;
+  const committedChecks = new WeakSet<Check>();
   let tail: Promise<unknown> = Promise.resolve();
   async function poison(): Promise<void> { poisoned = true; closed = true; try { await db.closeAsync(); } catch { /* Never reuse a poisoned connection. */ } }
   function access(check: Check): Access {
@@ -21,9 +22,10 @@ export function createConnection(db: SQLiteConnection) {
     try {
       check(); await db.execAsync('BEGIN IMMEDIATE'); check();
       const result = await action(access(check));
-      check(); attemptedCommit = true; await db.execAsync('COMMIT'); committed = true; check();
+      check(); attemptedCommit = true; await db.execAsync('COMMIT'); committed = true; committedChecks.add(check); check();
       return result;
     } catch (error) {
+      if (committed) return fail('STORAGE_INDETERMINATE');
       let active: boolean;
       try { active = await db.isInTransactionAsync(); if (active) await db.execAsync('ROLLBACK'); }
       catch { await poison(); return fail('STORAGE_INDETERMINATE'); }
@@ -35,7 +37,15 @@ export function createConnection(db: SQLiteConnection) {
     try { check(); } catch (error) { return Promise.reject(sanitize(error)); }
     if (pending >= LIMITS.totalRequests) return Promise.reject(new ShellStorageError('BUSY'));
     pending++;
-    const result = tail.then(async () => { check(); try { const value = await action(); check(); return value; } catch (error) { throw sanitize(error); } });
+    const result = tail.then(async () => {
+      check();
+      try {
+        const value = await action();
+        try { check(); }
+        catch (error) { if (committedChecks.has(check)) return fail('STORAGE_INDETERMINATE'); throw error; }
+        return value;
+      } catch (error) { throw sanitize(error); }
+    });
     tail = result.catch(() => undefined);
     return result.finally(() => { pending--; });
   }

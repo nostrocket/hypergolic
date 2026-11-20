@@ -61,6 +61,8 @@ internal class NativeFiniteVideo(private val host: LinearLayout, private val gen
   private val audio = host.context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
 
+  init { removeAbandonedDownload(host.context.cacheDir) }
+
   fun hasSession() = session != null
   fun receive(request: JSONObject, push: (JSONObject) -> Unit) {
     if (request.opt("type") == "media.session.create") { create(request, push); return }
@@ -393,6 +395,16 @@ internal class NativeFiniteVideo(private val host: LinearLayout, private val gen
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "hypergolic-finite-video").apply { isDaemon = true } }
     private var active: NativeFiniteVideo? = null
     private var downloading = false
+    private val swept = AtomicBoolean()
+    fun removeAbandonedDownload(cache: File) {
+      if (!swept.compareAndSet(false, true)) return
+      worker.execute {
+        val directory = File(cache, "hypergolic-finite-media-file-v1")
+        runCatching {
+          if (OsConstants.S_ISDIR(Os.lstat(directory.path).st_mode)) File(directory, "video.mp4").delete()
+        }
+      }
+    }
     fun revokeGenerations(generations: Set<String>) {
       active?.takeIf { it.generation in generations }?.retire("policy")
     }

@@ -9,7 +9,7 @@ async function open(page:Page,granted=true){
   const reply=(captured:any,message:object)=>send({type:'cvm.response',sessionId:generation,sequence:captured.sequence,response:JSON.stringify(message)});
   (window as any).__cvm={requests,held,finish(){const captured=held.shift();if(!captured)throw Error('No held request');const row=JSON.parse(captured.message),mcp=JSON.parse(row.message);reply(captured,{type:'cvm.request.result',id:row.id,message:{jsonrpc:'2.0',id:mcp.id,result:{accepted:true}}});},event(){send({type:'cvm.event',sessionId:generation,message:JSON.stringify({type:'cvm.event',server:{pubkey},message:{jsonrpc:'2.0',method:'notifications/progress',params:{progressToken:'stream',progress:1}}})});}};
   Object.defineProperty(window,'HypergolicHost',{value:{addEventListener(_t:string,h:(e:{data:string})=>void){listeners.add(h);},removeEventListener(_t:string,h:(e:{data:string})=>void){listeners.delete(h);},postMessage(raw:string){const value=JSON.parse(raw);
-   if(value.type==='artifact.read'){send({type:'artifact.chunk',sessionId:generation,sequence:0,base64:btoa(html),byteLength:html.length,totalBytes:html.length,publisher:pubkey,appId:'owned-cvm',eventId:'2'.repeat(64),htmlHash:hash,version,domains:granted?['cvm']:['theme'],done:true});return;}
+   if(value.type==='artifact.read'){send({type:'artifact.chunk',sessionId:generation,sequence:0,base64:btoa(html),byteLength:html.length,totalBytes:html.length,publisher:pubkey,appId:'owned-cvm',eventId:'2'.repeat(64),htmlHash:hash,version,domains:granted?['cvm','media']:['theme'],done:true});return;}
    if(value.type!=='cvm')return;requests.push(value);const row=JSON.parse(value.message);
    if(row.type==='cvm.request'){const mcp=JSON.parse(row.message);if(mcp.method==='hold'){held.push(value);return;}const result=mcp.method==='resources/read'?{contents:[{uri:'a',text:'one'},{uri:'b',mimeType:'text/plain',blob:'dHdv'}]}:mcp.method==='tools/list'?{tools:[{name:'owned'}]}:{accepted:true};reply(value,{type:'cvm.request.result',id:row.id,...(mcp.method!==undefined&&mcp.id!==undefined?{message:{jsonrpc:'2.0',id:mcp.id,result}}:{})});}
    else reply(value,{type:row.type+'.result',id:row.id,...(row.type==='cvm.registry.has'?{has:false}:row.type==='cvm.close'?{}:{error:'unsupported method'})});
@@ -38,3 +38,8 @@ test('120s operation survives ordinary30s; server callbacks require genuine pare
  await page.evaluate(()=>{(window as any).__cvm.event();(window as any).__cvm.finish();});await expect.poll(()=>guest.evaluate(()=>(window as any).__done)).toBe(true);expect(await guest.evaluate(()=>(window as any).__events.length)).toBe(1);expect(await guest.evaluate(()=>(window as any).__legacy[0].server.pubkey)).toBe(pubkey);
 });
 test('ungranted opaque guest has no namespace and raw CVM cannot reach native',async({page})=>{const guest=await open(page,false);expect(await guest.evaluate(()=>typeof(window as any).napplet.cvm)).toBe('undefined');await guest.evaluate(()=>parent.postMessage({type:'cvm.request',id:'forged',server:{pubkey:'4'.repeat(64)},message:{jsonrpc:'2.0',id:1,method:'ping'}},'*'));await page.waitForTimeout(50);expect(await page.evaluate(()=>(window as any).__cvm.requests)).toEqual([]);});
+
+test('the published guest inherits a neutral document base', async ({page}) => {
+  const guest = await open(page);
+  expect(await guest.evaluate(() => document.baseURI)).toBe('about:blank');
+});

@@ -6,7 +6,7 @@ import type { TrustedIdentityOwner } from './trusted-identity-owner';
 type IdentityState = Readonly<
   | { status: 'opening' }
   | { status: 'ready'; owner: TrustedIdentityOwner }
-  | { status: 'restart-required' | 'recovery-required' | 'device-required' | 'workspace-required' }
+  | { status: 'read-unavailable' | 'restart-required' | 'recovery-required' | 'device-required' | 'workspace-required' }
 >;
 const listeners = new Set<() => void>();
 let state: IdentityState = Object.freeze({ status: 'opening' });
@@ -14,13 +14,25 @@ const startOwner = createOwnerBootstrap(claimIdentityOwner, async () => {
   const { initializeNativeRandom } = await import('./crypto-bootstrap');
   initializeNativeRandom();
   const { openTrustedIdentityOwner, WorkspaceStartupError } = await import('./trusted-identity-owner');
-  try { return await openTrustedIdentityOwner(); } catch (error) {
+  try { return await openTrustedIdentityOwner(() => new Promise<void>(resolve => {
+    retryRead = resolve;
+    publish({ status: 'read-unavailable' });
+  })); } catch (error) {
     if (error instanceof WorkspaceStartupError) throw new WorkspaceEntryError();
     throw error;
   }
 });
 class WorkspaceEntryError extends Error {}
 let observed = false;
+let retryRead: (() => void) | undefined;
+
+export function retryIdentityRead(): void {
+  if (!retryRead) return;
+  const resume = retryRead;
+  retryRead = undefined;
+  publish({ status: 'opening' });
+  resume();
+}
 
 function publish(next: IdentityState) {
   state = Object.freeze(next);

@@ -20,13 +20,14 @@ async function fixture(t: TestContext, updating = false) {
   const prepare = async () => { await staged.promise; return next; };
   const actions = publishedSettingsActions({
     runtime: {openPublishedLink: prepare, preparePublishedUpdate: prepare,
+      commitPublishedUpdate: (previous, next, assertActive) => controller.acceptUpdate({previous, next, assertActive}),
       discardPublished: id => { discarded.push(id); }},
     blocked: false, getWorkspace: () => controller.getSnapshot().workspace,
     change: controller.change, position: {set: () => navigation.push('position')},
     progress: {set: () => navigation.push('progress')},
     setSettings: () => navigation.push('settings'),
   });
-  return {actions, controller, discarded, navigation, staged};
+  return {actions, controller, discarded, navigation, staged, database};
 }
 
 test('Settings releases a stage when the workspace freezes during preparation', async t => {
@@ -71,4 +72,34 @@ test('an accepted update transfers the stage and releases the previous runtime',
   assert.deepEqual(discarded, [previous.id]);
   assert.deepEqual(navigation, ['position', 'progress', 'settings']);
   await controller.flush();
+});
+
+test('a previously used target keeps both versions and the old workspace intact', async t => {
+  const {actions, controller, staged, database, discarded} = await fixture(t, true);
+  const owner = registration({publisher: previous.publisher, appId: previous.appId, version: next.version, instanceId: next.id});
+  const target = database.bindStorage(owner).port;
+  await target.set('saved', 'existing');
+  staged.resolve();
+  await assert.rejects(actions.checkPublishedUpdate(previous, new AbortController().signal, approve, approve), {code: 'TARGET_RETAINED'});
+  assert.deepEqual(controller.getSnapshot().workspace.sessions, [previous]);
+  assert.equal((await database.bindWorkspace(owner).port.load())?.snapshot.sessions[0]?.id, previous.id);
+  assert.equal(await target.get('saved'), 'existing');
+  assert.deepEqual(discarded, [next.id]);
+});
+
+test('a newly pinned card supplies the migration source after a previous selection was closed', async t => {
+  const {actions, controller, staged, database} = await fixture(t, true);
+  const owner = registration({publisher: previous.publisher, appId: previous.appId, version: previous.version, instanceId: previous.id});
+  const oldVersion = '1'.repeat(64);
+  const app = database.bindApp(owner).port;
+  await app.selectInitialVersion(oldVersion);
+  const historical = database.bindStorage({...owner, version: oldVersion}).port;
+  await historical.set('name', 'older selection');
+  await database.bindStorage(owner).port.set('name', 'current card');
+  staged.resolve();
+  assert.equal(await actions.checkPublishedUpdate(previous, new AbortController().signal, approve, approve), true);
+  assert.equal(controller.getSnapshot().workspace.sessions[0]?.id, next.id);
+  assert.equal(await app.selectedVersion(), next.version);
+  assert.equal(await historical.get('name'), 'older selection');
+  assert.equal(await database.bindStorage({...owner, version: next.version, instanceId: next.id}).port.get('name'), 'current card');
 });

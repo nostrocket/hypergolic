@@ -101,7 +101,7 @@ populate this cache.
 
 Cache and Object URLs live only while that napplet realm is loaded. Equivalent Blossom references share verified bytes by hash. Disabling Blossom blocks cached Blossom delivery too. Switching preserves its cache and place; cold launch refetches. Revocation clears the cache and private transfers. SDK URL helpers revoke on release, including revocation before asynchronous readiness; late completion cannot allocate a fresh URL.
 
-Audio/video uses complete grant-scoped Blob bytes. Trusted native focus/background handling pauses playback; the guest prelude rejects inactive/autoplay attempts and requires a fresh trusted gesture to Play. Returning retains position while loaded and waits for manual Play. iOS enables inline playback and disables AirPlay/Picture in Picture. Closing/replacement destroys the player. No background player, direct network media, stream or OS attachment-save workflow is claimed.
+Audio/video uses complete grant-scoped Blob bytes. Trusted native focus/background handling pauses playback; the guest prelude rejects inactive/autoplay attempts and requires a fresh trusted gesture to Play. Returning retains position while loaded and waits for manual Play. iOS enables inline playback and disables AirPlay/Picture in Picture. A Web Audio context connected to a guest game also suspends when the card loses focus. The next focused user gesture can resume a context that was running. Android WebViews with per-view muting support also mute the renderer while the card is inactive. Closing/replacement destroys the player. No background player, direct network media, stream or OS attachment-save workflow is claimed.
 
 
 ## Testing

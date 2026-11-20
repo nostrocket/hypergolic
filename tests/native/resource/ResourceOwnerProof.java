@@ -3,7 +3,6 @@ package org.nostrocket.hypergolic.host;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
 public final class ResourceOwnerProof {
@@ -23,7 +22,7 @@ public final class ResourceOwnerProof {
     check("immutable".equals(leases.borrowedSnapshot(token))); check(leases.take(token) == null);
     byte[] body = new byte[3 * 1024 * 1024]; body[body.length-1]=73;
     ResourceHttpsRequestOwner owner = new ResourceHttpsRequestOwner((url,cancel)->body.clone());
-    String id = UUID.randomUUID().toString();
+    String id = NativeTransportTickets.issue();
     denied(()->owner.fetch(id,token,"generation","https://cdn.example.com/a",()->leases.isActive(token),()->true),"blocked-by-policy");
     owner.setForeground(true);
     check(owner.fetch(id,token,"generation","https://cdn.example.com/a",()->leases.isActive(token),()->true)==body.length);
@@ -35,16 +34,16 @@ public final class ResourceOwnerProof {
     }
     denied(()->owner.read(id,token,0),"blocked-by-policy");
     denied(()->owner.fetch(id,token,"generation","https://cdn.example.com/a",()->leases.isActive(token),()->true),"invalid-request");
-    String cancelled=UUID.randomUUID().toString();owner.cancel(cancelled);
+    String cancelled=NativeTransportTickets.issue();owner.cancel(cancelled);
     denied(()->owner.fetch(cancelled,token,"generation","https://cdn.example.com/a",()->leases.isActive(token),()->true),"invalid-request");
     String[] ids=new String[4];
-    for(int i=0;i<4;i++){ids[i]=UUID.randomUUID().toString();check(owner.fetch(ids[i],token,"generation","https://cdn.example.com/a",()->leases.isActive(token),()->true)==body.length);}
-    denied(()->owner.fetch(UUID.randomUUID().toString(),token,"generation","https://cdn.example.com/a",()->leases.isActive(token),()->true),"quota-exceeded");
+    for(int i=0;i<4;i++){ids[i]=NativeTransportTickets.issue();check(owner.fetch(ids[i],token,"generation","https://cdn.example.com/a",()->leases.isActive(token),()->true)==body.length);}
+    denied(()->owner.fetch(NativeTransportTickets.issue(),token,"generation","https://cdn.example.com/a",()->leases.isActive(token),()->true),"quota-exceeded");
     leases.revoke("generation");owner.revokeGeneration("generation");
     for(String value:ids)denied(()->owner.read(value,token,0),"blocked-by-policy");
     check(leases.borrowedSnapshot(token)==null);check(leases.register("next"));
     String next=leases.admit("next",1,"next-snapshot");check(leases.take(next)!=null);
-    String waiting=UUID.randomUUID().toString();owner.fetch(waiting,next,"next","https://cdn.example.com/a",()->leases.isActive(next),()->true);
+    String waiting=NativeTransportTickets.issue();owner.fetch(waiting,next,"next","https://cdn.example.com/a",()->leases.isActive(next),()->true);
     time.addAndGet(25_000);check(leases.borrowedSnapshot(next)==null);
     denied(()->owner.read(waiting,next,0),"blocked-by-policy");
     byte[] header=("HTTP/1.1 200 OK\r\nContent-Length: "+body.length+"\r\n\r\n").getBytes(StandardCharsets.US_ASCII);

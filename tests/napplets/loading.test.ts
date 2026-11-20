@@ -12,7 +12,7 @@ const PUBKEY = getPublicKey(SECRET);
 const HTML = new TextEncoder().encode('<!doctype html><html><head><title>Test</title></head><body><main>ok</main></body></html>');
 const hex = (bytes: Uint8Array) => Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
 async function sha(bytes: Uint8Array): Promise<string> {
-  return hex(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)));
+  return hex(new Uint8Array(await crypto.subtle.digest('SHA-256', Uint8Array.from(bytes))));
 }
 async function fixtureTags(options: { x?: boolean; html?: Uint8Array; extras?: string[][] } = {}): Promise<string[][]> {
   const htmlHash = await sha(options.html ?? HTML);
@@ -29,7 +29,7 @@ function signed(tags: string[][], overrides: Record<string, unknown> = {}): any 
 }
 const LINK = naddrEncode({ kind: 35129, pubkey: PUBKEY, identifier: 'hello', relays: ['wss://relay.example.org'] });
 const coordinate = () => resolveNappletLink(`nostr:${LINK}`);
-const rejects = async (operation: () => unknown | Promise<unknown>) => assert.rejects(operation, NappletVerificationError);
+const rejects = async (operation: () => unknown | Promise<unknown>) => assert.rejects(async () => operation(), NappletVerificationError);
 
 test('resolves lowercase naddr and nostr:naddr with validated non-authoritative hints', () => {
   assert.deepEqual(resolveNappletLink(LINK), {

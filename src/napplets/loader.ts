@@ -26,7 +26,7 @@ export interface PublishedLoadOptions {
   /** Session/identity/epoch ownership is checked on each side of every await. */
   readonly assertActive: () => void;
 }
-type PublishedLoadCode = 'PUBLISHED_LOAD_FAILED' | 'PUBLISHED_NOT_FOUND' | 'PUBLISHED_UNSUPPORTED_MANIFEST' |
+type PublishedLoadCode = 'PUBLISHED_LOAD_FAILED' | 'PUBLISHED_NOT_FOUND' | 'PUBLISHED_PIN_CONFLICT' | 'PUBLISHED_UNSUPPORTED_MANIFEST' |
   'PUBLISHED_REVISION_CONFLICT' | 'PUBLISHED_REVISION_CHANGED' | 'PUBLISHED_LOOKUP_UNAVAILABLE' |
   'PUBLISHED_DOWNLOAD_UNAVAILABLE' | 'PUBLISHED_HASH_MISMATCH' | 'PUBLISHED_INVALID_HTML';
 

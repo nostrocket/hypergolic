@@ -1,13 +1,14 @@
+import { RequestHistory } from '../runtime/request-history.ts';
 import {decodeNativeRegistration, decodeNativeRequest, CAPABILITY_LIMITS, type NativeRegistration} from '../runtime/capability-protocol.ts';
 import type {CapabilityOwner, NativeCapabilityPort} from '../runtime/capability-broker.ts';
 import type {RoutingNativePort} from '../routing/routing-port.ts';
 import {routingPayload, routingRecord, routingText} from '../routing/routing-contract.ts';
 import {ShellStorageError, type TrustedRegistration} from '../storage/ports.ts';
 import {parseConfigMessage, type ConfigMessage} from './config-contract.ts';
-import {captureConfigSchema, configSecretFields, configValueValid, configValuesConform, resolveConfigValues, ConfigSchemaError, type ConfigSchema, type ConfigValues, type ConfigValue} from './config-schema.ts';
+import {ConfigKeyInputError, containsPrivateKeyInput, captureConfigSchema, configSecretFields, configValueValid, configValuesConform, resolveConfigValues, ConfigSchemaError, type ConfigSchema, type ConfigValues, type ConfigValue} from './config-schema.ts';
 import type {ConfigRecord, ConfigStore} from './config-store.ts';
 import type {ReviewSlot} from '../shell/review-slot.ts';
-type Endpoint = {origin: NativeRegistration; assertActive(): void; seen: Set<string>; tail: Promise<unknown>; schema: ConfigSchema | null; menu?: ConfigMenuTarget; version?: number; subscription: object | null; window: number; opens: number};
+type Endpoint = {origin: NativeRegistration; assertActive(): void; seen: RequestHistory; tail: Promise<unknown>; schema: ConfigSchema | null; menu?: ConfigMenuTarget; version?: number; subscription: object | null; window: number; opens: number};
 export type ConfigReview = Readonly<{id: string; origin: NativeRegistration; schema: ConfigSchema; reviewRevision: number; ordinary: ConfigValues; secretPresent: Readonly<Record<string, boolean>>; section?: string}>;
 export type ConfigMenuTarget = Readonly<{origin: NativeRegistration}>;
 export type ConfigSnapshot = Readonly<{review: ConfigReview | null; menu: readonly ConfigMenuTarget[]}>;
@@ -203,6 +204,7 @@ export class ConfigBroker {
     const check = () => {this.active(endpoint, revision); if (this.snapshot.review !== review || endpoint.schema !== review.schema ||
       (this.slot && !this.slot.owns('config', id)) || this.native.reviewRevision(endpoint.origin.generation, revision) !== review.reviewRevision) throw new ShellStorageError('REVOKED');}; check();
     const values = routingRecord(routingPayload(input), [], Object.keys(input as object)), changes = routingRecord(routingPayload(secretChanges), [], Object.keys(secretChanges));
+    if (containsPrivateKeyInput(values) || containsPrivateKeyInput(changes, true)) throw new ConfigKeyInputError();
     const fields = configSecretFields(review.schema), allowed = new Map(fields.map(field => [JSON.stringify(field.path), field]));
     if (fields.some(field => valueAt(values, field.path) !== undefined) || Object.entries(changes).some(([key, value]) => !allowed.has(key) || value !== null && !configValueValid(allowed.get(key)!.schema, value))) throw new ConfigSchemaError('invalid-schema');
     await this.store.change(this.owner(endpoint, check), previous => {
@@ -256,10 +258,10 @@ export class ConfigBroker {
       const id = routingText(wrapper.id, 128); if (!Number.isSafeInteger(wrapper.revision) || (wrapper.revision as number) < 0) return;
       this.refresh(); const revision = wrapper.revision as number;
       let endpoint = this.endpoints.get(expected.generation);
-      if (!endpoint) {if (this.endpoints.size >= 64) return; endpoint = {origin: expected, assertActive: owner.assertActive, seen: new Set(), tail: Promise.resolve(), schema: null, subscription: null, window: Date.now(), opens: 0}; this.endpoints.set(expected.generation, endpoint);}
+      if (!endpoint) {if (this.endpoints.size >= 64) return; endpoint = {origin: expected, assertActive: owner.assertActive, seen: new RequestHistory(CAPABILITY_LIMITS.sessionRequests), tail: Promise.resolve(), schema: null, subscription: null, window: Date.now(), opens: 0}; this.endpoints.set(expected.generation, endpoint);}
       else if (JSON.stringify(endpoint.origin) !== JSON.stringify(expected)) return;
       const selected = endpoint, check = () => {if (!this.capability.isActive(token)) throw new ShellStorageError('REVOKED'); owner.assertActive(); this.active(selected, revision);}; check();
-      if (selected.seen.has(id) || selected.seen.size >= CAPABILITY_LIMITS.sessionRequests) return; selected.seen.add(id);
+      if (selected.seen.claim(id)) return;
       const request = parseConfigMessage(wrapper.message);
       const work = selected.tail.catch(() => {}).then(async () => {check(); const result = await this.operate(selected, request, revision, check); check(); return result;}); selected.tail = work;
       const result = await work; check(); response = JSON.stringify({type: 'routing.call.result', id, response: result});

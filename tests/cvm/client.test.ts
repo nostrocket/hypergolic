@@ -88,7 +88,7 @@ test('prepared identity precedes commit and notification ACK remains decisive be
 test('endpoint accepts an already authenticated final before channel close, while still fencing stale source',async()=>{
  for(const invalidate of [false,true]){
   const h=setup();let current=true;
-  const scope:CvmScope={endpoint:'owned',generation:'generation',epoch:1,identity:'a'.repeat(64),publisher:'b'.repeat(64),appId:'owned',version:'c'.repeat(64),instance:'instance'};
+  const scope:CvmScope={endpoint:'owned',generation:'generation',sourceRevision:'source-revision',epoch:1,identity:'a'.repeat(64),publisher:'b'.repeat(64),appId:'owned',version:'c'.repeat(64),instance:'instance'};
   const endpoint=new CvmEndpoint(scope,{now:()=>performance.now(),assertCurrent(){if(!current)throw new CvmError('session closed');},async review(){return{token:'owned-integrated-permit'};},async open(){return h.client;}});
   h.setRespond((purpose,row,eventId)=>{if(purpose==='approved'){
    h.emit({eventId:id(799),references:[eventId],message:{jsonrpc:'2.0',id:row.id,result:{finished:true}}});if(invalidate)current=false;h.nativeClose();

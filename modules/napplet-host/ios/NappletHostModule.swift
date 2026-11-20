@@ -25,6 +25,7 @@ public final class NappletHostModule: Module {
     Name("HypergolicNappletHost")
     Events("onRelayStream", "onRelayLifecycle", "onUploadProgress", "onRoutingLifecycle")
     OnCreate {
+      Task { @MainActor in RestrictedNappletHost.removeAbandonedRules() }
       UploadTransport.observeProgress { event in streamEmitter?.emit(event: "onUploadProgress", payload: ["token": event.token, "bytesSent": event.bytesSent, "bytesTotal": event.bytesTotal]) }
       RoutingTransport.shared.observeLifecycle { snapshot in streamEmitter?.emit(event: "onRoutingLifecycle", payload: ["snapshot": snapshot]) }
       _ = CapabilityTransport.lifecycle
@@ -136,7 +137,7 @@ public final class NappletHostModule: Module {
       publishedRelay.cancel(operationId: operationId)
     }
     Function("revokeAllPublishedRelay") { publishedRelay.revokeAll() }
-    Function("newInstanceId") { UUID().uuidString.lowercased() }
+    Function("newInstanceId") { NativeTransportTickets.shared.issue() }
     Function("takeSubscription") { (token: String) -> String? in RelaySubscriptionTransport.shared.registry.take(token) }
     Function("acceptSubscription") { (token: String) -> Bool in RelaySubscriptionTransport.shared.registry.accept(token) }
     Function("mayDeliverSubscription") { (token: String) -> Bool in RelaySubscriptionTransport.shared.registry.mayDeliver(token) }

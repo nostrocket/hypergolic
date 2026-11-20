@@ -55,6 +55,10 @@ connection traffic are bounded. NIP-46 follows [revision a79e21d](https://github
 also selected for NIP-44; native cryptography is documented in
 [the signing core](signing-core.md#native-remote-encryption).
 
+Both clients ignore well-formed optional relay AUTH announcements. They validate each
+correlated reply against a 120-second past and 30-second future window. Relay order
+does not change the saved set. A signer error during preflight still stops the request.
+
 Signing stops when preflight reports changed relays. Explicit Settings refresh
 validates proposed destinations and requires flush/confirmation, retaining the
 client key, peer, account and selected method. On iOS, preflight relay equality
@@ -94,6 +98,10 @@ hop requires the exact bounded handoff ticket. Lock, account/method changes,
 cancellation, protected-data loss and expiry revoke work independently.
 
 Each native preparation/signing operation owns its panel, task, callback and timer.
+Android reuses its reserved 16-bit Activity codes only with a matching per-launch request ID.
+After a code has cycled, a platform cancellation with no ID is indistinguishable from an old
+callback. The request then ends through its owner cancellation or deadline.
+
 Late callbacks cannot consume or cancel a replacement request. Android handoff
 cancellation is notified at most once. Prepared resources not delivered because
 prompt cancellation wins must be closed.

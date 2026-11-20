@@ -79,7 +79,7 @@ const origin = {...resolveBundledSession(source), user, epoch: 1, generation: 's
 function request(available: boolean): RoutingReviewRequest {
   return {kind: 'published-open', origin, source, changesAccess: false,
     ...(available ? {legacyReadOnlyAvailable: true as const} : {}),
-    target: {...recipe, requiredDomains: [], optionalDomains: [], unsupportedDomains: [], unsupportedOptionalDomains: []}};
+    target: {...recipe, metadata: {title: 'Recipe cards', description: '', reference: recipe.appId, version: recipe.version, htmlHash: recipe.htmlHash}, requiredDomains: [], optionalDomains: [], unsupportedDomains: [], unsupportedOptionalDomains: []}};
 }
 test('trusted review defaults to ordinary mode and accepts only an explicit available legacy choice', async () => {
   for (const [available, decision, expected] of [
@@ -131,7 +131,7 @@ test('discovered installed unmounted pins persist their newly prepared descripto
   const saved = descriptorForPublishedArtifact(artifact, id), next = {...saved, title: 'Reviewed prepared title'};
   let workspace = openNapplet(openNapplet(emptyWorkspace(), saved), source), mounted = false, held = true;
   const controller: WorkspaceController = {getSnapshot: () => ({workspace, saving: false, error: null}),
-    subscribe: () => () => {}, change: value => {workspace = value;}, flush: async () => {}, freeze() {}, resume() {}, revoke() {}};
+    subscribe: () => () => {}, change: value => {workspace = value;}, acceptUpdate: async () => { throw Error('Unexpected update'); }, flush: async () => {}, freeze() {}, resume() {}, revoke() {}};
   const transition = {phase: 'ready', session: {workspace: controller, epoch: 1, vault: {selectedPubkey: user}}} as TransitionSnapshot;
   const reviews = new RoutingReviewService();
   const message = {type: DISCOVERY_OPEN, id: 'guest-open', address: naddrEncode(EMBEDDED_TEST_COORDINATE), expectedEventId: artifact.manifest.eventId};
@@ -142,7 +142,7 @@ test('discovered installed unmounted pins persist their newly prepared descripto
       mayDeliver: () => true, mayReview: () => true, reviewRevision: () => 7, send: () => false,
       newChannelId: () => 'channel', subscribe: () => () => {}},
     capability: {take: () => wire, isActive: () => held, finish: (_token, value) => {held = false; response = value;}},
-    runtime: () => ({resolveDiscovered: async () => artifact,
+    runtime: () => ({retainForPin: async () => () => {}, resolveDiscovered: async () => artifact,
       prepareDiscovered: async (_artifact, _signal, active, review, existing) => {
         assert.deepEqual(existing, saved); assert.equal(await review(false), true); active(); mounted = true; return next;
       }, publishedReadyGeneration: candidate => candidate.id === id && mounted ? 'mounted-target' : null, discardPublished() {}}),

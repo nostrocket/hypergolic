@@ -214,7 +214,7 @@ test('secure correlation IDs use getRandomValues when randomUUID is unavailable'
   });
   const frame = await open(page);
   expect(await frame.evaluate(() => (window as any).napplet.storage.getItem('secure-id'))).toBeNull();
-  expect((await state(page)).calls[0].message.id).toMatch(/^napplet-[a-f0-9]{32}$/);
+  expect((await state(page)).calls[0].message.id).toMatch(/^hg-[1-9][0-9]*-[a-f0-9]{32}$/);
 });
 
 

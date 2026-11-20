@@ -7,6 +7,8 @@ import { SUPPORTED_CAPABILITY_DOMAINS } from '../../src/runtime/capability-proto
 import { MAX_HTML_BYTES } from '../../src/napplets/artifact-limits';
 import type { NativeHost } from './native-client';
 const CHUNK_BYTES = 48 * 1024;
+// Native JSON encoders may escape every slash in the Base64 and claim strings.
+const MAX_CHUNK_WIRE_CHARS = 2 * (CHUNK_BYTES / 3 * 4) + 24 * 1024;
 const HEX64 = /^[0-9a-f]{64}$/;
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 
@@ -62,7 +64,7 @@ function receiveChunk(native: NativeHost, generation: string, sequence: number, 
       window.removeEventListener('message', ios);
     };
     const receive = (raw: unknown) => {
-      if (settled || typeof raw !== 'string' || raw.length > 70_000) return;
+      if (settled || typeof raw !== 'string' || raw.length > MAX_CHUNK_WIRE_CHARS) return;
       try {
         const value = record(JSON.parse(raw));
         if (value.type !== 'artifact.chunk' || value.sessionId !== generation) return;

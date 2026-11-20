@@ -53,6 +53,8 @@ protocol IdentityStoreBackend: Actor {
   func deleteItem(_ key: String, deletionToken: String?) async throws
 }
 
+#if !HYPERGOLIC_APP_VAULT
+// Compiled by the legacy native proof harness. The installed app uses NativeSignerVaultStorage.
 actor IdentityBridgeOwner {
   typealias Factory = @Sendable () throws -> any IdentityStoreBackend
   private let factory: Factory
@@ -107,6 +109,8 @@ enum IdentityStoreProcess {
     #endif
   }
 }
+
+#endif
 
 extension StoreFailure {
   var bridgeCode: String {

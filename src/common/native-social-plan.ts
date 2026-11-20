@@ -12,13 +12,14 @@ export function createNativeCommonSocialPlanner(native:NativePublishedRelayPort,
   return createCommonSocialPlanner({
     signer,
     async query(filters,registration,signal,active){
-      const trusted=settings();let relays=trusted.networkRelays;
+      const trusted=settings();let relays=trusted.networkRelays,routingIncomplete=false;
       if(registration.domains.includes('outbox')){
         const authors=[...new Set(filters.flatMap(filter=>(filter.authors??[]) as readonly string[]))];
         const plan=await resolveOutboxPlan(resolver,trusted,registration.user,authors,[],'read',signal,active,false,{wide:false,timeoutMs:7500});
-        if(plan.incomplete)throw new Error('Incomplete follow/target routing');relays=[...plan.relays];
+        routingIncomplete=plan.incomplete;relays=[...plan.relays];
       }
-      active();return createNativeRelayQuery(native,()=>relays).queryDetailed(filters,signal,active,{timeoutMs:7500});
+      active();const result=await createNativeRelayQuery(native,()=>relays).queryDetailed(filters,signal,active,{timeoutMs:7500});
+      return routingIncomplete?{...result,incomplete:true}:result;
     },
     async publication(template,id,registration,signal,active){
       if(registration.domains.includes('outbox')){const plan=await publication.plan({type:'outbox.publish',id,event:template,options:{toOutbox:true}},registration.user,signal,active);active();return Object.freeze({...plan,ancillary:null});}

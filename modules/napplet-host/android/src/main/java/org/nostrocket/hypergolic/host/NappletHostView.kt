@@ -66,8 +66,12 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
 
   init {
     synchronized(publishedViews) { publishedViews.add(this) }
+    if (WebViewFeature.isFeatureSupported(WebViewFeature.MUTE_AUDIO)) WebViewCompat.setAudioMuted(webView, true)
     webView.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
     webView.setBackgroundColor(0xff120e0a.toInt())
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      webView.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+    }
     webView.settings.apply {
       javaScriptEnabled = true
       domStorageEnabled = false
@@ -137,6 +141,15 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
         fail("renderer-stopped"); destroySession(); return true
       }
     }
+    if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+      // This all-frame policy exposes no Java object or callback.
+      WebViewCompat.addDocumentStartJavaScript(webView, """
+      if (window.parent !== window.top) window.top.postMessage({type: 'hypergolic.nested-document'}, '*');
+      for (const name of ['RTCPeerConnection', 'webkitRTCPeerConnection', 'RTCDataChannel', 'RTCIceTransport']) {
+        Object.defineProperty(globalThis, name, {value: undefined, writable: false, configurable: false});
+      }
+      """.trimIndent(), setOf("*"))
+    }
     if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
       WebViewCompat.addWebMessageListener(webView, "HypergolicHost", setOf(ORIGIN)) { view, message, origin, mainFrame, reply ->
         if (!live || view !== webView || !mainFrame || origin.toString() != ORIGIN || view.url != expectedUrl) return@addWebMessageListener
@@ -177,10 +190,9 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
           if (data.optString("sessionId") != generation) return@addWebMessageListener
           if (data.optString("type") == "routing-ack") {
             if (data.keys().asSequence().toSet() != setOf("type", "sessionId", "sequence", "delivery")) return@addWebMessageListener
-            val seq = data.opt("sequence"); val delivery = data.opt("delivery")
-            if ((seq !is Int && seq !is Long) || (delivery !is Int && delivery !is Long)) return@addWebMessageListener
-            if ((delivery as Number).toLong() !in 1..9_007_199_254_740_991L || !CapabilityTransport.leases.consumeSequence(generation, (seq as Number).toLong())) return@addWebMessageListener
-            RoutingTransport.acknowledge(generation, delivery.toLong())
+            if (!ready || consumeTransportSequence(data) == null) return@addWebMessageListener
+            val delivery = transportInteger(data.opt("delivery")) ?: return@addWebMessageListener
+            RoutingTransport.acknowledge(generation, delivery)
             return@addWebMessageListener
           }
           if (data.optString("type") == "relay-stream-ack") {
@@ -194,12 +206,10 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
             return@addWebMessageListener
           }
           if (data.optString("type") == "cvm") {
-            if (!ready || published == null || configuration?.cvmProfile != "free-foreground-v1" ||
-                data.keys().asSequence().toSet() != setOf("type", "sessionId", "sequence", "message")) return@addWebMessageListener
-            val sequence = data.opt("sequence")
-            if ((sequence !is Int && sequence !is Long) || !CapabilityTransport.leases.consumeSequence(generation, (sequence as Number).toLong())) return@addWebMessageListener
+            val sequence = consumeMessageSequence(data) ?: return@addWebMessageListener
+            if (published == null || configuration?.cvmProfile != "free-foreground-v1") return@addWebMessageListener
             val carrier = data.opt("message") as? String ?: return@addWebMessageListener
-            val capturedSequence = sequence.toLong()
+            val capturedSequence = sequence
             val token = CvmTransport.receive(generation, carrier, { response ->
               if (live && !disposed && view === webView && view.url == expectedUrl) reply.postMessage(
                 JSONObject().put("type","cvm.response").put("sessionId",generation).put("sequence",capturedSequence).put("response",response ?: JSONObject.NULL).toString())
@@ -211,10 +221,8 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
             return@addWebMessageListener
           }
           if (data.optString("type") == "media") {
-            if (!ready || published == null || configuration?.grantedDomains?.contains("media") != true ||
-                data.keys().asSequence().toSet() != setOf("type", "sessionId", "sequence", "message")) return@addWebMessageListener
-            val sequence = data.opt("sequence")
-            if ((sequence !is Int && sequence !is Long) || !CapabilityTransport.leases.consumeSequence(generation, (sequence as Number).toLong())) return@addWebMessageListener
+            consumeMessageSequence(data) ?: return@addWebMessageListener
+            if (published == null || configuration?.grantedDomains?.contains("media") != true) return@addWebMessageListener
             if (!UploadJsonBounds.accepts(text, 32 * 1024)) return@addWebMessageListener
             val request = data.optJSONObject("message") ?: return@addWebMessageListener
             val deliver: (JSONObject) -> Unit = { event ->
@@ -389,6 +397,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     finiteVideo.focusChanged(); liveRadio.focusChanged()
     updateInputActivity()
     val playingAllowed = active && mediaForeground
+    if (WebViewFeature.isFeatureSupported(WebViewFeature.MUTE_AUDIO)) WebViewCompat.setAudioMuted(webView, !playingAllowed)
     if (loaded) webView.evaluateJavascript("window.__hypergolicMediaActive?.($playingAllowed)", null)
     // Loaded foreground views also render the live overview. Focus gates media and
     // privileged actions separately; pausing an unfocused renderer blanks its card.
@@ -455,7 +464,8 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     }
     val claims = parsePublishedClaims(raw) ?: run { fail("invalid-session"); return }
     sessionId = claims.sessionId
-    if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+    if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER) ||
+      !WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
       fail("webview-update-required"); return
     }
     val claimed = PublishedArtifactTransfer.INSTANCE.claimForHost(
@@ -526,21 +536,14 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
 
   private fun receiveStreamAck(data: JSONObject) {
     if (!ready || data.keys().asSequence().toSet() != setOf("type", "sessionId", "sequence", "streamSequence", "delivery")) return
-    val values = listOf("sequence", "streamSequence", "delivery").map { name ->
-      val value = data.opt(name)
-      if (value !is Int && value !is Long) return
-      (value as Number).toLong().takeIf { it in 1..9_007_199_254_740_991L } ?: return
-    }
-    if (!CapabilityTransport.leases.consumeSequence(generation, values[0])) return
-    RelaySubscriptionTransport.acknowledge(generation, values[1], values[2])
+    consumeTransportSequence(data) ?: return
+    val stream = transportInteger(data.opt("streamSequence")) ?: return
+    val delivery = transportInteger(data.opt("delivery")) ?: return
+    RelaySubscriptionTransport.acknowledge(generation, stream, delivery)
   }
   private fun receiveSubscription(data: JSONObject, push: (String) -> Unit) {
     val config = configuration ?: return
-    if (!ready || data.keys().asSequence().toSet() != setOf("type", "sessionId", "sequence", "message")) return
-    val number = data.opt("sequence")
-    if (number !is Int && number !is Long) return
-    val sequence = (number as Number).toLong()
-    if (sequence !in 1..9_007_199_254_740_991L || !CapabilityTransport.leases.consumeSequence(generation, sequence)) return
+    val sequence = consumeMessageSequence(data) ?: return
     val message = data.opt("message") as? String ?: return
     val request = runCatching { UploadWire.objectValue(message, CapabilityLeaseRegistry.MAX_BYTES) }.getOrNull() ?: return
     val subId = request.opt("subId") as? String ?: return
@@ -555,6 +558,17 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     onHostEvent(mapOf("type" to "capability", "lane" to (if (legacy) "legacy-subscription" else if (outbox) "outbox-subscription" else "subscription"), "sessionId" to config.sessionId, "generation" to generation, "token" to token))
   }
 
+  private fun consumeMessageSequence(data: JSONObject): Long? {
+    if (!ready || data.keys().asSequence().toSet() != setOf("type", "sessionId", "sequence", "message")) return null
+    return consumeTransportSequence(data)
+  }
+  private fun consumeTransportSequence(data: JSONObject): Long? =
+    transportInteger(data.opt("sequence"))?.takeIf { CapabilityTransport.leases.consumeSequence(generation, it) }
+
+  private fun transportInteger(value: Any?): Long? {
+    if (value !is Int && value !is Long) return null
+    return (value as Number).toLong().takeIf { it in 1..9_007_199_254_740_991L }
+  }
   private fun mayDeferCapability(request: JSONObject?, config: CapabilityConfiguration): Boolean {
     if (request == null) return false
     val type = request.opt("type") as? String ?: return false
@@ -580,10 +594,10 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     val fields = setOf("type", "sessionId", "sequence", "message")
     if (!ready || data.keys().asSequence().toSet() != (if (deferred) fields + "deferred" else fields)) return
     val number = data.get("sequence")
-    if ((number !is Int && number !is Long) || data.get("message") !is String) return
+    if (number !is Int && number !is Long) return
     val sequence = (number as Number).toLong()
     if (sequence !in 1..9_007_199_254_740_991L) return
-    val message = data.getString("message")
+    val message = data.opt("message") as? String ?: run { CapabilityTransport.leases.consumeSequence(generation, sequence); replyRaw(null); return }
     val operation = UUID.randomUUID().toString()
     val now = android.os.SystemClock.elapsedRealtime()
     pendingNativeReplies.entries.removeAll { it.value <= now }
@@ -622,7 +636,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
       onHostEvent(mapOf("type" to "capability", "lane" to lane, "sessionId" to config.sessionId, "generation" to generation, "token" to token))
       return
     }
-    if (!UploadJsonBounds.accepts(message, CapabilityLeaseRegistry.MAX_BYTES)) { reply(null); return }
+    if (!UploadJsonBounds.accepts(message, CapabilityLeaseRegistry.MAX_BYTES)) { CapabilityTransport.leases.consumeSequence(generation, sequence); reply(null); return }
     if (request?.optString("type") == "link.open") {
       if (!CapabilityTransport.leases.consumeSequence(generation, sequence)) { reply(null); return }
       LinkTransport.receive(generation, config, message, appContext.currentActivity, reply)
@@ -630,9 +644,9 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     }
     if (request?.optString("type")?.startsWith("upload.") == true) {
       if (!CapabilityTransport.leases.consumeSequence(generation, sequence) || !config.allowsUpload) { reply(null); return }
-      reply(UploadTransport.receive(generation, sequence, message, push) { token ->
+      UploadTransport.receive(generation, sequence, message, request, push, reply) { token ->
         if (live && !disposed) onHostEvent(mapOf("type" to "capability", "lane" to "upload", "sessionId" to config.sessionId, "generation" to generation, "token" to token))
-      })
+      }
       return
     }
     if (request != null && (request.optString("type") in listOf("relay.publish", "outbox.publish") || config.allowsCommonSocial(request.optString("type")))) {
@@ -655,7 +669,8 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     if (sessionId != null) { fail("session-reuse-blocked"); return }
     sessionId = id
     if (!id.matches(Regex("[A-Za-z0-9_-]{1,80}"))) { fail("invalid-session"); return }
-    if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+    if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER) ||
+      !WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
       fail("webview-update-required"); return
     }
     if (configuration != null && !CapabilityTransport.leases.register(generation)) { fail("capability-unavailable"); return }

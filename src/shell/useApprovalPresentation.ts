@@ -1,12 +1,12 @@
 import type { ReviewSlot } from './review-slot';
-import {useState} from 'react';
+import {useEffect, useState} from 'react';
 import { VaultError } from '../security/identity-vault-model';
 import { isSignerFailureCode, signerFailureMessage } from '../security/signing-methods';
-import type {ApprovalItem,ApprovalService} from '../security/approval-service';
+import {PublicationUncertainError,type ApprovalItem,type ApprovalService} from '../security/approval-service';
 import type {OutboxPublicationReceipt} from '../outbox/publication-receipt';
 import type {RelayOutcome} from '../network/relay-service';
 import {appDataPublicationStatus} from './app-data-publication-status';
-type Presentation=Readonly<{service:ApprovalService;epoch:number;id:string;held:ApprovalItem|null;busy:boolean;receipt:OutboxPublicationReceipt|null;outcome:string|null}>;
+type Presentation=Readonly<{service:ApprovalService;epoch:number;id:string;sessionId:string;held:ApprovalItem|null;busy:boolean;receipt:OutboxPublicationReceipt|null;outcome:string|null}>;
 function publicationStatus(results:readonly RelayOutcome[]):string {
  let accepted=0,unknown=0;
  for(const row of results){if(row.status==='accepted')accepted++;if(row.status==='unknown')unknown++;}
@@ -17,20 +17,25 @@ function publicationStatus(results:readonly RelayOutcome[]):string {
 export function useApprovalPresentation(service:ApprovalService,epoch:number,reviewSlot?:ReviewSlot){
  const [stored,setStored]=useState<Presentation|null>(null);
  const state=stored?.epoch===epoch&&stored.service===service?stored:null;
- const approve=(item:ApprovalItem)=>{
+ useEffect(() => {
+  if (!state?.outcome) return;
+  const timer = setTimeout(() => setStored(current => current === state ? null : current), 8_000);
+  return () => clearTimeout(timer);
+ }, [state]);
+ const approve=(item:ApprovalItem,confirmedNewListId?:string)=>{
   if(reviewSlot ? !reviewSlot.holdApproval(item) : state?.busy)return;
-  const pending:Presentation={service,epoch,id:item.id,held:item,busy:true,receipt:null,outcome:null};setStored(pending);
-  void service.approve(item.id).then(results=>{
+  const pending:Presentation={service,epoch,id:item.id,sessionId:item.origin.sessionId,held:item,busy:true,receipt:null,outcome:null};setStored(pending);
+  void service.approve(item.id,confirmedNewListId).then(results=>{
    const receipt=service.outboxReceipt(results),outcome=receipt?null:item.appData?appDataPublicationStatus(results):publicationStatus(results);
    if(!receipt)reviewSlot?.releaseApproval(item.id);
    setStored(current=>current===pending?{...pending,held:null,busy:false,receipt,outcome}:current);
   }).catch(error=>{
    reviewSlot?.releaseApproval(item.id);
-   const outcome=error instanceof VaultError&&isSignerFailureCode(error.code)?signerFailureMessage(error.code):'Approval was not completed.';
+   const outcome=error instanceof PublicationUncertainError?'The event may have been published.':error instanceof VaultError&&isSignerFailureCode(error.code)?signerFailureMessage(error.code):'Approval was not completed.';
    setStored(current=>current===pending?{...pending,held:null,busy:false,outcome}:current);
   });
  };
- return {id:state?.id??null,held:state?.held??null,busy:state?.busy??false,receipt:state?.receipt??null,outcome:state?.outcome??null,approve,
+ return {id:state?.id??null,sessionId:state?.sessionId??null,held:state?.held??null,busy:state?.busy??false,receipt:state?.receipt??null,outcome:state?.outcome??null,approve,
   dismissReceipt:()=>{
    if(state?.receipt)reviewSlot?.releaseApproval(state.id);
    setStored(current=>current===state&&current?{...current,receipt:null}:current);

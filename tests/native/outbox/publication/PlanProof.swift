@@ -78,7 +78,7 @@ enum CapabilityTransport { static let leases = CapabilityLeaseRegistry() }
     check(!registry.claimNativeSigning(token, expected: frozen.replacingOccurrences(of: composed, with: decomposed)))
     check(registry.claimNativeSigning(token, expected: frozen))
   }
-  static func main() throws {
+  static func main() async throws {
     let data = try Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[1]))
     let fixture = try JSONSerialization.jsonObject(with: data) as! [String: Any]
     for row in fixture["appData"] as! [[String: Any]] {
@@ -144,11 +144,20 @@ enum CapabilityTransport { static let leases = CapabilityLeaseRegistry() }
     var noGrant = try JSONSerialization.jsonObject(with: Data(snapshot.utf8)) as! [String: Any]
     var registration = noGrant["registration"] as! [String: Any]; registration["domains"] = ["relay"]; noGrant["registration"] = registration
     denied { _ = try NativeOutboxPlan.capture(snapshot: wire(noGrant), raw: raw) }
+    var relayRequest = try NativeOutboxPlan.object(noGrant["request"] as! String)
+    relayRequest["type"] = "relay.publish"; relayRequest.removeValue(forKey:"options")
+    noGrant["request"] = try wire(relayRequest)
+    denied { _ = try NativeOutboxPlan.capture(snapshot: wire(noGrant), raw: raw) }
+    var relayPlan = fixture["plan"] as! [String: Any]
+    relayPlan["ancillary"] = NSNull(); relayPlan["requiredInboxes"] = [String]()
+    let rawOwner = try NativeOutboxPlan.capture(snapshot: wire(noGrant), raw: wire(relayPlan))
+    check(try rawOwner.reserve(group:"primary", wire:primary, relay:relay).eventId == send.eventId)
     denied { _ = try NativeOutboxPlan.capture(snapshot: snapshot, raw: String(repeating: "[", count: 30) + "0" + String(repeating: "]", count: 30)) }
     let leases = CapabilityLeaseRegistry(); check(leases.register("owner-a"))
     let registry = ApprovalTransportRegistry(leases: leases, schedule: { _, _ in })
     check(registry.register("owner-a")); registry.setForeground(true); registry.setFocused("owner-a", active: true)
-    let token = registry.admit("owner-a", snapshot: snapshot, wireId: "native-outbox-publication", reply: { _ in })!
+    let (replies, receiver) = AsyncStream<String?>.makeStream()
+    let token = registry.admit("owner-a", snapshot: snapshot, wireId: "native-outbox-publication", reply: { receiver.yield($0) })!
     check(registry.take(token) == snapshot); check(!registry.mayReview(token)); check(!registry.approve(token))
     check(registry.prepareOutbox(token, raw: raw)); check(!registry.prepareOutbox(token, raw: raw))
     check(registry.mayReview(token)); check(registry.approve(token)); check(!registry.prepareOutbox(token, raw: raw))
@@ -159,6 +168,9 @@ enum CapabilityTransport { static let leases = CapabilityLeaseRegistry() }
     denied { try registry.sendOutbox(token, operation: operation) { sends += 1 } }; check(sends == 1)
     let next = try registry.reserveOutbox(token, group: "primary", wire: primary, relay: plan.destinations[1])
     registry.setForeground(false)
+    var iterator = replies.makeAsyncIterator()
+    let interrupted = try NativeOutboxPlan.object(await iterator.next()!! )
+    check(interrupted["error"] as? String == "publication result unknown")
     denied { try registry.sendOutbox(token, operation: next) { sends += 1 } }; check(sends == 1)
     registry.setForeground(true); registry.resume()
     denied { try registry.sendOutbox(token, operation: next) { sends += 1 } }; check(sends == 1)

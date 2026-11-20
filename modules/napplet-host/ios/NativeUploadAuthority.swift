@@ -32,10 +32,12 @@ final class NativeUploadAuthority: @unchecked Sendable {
     func acceptsDescriptorType(_ type: String?) -> Bool {
       type == mimeType || validatedWav && type == "audio/x-wav"
     }
-    fileprivate init(_ row: Row) {
-      identity = row.session.identity; destination = row.destination; mimeType = row.mimeType; metadataPolicy = row.metadataPolicy
-      validatedWav = row.mimeType == "audio/wav" && UploadFileProfile.attachmentType([UInt8](row.body)) == "audio/wav"
-      size = row.body.count; sha256 = SHA256.hash(data: row.body).map { String(format: "%02x", $0) }.joined()
+    fileprivate init(identity: String, destination: String, file: UploadFileProfile.Prepared) {
+      self.identity = identity; self.destination = destination
+      mimeType = file.mimeType; metadataPolicy = file.metadataPolicy
+      validatedWav = mimeType == "audio/wav" && UploadFileProfile.attachmentType([UInt8](file.bytes)) == "audio/wav"
+      size = file.bytes.count
+      sha256 = SHA256.hash(data: file.bytes).map { String(format: "%02x", $0) }.joined()
     }
   }
   fileprivate final class Row {
@@ -49,6 +51,7 @@ final class NativeUploadAuthority: @unchecked Sendable {
     var expires: Int64
     var review: Review?
     var grant: Grant?
+    var preparing = false
     var signingClaimed = false
     var executionPaused = false
     var transferClaimed = false
@@ -116,26 +119,36 @@ final class NativeUploadAuthority: @unchecked Sendable {
   func append(_ request: Request, offset: Int, chunk: Data) -> Bool {
     lock.withLock {
       prune()
-      guard let row = live(request), row.review == nil, !chunk.isEmpty, chunk.count <= Self.chunkBytes,
+      guard let row = live(request), !row.preparing, row.review == nil, !chunk.isEmpty, chunk.count <= Self.chunkBytes,
         offset == row.cursor, chunk.count <= row.body.count - row.cursor else { return false }
       row.body.replaceSubrange(row.cursor..<(row.cursor + chunk.count), with: chunk); row.cursor += chunk.count; return true
     }
   }
   func seal(_ request: Request) -> Review? {
     lock.withLock {
-      prune(); guard let row = live(request), row.review == nil, row.cursor == row.body.count else { return nil }
-      let review = Review(row); row.review = review; return review
+      prune(); guard let row = live(request), !row.preparing, row.review == nil, row.cursor == row.body.count else { return nil }
+      let review = Review(identity: row.session.identity, destination: row.destination,
+        file: UploadFileProfile.Prepared(bytes: row.body, mimeType: row.mimeType, metadataPolicy: row.metadataPolicy))
+      row.review = review; return review
     }
   }
-  /// Native byte preparation happens before hashing/review, independently of the guest MIME.
   func sealPreparedFile(_ request: Request) -> Review? {
-    lock.withLock {
-      prune(); guard let row = live(request), row.review == nil, row.cursor == row.body.count else { return nil }
-      guard let result = prepare(row.body) else {
-        requests.removeValue(forKey: ObjectIdentifier(request))?.clear(); return nil
-      }
-      row.clear(); row.body = result.bytes; row.cursor = result.bytes.count; row.mimeType = result.mimeType; row.metadataPolicy = result.metadataPolicy
-      let review = Review(row); row.review = review; return review
+    let input: (String, String, Data)? = lock.withLock {
+      prune()
+      guard let row = live(request), !row.preparing, row.review == nil, row.cursor == row.body.count else { return nil }
+      row.preparing = true
+      return (row.session.identity, row.destination, row.body)
+    }
+    guard let (identity, destination, original) = input else { return nil }
+    guard let file = prepare(original) else { cancel(request); return nil }
+    let review = Review(identity: identity, destination: destination, file: file)
+    return lock.withLock {
+      prune()
+      guard let row = live(request), row.preparing else { return nil }
+      row.clear(); row.body = file.bytes; row.cursor = file.bytes.count
+      row.mimeType = file.mimeType; row.metadataPolicy = file.metadataPolicy
+      row.review = review; row.preparing = false
+      return review
     }
   }
   func pauseExecution(_ request: Request, paused: Bool) -> Bool {

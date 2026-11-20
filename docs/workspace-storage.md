@@ -30,8 +30,8 @@ ordinary napplet strings are stored as text.
 
 Namespaces use account, verified publisher, stable app, aggregate version and
 shared/instance scope. Instance scope additionally includes a persisted native
-UUID, surviving restart; a new opening after close receives another ID. Closing
-retains shared data. Already-saved legacy numeric UX Lab descriptors remain
+UUID that survives restart. Reopening a saved Home pin restores its instance
+ID. A fresh opening gets a new ID. Closing retains shared data. Already-saved legacy numeric UX Lab descriptors remain
 compatible.
 
 The native [broker](native-capabilities.md) binds operations to current epoch,
@@ -133,3 +133,7 @@ Custom unmarked controls need markup from the game author.
 
 - Long-press actions to rearrange and unpin Home shortcuts. The first version uses
   Edit on Home and Unpin from Home in the napplet menu.
+
+A focused napplet uses the landscape viewport. **All napplets** stays available in the upper corner and returns to the overview without closing the napplet. Android Back also opens the overview after dismissing any open keyboard or shell surface.
+
+The workspace keeps up to eight native napplet views loaded. Opening another card shows a prompt to close a loaded card first. Existing drafts stay in their running views until you choose which card to close.

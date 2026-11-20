@@ -18,7 +18,8 @@ export function useWorkspaceBack({ workspace, blocked, fullscreen, menuVisible, 
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
       if (menuVisible) { dismissMenu(); return true; }
       if (keyboard.current) { Keyboard.dismiss(); return true; }
-      if (fullscreen || blocked || busy.current || closeChecks.isPending()) return true;
+      if (blocked || busy.current || closeChecks.isPending()) return true;
+      if (fullscreen) { openOverview(); return true; }
       if (home) return false;
       if (!overview) { openHome(); return true; }
       if (focusedId) { focusSession(focusedId); return true; }

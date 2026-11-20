@@ -16,5 +16,9 @@ Pod::Spec.new do |s|
   s.dependency 'HypergolicIdentityOwner'
   s.frameworks = 'Security', 'CryptoKit', 'LocalAuthentication', 'UIKit'
   s.source_files = '**/*.swift'
-  s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
+  s.exclude_files = 'IdentityFileStore.swift', 'NativeIdentityAuthorizationServices.swift'
+  s.pod_target_xcconfig = {
+    'DEFINES_MODULE' => 'YES',
+    'SWIFT_ACTIVE_COMPILATION_CONDITIONS' => '$(inherited) HYPERGOLIC_APP_VAULT'
+  }
 end

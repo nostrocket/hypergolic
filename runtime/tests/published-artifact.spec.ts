@@ -12,13 +12,14 @@ const identity = {
   publisher: '1'.repeat(64), appId: 'published-test', eventId: '2'.repeat(64), version, htmlHash,
 };
 
-type Mode = 'normal' | 'keys-domain' | 'bad-hash' | 'malformed-base64' | 'replayed-sequence' | 'unknown-domain' | 'relay-domain' | 'attributed-head' | 'commented-head' | 'unsafe-head-comment' | 'upload-domain' | 'all-domains' | 'outbox-domain' | 'outbox-only' | 'published-approval' | 'intent-only' | 'soy-policy' | 'soy-policy-change'
+type Mode = 'escaped-full-chunk' | 'normal' | 'keys-domain' | 'bad-hash' | 'malformed-base64' | 'replayed-sequence' | 'unknown-domain' | 'relay-domain' | 'attributed-head' | 'commented-head' | 'unsafe-head-comment' | 'upload-domain' | 'all-domains' | 'outbox-domain' | 'outbox-only' | 'published-approval' | 'intent-only' | 'soy-policy' | 'soy-policy-change'
   | 'snapshot' | 'snapshot-mismatch' | 'snapshot-title-change' | 'snapshot-discovery';
 
 function artifactFor(mode: Mode): Buffer {
   if (mode === 'published-approval') return approvalHtml;
   if (mode === 'intent-only') return Buffer.from('<!doctype html><html><head><title>Intent</title></head><body><output id="deliveries"></output></body></html>');
   const source = html.toString();
+  if (mode === 'escaped-full-chunk') return Buffer.from(source.replace('</head>', '<!--' + '?'.repeat(48 * 1024) + '--></head>'));
   if(mode==='soy-policy'||mode==='soy-policy-change'||mode==='snapshot-title-change')return Buffer.from(source.replace('</body>','<!--'+'x'.repeat(64*1024)+'--></body>'));
   if (mode === 'keys-domain') return Buffer.from(source.replace('</body>', `
     <keys-declarative-editor id="keys-declarative" style="display:block">
@@ -90,7 +91,8 @@ async function openPublished(page: Page, mode: Mode = 'normal', extraQuery = '')
         domains: mode==='soy-policy'||mode==='soy-policy-change'?['identity','outbox','theme']:mode === 'intent-only' ? ['intent'] : mode === 'published-approval' ? ['identity', 'relay', 'theme'] : mode === 'unknown-domain' ? ['future-domain'] : mode === 'outbox-domain' ? ['outbox', 'relay', 'theme'] : mode === 'outbox-only' ? ['outbox', 'theme'] : mode === 'relay-domain' ? ['relay', 'theme'] : mode === 'upload-domain' ? ['upload'] : mode === 'keys-domain' ? ['keys', 'theme'] : mode === 'all-domains' ? ['config', 'identity', 'inc', 'intent', 'link', 'notify', 'outbox', 'relay', 'resource', 'storage', 'theme', 'upload'] : ['theme'],
         done: (sequence + 1) * 48 * 1024 >= htmlLength,
       };
-      for (const listener of listenerSet) listener({ data: JSON.stringify(envelope) });
+      const wire = JSON.stringify(envelope);
+      for (const listener of listenerSet) listener({ data: mode === 'escaped-full-chunk' ? wire.replaceAll('/', '\\/') : wire });
     };
     Object.defineProperty(window, 'HypergolicHost', { value: {
       addEventListener: (_type: string, listener: (event: { data: string }) => void) => listenerSet.add(listener),
@@ -137,6 +139,11 @@ async function publishedGuest(page: Page) {
 
 // Calculated in Node to keep browser fixture setup simple and deterministic.
 const awaitHashVersionPlaceholder = digest(`${'f'.repeat(64)} /index.html\n`);
+
+test('a full artifact chunk fits with escaped Base64 slashes', async ({page}) => {
+  await openPublished(page, 'escaped-full-chunk');
+  await expect(page.frameLocator('#napplet').getByTestId('lab')).toHaveAttribute('data-ready', 'true');
+});
 
 test('published host works when an older WebView lacks URLSearchParams.size', async ({ page }) => {
   await page.addInitScript(() => {

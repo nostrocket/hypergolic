@@ -27,7 +27,7 @@ async function readRecord(io: Access, user: string, author: string): Promise<Out
   return Object.freeze({ fetchedAt: rows[0]!.fetched_at, event: decode(rows[0]!.payload, author) });
 }
 /** Shell-owned public metadata; both identity and author are namespace keys. */
-export async function openOutboxRelayListCache(sqlite: SQLiteModule, platform: 'android' | 'ios'): Promise<OutboxRelayListCache> {
+export async function openOutboxRelayListCache(sqlite: SQLiteModule, platform: 'android' | 'ios', now: () => number = Date.now): Promise<OutboxRelayListCache> {
   if (platform !== 'android' && platform !== 'ios') return fail('INVALID_INPUT');
   let db;
   try { db = await sqlite.openDatabaseAsync(OUTBOX_CACHE_DATABASE, { useNewConnection: true, enableChangeListener: false }); }
@@ -62,7 +62,7 @@ export async function openOutboxRelayListCache(sqlite: SQLiteModule, platform: '
       const lease = connection.lease(assertActive);
       try { await lease.submit({ signal }, check => connection.transaction(check, async io => {
         const previous = await readRecord(io, user, author);
-        if (previous && fetchedAt < previous.fetchedAt) return fail('INVALID_INPUT');
+        if (previous && fetchedAt < previous.fetchedAt && previous.fetchedAt <= now()) return fail('INVALID_INPUT');
         // Empty/older replies cannot roll back a known replacement winner.
         const candidates = [previous?.event, candidate].filter((item): item is NostrEvent => item !== null && item !== undefined);
         const event = selectOutboxRelayList(candidates, author)?.event ?? null;

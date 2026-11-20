@@ -1,7 +1,7 @@
 import type { NappletConsentReview } from './first-open-consent.ts';
 import type { PublishedUpdateReview } from './published-session.ts';
 import type { NappletDescriptor, Workspace } from '../shell/workspace.ts';
-import { focusNapplet, openNapplet } from '../shell/workspace.ts';
+import { conflictsWithPublishedRevision, focusNapplet, openNapplet } from '../shell/workspace.ts';
 import { discoveryCoordinate, isDiscoveryEntry } from './discovery-entry.ts';
 
 type Review = (request: NappletConsentReview) => Promise<boolean>;
@@ -14,19 +14,24 @@ export interface DiscoveryControllerPorts {
   openPublished(address: string, signal: AbortSignal, review: Review): Promise<NappletDescriptor>;
   updatePublished(session: NappletDescriptor, signal: AbortSignal,
     reviewVersion: (request: PublishedUpdateReview) => Promise<boolean>, reviewAccess: Review): Promise<NappletDescriptor | null>;
+  commitUpdate(previous: NappletDescriptor, next: NappletDescriptor, active: () => void): Promise<void>;
   discard(sessionId: string): void;
   beforeClose?(session: NappletDescriptor): void;
   review: Review;
   unavailable(): void;
 }
 
-function replaceCatalog(ports: DiscoveryControllerPorts, selected: NappletDescriptor, next: NappletDescriptor, active: () => void) {
+async function replaceCatalog(ports: DiscoveryControllerPorts, selected: NappletDescriptor, next: NappletDescriptor, active: () => void) {
   ports.beforeClose?.(selected);
   active();
   const current = ports.workspace();
+  if (selected.source === 'bundled' && conflictsWithPublishedRevision(current, next)) throw new Error('Catalog revision has changed');
   if (current.sessions.some(session => session.id === next.id)) throw new Error('Catalog session already exists');
-  const sessions = current.sessions.map(session => session.id === selected.id ? next : session);
-  ports.commit({sessions, focusedId: next.id, overview: false});
+  if (selected.source === 'published') await ports.commitUpdate(selected, next, active);
+  else {
+    const sessions = current.sessions.map(session => session.id === selected.id ? next : session);
+    ports.commit({...current, home: false, sessions, focusedId: next.id, overview: false});
+  }
   if (ports.workspace().focusedId !== next.id) throw new Error('Catalog update could not be applied');
 }
 
@@ -101,7 +106,7 @@ export function createDiscoveryController(ports: DiscoveryControllerPorts) {
               (candidate.eventId !== reviewed.update?.nextEventId || candidate.version !== reviewed.update?.nextVersion))) {
           throw new Error('Invalid catalog update');
         }
-        replaceCatalog(ports, selected, candidate, active);
+        await replaceCatalog(ports, selected, candidate, active);
         committed = true;
         if (selected.source === 'published') ports.discard(selected.id);
       } catch {

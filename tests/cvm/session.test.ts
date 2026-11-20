@@ -132,7 +132,7 @@ test('own active cancellation keeps exact typed payload; a target finishing duri
  const work=h.endpoint.dispatch(request('own'));await new Promise(resolve=>setImmediate(resolve));
  const cancel={type:'cvm.request',id:'cancel',server,message:{jsonrpc:'2.0',method:'notifications/cancelled',params:{requestId:'own',reason:'stop'}},options:{initialize:false}};
  assert.deepEqual(await h.endpoint.dispatch(cancel),{type:'cvm.request.result',id:'cancel'});assert.equal(h.calls.requests,2);
- const held=deferred();h.ports.review=async review=>{h.calls.reviews.push(review);await held.promise;return{token:'later-cancel'};};
+ const held=deferred<void>();h.ports.review=async review=>{h.calls.reviews.push(review);await held.promise;return{token:'later-cancel'};};
  const late=h.endpoint.dispatch({...cancel,id:'late'});await new Promise(resolve=>setImmediate(resolve));target.resolve({jsonrpc:'2.0',id:'own',result:{}});await work;held.resolve();
  assert.equal((await late)?.error,'invalid message');assert.equal(h.calls.requests,2);h.endpoint.revoke();
 });

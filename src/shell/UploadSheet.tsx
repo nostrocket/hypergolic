@@ -1,3 +1,4 @@
+import { base64 } from '@scure/base';
 import { TrustedBand } from './TrustedBand';
 import { useMemo, useState } from 'react';
 import { Image } from 'expo-image';
@@ -11,25 +12,15 @@ import {snapshotEventId} from '../napplets/published-identity';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 interface Props {item: UploadItem | null; title: string; onApprove(id: string): void; onReject(id: string): void}
 function preview(item: UploadItem): string | null {
-  const bytes = item.copyPreview(); if (!bytes || item.review.mimeType !== 'image/png') return null;
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  const chunks: string[] = [];
+  if (item.review.metadataPolicy !== 'photo-stripped' || item.review.mimeType !== 'image/png') return null;
+  const bytes = item.copyPreview();
+  if (!bytes) return null;
   try {
-    for (let start = 0; start < bytes.length; start += 3 * 4096) {
-      let output = '';
-      for (let offset = start; offset < Math.min(start + 3 * 4096, bytes.length); offset += 3) {
-        const a = bytes[offset]!, b = bytes[offset + 1] ?? 0, c = bytes[offset + 2] ?? 0;
-        output += alphabet[a >> 2]! + alphabet[((a & 3) << 4) | (b >> 4)]! +
-          (offset + 1 < bytes.length ? alphabet[((b & 15) << 2) | (c >> 6)]! : '=') +
-          (offset + 2 < bytes.length ? alphabet[c & 63]! : '=');
-      }
-      chunks.push(output);
-    }
-    return 'data:image/png;base64,' + chunks.join('');
+    return 'data:image/png;base64,' + base64.encode(bytes);
   } finally {bytes.fill(0);}
 }
 function inspection(item: UploadItem): string | null {
-  const bytes = item.copyPreview(); if (!bytes) return null;
+  const bytes = item.copyPreview(256); if (!bytes) return null;
   try {
     return Array.from(bytes.subarray(0, 256), byte => byte.toString(16).padStart(2, '0'))
       .reduce<string[]>((lines, pair, index) => {const row = Math.floor(index / 16); lines[row] = (lines[row] || '') + (index % 16 ? ' ' : '') + pair; return lines;}, []).join('\n');

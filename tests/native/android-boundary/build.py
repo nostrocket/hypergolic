@@ -57,6 +57,7 @@ def build(output, network_control=False):
             command.insert(5, '-Dhypergolic.boundaryNetworkControl=true')
         receipt['command'] = command
         env = {key: value for key, value in os.environ.items() if key != 'ENTRY_FILE' and not key.startswith('HYPERGOLIC_KEY')}
+        env['HYPERGOLIC_VARIANT'] = 'development'
         with (output / 'gradle.log').open('w') as log:
             rc = subprocess.run(command, cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT, timeout=1200).returncode
         receipt['gradleExitCode'] = rc

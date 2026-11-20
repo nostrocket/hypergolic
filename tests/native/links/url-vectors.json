@@ -1,5 +1,13 @@
 [
   {
+    "url": "https://0x08080808",
+    "error": "invalid-url"
+  },
+  {
+    "url": "https://0xface.example",
+    "error": null
+  },
+  {
     "url": "https://example.com",
     "error": null
   },

@@ -16,7 +16,7 @@ async function open(page: Page) {
     Object.defineProperty(window, 'HypergolicHost', {value: {postMessage: (raw: string) => diagnostics.push(JSON.parse(raw))}});
     Object.defineProperty(window, 'workerDiagnostics', {value: diagnostics});
   });
-  await page.goto('/assets/runtime/index.html?sessionId=local-workers');
+  await page.goto('/assets/runtime/index.html?sessionId=local-workers&fixture=ux-lab');
   await expect(page.frameLocator('#napplet').getByTestId('lab')).toHaveAttribute('data-ready', 'true');
   const frame = page.frames().find(candidate => candidate.parentFrame() === page.mainFrame())!;
   expect(await page.locator('#napplet').getAttribute('sandbox')).toBe('allow-scripts');

@@ -1,5 +1,5 @@
 import {Configuration} from './Configuration';
-import {Notifications} from './Notifications';
+import {Notifications, NotificationReview} from './Notifications';
 import {RoutingReview} from './RoutingReview';
 import {IdentityListReview} from './IdentityListReview';
 import { useEffect, useSyncExternalStore } from 'react';
@@ -41,7 +41,8 @@ export function IdentityShell({ owner }: { owner: TrustedIdentityOwner }) {
       footer={owner.notify && <Notifications service={owner.notify} blocked={state.phase !== 'ready'} />} />
     {owner.config && <Configuration service={owner.config} blocked={state.phase !== 'ready'} />}
     <RoutingReview service={owner.routing?.reviews ?? null} reviewSlot={owner.reviewSlot} blocked={state.phase !== 'ready'} />
-    <IdentityListReview service={owner.listAccess ?? null} blocked={state.phase !== 'ready'} />
+    {owner.notify && <NotificationReview service={owner.notify} slot={owner.reviewSlot} blocked={state.phase !== 'ready'}/>}
+    <IdentityListReview slot={owner.reviewSlot} service={owner.listAccess ?? null} blocked={state.phase !== 'ready'} />
   </RuntimeContext></OwnerContext>;
 }
 const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.create({

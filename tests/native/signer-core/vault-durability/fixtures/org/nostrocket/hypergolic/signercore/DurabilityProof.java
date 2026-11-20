@@ -154,6 +154,25 @@ public final class DurabilityProof {
     }
   }
 
+  static void readFailures() throws Exception {
+    File root = fresh("read");
+    try {
+      NativeVaultFile store = storage(root);
+      store.write(OLD, true);
+      AtomicFile.failRead = true;
+      try { store.read(); check(false, "injected read must fail"); }
+      catch (NativeVault.Error e) { check("VAULT_READ_UNAVAILABLE".equals(e.code), "I/O read can retry"); }
+      AtomicFile.failRead = false;
+      check(Arrays.equals(store.read(), OLD), "same owner reads after storage is available");
+      File record = new File(root, "native-signer/vault.bin");
+      byte[] bytes = Files.readAllBytes(record.toPath());
+      bytes[bytes.length - 1] ^= 1;
+      Files.write(record.toPath(), bytes);
+      try { store.read(); check(false, "changed tag must fail"); }
+      catch (NativeVault.Error e) { check("CORRUPT_METADATA".equals(e.code), "invalid authentication tag requires recovery"); }
+    } finally { clear(root); }
+  }
+
   static void interruptedInitial() throws Exception {
     cases++;
     File root = fresh("initial");
@@ -170,13 +189,10 @@ public final class DurabilityProof {
       }
       check(!acknowledged, "failed initial file sync cannot acknowledge identity creation");
       fault = "none";
-      boolean denied = false;
-      try {
-        storage(root).read();
-      } catch (NativeVault.Error e) {
-        denied = true;
-      }
-      check(denied, "partial initial key state requires recovery and cannot become fresh absence");
+      NativeVaultFile fresh = storage(root);
+      check(fresh.read() == null, "empty store is retryable after interrupted setup");
+      fresh.write(NEXT, true);
+      check(Arrays.equals(storage(root).read(), NEXT), "retry produces a readable initial record");
     } finally {
       clear(root);
     }
@@ -218,12 +234,34 @@ public final class DurabilityProof {
     }
   }
 
+  static void bufferGrowth() throws Exception {
+    byte[][] backing = new byte[1][];
+    java.io.OutputStream capture = new java.io.OutputStream() {
+      public void write(int value) { throw new AssertionError(); }
+      public void write(byte[] data, int offset, int count) { backing[0] = data; }
+    };
+    try (NativeSecretBuffer buffer = new NativeSecretBuffer(1)) {
+      buffer.write(1);
+      buffer.writeTo(capture);
+      buffer.write(2);
+      check(Arrays.equals(backing[0], new byte[1]), "single-byte growth wipes retired array");
+      buffer.writeTo(capture);
+      buffer.write(new byte[]{3, 4, 5});
+      check(Arrays.equals(backing[0], new byte[backing[0].length]), "bulk growth wipes retired array");
+      check(Arrays.equals(buffer.toByteArray(), new byte[]{1, 2, 3, 4, 5}), "growth preserves encoded value");
+      buffer.writeTo(capture);
+    }
+    check(Arrays.equals(backing[0], new byte[backing[0].length]), "close wipes final backing");
+  }
+
   public static void main(String[] args) throws Exception {
+    bufferGrowth();
     Security.addProvider(new KeyStoreProvider());
     normal();
     for (String s : List.of("file", "child", "parent")) failure(s);
     for (String s : List.of("partial", "rename", "readback")) ordinaryFailure(s);
     interruptedInitial();
+    readFailures();
     for (String f : List.of("none", "sync", "close", "type")) systemAdapter(f);
     KeyStoreProvider.keys.clear();
     System.out.println("RESULT cases=" + cases + " assertions=" + assertions

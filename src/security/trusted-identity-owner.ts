@@ -43,7 +43,6 @@ import { ApprovalService } from './approval-service';
 import { createApprovalOwner, createUploadOwner } from './approval-owner';
 import { loadNativeApprovalPort } from '../runtime/native-approval-port';
 import { loadNativeRelayQuery } from '../network/native-relay-query-port';
-import { publishEvent } from '../network/relay-service';
 import { openNativeRelaySettings, type NativeRelaySettings } from '../network/relay-settings-native';
 import { Platform } from 'react-native';
 import { createRuntimeOwner, type RuntimeOwner } from '../runtime/runtime-owner';
@@ -132,7 +131,6 @@ async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android
     }), {
       handoffState: source => vault.signingHandoffState(source),
       sign: (snapshot, execution) => vault.signApproved(snapshot, execution),
-      publishEvent,
     },outbox.publication,outbox.common,outbox.appData);
     const uploads=createWorkspaceUploads(vault,transition,()=>runtime);
     const capability = loadNativeCapabilityPort(), routingNative = loadRoutingNativePort();
@@ -196,7 +194,7 @@ function createWorkspaceUploads(vault:NativeIdentityVault,transition:IdentityTra
 }
 
 /** Dynamically imported only after the native process claim succeeds. */
-export async function openTrustedIdentityOwner(): Promise<TrustedIdentityOwner> {
+export async function openTrustedIdentityOwner(waitForVaultRetry?: () => Promise<void>): Promise<TrustedIdentityOwner> {
   const platform = Platform.OS;
   if (platform !== 'android' && platform !== 'ios') throw new VaultError('STORAGE_FAILURE');
   const native = requireNativeModule<NativeVaultModule>('HypergolicSignerCore');
@@ -207,7 +205,7 @@ export async function openTrustedIdentityOwner(): Promise<TrustedIdentityOwner> 
   const vault = new NativeIdentityVault(native);
   const actions = createNativeIdentityActions(vault);
   try {
-    await vault.open();
+    await vault.open(waitForVaultRetry);
     return Object.freeze({ ...await openOwnerWorkspace(vault, platform), formatNpub, actions });
   } catch (error) {
     try { actions.dispose(); } catch { /* Native owner remains consumed. */ }

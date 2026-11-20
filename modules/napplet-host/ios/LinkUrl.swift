@@ -7,7 +7,7 @@ enum LinkUrl {
   static func displayIdentity(_ value: String) -> String {
     value.unicodeScalars.map {scalar in
       let c = scalar.value
-      if c < 32 || (127...159).contains(c) || c == 0x061c || c == 0x200e || c == 0x200f ||
+      if c < 32 || (127...159).contains(c) || scalar.properties.generalCategory == .format ||
         (0x2028...0x202e).contains(c) || (0x2066...0x2069).contains(c) {return String(format: "\\u%04X", c)}
       return String(scalar)
     }.joined()
@@ -32,7 +32,7 @@ enum LinkUrl {
     }
     let labels = host.split(separator: ".", omittingEmptySubsequences: false)
     guard labels.allSatisfy({$0.range(of: "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$", options: .regularExpression) != nil}) else {return "invalid-url"}
-    if host.allSatisfy({$0.isNumber || $0 == "."}) {
+    if labels.allSatisfy({$0.range(of: "^(?:[0-9]+|0[xX][0-9A-Fa-f]*)$", options: .regularExpression) != nil}) {
       guard labels.count == 4, labels.allSatisfy({$0.count <= 3 && ($0.count == 1 || !$0.hasPrefix("0")) && Int($0).map({$0 <= 255}) == true}) else {return "invalid-url"}
     }
     return nil

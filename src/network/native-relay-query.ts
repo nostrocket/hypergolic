@@ -5,7 +5,7 @@ import type { NativePublishedRelayPort } from '../napplets/native-published-rela
 import { parsePublishedRelayMessage } from '../napplets/published-relay-wire.ts';
 import { normalizeRelayUrl, MAX_RELAYS_PER_ROLE } from './relay-settings.ts';
 import { utf8Bytes } from '../storage/codec.ts';
-import { OUTBOX_QUERY_COUNTS, parseQueryFilters, QUERY_LIMITS, RelayQueryDataError, RelayQueryError, relayQueryWire, selectQueryEvents, captureQueryEvent, verifyQueryEvent, type QueryFilter } from './relay-query-contract.ts';
+import { OUTBOX_QUERY_COUNTS, parseQueryFilters, QUERY_LIMITS, RelayQueryBusyError, RelayQueryDataError, RelayQueryError, relayQueryWire, selectQueryEvents, captureQueryEvent, verifyQueryEvent, type QueryFilter } from './relay-query-contract.ts';
 
 export interface RelayQueryService {
   readonly catalog?: CatalogRelayReader;
@@ -48,15 +48,27 @@ async function boundedPeerRead(port: NativeQueryPort, request: PeerRequest, budg
   try {return await Promise.race([port.queryPublishedRelay(operation, relay, wire, subscription), expired]);}
   finally {clearTimeout(timer); signal.removeEventListener('abort', stop);}
 }
+function readPeerFrames(port: NativeQueryPort, request: PeerRequest, lifetime: ReturnType<typeof queryLifetime>,
+  budget: number, peers: number, index: number, completeRelays: boolean, outbox: boolean): Promise<string[]> {
+  if (completeRelays || (!outbox && peers > 1)) {
+    const remaining=lifetime.remaining();
+    const share=completeRelays ? completePeerBudget(budget,peers,remaining)
+      : Math.max(1,Math.min(remaining,Math.floor(budget / (Math.ceil(peers / 2) + 1))));
+    return boundedPeerRead(port, request, share, lifetime.signal);
+  }
+  const {operation,relay,wire,subscription}=request;
+  return outbox ? port.queryPublishedRelay(operation,relay,wire,subscription,lifetime.peerBudget(peers-index))
+    : port.queryPublishedRelay(operation,relay,wire,subscription);
+}
 type PeerRead = (relay: string, index: number) => Promise<'complete' | 'invalid' | 'failed'>;
-async function readCompleteRelays(relays: readonly string[], readRelay: PeerRead): Promise<void> {
+async function readPeers(relays: readonly string[], readRelay: PeerRead, retry: boolean): Promise<void> {
   // Two peers leave native capacity for other reads. A failed connection gets
   // one fresh attempt; invalid frames never retry or contribute partial data.
   let next = 0;
   const worker = async () => {
     while (next < relays.length) {
       const index = next++, relay = relays[index]!;
-      if (await readRelay(relay, index) === 'failed') await readRelay(relay, index);
+      if (await readRelay(relay, index) === 'failed' && retry) await readRelay(relay, index);
     }
   };
   await Promise.all(Array.from({length: Math.min(2, relays.length)}, worker));
@@ -141,7 +153,7 @@ function queryCollection(filters: readonly QueryFilter[], relays: readonly strin
 function queryLifetime(signal: AbortSignal, active: () => void, budget: number, enforceClock: boolean,
   cancelOperation: (operation: string) => void, partialResult: () => RelayQueryResult | undefined) {
   const controller = new AbortController();
-  const expiresAt = enforceClock ? performance.now() + budget : 0;
+  const expiresAt = performance.now() + budget;
   const pending = new Set<string>();
   let deadline = false;
   const cancel = () => {
@@ -202,18 +214,23 @@ export function createNativeRelayQuery(port: NativeQueryPort,
     if (new Set(relays).size !== relays.length) throw new RelayQueryError('relay query unavailable');
     return relays;
   }
+  function prepare(input:readonly QueryFilter[],catalogRelay?:string,detailed?:DetailedQueryOptions) {
+    const wireFilters = parseQueryFilters(input, counts.events, detailed?.maximumFilters, detailed?.allowSearch, counts.events);
+    const {search, ...structuredFilter} = wireFilters[0]!;
+    const ranked = search !== undefined;
+    const filters = ranked ? [structuredFilter] : wireFilters;
+    const budget = detailed?.timeoutMs ?? timeoutMs;
+    if (!Number.isSafeInteger(budget) || budget < 1 || budget > timeoutMs) throw new RelayQueryError();
+    const configured = configuredRelays();
+    const relays = catalogRelay === undefined ? configured : configured.filter(relay => relay === catalogRelay);
+    if (ranked && relays.length !== 1) throw new RelayQueryError();
+    if (relays.length === 0) throw new RelayQueryError('relay query unavailable');
+    return {wireFilters,filters,ranked,budget,relays};
+  }
   async function runQuery(input: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void, partialAtDeadline: boolean,
     catalogRelay?: string, detailed?: DetailedQueryOptions): Promise<RelayQueryResult> {
-      const wireFilters = parseQueryFilters(input, counts.events, detailed?.maximumFilters, detailed?.allowSearch, counts.events);
-      const {search, ...structuredFilter} = wireFilters[0]!;
-      const ranked = search !== undefined;
-      const filters = ranked ? [structuredFilter] : wireFilters;
-      const budget = detailed?.timeoutMs ?? timeoutMs;
-      if (!Number.isSafeInteger(budget) || budget < 1 || budget > timeoutMs) throw new RelayQueryError();
-      const configured = configuredRelays();
-      const relays = catalogRelay === undefined ? configured : configured.filter(relay => relay === catalogRelay);
-      if (ranked && relays.length !== 1) throw new RelayQueryError();
-      if (relays.length === 0 || concurrent >= QUERY_LIMITS.concurrent) throw new RelayQueryError('relay query busy');
+      const {wireFilters,filters,ranked,budget,relays}=prepare(input,catalogRelay,detailed);
+      if (concurrent >= QUERY_LIMITS.concurrent) throw new RelayQueryBusyError();
       const active = () => { if (signal.aborted) throw new RelayQueryError('relay query cancelled'); assertActive(); };
       active();
       concurrent++;
@@ -241,12 +258,7 @@ export function createNativeRelayQuery(port: NativeQueryPort,
             try {
               active();
               checkDeadline?.();
-              const frames = completeRelays
-                ? await boundedPeerRead(port, {operation, relay, wire, subscription},
-                  completePeerBudget(budget, relays.length, lifetime.remaining()), lifetime.signal)
-                : options.outbox
-                  ? await port.queryPublishedRelay(operation,relay,wire,subscription,lifetime.peerBudget(relays.length - index))
-                  : await port.queryPublishedRelay(operation,relay,wire,subscription);
+              const frames=await readPeerFrames(port,{operation,relay,wire,subscription},lifetime,budget,relays.length,index,completeRelays,options.outbox===true);
               active();
               if (lifetime.aborted()) throw new RelayQueryError();
               try {
@@ -272,7 +284,7 @@ export function createNativeRelayQuery(port: NativeQueryPort,
             return 'complete';
         };
         const work = async () => {
-          if (completeRelays) await readCompleteRelays(relays, readRelay);
+          if (completeRelays || !options.outbox) await readPeers(relays, readRelay, completeRelays);
           else {
             for (const [index, relay] of relays.entries()) await readRelay(relay, index);
           }

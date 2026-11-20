@@ -6,7 +6,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
 import java.util.function.LongSupplier;
@@ -23,7 +22,25 @@ final class NativeAndroidSignerActivityController {
     void cancel();
   }
   private static final long MAX_LIFETIME_MS = 120_000;
-  private static final AtomicInteger NEXT_CODE = new AtomicInteger(44000);
+  static final class RequestCode {
+    private static final int FIRST = 44000, LAST = 65535;
+    private static int next = FIRST;
+    private static boolean wrapped;
+    final int value;
+    final boolean needsRequestId;
+
+    private RequestCode(int value, boolean needsRequestId) {
+      this.value = value;
+      this.needsRequestId = needsRequestId;
+    }
+
+    static synchronized RequestCode reserve() {
+      RequestCode code = new RequestCode(next, wrapped);
+      if (next == LAST) { next = FIRST; wrapped = true; }
+      else next++;
+      return code;
+    }
+  }
   private final Object owner;
   private final BooleanSupplier live;
   private final LongSupplier elapsed;
@@ -39,7 +56,7 @@ final class NativeAndroidSignerActivityController {
     final NativeAndroidSignerBinding binding;
     final NativeEvent event;
     final String id = UUID.randomUUID().toString();
-    final int code;
+    final RequestCode code;
     final long deadline;
     final Completion completion;
     final Handoff handoff;
@@ -52,8 +69,7 @@ final class NativeAndroidSignerActivityController {
       this.activity = activity;
       this.binding = binding;
       this.event = event;
-      this.code = NEXT_CODE.getAndUpdate(value -> value < 65536 ? value + 1 : value);
-      if (code > 65535) throw new NativeVault.Error("SIGNER_UNSUPPORTED");
+      this.code = RequestCode.reserve();
       this.deadline = deadline;
       this.completion = completion;
     }
@@ -143,7 +159,7 @@ final class NativeAndroidSignerActivityController {
       if (handoff != null) handoff.start(entry.id, deadline, binding);
       if (!current(entry)) throw denied();
       if (handoff != null) handoff.dispatched();
-      launcher.launch(activity, intent, entry.code);
+      launcher.launch(activity, intent, entry.code.value);
       if (pending == entry) main.post(entry.poll);
     } catch (Exception failure) {
       finish(entry, null, code(failure, "SIGNER_APP_FAILED"));
@@ -153,7 +169,10 @@ final class NativeAndroidSignerActivityController {
   void result(Activity activity, Object context, int requestCode, int resultCode, Intent data) {
     onMain();
     Request entry = pending;
-    if (entry == null || entry.consumed || context != owner || activity != entry.activity || requestCode != entry.code) return;
+    if (entry == null || entry.consumed || context != owner || activity != entry.activity || requestCode != entry.code.value) return;
+    // A recycled Android result code alone cannot identify its launch. Ignore late and
+    // uncorrelated callbacks before consuming the current request or notifying its owner.
+    if (entry.code.needsRequestId && !NativeAndroidSignerResult.matchesRequest(data, entry.id)) return;
     // Consume before parsing or callback. Replays can never satisfy a later request.
     entry.consumed = true;
     main.removeCallbacks(entry.poll);

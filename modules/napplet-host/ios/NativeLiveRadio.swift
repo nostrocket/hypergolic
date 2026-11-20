@@ -4,10 +4,10 @@ import AVFoundation
 /// Foreground shell source card. Publisher Play/autoplay never starts a connection.
 @MainActor final class NativeLiveRadio {
   @MainActor private final class Session {
-    let id="media-"+UUID().uuidString.lowercased(),url:String,push:([String:Any])->Void
+    let id="media-"+UUID().uuidString.lowercased(),displayURL:String,push:([String:Any])->Void
     var playback:LiveMP3Playback!
     var phase="paused",pauseReason="user"
-    init(url:String,push:@escaping([String:Any])->Void){self.url=url;self.push=push}
+    init(displayURL:String,push:@escaping([String:Any])->Void){self.displayURL=displayURL;self.push=push}
   }
   private final class Weak { weak var value:NativeLiveRadio?;init(_ value:NativeLiveRadio){self.value=value} }
   private static var instances:[String:Weak]=[:]
@@ -55,8 +55,9 @@ import AVFoundation
     guard session == nil else{reject("Close the radio player before creating another source.");return}
     guard Set(request.keys) == ["type","id","url","live"],let live=request["live"] as? NSNumber,
       CFGetTypeID(live)==CFBooleanGetTypeID(),live.boolValue,let url=request["url"] as? String,
-      (try? PublishedPinnedHTTPS.Request(url,liveMP3Profile:true)) != nil else{reject("Unsupported radio source.");return}
-    let row=Session(url:url,push:push)
+      let endpoint = try? PublishedPinnedHTTPS.Request(url,liveMP3Profile:true) else{reject("Unsupported radio source.");return}
+    let authority = endpoint.port == 443 ? endpoint.host : "\(endpoint.host):\(endpoint.port)"
+    let row=Session(displayURL:"https://\(authority)\(endpoint.target)",push:push)
     row.playback=LiveMP3Playback(url:url,profile:profile(),scope:scope,permit:permit){[weak self,weak row] event in
       Task{@MainActor in if let self,let row{self.handle(row,event)}}
     }
@@ -88,8 +89,8 @@ import AVFoundation
       label.font=UIFont.preferredFont(forTextStyle:style);label.adjustsFontForContentSizeCategory=true;return label
     }
     let title=text(panelTitle(row),style:.caption1,color:Self.accent)
-    let source=text(row.url,style:.subheadline,color:Self.ink)
-    source.lineBreakMode = .byWordWrapping;source.accessibilityLabel="Source: \(row.url)"
+    let source=text(row.displayURL,style:.subheadline,color:Self.ink)
+    source.lineBreakMode = .byWordWrapping;source.accessibilityLabel="Source: \(row.displayURL)"
     let limits=text("MP3 · 15 minutes / 32 MiB · foreground only",style:.caption1,color:Self.muted)
     let details=UIStackView(arrangedSubviews:[title,source,limits]);details.axis = .vertical;details.spacing=2
     details.translatesAutoresizingMaskIntoConstraints=false

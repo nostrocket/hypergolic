@@ -77,7 +77,25 @@ internal object UploadTransport {
     recoveryReads.revoke(generation); leases.revoke(generation)
     main.post { sweep(); statuses.keys.removeAll { it.first == generation } }
   }
-  fun receive(generation: String, sequence: Long, raw: String, push: (String) -> Unit,
+  private val preparing = mutableSetOf<String>()
+  private val preparation = java.util.concurrent.Executors.newSingleThreadExecutor { task ->
+    Thread(task, "hypergolic-upload-prepare").apply { isDaemon = true }
+  }
+  fun receive(generation: String, sequence: Long, raw: String, request: JSONObject, push: (String) -> Unit,
+    reply: (String?) -> Unit, onReview: (String) -> Unit) {
+    fun finish(sealed: Boolean) = reply(handle(generation, sequence, raw, sealed, push, onReview))
+    if (request.optString("type") != "upload.__seal") { finish(false); return }
+    val token = request.opt("token") as? String
+    if (raw.length > 1024 || request.length() != 3 || request.opt("id") !is String || token == null ||
+      token.length !in 1..128 || preparing.size >= 8 || leases.publicId(generation, token) == null || !preparing.add(token)) {
+      finish(false); return
+    }
+    preparation.execute {
+      val sealed = runCatching { leases.seal(generation, token) }.getOrDefault(false)
+      main.post { preparing.remove(token); finish(sealed) }
+    }
+  }
+  private fun handle(generation: String, sequence: Long, raw: String, sealed: Boolean, push: (String) -> Unit,
     onReview: (String) -> Unit): String? {
     check(Looper.myLooper() == Looper.getMainLooper())
     sweep()
@@ -123,7 +141,7 @@ internal object UploadTransport {
         "upload.__seal" -> {
           UploadWire.fields(value, setOf("type", "id", "token"))
           val token = UploadWire.text(value.get("token"), 128)
-          if (!leases.seal(generation, token)) return response.put("error", "unsupported media type").toString()
+          if (!sealed) return response.put("error", "unsupported media type").toString()
           val publicId = leases.publicId(generation, token) ?: error("Revoked upload")
           val review = leases.sealedReview(generation, token) ?: error("Revoked upload")
           if (recoveryLedger().blocks(review.identity, review.destination, review.sha256)) {
