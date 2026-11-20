@@ -64,6 +64,7 @@ test('review snapshots exact native bytes and signing scope before one dispatch'
     assert.equal(snapshot.destination, taken.review.destination); assert.equal(snapshot.sha256, taken.review.sha256);
     return JSON.parse(JSON.stringify(finalizeEvent({...snapshot.authorization, tags: snapshot.authorization.tags.map(tag => [...tag])}, secret)));}});
   const id = await ready(service, native); const displayed = service.getSnapshot().current!;
+  assert.deepEqual([...displayed.copyPreview(1)!], [1]);
   const copy = displayed.copyPreview()!; copy.fill(8); assert.deepEqual([...displayed.copyPreview()!], [1,2,3]);
   const result = await service.approve(id);
   assert.equal(result.ok, true); assert.equal(result.sha256, taken.review.sha256); assert.equal(signed, 1); assert.equal(native.puts, 1);
