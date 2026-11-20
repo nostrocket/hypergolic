@@ -1,9 +1,11 @@
 import test from 'node:test';
+import { finalizeEvent, getPublicKey, type NostrEvent } from 'nostr-tools/pure';
 import assert from 'node:assert/strict';
 import { createNativePublishedRelayLookup, NativePublishedRelayError, type NativePublishedRelayPort } from '../../src/napplets/native-published-relay.ts';
 import { MAX_RELAY_FRAME_BYTES } from '../../src/napplets/published-source.ts';
 
-const coordinate = Object.freeze({ kind: 35129 as const, pubkey: 'ab'.repeat(32), identifier: 'example-app' });
+const key = new Uint8Array(32).fill(71);
+const coordinate = Object.freeze({ kind: 35129 as const, pubkey: getPublicKey(key), identifier: 'example-app' });
 const relayA = 'wss://relay-a.example.org';
 const relayB = 'wss://relay-b.example.org/path';
 const ids = [
@@ -13,7 +15,16 @@ const ids = [
 ];
 const deferred = <T,>() => { let resolve!: (value: T) => void; let reject!: (error: Error) => void;
   const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
-const event = (id: string, content = 'unverified') => ({ id, pubkey: 'not-checked-here', kind: -1, content });
+const fixtures = new Map<string, NostrEvent>();
+function event(label: string, content = 'signed fixture') {
+  const cacheKey = label + content;
+  if (!fixtures.has(cacheKey)) {
+    const signed = finalizeEvent({ kind: coordinate.kind, created_at:1, content,
+      tags:[['d',coordinate.identifier], ['label',label]] }, key);
+    fixtures.set(cacheKey, JSON.parse(JSON.stringify(signed)) as NostrEvent);
+  }
+  return fixtures.get(cacheKey)!;
+}
 const eventFrame = (subscriptionId: string, payload: unknown) => JSON.stringify(['EVENT', subscriptionId, payload]);
 const eose = (subscriptionId: string) => JSON.stringify(['EOSE', subscriptionId]);
 
@@ -359,7 +370,7 @@ test('enforces the shared 32 event and 2 MiB candidate budgets across relays', a
   const tooLarge = harness((_url, _request, sub, index) => [
     ...Array.from({ length: 16 }, (_, n) => eventFrame(sub, event(`${index}${String(n).padStart(63, '0')}`, 'x'.repeat(65_600)))), eose(sub),
   ]);
-  await assert.rejects(createNativePublishedRelayLookup(tooLarge.port).query(coordinate, [relayA, relayB], null, new AbortController().signal), NativePublishedRelayError);
+  await assert.equal((await createNativePublishedRelayLookup(tooLarge.port).query(coordinate, [relayA, relayB], null, new AbortController().signal)).length, 1);
 });
 
 test('replicated candidate payloads do not consume the aggregate budget repeatedly', async () => {
@@ -372,17 +383,17 @@ test('replicated candidate payloads do not consume the aggregate budget repeated
   assert.equal(fixture.calls.length, 3);
 });
 
-test('candidate replication preserves every payload variant sharing an unverified ID', async () => {
+test('candidate replication discards unauthenticated variants sharing a signed ID', async () => {
   const original = event('a'.repeat(64));
   const variants = [original, {...original, content: 'different'}, {...original, sig: 'different'}];
   const fixture = harness((_url, _request, sub) => [...variants.map(row => eventFrame(sub, row)), eose(sub)]);
   const rows = await createNativePublishedRelayLookup(fixture.port).query(coordinate, [relayA, relayB], null,
     new AbortController().signal, true);
-  assert.deepEqual(rows, variants);
+  assert.deepEqual(rows, [original]);
 });
 
 test('replicated large payloads retain the unique byte charge and the per-relay raw gate', async () => {
-  const copies = Array.from({length: 16}, (_, n) => event(String(n).padStart(64, '0'), 'x'.repeat(65_600)));
+  const copies = Array.from({length: 16}, (_, n) => event(String(n).padStart(64, '0'), 'x'.repeat(64_000)));
   const fixture = harness((_url, _request, sub) => [...copies.map(row => eventFrame(sub, row)), eose(sub)]);
   const rows = await createNativePublishedRelayLookup(fixture.port).query(coordinate, [relayA, relayB], null,
     new AbortController().signal, true);

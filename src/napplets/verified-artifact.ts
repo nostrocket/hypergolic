@@ -138,30 +138,37 @@ function domainDeclarations(tags: readonly string[][], name: string): string[] {
   return domains;
 }
 
+/** Authenticate the wire event and bind it to the requested publication before merging peers. */
+export function authenticateManifestEvent(coordinate: NappletReference, signedEvent: unknown) {
+  const input = plainRecord(signedEvent, ['id', 'pubkey', 'created_at', 'kind', 'tags', 'content', 'sig']);
+  const tags = cloneTags(input.tags);
+  if (typeof input.id !== 'string' || !HEX64.test(input.id) || typeof input.pubkey !== 'string' || !HEX64.test(input.pubkey) ||
+      typeof input.sig !== 'string' || !HEX128.test(input.sig) || typeof input.content !== 'string' ||
+      typeof input.created_at !== 'number' || !Number.isSafeInteger(input.created_at) || input.created_at < 0 ||
+      (coordinate.kind !== 35129 && coordinate.kind !== 5129) || input.kind !== coordinate.kind ||
+      (coordinate.pubkey !== undefined && input.pubkey !== coordinate.pubkey) ||
+      new TextEncoder().encode(JSON.stringify({ ...input, tags })).byteLength > MAX_MANIFEST_BYTES) return fail();
+
+  const dTags = tags.filter(tag => tag[0] === 'd');
+  const snapshot = coordinate.kind === 5129;
+  if (snapshot ? input.id !== coordinate.eventId || dTags.length !== 0
+    : input.pubkey !== coordinate.pubkey || !isNappletIdentifier(coordinate.identifier) ||
+      dTags.length !== 1 || dTags[0]!.length !== 2 || dTags[0]![1] !== coordinate.identifier) return fail();
+  // Verify a newly constructed plain object, so no nostr-tools verification cache can confer trust.
+  const event = {
+    id: input.id, pubkey: input.pubkey, created_at: input.created_at, kind: coordinate.kind,
+    tags, content: input.content, sig: input.sig,
+  };
+  if (getEventHash(event) !== event.id || !verifyEvent(event)) return fail();
+  return event;
+}
+
 /** Verifies and clones the selected named manifest or exact snapshot before any artifact fetch. */
 export async function verifyManifest(coordinate: NappletReference, signedEvent: unknown): Promise<VerifiedNappletManifest> {
   try {
-    const input = plainRecord(signedEvent, ['id', 'pubkey', 'created_at', 'kind', 'tags', 'content', 'sig']);
-    const tags = cloneTags(input.tags);
-    if (typeof input.id !== 'string' || !HEX64.test(input.id) || typeof input.pubkey !== 'string' || !HEX64.test(input.pubkey) ||
-        typeof input.sig !== 'string' || !HEX128.test(input.sig) || typeof input.content !== 'string' ||
-        typeof input.created_at !== 'number' || !Number.isSafeInteger(input.created_at) || input.created_at < 0 ||
-        (coordinate.kind !== 35129 && coordinate.kind !== 5129) || input.kind !== coordinate.kind ||
-        (coordinate.pubkey !== undefined && input.pubkey !== coordinate.pubkey) ||
-        new TextEncoder().encode(JSON.stringify({ ...input, tags })).byteLength > MAX_MANIFEST_BYTES) return fail();
-
-    const dTags = tags.filter(tag => tag[0] === 'd');
+    const event = authenticateManifestEvent(coordinate, signedEvent);
+    const tags = event.tags;
     const snapshot = coordinate.kind === 5129;
-    if (snapshot ? input.id !== coordinate.eventId || dTags.length !== 0
-      : input.pubkey !== coordinate.pubkey || !isNappletIdentifier(coordinate.identifier) ||
-        dTags.length !== 1 || dTags[0]!.length !== 2 || dTags[0]![1] !== coordinate.identifier) return fail();
-    // Verify a newly constructed plain object, so no nostr-tools verification cache can confer trust.
-    const event = {
-      id: input.id, pubkey: input.pubkey, created_at: input.created_at, kind: coordinate.kind,
-      tags, content: input.content, sig: input.sig,
-    };
-    if (getEventHash(event) !== event.id || !verifyEvent(event)) return fail();
-
     const paths = tags.filter(tag => tag[0] === 'path');
     const hashes = tags.filter(tag => tag[0] === 'x');
     const format = paths.length ? 'legacy-path' : 'nip-5d';

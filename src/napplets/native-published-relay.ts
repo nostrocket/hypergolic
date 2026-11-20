@@ -1,3 +1,4 @@
+import { authenticateManifestEvent } from './verified-artifact.ts';
 import { MAX_RELAYS_PER_ROLE, normalizeRelayUrl } from '../network/relay-settings.ts';
 import type { NappletLookupCoordinate } from './loader.ts';
 import { MAX_PUBLISHED_QUERY_BYTES, MAX_MANIFESTS_PER_QUERY, DEFAULT_RELAY_TIMEOUT_MS } from './published-source.ts';
@@ -139,6 +140,8 @@ export function createNativePublishedRelayLookup(
         const usedIds = new Set<string>();
         const events: unknown[] = [];
         const candidatePayloads = new Set<string>();
+        let invalidCandidate: unknown;
+        const reference = coordinate.kind === 5129 ? coordinate : { ...coordinate, relayHints: [] };
         let totalBytes = 0;
         let closed = false;
         let timer: ReturnType<typeof setTimeout>;
@@ -157,11 +160,14 @@ export function createNativePublishedRelayLookup(
           closed = true;
           cleanup();
           cancelOutstanding();
-          if (success && !signal.aborted) resolve(Object.freeze(events));
+          if (success && !signal.aborted) {
+            // Preserve the loader's distinction between empty and invalid replies.
+            resolve(Object.freeze(events.length === 0 && invalidCandidate !== undefined ? [invalidCandidate] : events));
+          }
           else reject(new NativePublishedRelayError());
         };
         const abort = (): void => finish(false);
-        timer = setTimeout(() => finish(discovery === true && attempted.size === relays.length && events.length > 0), timeoutMs);
+        timer = setTimeout(() => finish(discovery === true && attempted.size === relays.length && (events.length > 0 || invalidCandidate !== undefined)), timeoutMs);
         signal.addEventListener('abort', abort, { once: true });
         if (signal.aborted) { abort(); return; }
 
@@ -183,6 +189,13 @@ export function createNativePublishedRelayLookup(
           for (const event of relayEvents) {
             const payload = encodedCandidate(event);
             if (candidatePayloads.has(payload)) continue;
+            try {
+              const authenticated = authenticateManifestEvent(reference, event);
+              if (pinnedEventId !== null && authenticated.id !== pinnedEventId) continue;
+            } catch {
+              invalidCandidate ??= event;
+              continue;
+            }
             const eventByteLength = new TextEncoder().encode(payload).byteLength;
             if (events.length >= MAX_MANIFESTS_PER_QUERY || totalBytes > MAX_PUBLISHED_QUERY_BYTES - eventByteLength) {
               finish(false); return false;
