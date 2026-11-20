@@ -67,7 +67,7 @@ def main():
     host_names = ['PublicAddressPolicy', 'PublishedHttpsResponseReader', 'PublishedHttpsTransport',
                   'NativeTransportTickets', 'PublishedHttpsRequestOwner', 'PublishedRelayWebSocketHandshake', 'PublishedRelayWebSocketFrames',
                   'PublishedRelayWebSocketClientFrames', 'PublishedRelayWssQuery', 'PublishedRelayWssIo',
-                  'PublishedRelayResponseClassifier', 'NativeSignerRelayOpening', 'NativeSignerRelay']
+                  'PublishedRelayResponseClassifier', 'NativeResolverOwnership', 'NativeSignerRelayOpening', 'NativeSignerRelay']
     sources = [signer / (name + '.java') for name in signer_names]
     sources += [host / (name + '.java') for name in host_names]
     sources += [HERE / 'NativeAndroidSignerControllerProof.java', HERE.parent / 'SignerFixtureResponse.java']
