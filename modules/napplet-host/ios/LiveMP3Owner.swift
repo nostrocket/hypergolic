@@ -62,7 +62,10 @@ final class LiveMP3Owner: @unchecked Sendable {
       terminal=true;reasonValue="policy";phaseValue = .ended;budgetValue?.cancel();MediaPlaybackReservation.shared.draining(self)
     };return true
   } }
-  func retire(_ reason:String="policy") -> Bool { lock.withLock {
+  func retire(_ reason:String="policy", activeAttempt: UInt64? = nil) -> Bool { lock.withLock {
+    if let activeAttempt {
+      guard activeAttempt == attempt, phaseValue == .buffering || phaseValue == .playing else { return false }
+    }
     guard !terminal else { return false };terminal=true;reasonValue=reason;receipt=nil;phaseValue = .ended;budgetValue?.cancel();MediaPlaybackReservation.shared.draining(self)
     if !network && !decoder { MediaPlaybackReservation.shared.release(self);retained=nil };return true
   } }
