@@ -79,7 +79,7 @@ function setup(initial = openNapplet(emptyWorkspace(), source), reviews = new Ro
   const changes = subscriptions(), lifecycle = subscriptions(), account = subscriptions();
   const controller: WorkspaceController = persisted ?? {
     getSnapshot: () => ({ workspace, saving: false, error: null }), subscribe: changes.subscribe,
-    change: state => { workspace = state; changes.emit(); }, flush: async () => {},
+    change: state => { workspace = state; changes.emit(); }, acceptUpdate: async () => { throw Error('Unexpected update'); }, flush: async () => {},
     freeze() {}, resume() {}, revoke() {},
   };
   const transition = { phase: 'ready', session: { workspace: controller, epoch: 1, vault: { selectedPubkey: user } } } as TransitionSnapshot;

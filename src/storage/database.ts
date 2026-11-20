@@ -1,13 +1,18 @@
 import { configure, schema, SHELL_DATABASE } from './schema.ts';
 import { decodeSnapshot, encodeSnapshot, identifier, publicKey, revision, text, utf8Bytes, version } from './codec.ts';
 import { fail, LIMITS, sanitize, ShellStorageError, type AccessGrant, type Binding, type RequestOptions, type Scope, type SQLiteConnection, type SQLiteModule, type StringStorage, type TrustedApp, type TrustedRegistration, type TrustedUser } from './ports.ts';
-import type { WorkspaceSnapshot } from '../shell/workspace.ts';
+import { replacePublishedNapplet, restoreWorkspace, samePublishedPin, snapshotWorkspace, type NappletDescriptor, type WorkspaceSnapshot } from '../shell/workspace.ts';
 import {snapshotEventId} from '../napplets/published-identity.ts';
 export { SHELL_DATABASE } from './schema.ts';
 export interface WorkspaceRecord { readonly revision: number; readonly snapshot: WorkspaceSnapshot }
 export interface WorkspaceStorage {
   load(options?: RequestOptions): Promise<WorkspaceRecord | null>;
-  save(snapshot: WorkspaceSnapshot, expectedRevision: number | null, options?: RequestOptions): Promise<WorkspaceRecord>;
+  save(snapshot: WorkspaceSnapshot, expectedRevision: number | null, options?: RequestOptions & { update?: WorkspaceUpdate }): Promise<WorkspaceRecord>;
+}
+export interface WorkspaceUpdate {
+  readonly previous: NappletDescriptor;
+  readonly next: NappletDescriptor;
+  readonly assertActive: () => void;
 }
 export interface UpdateReceipt {
   readonly receiptId: string; readonly fromVersion: string; readonly targetVersion: string;
@@ -153,9 +158,21 @@ function bindWorkspace(connection: StorageConnection, owner: TrustedUser): Bindi
   const user = publicKey(owner.user), binding = lease(liveFunction(owner.assertActive));
   return Object.freeze({ revoke: binding.revoke, port: Object.freeze({
     load: (options?: RequestOptions) => binding.submit(options, check => readWorkspace(access(check), user)),
-    save: (value: WorkspaceSnapshot, expectedRevision: number | null, options?: RequestOptions) => {
+    save: (value: WorkspaceSnapshot, expectedRevision: number | null, options?: RequestOptions & { update?: WorkspaceUpdate }) => {
       const payload = encodeSnapshot(value), expected = expectedRevision === null ? null : revision(expectedRevision);
-      return binding.submit(options, check => transaction(check, io => writeWorkspace(io, user, payload, expected)));
+      const update = options?.update;
+      if (!update) return binding.submit(options, check => transaction(check, io => writeWorkspace(io, user, payload, expected)));
+      return binding.submit(options, async check => {
+        const active = () => { check(); update.assertActive(); };
+        try {
+          return await transaction(active, io => savePublishedUpdate(io, user, payload, expected, update));
+        } catch (error) {
+          // Cancellation can race the COMMIT acknowledgement. Reconcile against the exact durable replacement.
+          const saved = await readWorkspace(access(check), user);
+          if (!saved || expected === null || saved.revision !== expected + 1 || encodeSnapshot(saved.snapshot) !== payload) throw error;
+          return saved;
+        }
+      });
     },
   }) });
 }
@@ -248,6 +265,37 @@ async function applyUpdate(io: Access, plan: UpdateTarget): Promise<UpdateReceip
   if (await io.run('INSERT INTO update_receipts (user, publisher, app, receipt, previous_version, version, row_count, byte_count, workspace_revision, target_event_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', ...owner, id, from, target, counts.rowCount, counts.byteCount, workspaceRevision, targetEventId) !== 1) fail('STORAGE_FAILURE');
   return Object.freeze({ receiptId: id, fromVersion: from, targetVersion: target, ...counts, workspaceRevision, targetEventId });
 }
+async function savePublishedUpdate(io: Access, user: string, payload: string, expected: number | null,
+  {previous, next}: WorkspaceUpdate): Promise<WorkspaceRecord> {
+  const current = await readWorkspace(io, user);
+  if (!current || current.revision !== expected) return fail('CONFLICT');
+  const workspace = restoreWorkspace(current.snapshot);
+  const selected = workspace.sessions.find(item => item.id === previous.id);
+  if (!selected || !samePublishedPin(selected, previous)) return fail('CONFLICT');
+  const replacement = replacePublishedNapplet(workspace, previous.id, next);
+  if (encodeSnapshot(snapshotWorkspace(replacement)) !== payload) return fail('CONFLICT');
+  const owner = [user, publicKey(previous.publisher), text(previous.appId, 1024)];
+  const from = version(previous.version), target = version(next.version);
+  const prior = await selection(io, owner);
+  if (prior !== null && prior !== from) return fail('SELECTION_MISMATCH');
+  if (prior === null) {
+    // Existing workspaces predate selection rows. The exact persisted card supplies the initial version.
+    await retained(io, owner, from);
+    await io.run('INSERT INTO selected_versions (user, publisher, app, version) VALUES (?, ?, ?, ?)', ...owner, from);
+  }
+  if (from !== target) {
+    if ((await io.all(`SELECT version FROM app_versions WHERE ${VERSION}`, ...owner, target)).length) return fail('TARGET_RETAINED');
+    await retained(io, owner, target);
+    const counts = await copyVersion(io, owner, from, target);
+    if (await io.run(`UPDATE selected_versions SET version = ? WHERE ${OWNER} AND version = ?`, target, ...owner, from) !== 1) return fail('CONFLICT');
+    await io.run('INSERT INTO update_receipts (user, publisher, app, receipt, previous_version, version, row_count, byte_count, workspace_revision, target_event_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ...owner, next.id, from, target, counts.rowCount, counts.byteCount, current.revision + 1, publicKey(next.eventId));
+  }
+  // Native sessions get a fresh ID. Move the copied instance rows to the ID the replacement will actually use.
+  await io.run(`UPDATE saved_strings SET instance = ? WHERE ${NAMESPACE}`, identifier(next.id), ...owner, target, 'instance', identifier(previous.id));
+  return writeWorkspace(io, user, payload, expected);
+}
+
 async function recoverUpdate(io: Access, plan: UpdateTarget): Promise<UpdateReceipt> {
   const { owner, id, from, target } = plan;
   let actual: UpdateReceipt | null, selected: string | null;

@@ -131,7 +131,7 @@ test('discovered installed unmounted pins persist their newly prepared descripto
   const saved = descriptorForPublishedArtifact(artifact, id), next = {...saved, title: 'Reviewed prepared title'};
   let workspace = openNapplet(openNapplet(emptyWorkspace(), saved), source), mounted = false, held = true;
   const controller: WorkspaceController = {getSnapshot: () => ({workspace, saving: false, error: null}),
-    subscribe: () => () => {}, change: value => {workspace = value;}, flush: async () => {}, freeze() {}, resume() {}, revoke() {}};
+    subscribe: () => () => {}, change: value => {workspace = value;}, acceptUpdate: async () => { throw Error('Unexpected update'); }, flush: async () => {}, freeze() {}, resume() {}, revoke() {}};
   const transition = {phase: 'ready', session: {workspace: controller, epoch: 1, vault: {selectedPubkey: user}}} as TransitionSnapshot;
   const reviews = new RoutingReviewService();
   const message = {type: DISCOVERY_OPEN, id: 'guest-open', address: naddrEncode(EMBEDDED_TEST_COORDINATE), expectedEventId: artifact.manifest.eventId};
