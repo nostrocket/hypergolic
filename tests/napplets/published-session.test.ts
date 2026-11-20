@@ -145,7 +145,7 @@ test('explicit Settings open retains bounded loader reasons before consent or st
     active = false;
     throw downloadError;
   } }).openLink(link, new AbortController().signal, review), { code: 'PUBLISHED_SESSION_FAILED' });
-  assert.deepEqual(calls, []);
+  assert.equal(calls.length, 0);
 });
 
 test('Settings uses generic copy for unknown and untrusted errors', () => {
@@ -286,7 +286,7 @@ test('unsupported requested capabilities warn without granting unsupported domai
     deniedDomains.push(review.unsupportedDomains); return false;
   }), { code: 'PUBLISHED_SESSION_FAILED' });
   assert.deepEqual(deniedDomains, [['webrtc']]);
-  assert.deepEqual(calls, []);
+  assert.equal(calls.length, 0);
   const opened = await service.openLink(link, new AbortController().signal, async review => {
     assert.deepEqual(review.domains, ['cvm', 'webrtc']);
     assert.deepEqual(review.unsupportedDomains, ['webrtc']); return true;
@@ -312,11 +312,11 @@ test('denial and identity change during review never register a native published
     source: { query: async () => [EMBEDDED_TEST_EVENT], readHtml: async () => getEmbeddedTestHtmlBytes() },
   });
   await assert.rejects(service.openLink(LINK, new AbortController().signal, async () => false));
-  assert.deepEqual(calls, []);
+  assert.equal(calls.length, 0);
   await assert.rejects(service.openLink(LINK, new AbortController().signal, async () => {
     epoch++; return true;
   }));
-  assert.deepEqual(calls, []);
+  assert.equal(calls.length, 0);
 });
 
 test('workspace runtime consumes the reviewed artifact once and revokes it on close', async t => {
@@ -620,21 +620,21 @@ test('exact discovery review binds staging, then transfers lifetime to the mount
   const releasePin = await owner.retainForPin(artifact, signal.signal, sourceActive);
   const pinRow = sqlite.raw(PUBLISHED_ARTIFACT_CACHE_DATABASE).prepare('SELECT event_id FROM verified_published_artifacts').get();
   assert.equal(pinRow?.event_id, EMBEDDED_TEST_EVENT.id);
-  assert.deepEqual(calls, []);
+  assert.equal(calls.length, 0);
   releasePin();
   const busy = new ReviewBusyError();
   await assert.rejects(owner.prepareDiscovered(artifact, signal.signal, sourceActive, async changesAccess => {
     assert.equal(changesAccess, true);
     throw busy;
   }), error => error === busy);
-  assert.deepEqual(calls, []);
+  assert.equal(calls.length, 0);
 
   await assert.rejects(owner.prepareDiscovered(artifact, signal.signal, sourceActive, async changesAccess => {
     assert.equal(changesAccess, true);
     focused = false;
     return true;
   }));
-  assert.deepEqual(calls, []);
+  assert.equal(calls.length, 0);
 
   focused = true;
   const descriptor = await owner.prepareDiscovered(artifact, signal.signal, sourceActive, async changesAccess => {

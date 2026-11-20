@@ -54,6 +54,7 @@ async function pruneCache(io: Access, user: string, protectedEvents: () => Reado
     if (!Number.isSafeInteger(row.byte_count) || row.byte_count < 0 || row.byte_count > MAX_STORED_ROW_BYTES) fail('CORRUPT_STORAGE');
     if (keep.has(row.event_id)) bytes += row.byte_count;
   }
+  const evicted: number[] = [];
   if (bytes > MAX_ACCOUNT_BYTES) fail('QUOTA_EXCEEDED');
   for (const row of rows) {
     if (keep.has(row.event_id)) continue;
@@ -61,8 +62,13 @@ async function pruneCache(io: Access, user: string, protectedEvents: () => Reado
         bytes + row.byte_count <= MAX_ACCOUNT_BYTES) {
       coldRows++; coldBytes += row.byte_count; bytes += row.byte_count;
     } else {
-      await io.run('DELETE FROM verified_published_artifacts WHERE row_id = ? AND user = ?', row.row_id, user);
+      evicted.push(row.row_id);
     }
+  }
+  if (evicted.length) {
+    const placeholders = evicted.map(() => '?').join(', ');
+    const deleted = await io.run(`DELETE FROM verified_published_artifacts WHERE user = ? AND row_id IN (${placeholders})`, user, ...evicted);
+    if (deleted !== evicted.length) fail('STORAGE_FAILURE');
   }
 }
 
