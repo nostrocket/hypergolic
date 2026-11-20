@@ -103,7 +103,7 @@ public final class SignerProofActivity extends Activity {
           check(new JSONObject(result).getString("pubkey").equals(pubkey));
           check(new JSONObject(result).getString("content").equals("Disposable Android native review / 🚀\nExact bytes. No publication."));
           TextView status = new TextView(this); status.setText("Native approve observed. Now reject the next request."); setContentView(status);
-          NativeSignerCore.Review reject = core.admit(this, event(pubkey, "Reject this disposable request."));
+          NativeSignerCore.Review reject = core.admit(this, event(pubkey, "x".repeat(5000) + "Review tail before rejection."));
           panel.show(this, core, this, reject, () -> !isFinishing(), deniedResult -> {
             try {
               check(deniedResult == null); denied(() -> core.approveOnce(this, reject));

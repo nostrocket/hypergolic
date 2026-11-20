@@ -1,8 +1,9 @@
+import {reviewTextPage} from './review-text-page';
 import {useReviewControl} from './useReviewControl';
 import { TrustedBand } from './TrustedBand';
 import {OutboxReview} from './OutboxReview';
 import { useRef, useState } from 'react';
-import { AccessibilityInfo, ScrollView, StyleSheet, Text, View, useWindowDimensions, type ViewInstance } from 'react-native';
+import { AccessibilityInfo, ScrollView, StyleSheet, Text, View, useWindowDimensions, type StyleProp, type TextStyle, type ViewInstance } from 'react-native';
 import { ShellModal as Modal } from './ShellModal';
 import { ShellPressable as Pressable } from './ShellPressable';
 import { formatNpub } from '../security/public-identity.ts';
@@ -66,6 +67,24 @@ function AppDataRecordReview({record, content}: {record: NonNullable<ApprovalIte
     <Text style={styles.label}>Collection / record ID</Text><Text selectable style={styles.mono}>{record.collection} / {record.id}</Text>
     <Text style={styles.value}>{new TextEncoder().encode(content).byteLength} bytes · All listed relays must accept this change.</Text>
     <Text style={styles.label}>Exact record content</Text>
+  </View>;
+}
+
+function ReviewText({text, style, testID}: {text: string; style: StyleProp<TextStyle>; testID?: string}) {
+  const { styles } = useShellStyles(createStyles);
+  const [page, setPage] = useState(0);
+  const current = reviewTextPage(text, page);
+  return <View>
+    {current.count > 1 && <View style={styles.pageControls}>
+      <Pressable accessibilityRole="button" disabled={current.index === 0} onPress={() => setPage(current.index - 1)} style={styles.details}>
+        <Text style={styles.detailsText}>Previous page</Text>
+      </Pressable>
+      <Text accessibilityLiveRegion="polite" style={styles.value}>Page {current.index + 1} of {current.count}</Text>
+      <Pressable accessibilityRole="button" disabled={current.index + 1 === current.count} onPress={() => setPage(current.index + 1)} style={styles.details}>
+        <Text style={styles.detailsText}>Next page</Text>
+      </Pressable>
+    </View>}
+    <Text testID={testID} selectable style={style}>{current.text}</Text>
   </View>;
 }
 
@@ -141,7 +160,7 @@ function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismis
           {needsNewList && <NewFollowListConsent confirmed={confirmedNewList} busy={busy} onChange={() => setConfirmedNewList(value => !value)}/>}
           {item.common && <><Text style={styles.label}>Targets</Text><Text selectable style={styles.mono}>{commonTargets(item.common)}</Text></>}
           {item.common?.request.type==='common.report'&&<><Text style={styles.label}>Report reason</Text><Text style={styles.value}>{item.common.request.reason}</Text></>}
-          <Text testID="approval-sheet-content" selectable style={styles.content}>{item.event.event.content}</Text>
+          <ReviewText testID="approval-sheet-content" style={styles.content} text={item.event.event.content}/>
           <View style={styles.divider} />
           <Text style={styles.label}>Requesting napplet</Text>
           <Text style={styles.value}>{nappletTitle}</Text>
@@ -154,7 +173,7 @@ function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismis
           <Pressable testID="approval-sheet-details" accessibilityRole="button" accessibilityState={{ expanded: details, disabled: busy }} disabled={busy} onPress={() => setDetails(value => !value)} style={({ pressed }) => [styles.details, pressed && styles.pressed]}>
             <Text style={styles.detailsText}>{details ? 'Hide exact event' : 'Show exact event'}</Text>
           </Pressable>
-          {details && <Text selectable style={styles.json}>{JSON.stringify({ event: item.event.event, hash: item.event.hash }, null, 2)}</Text>}
+          {details && <ReviewText style={styles.json} text={JSON.stringify({ event: item.event.event, hash: item.event.hash }, null, 2)}/>}
           {error && <Text accessibilityLiveRegion="polite" style={styles.error}>{error}</Text>}
         </ScrollView>
         <ReviewActions approveDisabled={approveDisabled} approve={() => onApprove(item.id, confirmedNewList ? item.id : undefined)}
@@ -182,6 +201,7 @@ const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.cre
   value: { fontFamily: fonts.body, color: colors.text, fontSize: 17, lineHeight: 25 },
   mono: { fontFamily: fonts.mono, color: colors.text, fontSize: 13, lineHeight: 20 },
   destination: { fontFamily: fonts.mono, color: colors.text, fontSize: 13, lineHeight: 20 },
+  pageControls: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8},
   details: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', marginTop: 8 },
   detailsText: { textTransform: 'uppercase', letterSpacing: 1.8, fontFamily: fonts.strong, color: colors.accent, fontSize: 14, },
   json: { fontFamily: fonts.mono, color: colors.muted, fontSize: 12, lineHeight: 18 },
