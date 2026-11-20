@@ -53,7 +53,7 @@ function workspaceCloseGuard({service,presentation,showReceipt,uploads,cvmPendin
   cvmPending:readonly string[];workspace:ShellProps['workspace'];
 }) {
   return (id:string):boolean=>{
-    if(cvmPending.includes(id)||service.hasCloseRisk(id)||presentation.busy||(showReceipt&&presentation.receipt)||presentation.outcome||uploads?.hasCloseRisk(id))return false;
+    if(cvmPending.includes(id)||service.hasCloseRisk(id)||(presentation.sessionId===id&&(presentation.busy||(showReceipt&&presentation.receipt)))||uploads?.hasCloseRisk(id))return false;
     const session=workspace?.sessions.find(item=>item.id===id);
     return !(session&&uploads?.recovery?.hasUnresolvedOutcome(session.publisher,session.appId));
   };
@@ -98,7 +98,7 @@ function ApprovalResume({snapshot,service}:{snapshot:ApprovalSnapshot;service:Ap
 function ApprovalResults({snapshot,presentation,shown,showReceipt}:{snapshot:ApprovalSnapshot;presentation:ReturnType<typeof useApprovalPresentation>;shown:boolean;showReceipt:boolean}){
   const { styles } = useShellStyles(createStyles);
  return <>
-    {presentation.outcome && !presentation.receipt && !shown && snapshot.focusedSessionId !== null && <Pressable testID="approval-outcome" accessibilityRole="button" accessibilityLabel={`${presentation.outcome} Dismiss status`} onPress={presentation.dismissOutcome} style={styles.outcome}><Text accessibilityLiveRegion="polite" style={styles.outcomeText}>{presentation.outcome}</Text></Pressable>}
+    {presentation.outcome && !presentation.receipt && !shown && presentation.sessionId === snapshot.focusedSessionId && <Pressable testID="approval-outcome" accessibilityRole="button" accessibilityLabel={`${presentation.outcome} Dismiss status`} onPress={presentation.dismissOutcome} style={styles.outcome}><Text accessibilityLiveRegion="polite" style={styles.outcomeText}>{presentation.outcome}</Text></Pressable>}
     {presentation.receipt&&showReceipt&&<PublicationReceiptSheet receipt={presentation.receipt} onDismiss={presentation.dismissReceipt}/>}
  </>;
 }
