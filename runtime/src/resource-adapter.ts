@@ -83,8 +83,12 @@ export function createResourceAdapter(native: NativeResourceClient, captureRecip
       if (live() && failure) send(failure); return;
     }
     if (request.type === 'resource.cancel') {
-      const work = pending.get(request.id); if (work) work.cancelled = true;
-      cancelNative(request.id); return;
+      const work = pending.get(request.id);
+      if (work && !work.cancelled) {
+        work.cancelled = true;
+        cancelNative(request.id);
+      }
+      return;
     }
     if (pending.has(request.id) || pending.size >= 4) { send(resourceFailure(request, 'quota-exceeded')!); return; }
     const work = { cancelled: false }; pending.set(request.id, work);

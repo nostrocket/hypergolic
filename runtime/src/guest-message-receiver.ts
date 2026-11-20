@@ -1,3 +1,4 @@
+import { quotaReply } from './guest-envelope';
 import {RECOMMENDATION, type createRecommendationsReceiver} from './discovery-recommendations';
 import { CATALOG_PAGE } from '../../src/napplets/catalog-page-contract';
 import { DISCOVERY_OPEN } from '../../src/napplets/discovery-open-contract';
@@ -9,6 +10,7 @@ import { mediaRequestId, projectMediaRequest } from './media-wire';
 import type { createNativeClient } from './native-client';
 
 type GuestMessageRoutes = Readonly<{
+  domains: readonly string[];
   routing: ReturnType<typeof createGuestRouting>;
   discoveryOpen: ReturnType<typeof createDiscoveryOpenReceiver> | null;
   recommendations?: ReturnType<typeof createRecommendationsReceiver> | null;
@@ -26,8 +28,12 @@ export function guestMessageReceiver(frame: HTMLIFrameElement, source: Window, r
   return (event: MessageEvent): void => {
     if (routes.closed() || !event.isTrusted || event.source !== source || frame.contentWindow !== source) return;
     if (performance.now() - windowStart > 1000) { operations = 0; windowStart = performance.now(); }
-    if (++operations > 64) {
+    const type = event.data?.type;
+    const cleanup = type === 'relay.close' || type === 'outbox.close' || type === 'resource.cancel';
+    if (++operations > 64 && (!cleanup || event.ports.length)) {
       for (const port of event.ports) port.close();
+      const reply = routes.live() && !event.ports.length && quotaReply(event.data, routes.domains);
+      if (reply) source.postMessage(reply, '*');
       return;
     }
     if (routes.routing.connect(event)) return;
