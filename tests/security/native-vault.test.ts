@@ -118,6 +118,41 @@ test('selection during signing rejects the old response', async () => {
   await assert.rejects(result, { code: 'AUTHORIZATION_DENIED' });
 });
 
+test('opening waits for a retry signal only for known read failures', async () => {
+  const { vault, module } = harness();
+  const open = module.openNativeVaultAsync;
+  let attempts = 0;
+  module.openNativeVaultAsync = async () => {
+    if (++attempts === 1) throw { code: 'VAULT_READ_UNAVAILABLE' };
+    return open();
+  };
+  let resume!: () => void;
+  const signal = new Promise<void>(resolve => { resume = resolve; });
+  let notify!: () => void;
+  const waiting = new Promise<void>(resolve => { notify = resolve; });
+  const pending = vault.open(() => { notify(); return signal; });
+  await waiting;
+  assert.equal(attempts, 1);
+  resume();
+  assert.deepEqual(await pending, first);
+  assert.equal(attempts, 2);
+  module.openNativeVaultAsync = async () => { throw { code: 'CORRUPT_METADATA' }; };
+  await assert.rejects(vault.open(() => assert.fail('unexpected retry')), { code: 'CORRUPT_METADATA' });
+});
+
+test('a temporary signing-method read failure keeps the active snapshot and retries the read', async () => {
+  const { vault, module } = harness();
+  const before = await vault.open();
+  const read = module.getNativeSigningMethodsAsync;
+  for (const code of ['VAULT_READ_UNAVAILABLE', 'STORAGE_FAILURE']) {
+    module.getNativeSigningMethodsAsync = async () => { throw { code }; };
+    await assert.rejects(vault.getSigningMethods(pubkey), { code });
+    assert.equal(vault.getSnapshot(), before);
+  }
+  module.getNativeSigningMethodsAsync = read;
+  assert.equal((await vault.getSigningMethods(pubkey)).selectedMethod, 'local');
+});
+
 test('backup presentation cannot choose a stale or different selected identity', async () => {
   const { vault, calls } = harness(); await vault.open(); const actions = createNativeIdentityActions(vault);
   await actions.beginSettings({ selectedPubkey: pubkey, revision: 1 });

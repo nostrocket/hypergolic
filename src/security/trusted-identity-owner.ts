@@ -196,7 +196,7 @@ function createWorkspaceUploads(vault:NativeIdentityVault,transition:IdentityTra
 }
 
 /** Dynamically imported only after the native process claim succeeds. */
-export async function openTrustedIdentityOwner(): Promise<TrustedIdentityOwner> {
+export async function openTrustedIdentityOwner(waitForVaultRetry?: () => Promise<void>): Promise<TrustedIdentityOwner> {
   const platform = Platform.OS;
   if (platform !== 'android' && platform !== 'ios') throw new VaultError('STORAGE_FAILURE');
   const native = requireNativeModule<NativeVaultModule>('HypergolicSignerCore');
@@ -207,7 +207,7 @@ export async function openTrustedIdentityOwner(): Promise<TrustedIdentityOwner> 
   const vault = new NativeIdentityVault(native);
   const actions = createNativeIdentityActions(vault);
   try {
-    await vault.open();
+    await vault.open(waitForVaultRetry);
     return Object.freeze({ ...await openOwnerWorkspace(vault, platform), formatNpub, actions });
   } catch (error) {
     try { actions.dispose(); } catch { /* Native owner remains consumed. */ }

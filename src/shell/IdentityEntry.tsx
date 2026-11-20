@@ -2,12 +2,17 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { ActivityIndicator, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getIdentityState, startIdentity, subscribeIdentity } from '../security/identity-state';
+import { ShellPressable } from './ShellPressable';
+import { getIdentityState, retryIdentityRead, startIdentity, subscribeIdentity } from '../security/identity-state';
 import { ShellBackdrop } from './ShellBackdrop';
 import { IdentityShell } from './IdentityShell';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 
 const unavailableMessages = {
+  'read-unavailable': {
+    heading: 'Identity storage is unavailable',
+    detail: 'Unlock your device, then try opening your identity again.',
+  },
   'restart-required': {
     heading: 'Restart Hypergolic',
     detail: 'Close the app completely, then open it again to continue.',
@@ -58,6 +63,9 @@ export function IdentityEntry() {
     <ScrollView contentContainerStyle={styles.message} testID="identity-entry-status" accessibilityLiveRegion="polite">
       <Text accessibilityRole="header" style={styles.heading}>{message.heading}</Text>
       <Text style={styles.detail}>{message.detail}</Text>
+      {state.status === 'read-unavailable' && <ShellPressable accessibilityRole="button" onPress={retryIdentityRead}>
+        <Text style={styles.retry}>Try again</Text>
+      </ShellPressable>}
     </ScrollView>
   </SafeAreaView>;
 }
@@ -70,5 +78,6 @@ const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.cre
   name: { fontFamily: fonts.medium, color: colors.text, fontSize: 15, letterSpacing: 3, textTransform: 'uppercase' },
   message: { flexGrow: 1, justifyContent: 'flex-end', paddingTop: 120, paddingHorizontal: 24, paddingBottom: 64, gap: 18 },
   heading: { fontFamily: fonts.display, color: colors.text, fontSize: 40, lineHeight: 44 },
+  retry: { fontFamily: fonts.medium, color: colors.accent, fontSize: 18, paddingVertical: 12 },
   detail: { fontFamily: fonts.body, color: colors.muted, fontSize: 16, lineHeight: 24 },
 });

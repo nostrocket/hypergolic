@@ -154,6 +154,25 @@ public final class DurabilityProof {
     }
   }
 
+  static void readFailures() throws Exception {
+    File root = fresh("read");
+    try {
+      NativeVaultFile store = storage(root);
+      store.write(OLD, true);
+      AtomicFile.failRead = true;
+      try { store.read(); check(false, "injected read must fail"); }
+      catch (NativeVault.Error e) { check("VAULT_READ_UNAVAILABLE".equals(e.code), "I/O read can retry"); }
+      AtomicFile.failRead = false;
+      check(Arrays.equals(store.read(), OLD), "same owner reads after storage is available");
+      File record = new File(root, "native-signer/vault.bin");
+      byte[] bytes = Files.readAllBytes(record.toPath());
+      bytes[bytes.length - 1] ^= 1;
+      Files.write(record.toPath(), bytes);
+      try { store.read(); check(false, "changed tag must fail"); }
+      catch (NativeVault.Error e) { check("CORRUPT_METADATA".equals(e.code), "invalid authentication tag requires recovery"); }
+    } finally { clear(root); }
+  }
+
   static void interruptedInitial() throws Exception {
     cases++;
     File root = fresh("initial");
@@ -242,6 +261,7 @@ public final class DurabilityProof {
     for (String s : List.of("file", "child", "parent")) failure(s);
     for (String s : List.of("partial", "rename", "readback")) ordinaryFailure(s);
     interruptedInitial();
+    readFailures();
     for (String f : List.of("none", "sync", "close", "type")) systemAdapter(f);
     KeyStoreProvider.keys.clear();
     System.out.println("RESULT cases=" + cases + " assertions=" + assertions

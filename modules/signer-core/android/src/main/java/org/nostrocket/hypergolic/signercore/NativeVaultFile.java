@@ -54,10 +54,10 @@ final class NativeVaultFile {
       keystore = KeyStore.getInstance("AndroidKeyStore"); keystore.load(null);
     } catch (Exception failure) { throw new NativeVault.Error("STORAGE_FAILURE"); }
   }
-  private boolean exists() {
+  private boolean exists() throws IOException {
     File base = file.getBaseFile();
     String[] entries = base.getParentFile().list();
-    if (entries == null) throw new NativeVault.Error("STORAGE_FAILURE");
+    if (entries == null) throw new IOException("Vault directory is unavailable");
     return entries.length != 0;
   }
   private SecretKey key(boolean create) throws Exception {
@@ -66,7 +66,8 @@ final class NativeVaultFile {
       if (!(entry instanceof KeyStore.SecretKeyEntry)) throw new Exception();
       return ((KeyStore.SecretKeyEntry)entry).getSecretKey();
     }
-    if (!create || exists()) throw new Exception();
+    if (!create) throw new NativeVault.Error("RECOVERY_REQUIRED");
+    if (exists()) throw new NativeVault.Error("RECOVERY_REQUIRED");
     KeyGenerator generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore");
     KeyGenParameterSpec.Builder parameters = new KeyGenParameterSpec.Builder(ALIAS,
       KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
@@ -82,21 +83,23 @@ final class NativeVaultFile {
       try (java.io.FileInputStream input = file.openRead(); NativeSecretBuffer bytes = new NativeSecretBuffer(MAX_CLEAR_BYTES + 34)) {
         byte[] chunk = new byte[1024]; int count;
         while ((count=input.read(chunk)) != -1) {
-          if (bytes.size()+count > HEADER.length+12+16+MAX_CLEAR_BYTES) throw new Exception();
+          if (bytes.size()+count > HEADER.length+12+16+MAX_CLEAR_BYTES) throw new NativeVault.Error("CORRUPT_METADATA");
           bytes.write(chunk,0,count);
         }
         encoded=bytes.toByteArray();
       }
-      if (encoded.length < HEADER.length + 12 + 16 || encoded.length > HEADER.length + 12 + 16 + MAX_CLEAR_BYTES) throw new Exception();
-      for (int i = 0; i < HEADER.length; i++) if (encoded[i] != HEADER[i]) throw new Exception();
+      if (encoded.length < HEADER.length + 12 + 16 || encoded.length > HEADER.length + 12 + 16 + MAX_CLEAR_BYTES) throw new NativeVault.Error("CORRUPT_METADATA");
+      for (int i = 0; i < HEADER.length; i++) if (encoded[i] != HEADER[i]) throw new NativeVault.Error("CORRUPT_METADATA");
       byte[] iv = Arrays.copyOfRange(encoded, HEADER.length, HEADER.length + 12);
       Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
       cipher.init(Cipher.DECRYPT_MODE, key(false), new GCMParameterSpec(128, iv)); cipher.updateAAD(HEADER);
       byte[] clear = cipher.doFinal(encoded, HEADER.length + 12, encoded.length - HEADER.length - 12);
-      if (clear.length == 0 || clear.length > MAX_CLEAR_BYTES) { Arrays.fill(clear, (byte)0); throw new Exception(); }
+      if (clear.length == 0 || clear.length > MAX_CLEAR_BYTES) { Arrays.fill(clear, (byte)0); throw new NativeVault.Error("CORRUPT_METADATA"); }
       return clear;
     } catch (NativeVault.Error error) { throw error; }
-    catch (Exception failure) { throw new NativeVault.Error("CORRUPT_METADATA"); }
+    catch (javax.crypto.BadPaddingException invalidTag) { throw new NativeVault.Error("CORRUPT_METADATA"); }
+    catch (android.security.keystore.KeyPermanentlyInvalidatedException lost) { throw new NativeVault.Error("RECOVERY_REQUIRED"); }
+    catch (Exception unavailable) { throw new NativeVault.Error("VAULT_READ_UNAVAILABLE"); }
     finally { if (encoded != null) Arrays.fill(encoded, (byte)0); }
   }
   synchronized void write(byte[] clear, boolean initialize) {
@@ -119,7 +122,8 @@ final class NativeVaultFile {
       File directory = file.getBaseFile().getParentFile();
       durability.syncDirectory(directory);
       durability.syncDirectory(directory.getParentFile());
-      readback = read();
+      try { readback = read(); }
+      catch (NativeVault.Error unreadable) { throw new NativeVault.Error("READBACK_FAILED"); }
       if (!Arrays.equals(clear, readback)) throw new NativeVault.Error("READBACK_FAILED");
     } catch (NativeVault.Error error) { if (stream != null) file.failWrite(stream); throw error; }
     catch (Exception failure) { if (stream != null) file.failWrite(stream); throw new NativeVault.Error("STORAGE_FAILURE"); }

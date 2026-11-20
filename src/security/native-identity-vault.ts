@@ -36,7 +36,7 @@ export interface IdentityVaultPort {
 let preparationSequence = 0;
 const keyPattern = /^[0-9a-f]{64}$/;
 const handlePattern = /^[A-Za-z0-9_-]{16,128}$/;
-const recoverable = new Set<VaultErrorCode>(['INVALID_NSEC', 'LIMIT_REACHED', 'NOT_FOUND', 'DELETE_SELECTED', 'AUTHORIZATION_DENIED', ...SIGNER_FAILURE_CODES]);
+const recoverable = new Set<VaultErrorCode>(['VAULT_READ_UNAVAILABLE', 'INVALID_NSEC', 'LIMIT_REACHED', 'NOT_FOUND', 'DELETE_SELECTED', 'AUTHORIZATION_DENIED', ...SIGNER_FAILURE_CODES]);
 const knownErrors = new Set<VaultErrorCode>([...recoverable, 'INVALID_SECRET', 'CORRUPT_METADATA', 'STORAGE_FAILURE',
   'READBACK_FAILED', 'RECOVERY_REQUIRED', 'NOT_READY', 'PENDING_DELETION']);
 function denied(): never { throw new VaultError('AUTHORIZATION_DENIED'); }
@@ -90,13 +90,14 @@ export class NativeIdentityVault implements IdentityVaultPort {
   constructor(module: NativeVaultModule) { this.module = module; }
   getSnapshot(): VaultSnapshot { if (!this.snapshot) throw new VaultError('NOT_READY'); return this.snapshot; }
   private activate(): void { if (this.module.activateNativeVault() !== true) denied(); }
-  private async operation<T>(work: () => Promise<T>): Promise<T> {
+  private async operation<T>(work: () => Promise<T>, readOnly = false): Promise<T> {
     if (this.busy) denied();
     this.busy = true;
     try { this.activate(); return await work(); }
     catch (error) {
       const failure = nativeError(error);
-      if (!recoverable.has(failure.code)) this.snapshot = null;
+      const temporaryRead = readOnly && failure.code === 'STORAGE_FAILURE';
+      if (!temporaryRead && !recoverable.has(failure.code)) this.snapshot = null;
       throw failure;
     } finally { this.busy = false; }
   }
@@ -107,7 +108,15 @@ export class NativeIdentityVault implements IdentityVaultPort {
     this.snapshot = next;
     return next;
   }
-  open(): Promise<VaultSnapshot> { return this.operation(async () => this.accept(await this.module.openNativeVaultAsync())); }
+  async open(waitForRetry?: () => Promise<void>): Promise<VaultSnapshot> {
+    for (;;) {
+      try { return await this.operation(async () => this.accept(await this.module.openNativeVaultAsync())); }
+      catch (error) {
+        if (!(error instanceof VaultError) || error.code !== 'VAULT_READ_UNAVAILABLE' || !waitForRetry) throw error;
+        await waitForRetry();
+      }
+    }
+  }
   prepareImport(): Promise<NativeImportCandidate | null> {
     return this.operation(async () => {
       const before = this.getSnapshot();
@@ -165,7 +174,7 @@ export class NativeIdentityVault implements IdentityVaultPort {
       const raw = await this.module.getNativeSigningMethodsAsync(pubkey, before.vaultId, before.revision);
       if (this.getSnapshot() !== before) denied();
       return captureSigningMethods(raw, before, pubkey);
-    });
+    }, true);
   }
   prepareRemoteConnection(): Promise<NativeRemoteCandidate | null> { return this.prepareSignerCandidate('connect'); }
   prepareRemoteRefresh(pubkey: string): Promise<NativeRemoteCandidate | null> { return this.prepareSignerCandidate('refresh', pubkey); }
