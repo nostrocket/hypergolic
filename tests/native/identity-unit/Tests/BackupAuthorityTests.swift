@@ -228,7 +228,7 @@ private func backupInventory(selected: Int = 2, revision: UInt64 = 1) -> NativeV
 @Test func nsecEncodingMatchesKnownNIP19VectorAndRejectsMalformedSecret() throws {
   #expect(try NostrSecretBech32.encode(Data((1...32).map(UInt8.init))) ==
     "nsec1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5z5tpwxqergd3c8g7rusqpqcc2y")
-  #expect(throws: DeletionActionFailure.denied) { try NostrSecretBech32.encode(Data(repeating: 1, count: 31)) }
+  #expect(throws: StoreFailure.unauthorized) { try NostrSecretBech32.encode(Data(repeating: 1, count: 31)) }
 }
 
 @Test func nativeStoreBackupReadRequiresExactSelectedInventory() async throws {
