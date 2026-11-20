@@ -32,7 +32,7 @@ function createPublicationSender(module:ApprovalModule,tokenFor:(lease:NativeApp
     async function worker(index:number):Promise<void>{
       if(index>=destinations.length)return;execution.assertActive();
       try{const raw=await publish(token,group,wire,destinations[index]!);execution.assertActive();rows[index]=JSON.parse(raw);}
-      catch(error){if(!settleAll)throw error;execution.assertActive();rows[index]={relay:destinations[index]!,eventId:event.id,status:'unknown',reason:'app-data-publication-result-unavailable'};}
+      catch(error){if(!settleAll)throw error;execution.assertActive();rows[index]={relay:destinations[index]!,eventId:event.id,status:'unknown',reason:'publication result unavailable'};}
       execution.assertActive();return worker(index+4);
     }
     const work=[worker(0),worker(1),worker(2),worker(3)];

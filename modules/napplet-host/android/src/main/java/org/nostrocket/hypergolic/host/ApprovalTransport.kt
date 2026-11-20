@@ -9,8 +9,13 @@ import org.json.JSONObject
 internal object ApprovalTransport {
   val leases = ApprovalLeaseRegistry(SystemClock::elapsedRealtime)
   private val main = Handler(Looper.getMainLooper())
-  private data class Pending(val generation: String, val id: String, val resultType: String, val appData: Boolean, val reply: (String?) -> Unit)
-  private val pending = mutableMapOf<String, Pending>()
+  private data class Pending(val generation: String, val id: String, val resultType: String, val appData: Boolean, val reply: (String?) -> Unit) {
+    @Volatile var dispatched = false
+  }
+  private val pending = java.util.concurrent.ConcurrentHashMap<String, Pending>()
+  fun markDispatched(token: String) {
+    pending[token]?.dispatched = true
+  }
 
   fun register(generation: String): Boolean = leases.register(generation)
   fun foreground(active: Boolean) { leases.foreground(active); main.post { sweep() } }
@@ -98,6 +103,12 @@ internal object ApprovalTransport {
       response
     }.getOrNull()
     request.reply(exact ?: JSONObject().put("type", request.resultType).put("id", request.id)
-      .put("ok", false).put("error", if(request.resultType.startsWith("common."))"user-denied" else "approval denied").toString())
+      .put("ok", false).put("error", when {
+        request.dispatched && request.appData -> "app-data-publication-unknown"
+        request.dispatched && request.resultType.startsWith("common.") -> "publication-result-unknown"
+        request.dispatched -> "publication result unknown"
+        request.resultType.startsWith("common.") -> "user-denied"
+        else -> "approval denied"
+      }).toString())
   }
 }

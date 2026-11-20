@@ -51,6 +51,9 @@ type Entry = ApprovalItem & { revalidateRecommendation?: CatalogRecommendationGu
 const PER_SESSION = 4, GLOBAL = 16;
 let nextPresentationId = 0;
 
+export class PublicationUncertainError extends Error {
+  constructor() { super('Publication could not be confirmed.'); this.name = 'PublicationUncertainError'; }
+}
 function denied(): never { throw new Error('APPROVAL_DENIED'); }
 function captureOrigin(origin: ApprovalOrigin): ApprovalOrigin {
   return Object.freeze({ sessionId: origin.sessionId, generation: origin.generation, epoch: origin.epoch, user: origin.user,
@@ -120,7 +123,12 @@ export class ApprovalService {
   }
   private end(entry: Entry, cancel: boolean, response: string | null = null) {
     if (!this.entries.includes(entry)) return;
-    if (response === null && entry.publicationStarted) this.closeRisks.set(entry.origin.sessionId, entry.origin.epoch);
+    if (response === null && entry.publicationStarted) {
+      this.closeRisks.set(entry.origin.sessionId, entry.origin.epoch);
+      const type = entry.common ? entry.common.request.type : entry.outbox ? 'outbox.publish' : 'relay.publish';
+      const error = entry.appData ? 'app-data-publication-unknown' : entry.common ? 'publication-result-unknown' : 'publication result unknown';
+      response = JSON.stringify({type:type + '.result', id:entry.requestId, ok:false, error});
+    }
     this.entries = this.entries.filter(item => item !== entry);
     entry.revalidateRecommendation?.release(!entry.publicationStarted);
     if(entry.common)this.commonPlanner?.release(entry.common);
@@ -341,7 +349,7 @@ export class ApprovalService {
         try{this.native.failOutbox?.(entry.lease,code);}catch{/* Reporter attempts independent cancel/finish; never grants effect authority. */}
       }
       if(entry.common&&!publicationStarted&&error instanceof CommonError)try{this.native.failCommon?.(entry.lease,error.message);}catch{/* Native denial still revokes the original request. */}
-      if (publicationStarted && this.entries.includes(entry)) this.closeRisks.set(entry.origin.sessionId, entry.origin.epoch);
+      if (publicationStarted) throw new PublicationUncertainError();
       throw error;
     } finally { this.end(entry, response === null, response); releaseAppData?.(); this.publish(); }
   }

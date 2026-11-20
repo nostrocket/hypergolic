@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { finalizeEvent } from 'nostr-tools/pure';
 import { updateApprovalAppState } from '../../src/shell/approval-lifecycle.ts';
-import { ApprovalService, type ApprovalEffects, type ApprovalOrigin, type NativeApprovalLease, type NativeApprovalLeasePort, type NativeTakenApproval } from '../../src/security/approval-service.ts';
+import { ApprovalService, PublicationUncertainError, type ApprovalEffects, type ApprovalOrigin, type NativeApprovalLease, type NativeApprovalLeasePort, type NativeTakenApproval } from '../../src/security/approval-service.ts';
 
 const secret = new Uint8Array(32); secret[31] = 2;
 const relay = 'wss://relay.example.org';
@@ -225,7 +225,8 @@ test('background after publication dispatch retains uncertainty after the pendin
   const pending = service.approve(current(service, 'one'));
   await new Promise<void>(resolve => setImmediate(resolve)); assert.equal(dispatched, true);
   service.background(); assert.equal(service.getSnapshot().pending, 0);
-  held.resolve([]); await assert.rejects(pending); service.foreground();
+  held.resolve([]); await assert.rejects(pending, PublicationUncertainError); service.foreground();
+  assert.deepEqual(JSON.parse(native.responses[0]!), {type:'relay.publish.result', id:'wire-one', ok:false, error:'publication result unknown'});
   assert.equal(service.hasCloseRisk('one'), true);
   service.close('one'); assert.equal(service.hasCloseRisk('one'), false);
 });
