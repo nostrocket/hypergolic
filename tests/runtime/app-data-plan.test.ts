@@ -11,7 +11,7 @@ const secret=new Uint8Array(32).fill(37),user=getPublicKey(secret),publisher='2'
 const scope=deriveAppDataScope({publisher,kind:35129,identifier:appId});
 const peers=['wss://one.example.com','wss://two.example.com'];
 // Match the planner's deterministic clock when checking signing eligibility.
-beforeEach(t => t.mock.timers.enable({apis: ['Date'], now: 1_800_000_100_000}));
+beforeEach(t => { if (!("mock" in t)) throw new Error("A test context is required"); t.mock.timers.enable({apis: ['Date'], now: 1_800_000_100_000}); });
 const clone=<T>(value:T):T=>JSON.parse(JSON.stringify(value));
 function origin(patch:Partial<NativeRegistration>={}):NativeRegistration{return {sessionId:'app-data-source',generation:'app-data-generation',epoch:0,
   user,publisher,appId,version:'3'.repeat(64),instanceId:'app-data-instance',fixture:'published',domains:['identity','outbox'],
