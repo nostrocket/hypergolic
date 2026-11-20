@@ -10,6 +10,10 @@ add_library(hypergolic_signer STATIC
   ${HYPERGOLIC_SECP256K1}/src/precomputed_ecmult.c
   ${HYPERGOLIC_SECP256K1}/src/precomputed_ecmult_gen.c
 )
+if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+  set_source_files_properties(hypergolic_signer.c hypergolic_nip44.c
+    PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra;-Werror;-fstack-protector-strong")
+endif()
 target_include_directories(hypergolic_signer PUBLIC include PRIVATE ${HYPERGOLIC_SECP256K1}/include ${HYPERGOLIC_MONOCYPHER}/src)
 target_compile_definitions(hypergolic_signer PRIVATE
   ENABLE_MODULE_EXTRAKEYS=1 ENABLE_MODULE_SCHNORRSIG=1 ENABLE_MODULE_ECDH=1
