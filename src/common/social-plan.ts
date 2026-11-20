@@ -44,7 +44,8 @@ export function createCommonSocialPlanner(port:CommonPlanningPort,now:()=>number
   async function observed(filters:readonly QueryFilter[],registration:NativeRegistration,signal:AbortSignal,active:()=>void){
     active();const result=await port.query(filters,registration,signal,active);active();
     const event=latestIdentityEvent(result.events.map(row=>verifyQueryEvent(row.event,filters)));
-    if(result.incomplete && !(event && filters.length===1 && filters[0]?.ids?.length===1 && filters[0].ids[0]===event.id)) {
+    const ids=filters.length===1?filters[0]?.ids:undefined;
+    if(result.incomplete && !(event && Array.isArray(ids) && ids.length===1 && ids[0]===event.id)) {
       throw new CommonError('relay-timeout');
     }
     return event;
