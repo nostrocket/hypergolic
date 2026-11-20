@@ -618,7 +618,7 @@ class SignerCoreModule : Module() {
         val source = NativeSigningSourceFacade.capture(kind, token, unsigned)
         val event = NativeEvent.capture(unsigned, source.identity)
         val captured = NativeEvent.capture(source.unsigned, source.identity)
-        if (event.canonical != captured.canonical || kind == "approval" && (event.kind == 22242 || event.kind == 24242)) {
+        if (event.canonical != captured.canonical || kind == "approval" && (event.kind == 22242 || event.kind == 24242 || event.kind == 27235)) {
           throw NativeVault.Error("AUTHORIZATION_DENIED")
         }
         val pending = synchronized(session.lock) {

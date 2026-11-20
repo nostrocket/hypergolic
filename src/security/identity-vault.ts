@@ -1,3 +1,4 @@
+import {isAuthenticationEventKind} from './authentication-event.ts';
 import { validateSignedEvent, type VerifiedSignedEvent } from './signed-event.ts';
 import { uploadSigningSnapshot, type UploadSnapshot } from '../uploads/upload-snapshot.ts';
 import type { EventSnapshot } from './event-snapshot.ts';
@@ -330,7 +331,7 @@ export class IdentityVault {
   }
   /** Signs only an immutable, approved snapshot with the currently selected protected identity. */
   async signApproved(snapshot: EventSnapshot, authority: EffectAuthority, signer: ApprovedEventSigner): Promise<VerifiedSignedEvent> {
-    if (snapshot.event.kind === 22242 || snapshot.event.kind === 24242) throw new VaultError('AUTHORIZATION_DENIED');
+    if (isAuthenticationEventKind(snapshot.event.kind)) throw new VaultError('AUTHORIZATION_DENIED');
     return this.signCaptured(snapshot, authority, signer);
   }
   /** Blossom credentials require an owning reviewed upload, never the ordinary relay signing lane. */

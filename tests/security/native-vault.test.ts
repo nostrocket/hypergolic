@@ -88,7 +88,7 @@ test('ordinary signing rejects missing source, upload source and reserved auth k
   const { vault, calls } = harness(); await vault.open();
   await assert.rejects(vault.signApproved(event, { signal: new AbortController().signal, assertActive() {} }), { code: 'AUTHORIZATION_DENIED' });
   await assert.rejects(vault.signApproved(event, { ...authority(), nativeSource: { kind: 'upload', token: 'wrong-lane' } }), { code: 'AUTHORIZATION_DENIED' });
-  for (const kind of [22242, 24242]) await assert.rejects(vault.signApproved({ ...event, event: { ...event.event, kind } }, authority()), { code: 'AUTHORIZATION_DENIED' });
+  for (const kind of [22242, 24242, 27235]) await assert.rejects(vault.signApproved({ ...event, event: { ...event.event, kind } }, authority()), { code: 'AUTHORIZATION_DENIED' });
   assert.equal(calls.length, 0);
 });
 

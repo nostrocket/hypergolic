@@ -82,7 +82,7 @@ final class NativeOutboxPlan: @unchecked Sendable {
       event["selectedPubkey"] as? String == identity else { throw Failure.invalid }
     try fields(event, ["event", "selectedPubkey", "destinations", "hash"])
     let template = try unsigned(source, strict: true), kind = try integer(source["kind"], maximum: 65535)
-    guard bytesEqual(try unsigned(captured, strict: true), template), kind != 22242, kind != 24242 else { throw Failure.invalid }
+    guard bytesEqual(try unsigned(captured, strict: true), template), kind != 22242, kind != 24242, kind != 27235 else { throw Failure.invalid }
     let hash = try eventHash(captured, identity: identity)
     guard event["hash"] as? String == hash, let destinations = event["destinations"] as? [String],
       (1...16).contains(destinations.count), Set(destinations).count == destinations.count,

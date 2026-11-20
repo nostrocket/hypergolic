@@ -56,7 +56,7 @@ internal class NativeOutboxPlan private constructor(
       val template = unsigned(original, true)
       require(unsigned(event.getJSONObject("event"), true) == template)
       val kind = original.getInt("kind")
-      require(kind != 22242 && kind != 24242)
+      require(kind != 22242 && kind != 24242 && kind != 27235)
       val hash = eventHash(event.getJSONObject("event"), identity)
       require(event.getString("hash") == hash)
       val dummy = JSONObject(template).put("id", hash).put("pubkey", identity).put("sig", "0".repeat(128))

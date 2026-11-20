@@ -1,3 +1,4 @@
+import {isAuthenticationEventKind} from './authentication-event.ts';
 import { MAX_IDENTITIES, VaultError, type VaultErrorCode, type VaultSnapshot } from './identity-vault-model.ts';
 import { validateSignedEvent, type VerifiedSignedEvent } from './signed-event.ts';
 import { uploadSigningSnapshot, type UploadSnapshot } from '../uploads/upload-snapshot.ts';
@@ -286,7 +287,7 @@ export class NativeIdentityVault implements IdentityVaultPort {
     });
   }
   signApproved(snapshot: EventSnapshot, authority: EffectAuthority): Promise<VerifiedSignedEvent> {
-    if (snapshot.event.kind === 22242 || snapshot.event.kind === 24242 ||
+    if (isAuthenticationEventKind(snapshot.event.kind) ||
         !['approval', 'fixture-manifest'].includes(authority.nativeSource?.kind ?? '')) return Promise.reject(new VaultError('AUTHORIZATION_DENIED'));
     return this.sign(snapshot, authority, ['approval', 'fixture-manifest']);
   }

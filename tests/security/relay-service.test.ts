@@ -168,7 +168,7 @@ test('rejects malformed destinations, oversized destination lists and ordinary A
   await invalid(['wss://user:pass@relay.example.org/']);
   await invalid(['wss://127.0.0.1/']);
   await invalid(Array.from({ length: 17 }, (_, index) => `wss://relay${index}.example.org/`));
-  await invalid(['wss://relay.example.org/'], { ...EVENT, kind: 22242 });
+  for (const kind of [22242, 24242, 27235]) await invalid(['wss://relay.example.org/'], { ...EVENT, kind });
 });
 
 test('rejects nested getters without executing them', async () => {

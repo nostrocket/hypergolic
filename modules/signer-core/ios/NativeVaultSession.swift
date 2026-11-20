@@ -414,7 +414,7 @@ import HypergolicNappletHost
     let event: ExactSignerEvent
     do { event = try ExactSignerEvent(json: unsignedJSON, expectedPubkey: selected) } catch { throw NativeVaultFailure.denied }
     if let original = source.eventJSON {
-      guard event.kind != 22242, event.kind != 24242,
+      guard event.kind != 22242, event.kind != 24242, event.kind != 27235,
         let captured = try? ExactSignerEvent(json: original, expectedPubkey: selected), captured == event else { throw NativeVaultFailure.denied }
     } else {
       let now = UInt64(max(0, Date().timeIntervalSince1970))

@@ -1,3 +1,4 @@
+import {isAuthenticationEventKind} from './authentication-event.ts';
 import type {CatalogRecommendationGuard} from '../napplets/catalog-recommendation.ts';
 import {AppDataApprovalPreparation} from '../app-data/app-data-preparation.ts';
 import {appDataFailure,type AppDataPlan,type AppDataPlanner} from '../app-data/app-data-plan.ts';
@@ -152,7 +153,7 @@ export class ApprovalService {
       if(taken.commonRequest){if(!this.commonPreparing.start(taken))denied();return true;}
       if(taken.outboxRequest){if(!this.preparing.start(taken))denied();return true;}
       let event = captureEventSnapshot(taken.event, taken.origin.user, destinationsFromTrustedConfig);
-      if (event.event.kind === 22242 || event.event.kind === 24242 || this.entries.length >= GLOBAL || this.entries.filter(entry => entry.origin.sessionId === taken!.origin.sessionId).length >= PER_SESSION) denied();
+      if (isAuthenticationEventKind(event.event.kind) || this.entries.length >= GLOBAL || this.entries.filter(entry => entry.origin.sessionId === taken!.origin.sessionId).length >= PER_SESSION) denied();
       if (nextPresentationId >= Number.MAX_SAFE_INTEGER) denied();
       let recommendation: string | undefined;
       let recommendationExcludedRelays: readonly string[] | undefined;
