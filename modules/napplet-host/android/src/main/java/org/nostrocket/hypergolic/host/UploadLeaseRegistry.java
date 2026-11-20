@@ -89,9 +89,18 @@ final class UploadLeaseRegistry {
     if (row == null || row.claimed || row.review != null || !authority.append(row.request, offset, chunk)) return -1;
     row.cursor += chunk.length; return row.cursor;
   }
-  synchronized boolean seal(String generation, String token) {
-    Row row = owned(generation, token); if (row == null || row.claimed || row.review != null) return false;
-    row.review = authority.sealPreparedFile(row.request); return row.review != null;
+  boolean seal(String generation, String token) {
+    final Row row;
+    synchronized (this) {
+      row = owned(generation, token);
+      if (row == null || row.claimed || row.review != null) return false;
+    }
+    var review = authority.sealPreparedFile(row.request);
+    synchronized (this) {
+      if (review == null || owned(generation, token) != row || !authority.contains(row.request)) return false;
+      row.review = review;
+      return true;
+    }
   }
   synchronized NativeUploadAuthority.Review sealedReview(String generation, String token) { Row row = owned(generation, token); return row == null ? null : row.review; }
   synchronized Taken take(String token) {

@@ -34,7 +34,7 @@
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/MediaHttpsFile.java": "1c488ec147e0478d07225f44a26fb6d8bc23de4e641b32257d6eb5eb881aea70",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/MediaPlaybackReservation.java": "78581de98d92513c7eaa02c2f7ac7dcae06bde6ae661be2fea2c07b6a7905d56",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/NappletHostModule.kt": "53a2f5863e2ffdc69766fb5b8396cb379a2aee6f0f15dae460a4cc409b0c3fa6",
-    "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/NappletHostView.kt": "b6cd95c72eb0ada008c877b3651757c7df6081cdf775f0073875e5007e4f551f",
+    "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/NappletHostView.kt": "4262e8a593b5b331123db34c3da200dd7079ad3ad887fbf3c4ad48175f4105c0",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/NativeAppDataPolicy.kt": "8edbae14e0337ce17cab252f009c20c6aa1915da8a3365ed2ecf257df349b078",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/NativeApprovalAuthority.java": "76c1b7e3abc36227b0fa46049c539f55fcca4ae6e32e0f7daceb57101d7e75b0",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/NativeApprovalSigningData.kt": "3b4b37266897b5744be5574976f3510856eed436acddc392817f4225543fa2f5",
@@ -50,7 +50,7 @@
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/NativeResolverOwnership.java": "f4faff4424b67a42bc617edb9b57fe62883c01ba53bdad0405f7586ff66aa5b8",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/NativeSignerRelay.java": "80177e4f51306cb6e5b244bc91bd4e7221762e402667b87eda9767cb9aed53fa",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/NativeSignerRelayOpening.java": "798f0f2716c93d760cf8ccdb0cc53b4f8a15077f99a37b45d190c218e8c00420",
-    "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/NativeUploadAuthority.java": "7504eacc57d882eae3a8ce6e71c6e3919bce51132a90f261cf472ea6fbbd2af1",
+    "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/NativeUploadAuthority.java": "b4c878ae0f390c851d370207d8fec6e86eacc2f6cea6f6c6b2504ba7326aaf42",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/OutboxAcknowledgement.kt": "9e9cdeabb8c44664c643f98e36b772489eacf4ae957270a903731d70ddf1e842",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/OutboxPublicationOwner.kt": "9c3ca7ffb4c0559db1c9aa54c1a37a037fa44f5d09f59331c588d85a9948ef13",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/OutboxQueryCapability.kt": "b868b8e66281285e9881811d92ca7a8e744c456829b54361421c4b192c0ec961",
@@ -81,7 +81,7 @@
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/UploadExifMetadata.java": "122c6094056b301c8d96f77d2158ebf1526e97b9df45989f194b116fe7ea8eb8",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/UploadFileProfile.java": "3d470486bb3bc7f8a83fe47d1bcd4557babf4644eb4b46e348119c2f82c04b78",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/UploadJsonBounds.java": "0451ab09b880b01d2bb95946dcccc9c7e16e42d0bf49aef18ab4c9bc3e817c6d",
-    "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/UploadLeaseRegistry.java": "cceced12e8309f958af7d5b22061aea0ff496676ce8c3836c2671a4f28210129",
+    "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/UploadLeaseRegistry.java": "3538bbb8740a3d24f0155233acb2f80b93a822155998d6db6ee5a8e7ad4700b2",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/UploadPhotoContainer.java": "d103777068c9bac6826931af915291fc1a17944fdc81abe3511f882320f32216",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/UploadPhotoPreparation.java": "294cda96d6a45962ef65524485120236cf0ffd59b7f531bb78537e2b29d040aa",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/UploadPinnedHttpsTransport.java": "175af8dec46c9aa68109def093c221530c19f28ad30aa2aa471e439ac6694f5f",
@@ -91,7 +91,7 @@
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/UploadRecoveryHttps.java": "90f8349c5e340653722a6fffcdb206c9625c43de243118d3d7acaaec90b5b8b3",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/UploadRecoveryLedger.java": "5892d841f7e683a865687e004422af7a488939692e5a5839731ed79bb8fd93d1",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/UploadRecoveryReadAuthority.java": "93b3bc5b2b6ce9baf4e8a17da1de745793a5cd158285d2051c4e01d2dacc32ef",
-    "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/UploadTransport.kt": "7f142d2523ac8595574a6a5d30e0fff47241fa4e672762a3009dc50b6429b14e",
+    "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/UploadTransport.kt": "e46196935fda0f35cf9215eae063852a6fade9b2d31271f52ef2fb5c7162f1f9",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/UploadWire.kt": "2027422b69d5ace19bb0ab36e80ee4682260e5c95a6be04621400a40bcaf2e14"
   }
 }

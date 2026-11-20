@@ -35,10 +35,34 @@ import Foundation
       else {check(owner.dispatch(grant) == bytes); check(owner.dispatch(grant) == nil)}
     }
   }
+  static func revokeDuringPreparation(_ check: (Bool) -> Void) {
+    let started = DispatchSemaphore(value: 0), resume = DispatchSemaphore(value: 0), finished = DispatchSemaphore(value: 0)
+    let owner = NativeUploadAuthority(clock: {1}, prepare: { data in
+      started.signal()
+      precondition(resume.wait(timeout: .now() + 5) == .success, "Revocation blocked")
+      return UploadFileProfile.prepare(data)
+    })
+    let session = owner.register("during-preparation", identity: String(repeating: "a", count: 64))!
+    owner.setForeground(true); owner.focus(session)
+    let bytes = Data("attachment".utf8)
+    let request = owner.admit(session, length: bytes.count, destination: "https://files.example.com", mimeType: "text/plain")!
+    check(owner.append(request, offset: 0, chunk: bytes))
+    DispatchQueue.global().async {
+      precondition(owner.sealPreparedFile(request) == nil)
+      finished.signal()
+    }
+    check(started.wait(timeout: .now() + 5) == .success)
+    check(owner.sealPreparedFile(request) == nil)
+    owner.revoke(session)
+    resume.signal()
+    check(finished.wait(timeout: .now() + 5) == .success)
+    check(!owner.contains(request))
+  }
   static func main() throws {
     let root = URL(fileURLWithPath: CommandLine.arguments[1]); var checks = 0
     func check(_ value: Bool) {checks += 1; precondition(value, "Attachment check \(checks)")}
     htmlProof(check)
+    revokeDuringPreparation(check)
     for (ext, mime) in [("wav","audio/wav"),("mp4","video/mp4"),("pdf","application/pdf"),("zip","application/zip"),("txt","text/plain")] {
       let bytes = try Data(contentsOf: root.appendingPathComponent("fixture." + ext)), original = bytes
       let prepared = UploadFileProfile.prepare(bytes); check(prepared != nil); check(bytes == original); check(prepared?.bytes == bytes)

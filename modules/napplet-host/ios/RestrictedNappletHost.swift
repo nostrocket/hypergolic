@@ -754,7 +754,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
       let type = request["type"] as? String, type.hasPrefix("upload.") {
       guard configuration.domains.contains("upload"), CapabilityTransport.leases.consumeSequence(generation, sequence: counter),
         let capturedView = webView, let capturedURL = expectedURL else { respond(nil); return }
-      let result = UploadTransport.receive(generation, sequence: counter, raw: message,
+      UploadTransport.receive(generation, sequence: counter, raw: message, request: request,
         push: { [weak self, weak capturedView] envelope in
           guard let self, let capturedView, self.webView === capturedView, self.live, !self.disposed,
             capturedView.url?.absoluteString == capturedURL.absoluteString else { return }
@@ -765,8 +765,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
         }, onReview: { [weak self] token in
           guard let self, self.live, !self.disposed else { return }
           self.onEvent?(["type": "capability", "lane": "upload", "sessionId": configuration.sessionId, "generation": self.generation, "token": token])
-        })
-      respond(result)
+        }, reply: respond)
       return
     }
     let approval = configuration.approvalWireId(message)

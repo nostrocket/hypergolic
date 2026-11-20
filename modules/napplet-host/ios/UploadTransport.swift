@@ -77,7 +77,24 @@ import Network
     for key in statusOrder.filter({ $0.hasPrefix(generation + ":") }) { statuses.removeValue(forKey: key) }
     statusOrder.removeAll { $0.hasPrefix(generation + ":") }
   }
-  static func receive(_ generation: String, sequence: UInt64, raw: String,
+  private static let preparation = DispatchQueue(label: "hypergolic.upload.prepare", qos: .utility)
+  private static var preparing = Set<String>()
+  static func receive(_ generation: String, sequence: UInt64, raw: String, request: [String: Any],
+    push: @escaping @MainActor @Sendable (String) -> Void, onReview: @escaping @MainActor @Sendable (String) -> Void,
+    reply: @escaping @MainActor @Sendable (String?) -> Void) {
+    @MainActor @Sendable func finish(_ sealed: Bool) {
+      reply(handle(generation, sequence: sequence, raw: raw, sealed: sealed, push: push, onReview: onReview))
+    }
+    guard request["type"] as? String == "upload.__seal" else { finish(false); return }
+    guard raw.utf8.count <= 1024, request.count == 3, request["id"] is String,
+      let token = request["token"] as? String, (1...128).contains(token.utf8.count), preparing.count < 8,
+      leases.publicId(generation, token: token) != nil, preparing.insert(token).inserted else { finish(false); return }
+    preparation.async {
+      let sealed = leases.seal(generation, token: token)
+      Task { @MainActor in preparing.remove(token); finish(sealed) }
+    }
+  }
+  private static func handle(_ generation: String, sequence: UInt64, raw: String, sealed: Bool,
     push: @escaping @MainActor @Sendable (String) -> Void, onReview: @escaping @MainActor @Sendable (String) -> Void) -> String? {
     sweep(); var type: String?, id: String?
     do {
@@ -112,7 +129,7 @@ import Network
       case "upload.__seal":
         try UploadWire.fields(value, ["type", "id", "token"])
         let token = try UploadWire.text(value["token"], 128)
-        guard leases.seal(generation, token: token) else { response["error"] = "unsupported media type"; return try UploadWire.json(response) }
+        guard sealed else { response["error"] = "unsupported media type"; return try UploadWire.json(response) }
         guard let publicId = leases.publicId(generation, token: token), let review = leases.sealedReview(generation, token: token) else { throw UploadWire.Invalid.value }
         guard let recovery else { leases.cancel(token); sweep(); throw UploadWire.Invalid.value }
         if try recovery.blocks(identity: review.identity, destination: review.destination, sha256: review.sha256) {
