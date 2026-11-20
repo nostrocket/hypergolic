@@ -75,7 +75,7 @@ final class PublishedArtifactReadOwner {
     if let legacyReadOnly, let data = legacyReadOnly.data(using: .utf8), let value = try? JSONSerialization.jsonObject(with: data) { response["legacyReadOnly"] = value }
     if let appData, let data = appData.data(using: .utf8), let value = try? JSONSerialization.jsonObject(with:data) { response["appData"] = value }
     if publishedOpen { response["publishedOpen"] = true }
-    guard let encoded = try? JSONSerialization.data(withJSONObject: response) else { clear(); return nil }
+    guard let encoded = try? JSONSerialization.data(withJSONObject: response, options: .withoutEscapingSlashes) else { clear(); return nil }
     offset = end
     nextSequence += 1
     if done { clear() }
