@@ -50,17 +50,32 @@ function receiveFrame(process:SessionProcess,callbacks:SessionCallbacks,subscrip
   else if(message.type!=='notice'&&message.type!=='auth')throw new RelaySubscriptionError();
 }
 type LegacyAuthority=Readonly<{relays:readonly string[];isTokenActive(token:string):boolean}>;
+function stopConnection(connection:Connection) {
+  connection.revision++;
+  if(connection.retry!==null){clearTimeout(connection.retry);connection.retry=null;}
+  const stop=connection.stop;connection.stop=null;
+  try{stop?.();}catch{/* Delivery revision is already invalidated. */}
+}
+function initialDeadline(subscription:Subscription,process:SessionProcess,
+  eose:(subscription:Subscription)=>void,finish:(subscription:Subscription,reason:string)=>void) {
+  if(subscription.eose||subscription.ended)return;
+  if(subscription.initialTimer!==null)clearTimeout(subscription.initialTimer);
+  subscription.initialTimer=setTimeout(()=> {
+    subscription.initialTimer=null;
+    if(subscription.ended||!process.foreground)return;
+    for(const connection of subscription.connections)if(connection.state==='opening'){
+      stopConnection(connection);
+      connection.state='failed';
+      connection.attempts=SUBSCRIPTION_LIMITS.retries;
+    }
+    if(subscription.connections.some(connection=>connection.state==='eose'))eose(subscription);else finish(subscription,'relay timeout');
+  },subscription.initialTimeoutMs);
+}
 function createSession(owner:RelaySubscriptionOwner,registration:NativeRegistration,process:SessionProcess,legacy?:LegacyAuthority) {
   const {port,newId,now,retryMs,sessions}=process;
       let revoked=false;
       const subscriptions=new Map<string,Subscription>(),callerIds=new Set<string>();
       const active=()=>{if(revoked)throw new RelaySubscriptionError('relay owner revoked');owner.assertActive();};
-      function stopConnection(connection:Connection) {
-        connection.revision++;
-        if(connection.retry!==null){clearTimeout(connection.retry);connection.retry=null;}
-        const stop=connection.stop;connection.stop=null;
-        try{stop?.();}catch{/* Delivery revision is already invalidated. */}
-      }
       function finish(subscription:Subscription,reason?:string) {
         if(subscription.ended)return;
         subscription.ended=true;subscription.epoch++;if(subscription.initialTimer!==null)clearTimeout(subscription.initialTimer);subscription.initialTimer=null;subscriptions.delete(subscription.request.subId);process.total--;
@@ -112,20 +127,7 @@ function createSession(owner:RelaySubscriptionOwner,registration:NativeRegistrat
           if(live())connection.stop=handle;else try{handle();}catch{/* Synchronous callbacks may already revoke. */}
         }catch{fail();}
       }
-      function deadline(subscription:Subscription) {
-        if(subscription.eose||subscription.ended)return;
-        if(subscription.initialTimer!==null)clearTimeout(subscription.initialTimer);
-        subscription.initialTimer=setTimeout(()=> {
-          subscription.initialTimer=null;
-          if(subscription.ended||!process.foreground)return;
-          for(const connection of subscription.connections)if(connection.state==='opening'){
-            stopConnection(connection);
-            connection.state='failed';
-            connection.attempts=SUBSCRIPTION_LIMITS.retries;
-          }
-          if(subscription.connections.some(connection=>connection.state==='eose'))eose(subscription);else finish(subscription,'relay timeout');
-        },subscription.initialTimeoutMs);
-      }
+      const deadline=(subscription:Subscription)=>initialDeadline(subscription,process,eose,finish);
       function resume() {
         try{active();}catch{revoke();return;}
         for(const subscription of Array.from(subscriptions.values())) {
