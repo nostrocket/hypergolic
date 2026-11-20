@@ -4,9 +4,7 @@ import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 /** App-only resource reads. Native lease guards remain authoritative during fetch and chunk delivery. */
@@ -32,7 +30,6 @@ public final class ResourceHttpsRequestOwner {
   }
   private final Object lock = new Object();
   private final Map<String, Operation> operations = new HashMap<>();
-  private final Set<String> used = new HashSet<>();
   private final Fetcher fetcher;
   private boolean foreground;
   ResourceHttpsRequestOwner(Fetcher fetcher) { this.fetcher = fetcher; }
@@ -45,9 +42,9 @@ public final class ResourceHttpsRequestOwner {
     synchronized (lock) {
       pruneLocked();
       if (!foreground || !lease.isActive()) throw new Failure("blocked-by-policy");
-      if (used.contains(id)) throw new Failure("invalid-request");
-      if (operations.size() >= 4 || used.size() >= 65_536) throw new Failure("quota-exceeded");
-      used.add(id); operations.put(id, operation);
+      if (operations.size() >= 4) throw new Failure("quota-exceeded");
+      if (!NativeTransportTickets.consume(id)) throw new Failure("invalid-request");
+      operations.put(id, operation);
     }
     try {
       byte[] body = fetcher.fetch(url, () -> operation.cancelled || !lease.isActive() || !job.isActive());
@@ -85,7 +82,7 @@ public final class ResourceHttpsRequestOwner {
   public void cancel(String id) {
     if (!validId(id)) return;
     synchronized (lock) {
-      if (used.size() < 65_536) used.add(id);
+      NativeTransportTickets.consume(id);
       Operation operation = operations.remove(id);
       if (operation != null) { operation.cancelled = true; operation.bytes = null; }
     }

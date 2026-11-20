@@ -197,11 +197,10 @@ export function createRelaySubscriptions(port:NativeRelayStreamPort,destinations
   if(retryMs.length!==SUBSCRIPTION_LIMITS.retries||retryMs.some(ms=>!Number.isSafeInteger(ms)||ms<1||ms>16000))throw new RelaySubscriptionError();
   let foreground=true,total=0;
   const sessions=new Map<string,{pause:()=>void;resume:()=>void;revoke:()=>void}>();
-  const usedOperations=new Set<string>();
   const newId=()=> {
     const id=port.newInstanceId();
-    if(!uuid.test(id)||usedOperations.has(id)||usedOperations.size>=65536)throw new RelaySubscriptionError();
-    usedOperations.add(id);return id;
+    if(!uuid.test(id))throw new RelaySubscriptionError();
+    return id;
   };
   const process:SessionProcess={port,newId,destinations,domain:options.domain??'relay',now,retryMs,sessions,
     get foreground(){return foreground;},set foreground(value){foreground=value;},

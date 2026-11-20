@@ -10,6 +10,7 @@ SOURCES = [
     HOST / "PublicAddressPolicy.java",
     HOST / "PublishedHttpsResponseReader.java",
     HOST / "PublishedHttpsTransport.java",
+    HOST / "NativeTransportTickets.java",
     HOST / "PublishedHttpsRequestOwner.java",
     HOST / "PublishedRelayWebSocketHandshake.java",
     HOST / "PublishedRelayWebSocketFrames.java",

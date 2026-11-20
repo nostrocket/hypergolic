@@ -3,7 +3,6 @@ package org.nostrocket.hypergolic.host;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -15,6 +14,17 @@ public final class PublishedRelayWssRequestOwnerProof {
   private static final String REQ = "[\"REQ\",\"sub-1\",{}]";
 
   public static void main(String[] args) throws Exception {
+    String stale = NativeTransportTickets.issue();
+    for (int i = 0; i < 65_537; i++) {
+      String id = NativeTransportTickets.issue();
+      if (!NativeTransportTickets.consume(id) || NativeTransportTickets.consume(id))
+        throw new AssertionError("Operation ticket must be single use");
+    }
+    check(!NativeTransportTickets.consume(stale));
+    String cancelled = NativeTransportTickets.issue();
+    check(NativeTransportTickets.consume(cancelled));
+    check(!NativeTransportTickets.consume(cancelled));
+
     cancellationAndIdempotence();
     outboxClaimAndProfile();
     concurrencyCap();
@@ -132,7 +142,7 @@ public final class PublishedRelayWssRequestOwnerProof {
     checks++;
   }
 
-  private static String uuid() { return UUID.randomUUID().toString(); }
+  private static String uuid() { return NativeTransportTickets.issue(); }
   private static void awaitCancellation(PublishedHttpsTransport.Cancellation cancellation) throws IOException {
     long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
     while (!cancellation.isCancelled() && System.nanoTime() < until) {

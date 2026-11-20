@@ -98,7 +98,7 @@ def main():
         out = Path(temporary)
         good_key, good_pem, good_der = certificate(out, 'files.example.com')
         wrong_key, wrong_pem, wrong_der = certificate(out, 'other.example.com')
-        java_names = ['NativeSigningHold', 'UploadFileProfile', 'UploadPngProfile', 'UploadPngMetadata', 'NativeUploadAuthority', 'NativeBlossomPermit', 'PublishedHttpsRequestOwner',
+        java_names = ['NativeSigningHold', 'UploadFileProfile', 'UploadPngProfile', 'UploadPngMetadata', 'NativeUploadAuthority', 'NativeBlossomPermit', 'NativeTransportTickets', 'PublishedHttpsRequestOwner',
                       'PublishedHttpsTransport', 'PublishedHttpsResponseReader', 'PublicAddressPolicy', 'UploadPinnedHttpsTransport']
         subprocess.run(['javac', '-Xlint:all', '-Werror', '-d', str(out),
                         *[str(JAVA / (name + '.java')) for name in java_names], str(HERE/'UploadTLSProof.java')], check=True)

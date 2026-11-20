@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[5]
 HERE = Path(__file__).resolve().parent
 HOST = ROOT / 'modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host'
 NAMES = ['PublicAddressPolicy', 'PublishedHttpsResponseReader', 'PublishedHttpsTransport',
-         'PublishedHttpsRequestOwner', 'PublishedRelayWebSocketHandshake', 'PublishedRelayWebSocketFrames',
+         'NativeTransportTickets', 'PublishedHttpsRequestOwner', 'PublishedRelayWebSocketHandshake', 'PublishedRelayWebSocketFrames',
          'PublishedRelayWebSocketClientFrames', 'PublishedRelayWssQuery', 'PublishedRelayWssIo',
          'PublishedRelayResponseClassifier', 'NativeSignerRelayOpening', 'NativeSignerRelay']
 SOURCES = [HOST / (name + '.java') for name in NAMES] + [

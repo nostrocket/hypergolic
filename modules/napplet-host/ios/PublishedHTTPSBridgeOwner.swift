@@ -1,6 +1,32 @@
 import Foundation
 import UIKit
 
+/// Pending transport reservations remain bounded. Only a freshly issued, unused ID can start work.
+final class NativeTransportTickets: @unchecked Sendable {
+  static let shared = NativeTransportTickets()
+  private let lock = NSLock()
+  private var issued = Array<String?>(repeating: nil, count: 4096)
+  private var available = Set<String>()
+  private var next = 0
+
+  func issue() -> String {
+    lock.withLock {
+      let id = UUID().uuidString.lowercased()
+      if let previous = issued[next] { available.remove(previous) }
+      issued[next] = id
+      next = (next + 1) % issued.count
+      available.insert(id)
+      return id
+    }
+  }
+
+  @discardableResult func consume(_ id: String) -> Bool {
+    lock.withLock { available.remove(id) != nil }
+  }
+
+  func revokeAll() { lock.withLock { available.removeAll(keepingCapacity: true) } }
+}
+
 /// Owns cancellable native reads; no WebView or publisher-supplied object receives this owner.
 final class PublishedHTTPSBridgeOwner: @unchecked Sendable {
   enum Failure: Error { case invalidOperation, busy, inactive }
@@ -38,7 +64,6 @@ final class PublishedHTTPSBridgeOwner: @unchecked Sendable {
   private var pending: [String: Pending] = [:]
   private var ready: [String: Ready] = [:]
   // Consume ids on start or early cancellation. Completed and cancelled reads cannot be replayed.
-  private var used: Set<String> = []
   private var foreground = true
   private var observers: [NSObjectProtocol] = []
 
@@ -77,8 +102,7 @@ final class PublishedHTTPSBridgeOwner: @unchecked Sendable {
       let reserved = ready.values.reduce(reply.maximumBytes) { $0 + $1.body.count } +
         pending.values.reduce(0) { $0 + $1.reply.maximumBytes }
       guard foreground, reserved <= Self.maximumReservedBodyBytes,
-            pending.count + ready.count < 4, used.count < 65_536,
-            used.insert(operationId).inserted else { return false }
+            pending.count + ready.count < 4, NativeTransportTickets.shared.consume(operationId) else { return false }
       pending[operationId] = Pending(reply: reply)
       return true
     }
@@ -130,7 +154,7 @@ final class PublishedHTTPSBridgeOwner: @unchecked Sendable {
   func cancel(operationId: String) {
     guard UUID(uuidString: operationId)?.uuidString.lowercased() == operationId else { return }
     let current = lock.withLock {
-      if used.count < 65_536 { used.insert(operationId) }
+      NativeTransportTickets.shared.consume(operationId)
       ready.removeValue(forKey: operationId)
       return cancelLocked(operationId)
     }
@@ -162,6 +186,7 @@ final class PublishedHTTPSBridgeOwner: @unchecked Sendable {
   }
 
   private func setForeground(_ value: Bool) {
+    if !value { NativeTransportTickets.shared.revokeAll() }
     lock.withLock { foreground = value }
     if !value { revokeAll() }
   }

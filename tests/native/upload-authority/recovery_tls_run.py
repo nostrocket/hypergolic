@@ -58,7 +58,7 @@ def serve(listener,pem,key,mode,observed,errors,checkpoint):
 def main():
     with tempfile.TemporaryDirectory(prefix='hg-recovery-tls-') as temporary:
         out=Path(temporary);key,pem,der=certificate(out,'files.example.com,DNS:other.example.com');wrong_key,wrong_pem,wrong_der=certificate(out,'other.example.com')
-        names=['NativeSigningHold','UploadFileProfile','UploadPngProfile','UploadPngMetadata','NativeUploadAuthority','UploadRecoveryLedger','UploadRecoveryReadAuthority','UploadRecoveryHttps','PublishedHttpsRequestOwner','PublishedHttpsTransport','PublishedHttpsResponseReader','PublicAddressPolicy']
+        names=['NativeSigningHold','UploadFileProfile','UploadPngProfile','UploadPngMetadata','NativeUploadAuthority','UploadRecoveryLedger','UploadRecoveryReadAuthority','UploadRecoveryHttps','NativeTransportTickets', 'PublishedHttpsRequestOwner','PublishedHttpsTransport','PublishedHttpsResponseReader','PublicAddressPolicy']
         subprocess.run(['javac','-Xlint:all','-Werror','-d',str(out),*[str(JAVA/(name+'.java')) for name in names],str(HERE/'UploadRecoveryTLSProof.java')],check=True)
         names=['UploadFileProfile','UploadPngProfile','UploadPngMetadata','NativeUploadAuthority','UploadRecoveryLedger','UploadRecoveryReadAuthority','PublishedHTTPResponse','PublishedPinnedHTTPS','PublicAddressPolicy']
         subprocess.run(['swiftc','-swift-version','6','-D','HYPERGOLIC_NETWORK_PROOF','-warnings-as-errors','-module-cache-path',str(out/'swift-cache'),*[str(SWIFT/(name+'.swift')) for name in names],str(HERE/'UploadRecoveryTLSProof.swift'),'-o',str(out/'swift-proof')],check=True)

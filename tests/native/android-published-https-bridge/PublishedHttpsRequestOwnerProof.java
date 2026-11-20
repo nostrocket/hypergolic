@@ -3,7 +3,6 @@ package org.nostrocket.hypergolic.host;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
-import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -28,14 +27,14 @@ public final class PublishedHttpsRequestOwnerProof {
         "verified bytes".getBytes(StandardCharsets.US_ASCII));
     owner.setForeground(true);
     throwsIo(() -> owner.fetch("not-a-uuid", "https://napplets.example.org/a", () -> true));
-    String cancelledBeforeRegistration = UUID.randomUUID().toString();
+    String cancelledBeforeRegistration = NativeTransportTickets.issue();
     check(owner.cancel(cancelledBeforeRegistration));
     throwsIo(() -> owner.fetch(cancelledBeforeRegistration, "https://napplets.example.org/a", () -> true));
-    String id = UUID.randomUUID().toString();
+    String id = NativeTransportTickets.issue();
     bytes("verified bytes", owner.fetch(id, "https://napplets.example.org/a", () -> true));
     throwsIo(() -> owner.fetch(id, "https://napplets.example.org/a", () -> true));
     check(!owner.cancel(id));
-    throwsIo(() -> owner.fetch(UUID.randomUUID().toString().toUpperCase(), "https://napplets.example.org/a", () -> true));
+    throwsIo(() -> owner.fetch(NativeTransportTickets.issue().toUpperCase(), "https://napplets.example.org/a", () -> true));
   }
 
   private static void capsConcurrentRequestsAndReleasesSlots() throws Exception {
@@ -50,7 +49,7 @@ public final class PublishedHttpsRequestOwnerProof {
     Thread[] workers = new Thread[4];
     AtomicReference<Throwable> workerFailure = new AtomicReference<>();
     for (int i = 0; i < workers.length; i++) {
-      final String id = UUID.randomUUID().toString();
+      final String id = NativeTransportTickets.issue();
       workers[i] = new Thread(() -> {
         try { owner.fetch(id, "https://napplets.example.org/a", () -> true); }
         catch (Throwable error) { workerFailure.compareAndSet(null, error); }
@@ -58,7 +57,7 @@ public final class PublishedHttpsRequestOwnerProof {
       workers[i].start();
     }
     check(started.await(2, TimeUnit.SECONDS));
-    String fifth = UUID.randomUUID().toString();
+    String fifth = NativeTransportTickets.issue();
     throwsIo(() -> owner.fetch(fifth, "https://napplets.example.org/a", () -> true));
     release.countDown();
     for (Thread worker : workers) worker.join(2_000);
@@ -76,7 +75,7 @@ public final class PublishedHttpsRequestOwnerProof {
       throw new IOException("cancelled");
     });
     owner.setForeground(true);
-    String cancelled = UUID.randomUUID().toString();
+    String cancelled = NativeTransportTickets.issue();
     Thread worker = new Thread(() -> {
       try { owner.fetch(cancelled, "https://napplets.example.org/a", () -> true); }
       catch (IOException expected) { assertions.incrementAndGet(); }
@@ -98,7 +97,7 @@ public final class PublishedHttpsRequestOwnerProof {
     });
     backgroundOwner.setForeground(true);
     Thread backgroundWorker = new Thread(() -> {
-      try { backgroundOwner.fetch(UUID.randomUUID().toString(), "https://napplets.example.org/a", () -> true); }
+      try { backgroundOwner.fetch(NativeTransportTickets.issue(), "https://napplets.example.org/a", () -> true); }
       catch (IOException expected) { assertions.incrementAndGet(); }
     });
     backgroundWorker.start();
@@ -107,7 +106,7 @@ public final class PublishedHttpsRequestOwnerProof {
     check(backgroundCancelled.await(2, TimeUnit.SECONDS));
     backgroundWorker.join(2_000);
     check(!backgroundWorker.isAlive());
-    throwsIo(() -> backgroundOwner.fetch(UUID.randomUUID().toString(), "https://napplets.example.org/a", () -> true));
+    throwsIo(() -> backgroundOwner.fetch(NativeTransportTickets.issue(), "https://napplets.example.org/a", () -> true));
   }
 
   private static void appliesTheProductionAddressPolicy() throws Exception {
@@ -128,7 +127,7 @@ public final class PublishedHttpsRequestOwnerProof {
     PublishedHttpsRequestOwner owner = new PublishedHttpsRequestOwner((url, cancellation) -> retained);
     owner.setForeground(true);
     String url = "https://napplets.example.org/" + "a".repeat(64);
-    String id = UUID.randomUUID().toString();
+    String id = NativeTransportTickets.issue();
     equal(retained.length, owner.fetchArtifact(id, url, () -> true));
     throwsIo(() -> owner.readArtifactChunk(id, chunk));
     equal(chunk, owner.readArtifactChunk(id, 0).length);
@@ -138,13 +137,13 @@ public final class PublishedHttpsRequestOwnerProof {
     throwsIo(() -> owner.readArtifactChunk(id, chunk));
     throwsIo(() -> owner.fetchArtifact(id, url, () -> true));
 
-    String cancelled = UUID.randomUUID().toString();
+    String cancelled = NativeTransportTickets.issue();
     java.util.Arrays.fill(retained, (byte) 5);
     owner.fetchArtifact(cancelled, url, () -> true);
     check(owner.cancel(cancelled));
     equal(0, retained[0]);
     throwsIo(() -> owner.readArtifactChunk(cancelled, 0));
-    String backgrounded = UUID.randomUUID().toString();
+    String backgrounded = NativeTransportTickets.issue();
     java.util.Arrays.fill(retained, (byte) 6);
     owner.fetchArtifact(backgrounded, url, () -> true);
     owner.setForeground(false);
@@ -168,13 +167,13 @@ public final class PublishedHttpsRequestOwnerProof {
         });
     owner.setForeground(true);
     String target = "https://napplets.example.org/" + "a".repeat(64);
-    String first = UUID.randomUUID().toString(), second = UUID.randomUUID().toString();
+    String first = NativeTransportTickets.issue(), second = NativeTransportTickets.issue();
     Thread pending = new Thread(() -> startPendingArtifact(owner, first, target));
     pending.setDaemon(true);
     pending.start();
     check(started.await(2, TimeUnit.SECONDS));
     throwsIo(() -> owner.fetchArtifact(second, target, () -> true));
-    equal(1, owner.fetch(UUID.randomUUID().toString(), target, () -> true).length);
+    equal(1, owner.fetch(NativeTransportTickets.issue(), target, () -> true).length);
     check(owner.cancel(first));
     check(sawCancellation.await(2, TimeUnit.SECONDS));
     throwsIo(() -> owner.fetchArtifact(second, target, () -> true));
@@ -190,15 +189,16 @@ public final class PublishedHttpsRequestOwnerProof {
     PublishedHttpsRequestOwner retained = new PublishedHttpsRequestOwner((url, cancellation) ->
         new byte[url.equals(smallTarget) ? remainder : maximum]);
     retained.setForeground(true);
-    String third = UUID.randomUUID().toString();
-    equal(maximum, retained.fetchArtifact(first, target, () -> true));
-    throwsIo(() -> retained.fetchArtifact(second, smallTarget, () -> true));
-    check(retained.cancel(first));
-    equal(remainder, retained.fetchArtifact(second, smallTarget, () -> true));
+    String retainedFirst = NativeTransportTickets.issue(), retainedSecond = NativeTransportTickets.issue();
+    String third = NativeTransportTickets.issue();
+    equal(maximum, retained.fetchArtifact(retainedFirst, target, () -> true));
+    throwsIo(() -> retained.fetchArtifact(retainedSecond, smallTarget, () -> true));
+    check(retained.cancel(retainedFirst));
+    equal(remainder, retained.fetchArtifact(retainedSecond, smallTarget, () -> true));
     equal(maximum, retained.fetchArtifact(third, target, () -> true));
-    throwsIo(() -> retained.fetchArtifact(UUID.randomUUID().toString(), target, () -> true));
+    throwsIo(() -> retained.fetchArtifact(NativeTransportTickets.issue(), target, () -> true));
     retained.revokeAll();
-    throwsIo(() -> retained.readArtifactChunk(second, 0));
+    throwsIo(() -> retained.readArtifactChunk(retainedSecond, 0));
     throwsIo(() -> retained.readArtifactChunk(third, 0));
   }
 

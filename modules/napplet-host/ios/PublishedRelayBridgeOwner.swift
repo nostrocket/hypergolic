@@ -12,8 +12,6 @@ final class PublishedRelayBridgeOwner: @unchecked Sendable {
 
   private let lock = NSLock()
   private var pending: [String: Pending] = [:]
-  private var cancelledBeforeStart: Set<String> = []
-  private var cancellationBudgetExhausted = false
   private var foreground = true
   private var observers: [NSObjectProtocol] = []
 
@@ -52,9 +50,7 @@ final class PublishedRelayBridgeOwner: @unchecked Sendable {
     guard (1...10_000).contains(timeoutMs), Self.validRequest(requestText, subscriptionId: subscriptionId) else { throw Failure.invalidRequest }
     return try await withCheckedThrowingContinuation { continuation in
       lock.lock()
-      let preCancelled = cancelledBeforeStart.remove(operationId) != nil
-      guard !preCancelled, !cancellationBudgetExhausted, foreground, pending.count < 4,
-            pending[operationId] == nil else {
+      guard foreground, pending.count < 4, NativeTransportTickets.shared.consume(operationId) else {
         lock.unlock()
         continuation.resume(throwing: Failure.busy)
         return
@@ -76,10 +72,7 @@ final class PublishedRelayBridgeOwner: @unchecked Sendable {
     guard UUID(uuidString: operationId)?.uuidString.lowercased() == operationId else { return }
     lock.lock()
     let current = pending.removeValue(forKey: operationId)
-    if current == nil {
-      if cancelledBeforeStart.count < 4_096 { cancelledBeforeStart.insert(operationId) }
-      else { cancellationBudgetExhausted = true }
-    }
+    if current == nil { NativeTransportTickets.shared.consume(operationId) }
     lock.unlock()
     current?.operation?.cancel()
     current?.continuation.resume(throwing: Failure.inactive)

@@ -4,10 +4,8 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -16,7 +14,6 @@ import java.util.concurrent.TimeUnit;
 /** Process-scoped owner for trusted-shell published artifact HTTPS requests. */
 public final class PublishedHttpsRequestOwner {
   private static final int MAX_CONCURRENT_REQUESTS = 4;
-  private static final int MAX_PROCESS_OPERATIONS = 65_536;
   private static final int ARTIFACT_CHUNK_BYTES = 48 * 1024;
   private static final int MAX_RESERVED_BODY_BYTES = 32 * 1024 * 1024;
   private static final ScheduledThreadPoolExecutor expiry = new ScheduledThreadPoolExecutor(1, task -> {
@@ -42,8 +39,6 @@ public final class PublishedHttpsRequestOwner {
 
   private final Object lock = new Object();
   private final Map<String, Operation> active = new HashMap<>();
-  // Operation ids are one-use for this process lifetime, including completed and cancelled requests.
-  private final Set<String> consumed = new HashSet<>();
   private final Fetcher fetcher, artifactFetcher;
   private boolean foreground;
 
@@ -72,13 +67,11 @@ public final class PublishedHttpsRequestOwner {
     Operation operation = new Operation(maximumBytes);
     synchronized (lock) {
       if (!foreground) throw new IOException("Published HTTPS transport is inactive");
-      if (consumed.contains(operationId)) throw new IOException("Published HTTPS operation id was already used");
       if (active.size() >= MAX_CONCURRENT_REQUESTS) throw new IOException("Too many published HTTPS requests");
-      if (consumed.size() >= MAX_PROCESS_OPERATIONS) throw new IOException("Published HTTPS operation limit reached");
       int reserved = maximumBytes;
       for (Operation existing : active.values()) reserved += existing.reservedBytes();
       if (reserved > MAX_RESERVED_BODY_BYTES) throw new IOException("Published HTTPS body budget exhausted");
-      consumed.add(operationId);
+      if (!NativeTransportTickets.consume(operationId)) throw new IOException("Invalid or used operation id");
       active.put(operationId, operation);
     }
     return operation;
@@ -150,9 +143,7 @@ public final class PublishedHttpsRequestOwner {
       }
       // Record a cancel that beats Expo's async coroutine registration. Marking it consumed
       // makes the later fetch reject without retaining a separate unbounded tombstone set.
-      if (consumed.contains(operationId) || consumed.size() >= MAX_PROCESS_OPERATIONS) return false;
-      consumed.add(operationId);
-      return true;
+      return NativeTransportTickets.consume(operationId);
     }
   }
 
