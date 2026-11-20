@@ -1,5 +1,7 @@
 """Verify packaged notices and ARM64 ELF alignment without extracting APK paths."""
+import hashlib
 import json
+from pathlib import Path
 import struct
 import sys
 import zipfile
@@ -34,7 +36,10 @@ def verify_elf(data):
                 raise ValueError('RELRO would protect adjacent writable data on 16 KB pages')
 
 
-def verify_apk(filename, version, version_code):
+def verify_apk(filename, version, version_code, runtime_pins=None):
+    if runtime_pins is None:
+        pins = Path(__file__).resolve().parents[1] / 'config' / 'runtime-assets.json'
+        runtime_pins = json.loads(pins.read_text())['production']
     with zipfile.ZipFile(filename) as apk:
         names = apk.namelist()
         if len(names) != len(set(names)):
@@ -45,6 +50,10 @@ def verify_apk(filename, version, version_code):
                 or config['version'] != version
                 or config['android']['versionCode'] != int(version_code)):
             raise ValueError('Embedded Expo config is not the expected production release')
+        for asset in ('host.js', 'index.html', 'fixture-release.json'):
+            digest = hashlib.sha256(apk.read(f'assets/runtime/{asset}')).hexdigest()
+            if digest != runtime_pins[asset]:
+                raise ValueError(f'Unexpected packaged runtime asset {asset}')
         for folder in ('notices', 'archive-notices', 'cpp-notices', 'compiler-notices'):
             if f'assets/{folder}/manifest.json' not in names:
                 raise ValueError(f'Missing packaged {folder} manifest')

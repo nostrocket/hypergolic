@@ -34,7 +34,9 @@ export async function releaseConfig(root) {
   assert(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(app.version), 'Invalid release version.');
   assert(Number.isInteger(app.android.versionCode) && app.android.versionCode > 0 &&
     app.android.versionCode <= 2100000000, 'Invalid Android versionCode.');
-  return { applicationId: policy.applicationId, version: app.version, versionCode: app.android.versionCode,
+  const runtime = JSON.parse(await readFile(path.join(root, 'config/runtime-assets.json'), 'utf8')).production;
+  assert(/^[a-f0-9]{64}$/.test(runtime['host.js']), 'Invalid reviewed runtime digest');
+  return { runtimeHostSha256: runtime['host.js'], applicationId: policy.applicationId, version: app.version, versionCode: app.android.versionCode,
     signingCertificateSha256: policy.signingCertificateSha256 };
 }
 
@@ -116,7 +118,7 @@ export async function buildRelease({ root = ROOT, env = process.env, output, run
       await copyFile(unsigned, path.join(directory, 'unsigned.apk'));
       await writeFile(path.join(directory, 'input.json'), JSON.stringify({ schemaVersion: 1,
         applicationId: config.applicationId, version: config.version, versionCode: config.versionCode,
-        sourceCommit: commit, unsignedSha256: sha256(await readFile(unsigned)) }, null, 2) + '\n');
+        sourceCommit: commit, runtimeHostSha256: config.runtimeHostSha256, unsignedSha256: sha256(await readFile(unsigned)) }, null, 2) + '\n');
     });
   } finally { await releaseLock(); }
 }
@@ -131,7 +133,7 @@ export async function signRelease({ root = ROOT, env = process.env, input, outpu
   const receipt = JSON.parse(await readFile(path.join(input, 'input.json'), 'utf8'));
   const unsigned = path.resolve(input, 'unsigned.apk');
   assert.deepEqual(receipt, { schemaVersion: 1, applicationId: config.applicationId, version: config.version,
-    versionCode: config.versionCode, sourceCommit: commit, unsignedSha256: sha256(await readFile(unsigned)) },
+    versionCode: config.versionCode, sourceCommit: commit, runtimeHostSha256: config.runtimeHostSha256, unsignedSha256: sha256(await readFile(unsigned)) },
   'Unsigned artifact does not match the checked-out source and release metadata.');
   assert(/^[a-f0-9]{64}$/i.test(config.signingCertificateSha256 ?? ''),
     'Register the production certificate in config/android-release.json before signing.');

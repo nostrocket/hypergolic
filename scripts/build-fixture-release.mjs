@@ -20,7 +20,5 @@ const routing = artifacts['routing-lab'];
 if (routing) artifacts['routing-lab-peer'] = {...routing, tags: routing.tags.map(tag => tag[0] === 'd' ? ['d','routing-lab-peer'] : tag).concat([['archetype','note','napplet:note/open']])};
 const bytes = Buffer.from(JSON.stringify({schema: 1, artifacts}));
 assert(bytes.length < 1024 * 1024);
-for (const destination of ['modules/napplet-host/android/src/main/assets/runtime/fixture-release.json','modules/napplet-host/ios/Resources/runtime/fixture-release.json']) {
-  await writeFile(new URL(destination, root), bytes);
-}
+await writeFile(new URL('runtime/.fixture-release.json', root), bytes);
 console.log(`Sealed ${Object.keys(artifacts).length} trusted fixture release artifacts: ${hash(bytes)}`);

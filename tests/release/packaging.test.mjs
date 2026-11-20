@@ -65,9 +65,11 @@ async function fixture(t) {
   await mkdir(path.join(root,'config'),{recursive:true}); await mkdir(input);
   await writeFile(path.join(root,'app.json'),JSON.stringify({expo:{version:'0.1.0',android:{versionCode:1}}}));
   await writeFile(path.join(root,'config/android-release.json'),JSON.stringify({applicationId:'space.hypergolic',signingCertificateSha256:cert}));
+  const runtimeHash='d'.repeat(64);
+  await writeFile(path.join(root,'config/runtime-assets.json'),JSON.stringify({production:{'host.js':runtimeHash}}));
   const bytes=Buffer.from('controlled unsigned APK');
   await writeFile(path.join(input,'unsigned.apk'),bytes);
-  const receipt={schemaVersion:1,...config,sourceCommit:commit,unsignedSha256:createHash('sha256').update(bytes).digest('hex')};
+  const receipt={schemaVersion:1,...config,sourceCommit:commit,runtimeHostSha256:runtimeHash,unsignedSha256:createHash('sha256').update(bytes).digest('hex')};
   await writeFile(path.join(input,'input.json'),JSON.stringify(receipt));
   const key=path.join(directory,'test-key'); await writeFile(key,'fixture only');
   const env={PATH:process.env.PATH,ANDROID_HOME:'/sdk',HYPERGOLIC_KEYSTORE_PATH:key,HYPERGOLIC_KEY_ALIAS:'fixture',HYPERGOLIC_KEYSTORE_PASSWORD:'fixture-store',HYPERGOLIC_KEY_PASSWORD:'fixture-key',GH_TOKEN:'never-forward'};
