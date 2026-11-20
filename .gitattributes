@@ -7,6 +7,7 @@ modules/napplet-host/android/src/main/assets/compiler-notices/*.txt -text
 
 # Hash-bound upstream sources and vectors must retain their original bytes.
 modules/signer-core/vendor/** -text
+modules/signer-core/vendor/secp256k1/autotools-aux/m4/bitcoin_secp.m4 whitespace=-blank-at-eol
 modules/signer-core/tests/bip340-test-vectors.csv -text
 modules/napplet-host/android/src/main/assets/shell-notices/*.txt -text
 modules/napplet-host/ios/Resources/shell-notices/*.txt -text
