@@ -4,6 +4,7 @@ import { RelayQueryDataError, RelayQueryError } from '../network/relay-query-con
 import { identityResult, type CapabilityReply, type NativeRegistration } from '../runtime/capability-protocol.ts';
 import {identityProjection} from './identity-projection.ts';
 import { publicKey } from '../storage/codec.ts';
+import { ShellStorageError } from '../storage/ports.ts';
 import type { IdentityCache } from './identity-cache.ts';
 import { IDENTITY_LIMITS, IdentityDataError, identityFailure, latestIdentityEvent, verifiedIdentityEvents, type IdentityRequest, type ProfileData } from './identity-contract.ts';
 
@@ -47,12 +48,22 @@ export function createIdentityDataService(cache: IdentityCache, queries: RelayQu
       }
       const timestamp = now();
       if (!Number.isSafeInteger(timestamp) || timestamp < 0) throw new IdentityDataError();
-      const stored = await cache.read(user, projection.key, live, controller.signal);
-      live();
-      const cached = stored ? verifiedIdentityEvents(stored.events, projection.filters) : null;
-      if (cached) projection.project(cached);
+      let cached: ReturnType<typeof verifiedIdentityEvents> | null = null;
+      let age = Infinity;
+      try {
+        const stored = await cache.read(user, projection.key, live, controller.signal);
+        live();
+        if (stored) {
+          const events = verifiedIdentityEvents(stored.events, projection.filters);
+          projection.project(events);
+          cached = events;
+          age = timestamp - stored.fetchedAt;
+        }
+      } catch (error) {
+        live();
+        if (!(error instanceof IdentityDataError || error instanceof ShellStorageError && error.code === 'CORRUPT_STORAGE')) throw error;
+      }
       let selected = cached;
-      const age = stored ? timestamp - stored.fetchedAt : Infinity;
       if (cached === null || age < 0 || age >= IDENTITY_LIMITS.freshMs) {
         let fetched: readonly import('nostr-tools/pure').NostrEvent[] | undefined;
         let observed = true;
