@@ -1,7 +1,9 @@
+import {useReviewControl, usePermissionClaim} from './useReviewControl';
+import type {ReviewSlot} from './review-slot';
 import {publishedAppLabel, snapshotEventId} from '../napplets/published-identity';
 import { TrustedBand } from './TrustedBand';
-import {useEffect, useSyncExternalStore} from 'react';
-import {AppState, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {useEffect, useRef, useSyncExternalStore} from 'react';
+import {AppState, ScrollView, StyleSheet, Text, View, type ViewInstance} from 'react-native';
 import { ShellModal as Modal } from './ShellModal';
 import { ShellPressable as Pressable } from './ShellPressable';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -10,7 +12,7 @@ import {formatNpub} from '../security/public-identity';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 const empty: IdentityListAccessSnapshot = Object.freeze({grants: [], denied: [], review: null, busy: false, error: null});
 const subscribe = () => () => {}, getEmpty = () => empty;
-export function IdentityListReview({service, blocked = false}: {service: IdentityListAccess | null; blocked?: boolean}) {
+export function IdentityListReview({service, slot, blocked = false}: {slot?: ReviewSlot; service: IdentityListAccess | null; blocked?: boolean}) {
   const { styles } = useShellStyles(createStyles);
   const state = useSyncExternalStore(service?.subscribe ?? subscribe, service?.getSnapshot ?? getEmpty);
   const insets = useSafeAreaInsets();
@@ -19,11 +21,14 @@ export function IdentityListReview({service, blocked = false}: {service: Identit
     return () => subscription.remove();
   }, [service]);
   useEffect(() => {if (blocked) service?.dismissPending();}, [service, blocked]);
-  if (!service || !state.review || blocked) return null;
+  const shown = usePermissionClaim(slot, 'identity-list', blocked ? null : state.review);
+  const control = useReviewControl(shown ? String(state.review!.id) : null);
+  const decline = useRef<ViewInstance>(null);
+  if (!service || !state.review || !shown) return null;
   const review = state.review, disabled = state.busy;
   const manifestEventId = snapshotEventId(review.owner.appId);
   const decide = (allow: boolean) => {void service.decide(review.id, allow).catch(() => { /* Service publishes the current failure. */ });};
-  return <Modal visible transparent animationType="none" onRequestClose={() => {if (!disabled) decide(false);}}>
+  return <Modal key={review.id} visible onShow={() => {control.onShow(); decline.current?.focus();}} transparent animationType="none" onRequestClose={() => {if (!disabled) decide(false);}}>
     <View style={[styles.backdrop, {paddingLeft: insets.left, paddingRight: insets.right}]}><View testID="identity-list-review" accessibilityViewIsModal style={[styles.sheet, {paddingBottom: Math.max(16, insets.bottom)}]}>
       <TrustedBand />
       <ScrollView contentContainerStyle={styles.content}>
@@ -38,8 +43,8 @@ export function IdentityListReview({service, blocked = false}: {service: Identit
         {state.error && <Text accessibilityLiveRegion="polite" style={styles.text}>{state.error}</Text>}
       </ScrollView>
       <View style={styles.actions}>
-        <Pressable accessibilityRole="button" disabled={disabled} accessibilityState={{disabled}} style={styles.button} onPress={() => decide(true)}><Text style={styles.action}>{disabled ? 'Saving permission…' : 'Allow public lists'}</Text></Pressable>
-        <Pressable accessibilityRole="button" disabled={disabled} accessibilityState={{disabled}} style={styles.button} onPress={() => decide(false)}><Text style={styles.action}>Decline public lists</Text></Pressable>
+        <Pressable accessibilityRole="button" disabled={disabled || !control.ready} style={styles.button} onPress={() => decide(true)}><Text style={styles.action}>{disabled ? 'Saving permission…' : 'Allow public lists'}</Text></Pressable>
+        <Pressable ref={decline} accessibilityRole="button" disabled={disabled} style={styles.button} onPress={() => decide(false)}><Text style={styles.action}>Decline public lists</Text></Pressable>
       </View>
     </View></View>
   </Modal>;

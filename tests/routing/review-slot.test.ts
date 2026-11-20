@@ -132,3 +132,18 @@ test('blurred requests cannot observe an unrelated focused review', async t => {
   assert.deepEqual(h.activated, []);
   assert.deepEqual(h.sent, []);
 });
+
+test('notification and list permission prompts take turns with signing and routing', t => {
+  const {slot, approvals} = openSlot(t);
+  assert.equal(slot.reserve('notify', route), true);
+  assert.equal(slot.reserve('identity-list', route), false);
+  approvals.show(signing);
+  assert.ok(slot.owns('notify', route.id));
+  slot.release('notify', route.id);
+  assert.ok(slot.owns('approval', signing.id));
+  approvals.show(null);
+  assert.ok(slot.reserve('identity-list', route));
+  assert.equal(slot.reserveRouting(route), false);
+  slot.setForeground(false);
+  assert.equal(slot.getSnapshot(), null);
+});

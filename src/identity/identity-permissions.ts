@@ -9,7 +9,7 @@ export const IDENTITY_PERMISSION_DATABASE = 'hypergolic-identity-list-access-v1.
 const TABLE = 'CREATE TABLE identity_list_access (user TEXT NOT NULL, publisher TEXT NOT NULL, app TEXT NOT NULL, PRIMARY KEY (user, publisher, app)) WITHOUT ROWID';
 export type IdentityListOwner = Readonly<{user: string; publisher: string; appId: string}>;
 export interface IdentityListNativePolicy {replace(owners: readonly IdentityListOwner[]): void}
-export type IdentityListReview = Readonly<{id: number; owner: IdentityListOwner; source: 'published' | 'bundled'}>;
+export type IdentityListReview = Readonly<{id: number; origin: Pick<NativeRegistration, 'sessionId' | 'generation' | 'epoch'>; owner: IdentityListOwner; source: 'published' | 'bundled'}>;
 export type IdentityListAccessSnapshot = Readonly<{grants: readonly IdentityListOwner[]; denied: readonly IdentityListOwner[]; review: IdentityListReview | null; busy: boolean; error: string | null}>;
 export interface IdentityListAccess extends IdentityPermissionPort {
   getSnapshot(): IdentityListAccessSnapshot; subscribe(listener: () => void): () => void;
@@ -109,7 +109,7 @@ export async function openIdentityListAccess(sqlite: SQLiteModule, platform: 'an
       if (permitted().some(row => key(row) === key(value))) {const check = permission(value, signal, onRevoke); check(); return check;}
       if (busy || pending.size >= 2 || [...pending.values()].some(item => key(item.review.owner) === key(value))) throw new IdentityDataError('public list approval busy');
       if (!Number.isSafeInteger(++counter)) throw new IdentityDataError('public list approval limit');
-      const review = Object.freeze({id: counter, owner: value, source: captured.fixture === 'published' ? 'published' as const : 'bundled' as const});
+      const review = Object.freeze({id: counter, origin: captured, owner: value, source: captured.fixture === 'published' ? 'published' as const : 'bundled' as const});
       return new Promise<() => void>((resolve, reject) => {
         const item: Pending = {review, active, signal, onRevoke, resolve, reject, stop: () => finish(item, null, 'public list request cancelled')};
         pending.set(review.id, item); signal.addEventListener('abort', item.stop, {once: true}); error = null; publish();

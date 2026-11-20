@@ -1,3 +1,4 @@
+import {useReviewControl} from './useReviewControl';
 import { TrustedBand } from './TrustedBand';
 import {OutboxReview} from './OutboxReview';
 import { useRef, useState } from 'react';
@@ -70,7 +71,8 @@ function AppDataRecordReview({record, content}: {record: NonNullable<ApprovalIte
 
 function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismiss }: Omit<ApprovalSheetProps, 'item'> & { item: ApprovalItem }) {
   const { styles } = useShellStyles(createStyles);
-  const approve = useRef<ViewInstance>(null);
+  const control = useReviewControl(item.id);
+  const reject = useRef<ViewInstance>(null);
   const [details, setDetails] = useState(false);
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -81,11 +83,12 @@ function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismis
   const record = item.appData?.record;
   const [confirmedNewList, setConfirmedNewList] = useState(false);
   const needsNewList = requiresNewFollowListConfirmation(item);
-  const approveDisabled = busy || (needsNewList && !confirmedNewList);
+  const approveDisabled = busy || !control.ready || (needsNewList && !confirmedNewList);
   const dismiss = () => { if (!busy) onDismiss(item.id); };
   return <Modal visible transparent animationType="none" onRequestClose={dismiss} onShow={() => {
-    approve.current?.focus();
-    if (approve.current) AccessibilityInfo.sendAccessibilityEvent(approve.current, 'focus');
+    control.onShow();
+    reject.current?.focus();
+    if (reject.current) AccessibilityInfo.sendAccessibilityEvent(reject.current, 'focus');
   }}>
     <View style={[styles.backdrop, {paddingLeft: insets.left, paddingRight: insets.right}]}>
       <View testID="approval-sheet" accessibilityViewIsModal style={[styles.sheet, { paddingBottom: Math.max(16, insets.bottom) }]}>
@@ -133,8 +136,8 @@ function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismis
           {error && <Text accessibilityLiveRegion="polite" style={styles.error}>{error}</Text>}
         </ScrollView>
         <View style={[styles.actions, landscape && styles.actionsLandscape]}>
-          <Pressable ref={approve} testID="approval-sheet-approve" accessibilityRole="button" accessibilityLabel="Continue to signer" accessibilityState={{ disabled: approveDisabled }} disabled={approveDisabled} onPress={() => onApprove(item.id, confirmedNewList ? item.id : undefined)} style={({ pressed }) => [styles.approve, landscape && styles.actionLandscape, (pressed || approveDisabled) && styles.pressed]}><Text style={styles.approveText}>{busy ? 'Signing and publishing…' : 'Continue to signer'}</Text></Pressable>
-          <Pressable testID="approval-sheet-reject" accessibilityRole="button" accessibilityState={{ disabled: busy }} disabled={busy} onPress={() => onReject(item.id)} style={({ pressed }) => [styles.reject, landscape && styles.actionLandscape, (pressed || busy) && styles.pressed]}><Text style={styles.rejectText}>Reject</Text></Pressable>
+          <Pressable testID="approval-sheet-approve" accessibilityRole="button" accessibilityLabel="Continue to signer" accessibilityState={{ disabled: approveDisabled }} disabled={approveDisabled} onPress={() => onApprove(item.id, confirmedNewList ? item.id : undefined)} style={({ pressed }) => [styles.approve, landscape && styles.actionLandscape, (pressed || approveDisabled) && styles.pressed]}><Text style={styles.approveText}>{busy ? 'Signing and publishing…' : 'Continue to signer'}</Text></Pressable>
+          <Pressable ref={reject} testID="approval-sheet-reject" accessibilityRole="button" accessibilityState={{ disabled: busy }} disabled={busy} onPress={() => onReject(item.id)} style={({ pressed }) => [styles.reject, landscape && styles.actionLandscape, (pressed || busy) && styles.pressed]}><Text style={styles.rejectText}>Reject</Text></Pressable>
           <Pressable testID="approval-sheet-dismiss" accessibilityRole="button" accessibilityLabel="Dismiss signing request" accessibilityState={{ disabled: busy }} disabled={busy} onPress={dismiss} style={({ pressed }) => [styles.dismiss, landscape && styles.actionLandscape, (pressed || busy) && styles.pressed]}><Text style={styles.dismissText}>Dismiss</Text></Pressable>
         </View>
       </View>

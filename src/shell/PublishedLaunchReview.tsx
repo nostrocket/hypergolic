@@ -1,3 +1,4 @@
+import {useReviewControl} from './useReviewControl';
 import { useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { accessIconUri } from './access-icon';
 import { Image } from 'expo-image';
@@ -166,7 +167,9 @@ export function PublishedLaunchReview({ target, source, changesAccess, onAccept,
   const { styles } = useShellStyles(createStyles);
   const insets = useSafeAreaInsets();
   const heading = useRef<TextInstance>(null);
+  const control = useReviewControl(target.eventId);
   return <ShellModal visible transparent animationType="none" onRequestClose={onCancel} onShow={() => {
+    control.onShow();
     if (heading.current) AccessibilityInfo.sendAccessibilityEvent(heading.current, 'focus');
   }}>
     <View style={[styles.backdrop, { paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right }]}>
@@ -183,7 +186,7 @@ export function PublishedLaunchReview({ target, source, changesAccess, onAccept,
           <ShellPressable accessibilityRole="button" testID={ids.cancel} onPress={onCancel} style={styles.button}>
             <Text style={styles.buttonText}>Cancel</Text>
           </ShellPressable>
-          <ShellPressable accessibilityRole="button" testID={ids.approve} onPress={onAccept} style={[styles.button, styles.primary]}>
+          <ShellPressable accessibilityRole="button" testID={ids.approve} disabled={!control.ready} onPress={onAccept} style={[styles.button, styles.primary]}>
             <Text style={[styles.buttonText, styles.primaryText]}>{approveLabel ?? (changesAccess ? 'Allow and open' : 'Open')}</Text>
           </ShellPressable>
         </View>

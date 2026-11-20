@@ -1,16 +1,18 @@
+import {useReviewControl, usePermissionClaim} from './useReviewControl';
+import type {ReviewSlot} from './review-slot';
 import {publishedAppLabel} from '../napplets/published-identity';
 import { TrustedBand } from './TrustedBand';
 import {WorkspaceFullscreenContext} from './WorkspaceFullscreen';
-import {useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore} from 'react';
-import {AppState, FlatList, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore} from 'react';
+import {AppState, FlatList, ScrollView, StyleSheet, Text, View, type ViewInstance} from 'react-native';
 import { ShellModal as Modal } from './ShellModal';
 import { ShellPressable as Pressable } from './ShellPressable';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import type {NotifyBroker, NotificationBadge, NotificationCard, NotifyReview} from '../presentation/notify-broker';
 import {formatNpub} from '../security/public-identity';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
-function Button({label, id, onPress}: {label: string; id: string; onPress(): void}) {
-  const { styles } = useShellStyles(createStyles);return <Pressable testID={id} accessibilityRole="button" onPress={onPress} style={styles.button}><Text style={styles.action}>{label}</Text></Pressable>;}
+function Button({label, id, disabled, onPress}: {disabled?: boolean; label: string; id: string; onPress(): void}) {
+  const { styles } = useShellStyles(createStyles);return <Pressable testID={id} disabled={disabled ?? false} accessibilityRole="button" onPress={onPress} style={styles.button}><Text style={styles.action}>{label}</Text></Pressable>;}
 function NotificationContent({card, service}: {card: NotificationCard; service: NotifyBroker}) {
   const { styles } = useShellStyles(createStyles);
   return <View testID={'notify-card-' + card.id} style={styles.card}>
@@ -23,16 +25,24 @@ function NotificationContent({card, service}: {card: NotificationCard; service: 
 function NotificationPermission({review, service}: {review: NotifyReview; service: NotifyBroker}) {
   const { styles } = useShellStyles(createStyles);
   const insets = useSafeAreaInsets();
-  return <Modal visible transparent animationType="fade" onRequestClose={() => service.decide(review.id, false)}><View style={[styles.shade, {paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right}]}><View style={styles.permissionSheet} accessibilityViewIsModal><TrustedBand /><ScrollView contentContainerStyle={[styles.sheet, {paddingBottom: Math.max(insets.bottom, 24)}]}>
+  const control = useReviewControl(review.id);
+  const decline = useRef<ViewInstance>(null);
+  return <Modal visible onShow={() => {control.onShow(); decline.current?.focus();}} transparent animationType="fade" onRequestClose={() => service.decide(review.id, false)}><View style={[styles.shade, {paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right}]}><View style={styles.permissionSheet} accessibilityViewIsModal><TrustedBand /><ScrollView contentContainerStyle={[styles.sheet, {paddingBottom: Math.max(insets.bottom, 24)}]}>
     <Text accessibilityRole="header" style={styles.heading}>Allow notifications?</Text>
     <Text selectable style={styles.title}>{review.origin.snapshot?.title ?? publishedAppLabel(review.origin.appId)}</Text><Text selectable style={styles.publisher}>{formatNpub(review.origin.publisher)}</Text>
     {review.origin.snapshot && <Text selectable style={styles.publisher}>Snapshot (kind 5129) · {review.origin.snapshot.eventId}</Text>}
     <Text style={styles.detail}>Selected identity</Text><Text selectable style={styles.publisher}>{formatNpub(review.origin.user)}</Text>
     <Text style={styles.title}>{review.label}</Text><Text selectable testID="notify-review-channel" style={styles.text}>{review.channel || 'General notifications'}</Text>
     <Text style={styles.text}>Remember this notification permission for this identity, napplet and channel. Revoke it in Settings. Alerts stay inside Hypergolic and clear when the app enters the background.</Text>
-    <Button id="notify-allow" label="Allow notifications" onPress={() => service.decide(review.id, true)}/><Button id="notify-deny" label="Not now" onPress={() => service.decide(review.id, false)}/>
+    <Button disabled={!control.ready} id="notify-allow" label="Allow notifications" onPress={() => service.decide(review.id, true)}/><Pressable ref={decline} testID="notify-deny" accessibilityRole="button" onPress={() => service.decide(review.id, false)} style={styles.button}><Text style={styles.action}>Not now</Text></Pressable>
   </ScrollView></View></View></Modal>;
 }
+export function NotificationReview({service, slot, blocked}: {service: NotifyBroker; slot?: ReviewSlot; blocked: boolean}) {
+  const {review} = useSyncExternalStore(service.subscribe, service.getSnapshot);
+  const shown = usePermissionClaim(slot, 'notify', blocked ? null : review);
+  return shown && review ? <NotificationPermission key={review.id} review={review} service={service}/> : null;
+}
+
 type CentreEntry = Readonly<{kind: 'card'; card: NotificationCard}> | Readonly<{kind: 'badge'; badge: NotificationBadge}>;
 export function Notifications({service, blocked}: {service: NotifyBroker; blocked: boolean}) {
   const { styles } = useShellStyles(createStyles);
@@ -61,7 +71,6 @@ export function Notifications({service, blocked}: {service: NotifyBroker; blocke
       ListHeaderComponent={<View style={styles.group}><Text accessibilityRole="header" style={styles.heading}>Notifications</Text><Button id="notify-centre-close" label="Done" onPress={() => setOpened(false)}/></View>}
       renderItem={renderEntry}
       ListEmptyComponent={<Text style={styles.detail}>No current notifications.</Text>}/></View></Modal>
-    {snapshot.review && <NotificationPermission review={snapshot.review} service={service}/>}
   </>;
 }
 const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.create({
