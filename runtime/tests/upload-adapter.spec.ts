@@ -83,3 +83,13 @@ test('captured original recipient loses all status delivery after unregister', a
   });
   expect(await frame.evaluate(() => (window as any).updates)).toEqual([]);
 });
+
+test('a missing terminal push cannot retain both upload slots past the native lifetime', async ({page}) => {
+  await page.clock.install();
+  const frame = await open(page);
+  const upload = () => frame.evaluate(() => (window as any).napplet.upload.upload({data: new Uint8Array([1]).buffer}));
+  expect((await upload()).status).toBe('pending');
+  expect((await upload()).status).toBe('pending');
+  await page.clock.fastForward(12 * 60_000);
+  expect((await upload()).status).toBe('pending');
+});

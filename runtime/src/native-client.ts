@@ -95,7 +95,15 @@ function receiveOrdinary(envelope:{sequence:number;response:unknown},pending:Map
   } catch (error) { request.reject(error instanceof NativeRequestRevoked ? error : undefined); }
   finally { pending.delete(envelope.sequence); window.clearTimeout(request.timer); released(); }
 }
-type UploadState = {uploadId: string; delivery: number; bytesSent: number; onStatus(message: NappletMessage): void};
+// A seal may wait for a ten-minute review followed by one minute of transfer.
+const uploadListenerLifetimeMs = 11 * 60_000 + 5_000;
+type UploadState = {expiry: number; uploadId: string; delivery: number; bytesSent: number; onStatus(message: NappletMessage): void};
+function releaseUpload(uploads: Map<number, UploadState>, sequence: number): void {
+  const listener = uploads.get(sequence);
+  if (listener) window.clearTimeout(listener.expiry);
+  uploads.delete(sequence);
+}
+
 interface NativeReceiveState {generation: string; pending: Map<number, PendingRequest>; streams: Map<number, StreamState>; uploads: Map<number, UploadState>;
   stopStream(counter: number, notify: boolean): void; acknowledge(envelope: StreamEnvelope): void; released():void; requestReleased():void; routing(raw: unknown): boolean; media: NativeClientOptions['onMedia']}
 function receiveNative(raw: unknown, state: NativeReceiveState): void {
@@ -112,14 +120,16 @@ function receiveNative(raw: unknown, state: NativeReceiveState): void {
       if(receiveControl(envelope,generation,streams,stopStream))return;
       if (envelope?.type === 'capability.upload' && Object.keys(envelope).length === 5 && envelope.sessionId === generation) {
         const upload = uploads.get(envelope.sequence);
-        if (!upload || !Number.isSafeInteger(envelope.delivery) || envelope.delivery !== upload.delivery + 1 ||
+        if (!upload || !Number.isSafeInteger(envelope.delivery) || envelope.delivery <= upload.delivery ||
           typeof envelope.response !== 'string' || new TextEncoder().encode(envelope.response).length > 32 * 1024) return;
         const message = JSON.parse(envelope.response);
         if (!message || Object.keys(message).length !== 2 || message.type !== 'upload.status.changed') return;
         const status = captureUploadResult(message.status, upload.uploadId);
+        const terminal = ['complete', 'failed', 'cancelled'].includes(status.status);
+        if (!terminal && envelope.delivery !== upload.delivery + 1) return;
         if (status.bytesSent !== undefined && status.bytesSent < upload.bytesSent) return;
         upload.delivery = envelope.delivery; upload.bytesSent = status.bytesSent ?? upload.bytesSent;
-        if (['complete', 'failed', 'cancelled'].includes(status.status)) uploads.delete(envelope.sequence);
+        if (terminal) releaseUpload(uploads, envelope.sequence);
         upload.onStatus({type: 'upload.status.changed', status} as NappletMessage); return;
       }
       if (!envelope || Object.keys(envelope).length !== (envelope.type==='capability.stream'?5:4) || !['capability.result','capability.stream'].includes(envelope.type) ||
@@ -157,11 +167,22 @@ function enqueueRequest(native: NativeHost, pending: Map<number, PendingRequest>
   request: Readonly<{counter: number; encoded: string; id: string; type: string; timeoutMs: number; upload?: NativeUploadRequest}>): Promise<NappletMessage> {
   const {counter, encoded, id, type, timeoutMs, upload} = request;
       return new Promise((resolve, rejectPromise) => {
-        const reject = (reason?: Error): void => { uploads.delete(counter); rejectPromise(reason ?? new Error('Native capability unavailable')); };
-        if (upload) uploads.set(counter, {uploadId: upload.uploadId, delivery: 0, bytesSent: 0, onStatus: upload.onStatus});
+        const reject = (reason?: Error): void => { releaseUpload(uploads, counter); rejectPromise(reason ?? new Error('Native capability unavailable')); };
+        if (upload) uploads.set(counter, {
+          expiry: window.setTimeout(() => releaseUpload(uploads, counter), uploadListenerLifetimeMs),
+          uploadId: upload.uploadId, delivery: 0, bytesSent: 0, onStatus: upload.onStatus,
+        });
         const timer = window.setTimeout(() => { pending.delete(counter); reject(); released(); }, timeoutMs);
         pending.set(counter, { type, id, timer, resolve: response => {
-          if (upload && !('result' in response)) uploads.delete(counter);
+          if (upload) {
+            // Only a correlated nonterminal seal needs to keep its status listener.
+            let pendingStatus = false;
+            if ('result' in response) {
+              const result = captureUploadResult(response.result, upload.uploadId);
+              pendingStatus = result.status === 'pending' || result.status === 'uploading';
+            }
+            if (!pendingStatus) releaseUpload(uploads, counter);
+          }
           resolve(response);
         }, reject });
         try { native.postMessage(encoded); }
@@ -369,7 +390,8 @@ export function createNativeClient(native: NativeHost, generation: string, optio
       pending.clear();
       for(const stream of streams.values())window.clearTimeout(stream.timer);
       streams.clear();
-      admission.destroy();uploads.clear();
+      admission.destroy();
+      for (const counter of uploads.keys()) releaseUpload(uploads, counter);
     },
   });
 }

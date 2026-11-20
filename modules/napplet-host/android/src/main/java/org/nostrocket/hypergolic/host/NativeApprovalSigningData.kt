@@ -21,7 +21,7 @@ internal fun signingRequester(registration: JSONObject): String {
     snapshot.requester(publisher)
   } else {
     require(!app.startsWith(" 5129:"))
-    "Napplet: $app\nPublisher: $publisher"
+    "Napplet: ${LinkUrl.displayIdentity(app)}\nPublisher: $publisher"
   }
   return "$label\nVersion: ${registration.getString("version")}"
 }

@@ -143,12 +143,22 @@ function SavedIdentities({session, transition, format, canDelete, onDelete}: {
   canDelete: boolean; onDelete(pubkey: string): void;
 }) {
   const { styles } = useShellStyles(createStyles);
+  const [selectionError, setSelectionError] = useState('');
+  const select = (pubkey: string) => {
+    try {
+      transition.prepareSelect(pubkey);
+      setSelectionError('');
+    } catch {
+      setSelectionError('The account could not be selected. Finish any pending signing request and try again.');
+    }
+  };
   return <>
       <Text accessibilityRole="header" style={styles.title}>Saved identities</Text>
+      {selectionError && <Text accessibilityLiveRegion="polite" style={styles.detail}>{selectionError}</Text>}
       {session.vault.identities.map(identity => <View key={identity.pubkey} style={styles.identity}><Pressable accessibilityRole="button"
         disabled={identity.pubkey === session.vault.selectedPubkey || identity.status !== 'active'}
         accessibilityState={{ selected: identity.pubkey === session.vault.selectedPubkey, disabled: identity.pubkey === session.vault.selectedPubkey || identity.status !== 'active' }}
-        testID={`identity-select-${identity.pubkey}`} style={styles.identitySelect} onPress={() => transition.prepareSelect(identity.pubkey)}>
+        testID={`identity-select-${identity.pubkey}`} style={styles.identitySelect} onPress={() => select(identity.pubkey)}>
         <Text style={styles.npub}>{format(identity.pubkey)}</Text>
         <Text style={styles.detail}>{identity.pubkey === session.vault.selectedPubkey ? 'Selected' : identity.status === 'deleting' ? 'Deletion pending' : 'Use this identity'}</Text>
       </Pressable>

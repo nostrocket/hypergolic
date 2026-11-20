@@ -6,6 +6,19 @@ export class ConfigSchemaError extends Error {
   readonly code: ConfigSchemaCode;
   constructor(code: ConfigSchemaCode) {super(code); this.code = code;}
 }
+export class ConfigKeyInputError extends Error {
+  constructor() { super('Private keys cannot be saved in napplet settings.'); }
+}
+
+export function containsPrivateKeyInput(value: unknown, masked = false): boolean {
+  if (typeof value === 'string') {
+    return /nsec1[023456789acdefghjklmnpqrstuvwxyz]{58}/i.test(value) ||
+      (masked && /^[0-9a-f]{64}$/i.test(value.trim()));
+  }
+  return value !== null && typeof value === 'object' &&
+    Object.values(value).some(child => containsPrivateKeyInput(child, masked));
+}
+
 export const CONFIG_LIMITS = Object.freeze({bytes: 32 * 1024, properties: 128, depth: 4, stringLength: 4096, items: 256, enumValues: 64});
 type Kind = 'object' | 'array' | 'string' | 'number' | 'integer' | 'boolean';
 export interface ConfigSchema {

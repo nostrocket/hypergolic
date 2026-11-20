@@ -19,10 +19,17 @@ export interface WorkspaceController {
   revoke(): void;
 }
 
-function immutable(workspace: Workspace): Workspace {
+function immutable(workspace: Workspace, previous?: Workspace): Workspace {
   if (typeof workspace.overview !== 'boolean') throw new Error('Invalid overview state');
   const saved = snapshot(snapshotWorkspace(workspace));
-  return Object.freeze({ ...restoreWorkspace(saved), sessions: saved.sessions, pins: saved.pins, overview: workspace.overview });
+  // Deferred native actions capture the current descriptor. Preserve it only when the
+  // caller retained the exact immutable object from the previous workspace.
+  const existing = new Set(previous?.sessions);
+  const sessions = Object.freeze(saved.sessions.map((normalized, index) => {
+    const original = workspace.sessions[index]!;
+    return existing.has(original) ? original : normalized;
+  }));
+  return Object.freeze({ ...restoreWorkspace(saved), sessions, pins: saved.pins, overview: workspace.overview });
 }
 
 export async function openWorkspaceController(
@@ -90,7 +97,7 @@ export async function openWorkspaceController(
     change: (workspace: Workspace) => {
       if (!editable || updating || state.error !== null) return;
       try {
-        const next = immutable(workspace);
+        const next = immutable(workspace, state.workspace);
         assertAvailable(next);
         pending = snapshotWorkspace(next);
         publish({ workspace: next, saving: true, error: null });

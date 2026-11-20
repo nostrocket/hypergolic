@@ -11,7 +11,7 @@ import {OutboxApprovalPreparation,type OutboxPublicationPlanner} from '../outbox
 import type {OutboxPublishRequest} from '../outbox/publication-contract.ts';
 import type {OutboxPublicationPlan} from '../outbox/publication-plan.ts';
 import {captureOutboxPublicationReceipt,type OutboxPublicationReceipt} from '../outbox/publication-receipt.ts';
-import { captureEventSnapshot, type EventSnapshot } from './event-snapshot.ts';
+import { assertSigningTime, captureEventSnapshot, type EventSnapshot } from './event-snapshot.ts';
 import { validateSignedEvent, type VerifiedSignedEvent } from './signed-event.ts';
 import {captureRelayOutcomes} from './relay-outcomes.ts';
 import type { NativeSigningSource } from './native-vault-contract.ts';
@@ -46,6 +46,10 @@ export interface ApprovalEffects extends SigningHandoffReader {
 }
 export interface TrustedApprovalOwner { assertActive(origin: ApprovalOrigin,domain?:'outbox'|'common'): void }
 export type ApprovalItem = Readonly<{ recommendation?: string; recommendationExcludedRelays?: readonly string[]; id: string; origin: ApprovalOrigin; event: EventSnapshot; outbox?:OutboxPublicationPlan;common?:CommonSocialPlan;appData?:AppDataPlan }>;
+export function requiresNewFollowListConfirmation(item: ApprovalItem): boolean {
+  return item.common?.request.type === 'common.follow' && item.common.basis === null;
+}
+
 export type ApprovalSnapshot = Readonly<{ focusedSessionId: string | null; reviewPaused: boolean; current: ApprovalItem | null; pending: number; pendingSessionIds: readonly string[] }>;
 type Entry = ApprovalItem & { revalidateRecommendation?: CatalogRecommendationGuard; requestId: string; lease: NativeApprovalLease; controller: AbortController | null; signingPending?: boolean; publicationStarted?: boolean };
 const PER_SESSION = 4, GLOBAL = 16;
@@ -234,10 +238,10 @@ export class ApprovalService {
     }
     execution.assertActive();return captureOutboxPublicationReceipt(entry.outbox,verified,primary,ancillary);
   }
-  async approve(id: string): Promise<readonly RelayOutcome[]> {
+  async approve(id: string, confirmedNewListId?: string): Promise<readonly RelayOutcome[]> {
     this.refresh();
     const item = this.snapshot.current;
-    if (!item || item.id !== id) denied();
+    if (!item || item.id !== id || (requiresNewFollowListConfirmation(item) && confirmedNewListId !== id)) denied();
     const entry = this.entries.find(candidate => candidate.id === id)!;
     let response: string | null = null;
     let publicationStarted = false;
@@ -261,6 +265,7 @@ export class ApprovalService {
         else await entry.revalidateRecommendation!(signal, active);
         active();
       }
+      assertSigningTime(entry.event.event.created_at);
       if (this.native.prepareSigning && !this.native.prepareSigning(entry.lease, entry.event)) denied();
       if (!this.native.mayReview(entry.lease) || !this.native.approveOnce(entry.lease)) denied();
       entry.controller = new AbortController(); this.publish();

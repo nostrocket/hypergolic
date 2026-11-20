@@ -125,6 +125,11 @@ final class NativeFiniteVideo {
       content.topAnchor.constraint(equalTo: card.topAnchor, constant: 8), content.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -4),
       buttons.heightAnchor.constraint(equalToConstant: 44)])
     panel = card; self.picture = picture; heading = title; self.play = play; stop = close
+    play.isEnabled = false
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self, weak row, weak play] in
+      guard let self, let row, self.session === row else { return }
+      play?.isEnabled = true
+    }
     layout()
   }
 

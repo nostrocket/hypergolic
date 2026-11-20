@@ -38,7 +38,7 @@ public enum NativeSigningSourceFacade {
       label = snapshot.requester(publisher: publisher)
     } else {
       guard !app.hasPrefix(" 5129:") else { return nil }
-      label = "Napplet: \(app)\nPublisher: \(publisher)"
+      label = "Napplet: \(LinkUrl.displayIdentity(app))\nPublisher: \(publisher)"
     }
     return "\(label)\nVersion: \(version)\nSession: \(session)"
   }

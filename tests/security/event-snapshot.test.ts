@@ -57,3 +57,11 @@ test('rejects oversized canonical payload and destination ambiguity', () => {
   invalid(() => capture(EVENT, PUBKEY, ['wss://relay.example.org', 'wss://relay.example.org/']));
   invalid(() => capture(EVENT, PUBKEY, []));
 });
+
+test('accepts historical timestamps and up to ten minutes of positive clock skew', t => {
+  const now = 1_800_000_000;
+  t.mock.timers.enable({apis: ['Date'], now: now * 1000});
+  assert.equal(capture({...EVENT, created_at: 0}).event.created_at, 0);
+  assert.equal(capture({...EVENT, created_at: now + 600}).event.created_at, now + 600);
+  invalid(() => capture({...EVENT, created_at: now + 601}));
+});

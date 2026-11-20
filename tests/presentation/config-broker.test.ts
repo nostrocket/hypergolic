@@ -254,3 +254,15 @@ test('unsubscribe during a pending broadcast prevents values and schema errors a
  await saved;assert.equal(h.sent.length,0);assert.deepEqual(await h.get(),{theme:'light',nested:{level:3}});
  await h.dispatch({type:'config.subscribe'}).promise;assert.deepEqual(h.sent.map(row=>row.message.values),[{theme:'light',nested:{level:3}}]);
 });
+
+test('the editor refuses private-key-shaped secret input before storage or broadcast', async t => {
+  const h = await setup(t);
+  await h.register();
+  await h.broker.open(h.source.generation);
+  const review = h.broker.getSnapshot().review!;
+  for (const value of ['nsec1' + 'q'.repeat(58), '01'.repeat(32)]) {
+    await assert.rejects(h.broker.commit(review.id, review.ordinary, {'["token"]': value}), /Private keys/);
+    assert.equal((await h.get()).token, undefined);
+    assert.equal(h.broker.getSnapshot().review?.id, review.id);
+  }
+});

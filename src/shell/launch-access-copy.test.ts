@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {accessIconPath} from './access-icon.ts';
+import {publishedAppLabel} from '../napplets/published-identity.ts';
 import {launchAccessCopy} from './launch-access-copy.ts';
 import {SUPPORTED_CAPABILITY_DOMAINS} from '../runtime/capability-protocol.ts';
 
@@ -18,7 +19,7 @@ test('unavailable known and unknown capabilities never promise working access', 
     assert.match(copy.description, /will not be granted/);
     assert.match(copy.description, /will not work/);
   }
-  assert.equal(launchAccessCopy('unknown-future-capability', true).name, 'unknown-future-capability');
+  assert.equal(launchAccessCopy('unknown-future-capability', true).name, 'Unrecognized capability · unknown-future-capability');
 });
 
 test('unknown declarations do not invent functionality', () => {
@@ -38,4 +39,9 @@ test('each named access type has distinct artwork, including unavailable direct 
   assert.equal(new Set(paths).size, domains.length);
   assert.ok(!paths.includes(accessIconPath('unknown-future-capability')));
   assert.equal(accessIconPath('__proto__'), accessIconPath('unknown-future-capability'));
+});
+
+test('requester identifiers render formatting and line separators literally', () => {
+  assert.equal(publishedAppLabel('app\u2028id\u200B'), 'app\\u2028id\\u200B');
+  assert.equal(publishedAppLabel(' 5129:' + 'a'.repeat(64)), '5129:' + 'a'.repeat(64));
 });

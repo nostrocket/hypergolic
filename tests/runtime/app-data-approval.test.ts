@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, {beforeEach} from 'node:test';
 import assert from 'node:assert/strict';
 import {setImmediate} from 'node:timers/promises';
 import {finalizeEvent,getPublicKey,type NostrEvent} from 'nostr-tools/pure';
@@ -10,6 +10,8 @@ import {captureEventSnapshot} from '../../src/security/event-snapshot.ts';
 import {deferred} from '../storage/harness.ts';
 const key=new Uint8Array(32).fill(42),user=getPublicKey(key),publisher='2'.repeat(64),appId='approval-soy';
 const scope=deriveAppDataScope({publisher,kind:35129,identifier:appId}),peers=['wss://one.example.com','wss://two.example.com'];
+// Match the planner's deterministic clock when checking signing eligibility.
+beforeEach(t => { if (!("mock" in t)) throw new Error("A test context is required"); t.mock.timers.enable({apis: ['Date'], now: 1_800_000_100_000}); });
 const clone=<T>(value:T):T=>JSON.parse(JSON.stringify(value));
 function template(id:string){return {kind:30078,created_at:1800000100,tags:dataTags(scope,'levels',id,'example.level',1),content:JSON.stringify({schema:'example.level',version:1,title:id,previous:null,deleted:false,data:{value:1}})};}
 function harness(id:string,route:'outbox'|'relay'='outbox',selectedPeers:readonly string[]=peers){

@@ -1,9 +1,10 @@
+import {useReviewControl} from './useReviewControl';
 import { PublishedLaunchReview } from './PublishedLaunchReview';
 import { MEDIA_ACCESS_DETAIL } from '../runtime/support-report';
 import type { ReviewSlot } from './review-slot';
 import { TrustedBand } from './TrustedBand';
-import { useEffect, useState, useSyncExternalStore } from 'react';
-import { AppState, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { AppState, ScrollView, StyleSheet, Text, View, type ViewInstance, useWindowDimensions } from 'react-native';
 import { ShellModal as Modal } from './ShellModal';
 import { ShellPressable as Pressable } from './ShellPressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -103,12 +104,14 @@ function RoutingReviewSheet({service, item}: {service: RoutingReviewService; ite
   const landscape = width > height;
   const [selected, setSelected] = useState<CatalogHandler | null>(request.kind === 'intent' ? request.selected : null);
   const [remember, setRemember] = useState(false);
+  const cancelControl = useRef<ViewInstance>(null);
+  const control = useReviewControl(item.id);
   const cancel = () => service.decide(item.id, {allow: false});
   const accept = () => service.decide(item.id, {allow: true, ...(selected ? {selected} : {}), remember});
   if (request.kind === 'published-open') return <RoutingPublishedLaunchReview request={request} onCancel={cancel}
     onAccept={legacyReadOnly => service.decide(item.id, {allow: true, ...(legacyReadOnly ? {legacyReadOnly: true as const} : {})})} />;
-  const disabled = request.kind === 'intent' && selected === null;
-  return <Modal visible transparent animationType="none" onRequestClose={cancel}>
+  const disabled = !control.ready || request.kind === 'intent' && selected === null;
+  return <Modal visible onShow={() => {control.onShow(); cancelControl.current?.focus();}} transparent animationType="none" onRequestClose={cancel}>
     <View style={[styles.backdrop, {paddingLeft: insets.left, paddingRight: insets.right}]}><View accessibilityViewIsModal testID="routing-review" style={[styles.sheet, {paddingBottom: Math.max(16, insets.bottom)}]}>
       <TrustedBand />
       <ScrollView contentContainerStyle={styles.content}>
@@ -118,7 +121,7 @@ function RoutingReviewSheet({service, item}: {service: RoutingReviewService; ite
         <ReviewDetails request={request} selected={selected} onSelect={setSelected} remember={remember} onRemember={() => setRemember(value => !value)}/>
       </ScrollView>
       <View style={[styles.actions, landscape && styles.actionsLandscape]}><Pressable accessibilityRole="button" testID="routing-approve" disabled={disabled} accessibilityState={{disabled}} style={[styles.button, landscape && styles.actionLandscape]} onPress={accept}><Text style={styles.action}>{reviewActions[request.kind]}</Text></Pressable>
-        <Pressable accessibilityRole="button" testID="routing-cancel" style={[styles.button, landscape && styles.actionLandscape]} onPress={cancel}><Text style={styles.action}>Cancel</Text></Pressable></View>
+        <Pressable ref={cancelControl} accessibilityRole="button" testID="routing-cancel" style={[styles.button, landscape && styles.actionLandscape]} onPress={cancel}><Text style={styles.action}>Cancel</Text></Pressable></View>
     </View></View>
   </Modal>;
 }

@@ -133,3 +133,17 @@ for (const version of [
   }
   assert.throws(() => resolveBundledSession({...bundledDescriptor('state-lab', 4),version:previous.version}), /Unavailable saved napplet/);
 });
+
+test('a retired bundled version stays removable without gaining runtime authority', async t => {
+  const {database} = await setup(t);
+  const retired = {...bundledDescriptor('nap-support', 2), version: 'a'.repeat(64)};
+  const original = openNapplet(initialTestWorkspace(), retired);
+  const binding = database.bindWorkspace(registration());
+  await binding.port.save(snapshotWorkspace(original), null);
+  const controller = await openWorkspaceController(binding, emptyWorkspace, assertWorkspaceAvailability);
+  assert.deepEqual(controller.getSnapshot().workspace, original);
+  assert.throws(() => resolveBundledSession(retired), /Unavailable saved napplet/);
+  controller.change(initialTestWorkspace());
+  await controller.flush();
+  assert.deepEqual(controller.getSnapshot().workspace, initialTestWorkspace());
+});

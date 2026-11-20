@@ -1,3 +1,4 @@
+import {compactPublisher} from '../security/public-identity';
 import { OwnerContext } from './IdentityOwnerContext';
 import { useContext, useEffect, useState } from 'react';
 import { Image } from 'expo-image';
@@ -49,6 +50,7 @@ export function Home({workspace, disabled, onOpen, onUnpin, onOverview, onDiscov
         <PinIcon key={`${pin.id}:${pin.version}`} pin={pin} />
         <Text style={styles.label}>{pin.title}</Text>
       </ShellPressable>
+      {editing && <Text selectable style={styles.label}>{pin.source === 'bundled' ? 'Built into Hypergolic' : compactPublisher(pin.publisher)}</Text>}
       {editing && <ShellPressable accessibilityRole="button" accessibilityLabel={`Unpin ${pin.title}`} disabled={disabled} testID={`home-unpin-${pin.id}`} onPress={() => onUnpin(pin)} style={styles.remove}><Text style={styles.actionText}>Unpin</Text></ShellPressable>}
     </View>)}</View>
   </ScrollView>;

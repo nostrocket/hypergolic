@@ -109,3 +109,5 @@ Test dismissal/resume, native inactivity, delayed sends, near expiry, queue race
 stale source/epoch, field mutation and post-send uncertainty on both platforms.
 Current layout changes also need native input/geometry proof. [Testing](testing.md)
 tracks acceptance separately from source/build/fixture evidence.
+
+The shell shows each event’s timestamp and tag count before approval. Signing permits historical timestamps and up to ten minutes of positive device-clock skew. Hypergolic checks this limit at capture and again before signing. When the configured relays return no existing follow list, creating one requires separate confirmation on that review.

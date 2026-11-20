@@ -4,7 +4,7 @@ import type {RoutingNativePort} from '../routing/routing-port.ts';
 import {routingPayload, routingRecord, routingText} from '../routing/routing-contract.ts';
 import {ShellStorageError, type TrustedRegistration} from '../storage/ports.ts';
 import {parseConfigMessage, type ConfigMessage} from './config-contract.ts';
-import {captureConfigSchema, configSecretFields, configValueValid, configValuesConform, resolveConfigValues, ConfigSchemaError, type ConfigSchema, type ConfigValues, type ConfigValue} from './config-schema.ts';
+import {ConfigKeyInputError, containsPrivateKeyInput, captureConfigSchema, configSecretFields, configValueValid, configValuesConform, resolveConfigValues, ConfigSchemaError, type ConfigSchema, type ConfigValues, type ConfigValue} from './config-schema.ts';
 import type {ConfigRecord, ConfigStore} from './config-store.ts';
 import type {ReviewSlot} from '../shell/review-slot.ts';
 type Endpoint = {origin: NativeRegistration; assertActive(): void; seen: Set<string>; tail: Promise<unknown>; schema: ConfigSchema | null; menu?: ConfigMenuTarget; version?: number; subscription: object | null; window: number; opens: number};
@@ -203,6 +203,7 @@ export class ConfigBroker {
     const check = () => {this.active(endpoint, revision); if (this.snapshot.review !== review || endpoint.schema !== review.schema ||
       (this.slot && !this.slot.owns('config', id)) || this.native.reviewRevision(endpoint.origin.generation, revision) !== review.reviewRevision) throw new ShellStorageError('REVOKED');}; check();
     const values = routingRecord(routingPayload(input), [], Object.keys(input as object)), changes = routingRecord(routingPayload(secretChanges), [], Object.keys(secretChanges));
+    if (containsPrivateKeyInput(values) || containsPrivateKeyInput(changes, true)) throw new ConfigKeyInputError();
     const fields = configSecretFields(review.schema), allowed = new Map(fields.map(field => [JSON.stringify(field.path), field]));
     if (fields.some(field => valueAt(values, field.path) !== undefined) || Object.entries(changes).some(([key, value]) => !allowed.has(key) || value !== null && !configValueValid(allowed.get(key)!.schema, value))) throw new ConfigSchemaError('invalid-schema');
     await this.store.change(this.owner(endpoint, check), previous => {
