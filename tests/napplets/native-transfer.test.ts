@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { finalizeEvent, getPublicKey } from 'nostr-tools/pure';
 import { naddrEncode } from 'nostr-tools/nip19';
 import { resolveNappletLink } from '../../src/napplets/resolve-link.ts';
-import { stageVerifiedArtifact, TRANSFER_CHUNK_BYTES, type NativePublishedTransferPort } from '../../src/napplets/native-transfer.ts';
+import { registerTransferSession, stageVerifiedArtifact, TRANSFER_CHUNK_BYTES, type NativePublishedTransferPort } from '../../src/napplets/native-transfer.ts';
 import { verifyArtifact, verifyManifest } from '../../src/napplets/verified-artifact.ts';
 
 const SECRET = new Uint8Array(32); SECRET[31] = 5;
@@ -51,6 +51,20 @@ function port(overrides: Partial<NativePublishedTransferPort> = {}) {
   };
   return { native, calls, chunks };
 }
+
+test('delayed cleanup cannot release a session re-registered after native background cleanup', () => {
+  const {native, calls} = port();
+  const original = registerTransferSession(native, SESSION);
+  native.revokeAllPublishedArtifacts();
+  const replacement = registerTransferSession(native, SESSION);
+  assert.throws(original.assertActive, {code: 'PUBLISHED_TRANSFER_FAILED'});
+  original.revoke();
+  replacement.assertActive();
+  assert.equal(calls.filter(call => call === 'revoke').length, 0);
+  replacement.revoke();
+  replacement.revoke();
+  assert.equal(calls.filter(call => call === 'revoke').length, 1);
+});
 
 test('stages original verified bytes in canonical bounded chunks with exact native claims', async () => {
   const { artifact, bytes } = await verified('a'.repeat(TRANSFER_CHUNK_BYTES * 2));
