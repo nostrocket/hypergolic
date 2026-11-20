@@ -5,6 +5,8 @@ import UniformTypeIdentifiers
  static func main() throws {
   let root=URL(fileURLWithPath:CommandLine.arguments[1]),out=URL(fileURLWithPath:CommandLine.arguments[2]);try FileManager.default.createDirectory(at:out,withIntermediateDirectories:true)
   let manifest=try JSONSerialization.jsonObject(with:Data(contentsOf:root.appendingPathComponent("photos.json"))) as! [String:Any]
+  precondition(UploadPhotoContainer.validatedType(Data("ordinary text".utf8)) == nil)
+  precondition(UploadPhotoContainer.validatedType(Data([0x49, 0x49, 42, 0] + Array(repeating: 0, count: 32))) == nil)
   var checks=0
   for item in manifest["files"] as! [[String:Any]] {
    let name=item["file"] as! String,data=try Data(contentsOf:root.appendingPathComponent(name))
