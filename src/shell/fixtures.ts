@@ -44,6 +44,10 @@ export function initialTestWorkspace(): Workspace {
   const loaded = [1, 2, 3].reduce((state, number) => openNapplet(state, bundledUXDescriptor(number)), emptyWorkspace());
   return focusNapplet(loaded, 'ux-lab-1');
 }
+export class UnavailableBundledVersion extends Error {
+  constructor() { super('Unavailable saved napplet'); }
+}
+
 export function resolveBundledSession(session: NappletDescriptor) {
   if (session.eventId !== undefined) throw new Error('Unavailable saved napplet');
   const variant = variants.find(value => session.id.startsWith(value + '-'));
@@ -58,7 +62,10 @@ export function resolveBundledSession(session: NappletDescriptor) {
     : variant === 'feed-lab' && session.version === BUNDLED_FIXTURES['feed-lab-v1'].aggregateHash
       ? 'feed-lab-v1' : undefined;
   if (session.title !== expected.title || session.publisher !== expected.publisher || session.appId !== expected.appId ||
-      (session.version !== expected.version && !archivedFixture && !compatiblePackagedVersion(variant, session.version)) || session.source !== expected.source) throw new Error('Unavailable saved napplet');
+      session.source !== expected.source || !/^[0-9a-f]{64}$/.test(session.version)) throw new Error('Unavailable saved napplet');
+  if (session.version !== expected.version && !archivedFixture && !compatiblePackagedVersion(variant, session.version)) {
+    throw new UnavailableBundledVersion();
+  }
   // Archived labs keep their exact bytes. Compatible bundled descriptors use the packaged replacement.
   const fixture = archivedFixture ?? (variant === 'state-lab-other-publisher' ? 'state-lab' : variant);
   const entry = BUNDLED_FIXTURES[fixture];
@@ -85,7 +92,10 @@ function assertPublishedSession(session: NappletDescriptor): void {
 /** Validate only the durable source claims; published rows are not verified artifacts until reopened. */
 export function assertWorkspaceAvailability(workspace: Workspace): void {
   for (const session of [...workspace.sessions, ...(workspace.pins ?? [])]) {
-    if (session.source === 'bundled') resolveBundledSession(session);
-    else assertPublishedSession(session);
+    if (session.source === 'published') assertPublishedSession(session);
+    else {
+      try { resolveBundledSession(session); }
+      catch (error) { if (!(error instanceof UnavailableBundledVersion)) throw error; }
+    }
   }
 }

@@ -1,3 +1,4 @@
+import { UnavailableBundledVersion } from '../shell/fixtures';
 import { PublishedLaunchReview } from '../shell/PublishedLaunchReview';
 import type { CloseCheckEvent } from '../shell/close-check';
 import { useCallback, useContext, useEffect, useRef, useState, type Ref } from 'react';
@@ -45,19 +46,28 @@ export function NappletHost(props: Props) {
 function BundledNappletHost({ session, onHostEvent, onZoomTarget, ...props }: Props) {
   const {zoomRef, zoomReady, clearZoomTarget, zoomReply, zoomNativeProps} = useNativeZoomTarget(session.id, props.active === true, onZoomTarget);
   const runtime = useContext(RuntimeContext);
-  const [binding] = useState(() => runtime?.open(session) ?? null);
-  useEffect(() => () => binding?.revoke(), [binding]);
+  const [binding] = useState(() => {
+    try { return runtime?.open(session) ?? null; }
+    catch (error) {
+      if (error instanceof UnavailableBundledVersion) return error;
+      throw error;
+    }
+  });
+  const unavailable = binding instanceof UnavailableBundledVersion;
+  const liveBinding = unavailable ? null : binding;
+  useEffect(() => () => liveBinding?.revoke(), [liveBinding]);
   const receive = useCallback((event: NativeSyntheticEvent<NativeEvent>) => {
     const message = event.nativeEvent;
     if (message.sessionId !== session.id) return;
     if (zoomReply(message)) return;
-    if (message.type === 'capability') { binding?.receive(message); return; }
+    if (message.type === 'capability') { liveBinding?.receive(message); return; }
     if (message.type === 'ready' && message.generation) zoomReady(message.generation);
-    if (message.type === 'error') {clearZoomTarget(); binding?.revoke();}
+    if (message.type === 'error') {clearZoomTarget(); liveBinding?.revoke();}
     onHostEvent(event as NativeSyntheticEvent<HostEvent>);
-  }, [binding, onHostEvent, session.id, zoomReady, clearZoomTarget, zoomReply]);
+  }, [liveBinding, onHostEvent, session.id, zoomReady, clearZoomTarget, zoomReply]);
+  if (unavailable) return <Text>This bundled version is unavailable. Close this card to open the current version.</Text>;
   if (NativeHost === null) return <Text>Napplet execution is available in the Android and iOS builds.</Text>;
-  return <NativeHost {...props} {...zoomNativeProps} ref={zoomRef} {...(binding ? { configuration: binding.configuration } : { sessionId: session.id })} onHostEvent={receive} />;
+  return <NativeHost {...props} {...zoomNativeProps} ref={zoomRef} {...(liveBinding ? { configuration: liveBinding.configuration } : { sessionId: session.id })} onHostEvent={receive} />;
 }
 
 function PublishedNappletHost({ session, onHostEvent, onZoomTarget, ...props }: Props) {

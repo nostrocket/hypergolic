@@ -27,9 +27,14 @@ test('controller keeps stable immutable snapshots and live overview while serial
   const controller = await openWorkspaceController(binding, seed, accept);
   assert.equal(controller.getSnapshot(), controller.getSnapshot());
   let notices = 0; const unsubscribe = controller.subscribe(() => { notices++; });
+  const first = controller.getSnapshot().workspace.sessions[0];
   const next = showOverview(controller.getSnapshot().workspace);
   controller.change(next); await controller.flush();
   assert.equal(controller.getSnapshot().workspace.overview, true);
+  assert.equal(controller.getSnapshot().workspace.sessions[0], first);
+  controller.change({...next, sessions: next.sessions.map(row => ({...row}))});
+  assert.notEqual(controller.getSnapshot().workspace.sessions[0], first);
+  await controller.flush();
   assert(Object.isFrozen(controller.getSnapshot().workspace.sessions));
   assert.equal((await binding.port.load())!.snapshot.lastActiveId, 'two');
   assert(notices > 0); unsubscribe(); const count = notices;
