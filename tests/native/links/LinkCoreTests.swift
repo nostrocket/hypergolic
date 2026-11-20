@@ -28,7 +28,7 @@ final class Winners: @unchecked Sendable {
     check(r.synchronizeOwner("owner",epoch:0,available:true) == nil);check(r.synchronizeOwner("owner",epoch:1,available:true) == nil)
     check(r.register("new",user:"other",epoch:1));_ = r.focus("new",true);check(!r.register("new",user:"owner",epoch:0));token=r.admit("new")!
     let raceToken=token, winners=Winners();DispatchQueue.concurrentPerform(iterations:20) {_ in if r.claim(raceToken) {winners.add()}}
-    check(winners.count == 1);check(r.finish(token))
+    check(winners.count == 1);clock.now += 25_000;check(r.expire().isEmpty);check(r.finish(token));check(!r.finish(token))
     let bounded=LinkLeaseRegistry(clock:{clock.now});_ = bounded.synchronizeOwner("owner",epoch:0,available:true);_ = bounded.setForeground(true)
     for n in 0..<64 {check(bounded.register("s\(n)",user:"owner",epoch:0))};check(!bounded.register("overflow",user:"owner",epoch:0))
     for n in 0..<12 {let g="s\(n)";_ = bounded.focus(g,true);let t=bounded.admit(g)!;check(bounded.finish(t))}

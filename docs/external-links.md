@@ -33,7 +33,7 @@ registered generations and a 25-second review expiry. There is no automatic retr
 Focus and foreground are required for review and dispatch. Blur/background cancels
 undispatched review. A claimed one-shot OS receipt may complete across the background
 it caused; close, replacement and identity revocation still suppress delivery.
-That receipt cannot dispatch another opening or revive ordinary work.
+On iOS a claim near review expiry has up to 1.5 seconds for the OS callback. A missing callback returns the error `handoff-result-unknown` on the original request. That receipt cannot dispatch another opening or revive ordinary work.
 
 The trusted identity owner synchronizes user/epoch/availability before vault work
 or React teardown. A newer epoch invalidates old native generations. The app-only
