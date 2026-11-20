@@ -111,6 +111,14 @@ public final class NativeAndroidSignerControllerProof extends Activity {
       deliver(response(fault)); check(value == null && "SIGNER_RESPONSE_INVALID".equals(error));
     }
     inboundBoundary();
+    while (!NativeAndroidSignerActivityController.RequestCode.reserve().needsRequestId) { /* cycle 16-bit codes */ }
+    start(completed);
+    int beforeReuse = callbacks;
+    deliver(valid);
+    controller.result(this, owner, code, RESULT_CANCELED, null);
+    check(callbacks == beforeReuse);
+    deliver(response("Valid result"));
+    check(callbacks == beforeReuse + 1 && error == null);
     replacement();
   }
   private static int parcelBytes(Intent intent) {
