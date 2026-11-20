@@ -25,7 +25,7 @@ public final class LinkUrl {
       if (host.length() > 253 || host.endsWith(".") || host.contains("%")) return "invalid-url";
       if (host.startsWith("[")) return null;
       for (String label : host.split("\\.", -1)) if (!label.matches("[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?")) return "invalid-url";
-      if (host.matches("[0-9.]+")) {
+      if (host.matches("(?i)(?:[0-9]+|0x[0-9a-f]*)(?:\\.(?:[0-9]+|0x[0-9a-f]*))*")) {
         String[] parts = host.split("\\.", -1);
         if (parts.length != 4) return "invalid-url";
         for (String part : parts) if (part.length() > 3 || part.length() > 1 && part.startsWith("0") || Integer.parseInt(part) > 255) return "invalid-url";
