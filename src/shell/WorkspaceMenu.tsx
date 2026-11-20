@@ -1,3 +1,4 @@
+import {formatNpub} from '../security/public-identity';
 import { useEffect, useRef } from 'react';
 import { AccessibilityInfo, Platform, Switch, ScrollView, StyleSheet, Text, View, type ViewInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -6,14 +7,14 @@ import { ShellPressable } from './ShellPressable';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 
 interface Props {
-  title: string; disabled: boolean; pinned?: boolean; onPin?(): void;
+  title: string; publisher?: string; disabled: boolean; pinned?: boolean; onPin?(): void;
   gameControls: boolean; onGameControls(enabled: boolean): void;
   onResetZoom?(): void; zoomResetDisabled?: boolean;
   onDismiss(): void; onOverview(): void; onSettings(): void; onNappletSettings?(): void; onClose(): void;
 }
 
 /** An in-shell overlay keeps menu dismissal and close/review dialogs in one navigation flow. */
-export function WorkspaceMenu({ title, disabled, gameControls, onGameControls, pinned, onPin, onDismiss, onOverview, onSettings, onNappletSettings, onResetZoom, zoomResetDisabled, onClose }: Props) {
+export function WorkspaceMenu({ title, publisher, disabled, gameControls, onGameControls, pinned, onPin, onDismiss, onOverview, onSettings, onNappletSettings, onResetZoom, zoomResetDisabled, onClose }: Props) {
   const { styles, colors } = useShellStyles(createStyles);
   const insets = useSafeAreaInsets();
   const done = useRef<ViewInstance>(null);
@@ -33,6 +34,7 @@ export function WorkspaceMenu({ title, disabled, gameControls, onGameControls, p
           <ShellPressable ref={done} testID="shell-menu-done" accessibilityRole="button" onPress={onDismiss} style={styles.done}><Text style={styles.doneText}>Done</Text></ShellPressable>
         </View>
         <ScrollView contentContainerStyle={styles.actions}>
+          <Text selectable style={styles.actionText}>{publisher ? `Publisher · ${formatNpub(publisher)}` : 'Built into Hypergolic'}</Text>
           {onPin && <ShellPressable testID="shell-pin" accessibilityRole="button" disabled={disabled} onPress={onPin} style={styles.action}><Text style={styles.actionText}>{pinned ? 'Unpin from Home' : 'Pin to Home'}</Text></ShellPressable>}
           <View style={styles.action}>
             <Text accessible={false} style={styles.actionText}>Game controls</Text>

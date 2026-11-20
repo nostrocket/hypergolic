@@ -51,7 +51,8 @@ export function captureSnapshotIdentity(input: unknown, appId: string): Snapshot
 /** Public labels use the opaque catalog identity and never expose the private key. */
 export function publishedAppLabel(appId: string): string {
   const eventId = snapshotEventId(appId);
-  return eventId ? `5129:${eventId}` : appId;
+  return eventId ? `5129:${eventId}` : appId.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, character =>
+    '\\u' + character.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0'));
 }
 
 /** Legacy routing accepts raw named d values. The opaque snapshot alias stays disjoint. */

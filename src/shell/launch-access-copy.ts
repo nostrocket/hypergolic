@@ -1,3 +1,4 @@
+import {publishedAppLabel} from '../napplets/published-identity.ts';
 import { MEDIA_ACCESS_DETAIL } from '../runtime/support-report.ts';
 
 const capabilityCopy = new Map<string, readonly [string, string]>([
@@ -25,7 +26,7 @@ const capabilityCopy = new Map<string, readonly [string, string]>([
 /** Publisher declarations are requests, never grants or proof of safety. */
 export function launchAccessCopy(domain: string, unavailable: boolean) {
   const known = capabilityCopy.get(domain);
-  return { name: known?.[0] ?? domain, description: unavailable
+  return { name: known?.[0] ?? `Unrecognized capability · ${publishedAppLabel(domain)}`, description: unavailable
     ? 'Unavailable in Hypergolic. This access will not be granted; features that need it will not work.'
     : known?.[1] ?? 'Unrecognized capability declared by the publisher. Availability and behavior are not confirmed.' };
 }

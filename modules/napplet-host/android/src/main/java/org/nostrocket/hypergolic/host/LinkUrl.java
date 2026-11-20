@@ -6,7 +6,7 @@ public final class LinkUrl {
   public static String displayIdentity(String value) {
     StringBuilder out = new StringBuilder();
     for (char c : value.toCharArray()) {
-      if (c < 32 || c >= 127 && c <= 159 || c == 0x061c || c == 0x200e || c == 0x200f ||
+      if (c < 32 || c >= 127 && c <= 159 || Character.getType(c) == Character.FORMAT ||
           c >= 0x2028 && c <= 0x202e || c >= 0x2066 && c <= 0x2069) out.append(String.format(java.util.Locale.ROOT, "\\u%04X", (int)c));
       else out.append(c);
     }

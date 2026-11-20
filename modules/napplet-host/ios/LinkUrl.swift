@@ -7,7 +7,7 @@ enum LinkUrl {
   static func displayIdentity(_ value: String) -> String {
     value.unicodeScalars.map {scalar in
       let c = scalar.value
-      if c < 32 || (127...159).contains(c) || c == 0x061c || c == 0x200e || c == 0x200f ||
+      if c < 32 || (127...159).contains(c) || scalar.properties.generalCategory == .format ||
         (0x2028...0x202e).contains(c) || (0x2066...0x2069).contains(c) {return String(format: "\\u%04X", c)}
       return String(scalar)
     }.joined()
