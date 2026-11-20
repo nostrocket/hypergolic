@@ -20,6 +20,25 @@ export class PublishedTransferError extends Error {
   constructor() { super('The published napplet could not be prepared'); this.name = 'PublishedTransferError'; }
 }
 
+const registrations = new WeakMap<NativePublishedTransferPort, Map<string, symbol>>();
+
+/** Native lifecycle cleanup can release a session ID before its previous JS owner unwinds. */
+export function registerTransferSession(port: NativePublishedTransferPort, id: string) {
+  if (!port.registerPublishedSession(id)) throw new PublishedTransferError();
+  const active = registrations.get(port) ?? new Map<string, symbol>();
+  registrations.set(port, active);
+  const token = Symbol();
+  active.set(id, token);
+  return {
+    assertActive() { if (active.get(id) !== token) throw new PublishedTransferError(); },
+    revoke() {
+      if (active.get(id) !== token) return;
+      active.delete(id);
+      port.revokePublishedSession(id);
+    },
+  };
+}
+
 /** Divisible by three, so every full chunk has canonical unpadded Base64. */
 export const TRANSFER_CHUNK_BYTES = 48 * 1024;
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -51,7 +70,8 @@ function active(signal: AbortSignal, assertActive: () => void): void {
  * containing bytes, a URL, or a filesystem path.
  */
 export async function stageVerifiedArtifact(artifactInput: unknown, sessionId: string,
-  port: NativePublishedTransferPort, signal: AbortSignal, assertActive: () => void): Promise<string> {
+  port: NativePublishedTransferPort, signal: AbortSignal, assertActive: () => void,
+  revokeSession = () => port.revokePublishedSession(sessionId)): Promise<string> {
   assertVerifiedArtifact(artifactInput);
   const artifact: VerifiedNappletArtifact = artifactInput;
   if (!SESSION.test(sessionId)) throw new PublishedTransferError();
@@ -84,7 +104,7 @@ export async function stageVerifiedArtifact(artifactInput: unknown, sessionId: s
     return handle;
   } catch {
     // A late revocation after finalize must also destroy the staged native bytes.
-    if (handle) try { port.revokePublishedSession(sessionId); } catch { /* Native also expires the handle. */ }
+    if (handle) try { revokeSession(); } catch { /* Native also expires the handle. */ }
     throw new PublishedTransferError();
   } finally {
     if (uploadId) try { port.cancelPublishedArtifact(uploadId); } catch { /* Native expiry is the backstop. */ }

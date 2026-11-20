@@ -10,7 +10,7 @@ import { loadPublishedArtifact, PublishedLoadError, type PublishedArtifactSource
 import { openPublishedArtifactCache } from './published-artifact-cache.ts';
 import { descriptorForPublishedArtifact, publishedHostInput } from './published-host-input.ts';
 import { stageAdmittedPublishedArtifact } from './admitted-transfer.ts';
-import { PublishedTransferError, type NativePublishedTransferPort } from './native-transfer.ts';
+import { registerTransferSession, PublishedTransferError, type NativePublishedTransferPort } from './native-transfer.ts';
 import { assertVerifiedArtifact, type VerifiedNappletArtifact } from './verified-artifact.ts';
 import {verifiedPublicationIdentity} from './verified-publication-identity.ts';
 import {matchesPublishedAppKey,snapshotEventId} from './published-identity.ts';
@@ -112,11 +112,12 @@ async function preparePublishedSession(ports: SessionPorts, request: PrepareRequ
     if (controller.signal.aborted) fail();
     try {
       authority.assertActive();
+      registered?.assertActive();
       if (!success) assertExactOpenActive?.();
     } catch { fail(); }
     if (controller.signal.aborted) fail();
   };
-  let registered: string | null = null;
+  let registered: ReturnType<typeof registerTransferSession> | undefined;
   let success = false;
   let release: (() => void) | undefined;
   try {
@@ -178,21 +179,18 @@ async function preparePublishedSession(ports: SessionPorts, request: PrepareRequ
     }
     if (opensLink) assertCompatiblePin(ports, descriptor);
     active();
-    if (!ports.native.registerPublishedSession(id)) throw new PublishedTransferError();
-    registered = id;
+    registered = registerTransferSession(ports.native, id);
     const handle = await stageAdmittedPublishedArtifact(admission, artifact, id, ports.native,
-      controller.signal, active);
+      controller.signal, active, registered.revoke);
     active();
     const hostInput = publishedHostInput(artifact, admission, descriptor, authority, handle, ports.networkRelays?.() ?? []);
     success = true;
     return Object.freeze({ descriptor, hostInput, artifact,
       assertActive: () => { active(); admission.assertActive(); },
       revoke: () => {
-        if (registered === null) return;
-        registered = null;
         controller.abort();
         release?.();
-        ports.native.revokePublishedSession(id);
+        registered?.revoke();
       },
     });
   } catch (error) {
@@ -209,7 +207,7 @@ async function preparePublishedSession(ports: SessionPorts, request: PrepareRequ
     if (!success) {
       release?.();
       controller.abort();
-      if (registered) try { ports.native.revokePublishedSession(registered); } catch { /* Native owner also expires. */ }
+      if (registered) try { registered.revoke(); } catch { /* Native owner also expires. */ }
     }
   }
 }
