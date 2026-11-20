@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Keyboard, StyleSheet, Text, View } from 'react-native';
+import { Alert, Keyboard, StyleSheet, Text, View } from 'react-native';
 import { ShellPressable as Pressable } from './ShellPressable';
 import { ShellTextInput as TextInput } from './ShellTextInput';
 import { RelaySettingsError, type NetworkRelayMove, type RelayRole, type RelaySettingsService, type RelaySettingsSnapshot } from '../network/relay-settings.ts';
@@ -64,7 +64,10 @@ export function RelaySettings({ service }: { service: RelaySettingsService | nul
     <Pressable accessibilityRole="button" testID={`relay-add-${role}`} disabled={busy || input.trim() === ''} onPress={add} style={[styles.button, styles.subdued]}>
       <Text style={styles.buttonText}>Add {role} relay</Text>
     </Pressable>
-    <Pressable accessibilityRole="button" testID={`relay-restore-${role}`} disabled={busy} onPress={() => { void update(() => service!.restoreDefaults(role)); }} style={[styles.button, styles.subdued]}>
+    <Pressable accessibilityRole="button" testID={`relay-restore-${role}`} disabled={busy} onPress={() => Alert.alert(
+      `Restore ${role} defaults?`, `This replaces every relay in your ${role} list on this device.`,
+      [{text: 'Cancel', style: 'cancel'}, {text: 'Restore defaults', style: 'destructive', onPress: () => { void update(() => service.restoreDefaults(role)); }}],
+    )} style={[styles.button, styles.subdued]}>
       <Text style={styles.buttonText}>Restore {role} defaults</Text>
     </Pressable>
     {error !== '' && <Text accessibilityLiveRegion="polite" testID="relay-settings-error" style={styles.error}>{error}</Text>}
