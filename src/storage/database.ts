@@ -272,15 +272,20 @@ async function savePublishedUpdate(io: Access, user: string, payload: string, ex
   const workspace = restoreWorkspace(current.snapshot);
   const selected = workspace.sessions.find(item => item.id === previous.id);
   if (!selected || !samePublishedPin(selected, previous)) return fail('CONFLICT');
+  const sameApp = (item: typeof selected) => item.source === 'published' && item.publisher === previous.publisher && item.appId === previous.appId;
+  if (workspace.sessions.some(item => sameApp(item) && item.id !== previous.id) ||
+      workspace.pins?.some(item => sameApp(item) && (item.eventId !== previous.eventId || item.version !== previous.version))) return fail('CONFLICT');
   const replacement = replacePublishedNapplet(workspace, previous.id, next);
   if (encodeSnapshot(snapshotWorkspace(replacement)) !== payload) return fail('CONFLICT');
   const owner = [user, publicKey(previous.publisher), text(previous.appId, 1024)];
   const from = version(previous.version), target = version(next.version);
   const prior = await selection(io, owner);
-  if (prior !== null && prior !== from) return fail('SELECTION_MISMATCH');
+  // Opening a fresh pin after closing and unpinning an older revision can leave an old selection.
+  // Only the sole persisted card and its matching Home pin can authorize a new migration source.
+  await retained(io, owner, from);
+  if (prior !== null && prior !== from &&
+      await io.run(`UPDATE selected_versions SET version = ? WHERE ${OWNER} AND version = ?`, from, ...owner, prior) !== 1) return fail('CONFLICT');
   if (prior === null) {
-    // Existing workspaces predate selection rows. The exact persisted card supplies the initial version.
-    await retained(io, owner, from);
     await io.run('INSERT INTO selected_versions (user, publisher, app, version) VALUES (?, ?, ?, ?)', ...owner, from);
   }
   if (from !== target) {

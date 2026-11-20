@@ -86,3 +86,20 @@ test('a previously used target keeps both versions and the old workspace intact'
   assert.equal(await target.get('saved'), 'existing');
   assert.deepEqual(discarded, [next.id]);
 });
+
+test('a newly pinned card supplies the migration source after a previous selection was closed', async t => {
+  const {actions, controller, staged, database} = await fixture(t, true);
+  const owner = registration({publisher: previous.publisher, appId: previous.appId, version: previous.version, instanceId: previous.id});
+  const oldVersion = '1'.repeat(64);
+  const app = database.bindApp(owner).port;
+  await app.selectInitialVersion(oldVersion);
+  const historical = database.bindStorage({...owner, version: oldVersion}).port;
+  await historical.set('name', 'older selection');
+  await database.bindStorage(owner).port.set('name', 'current card');
+  staged.resolve();
+  assert.equal(await actions.checkPublishedUpdate(previous, new AbortController().signal, approve, approve), true);
+  assert.equal(controller.getSnapshot().workspace.sessions[0]?.id, next.id);
+  assert.equal(await app.selectedVersion(), next.version);
+  assert.equal(await historical.get('name'), 'older selection');
+  assert.equal(await database.bindStorage({...owner, version: next.version, instanceId: next.id}).port.get('name'), 'current card');
+});
