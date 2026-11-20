@@ -20,7 +20,10 @@ export type ApprovalSheetProps = Readonly<{
   onDismiss: (id: string) => void;
 }>;
 
-function requestedKind(kind: number): string { return kind === 1 ? 'Note' : `Event kind ${kind}`; }
+const eventKinds = new Map([
+  [0, 'Replace your public profile'], [1, 'Publish a note'], [3, 'Replace your follow list'],
+  [5, 'Request event deletion'], [10002, 'Replace your public relay list'],
+]);
 
 function commonAction(common:NonNullable<ApprovalItem['common']>):string{
   const request=common.request;
@@ -48,7 +51,7 @@ function requestedAction(item: ApprovalItem): string {
     if (body.deleted) return 'Unpublish public record';
     return body.previous ? 'Update public record' : 'Publish public record';
   }
-  return item.common ? commonAction(item.common) : requestedKind(item.event.event.kind);
+  return item.common ? commonAction(item.common) : eventKinds.get(item.event.event.kind) ?? `Event kind ${item.event.event.kind}`;
 }
 
 function AppDataRecordReview({record, content}: {record: NonNullable<ApprovalItem['appData']>['record']; content: string}) {
@@ -90,6 +93,8 @@ function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismis
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text accessibilityRole="header" style={styles.eyebrow}>Approve signing request</Text>
           <Text style={styles.title}>{requestedAction(item)}</Text>
+          <Text style={styles.value}>Event time · {new Date(item.event.event.created_at * 1000).toISOString()}</Text>
+          <Text style={styles.value}>Tags · {item.event.event.tags.length}</Text>
           {item.recommendation && <><Text style={styles.value}>{item.recommendationExcludedRelays
             ? 'Add this napplet to your public list on the reachable Network relays below for this request only.'
             : 'Add this napplet to your public list on the Network relays below.'}</Text>

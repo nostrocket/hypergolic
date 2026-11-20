@@ -11,7 +11,7 @@ import {OutboxApprovalPreparation,type OutboxPublicationPlanner} from '../outbox
 import type {OutboxPublishRequest} from '../outbox/publication-contract.ts';
 import type {OutboxPublicationPlan} from '../outbox/publication-plan.ts';
 import {captureOutboxPublicationReceipt,type OutboxPublicationReceipt} from '../outbox/publication-receipt.ts';
-import { captureEventSnapshot, type EventSnapshot } from './event-snapshot.ts';
+import { assertSigningTime, captureEventSnapshot, type EventSnapshot } from './event-snapshot.ts';
 import { validateSignedEvent, type VerifiedSignedEvent } from './signed-event.ts';
 import {captureRelayOutcomes} from './relay-outcomes.ts';
 import type { NativeSigningSource } from './native-vault-contract.ts';
@@ -265,6 +265,7 @@ export class ApprovalService {
         else await entry.revalidateRecommendation!(signal, active);
         active();
       }
+      assertSigningTime(entry.event.event.created_at);
       if (this.native.prepareSigning && !this.native.prepareSigning(entry.lease, entry.event)) denied();
       if (!this.native.mayReview(entry.lease) || !this.native.approveOnce(entry.lease)) denied();
       entry.controller = new AbortController(); this.publish();
