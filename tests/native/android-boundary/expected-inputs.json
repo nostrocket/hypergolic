@@ -3,7 +3,7 @@
   "scope": "Reviewed unmodified Android native host, owning transports and packaged runtime; no device execution. Future changes require scope review before rebaseline.",
   "sources": {
     "modules/napplet-host/android/build.gradle": "b87a4c660d37f6d3790dc0c30afd0a4ddd20d087e2962c35cca204acf87d708e",
-    "modules/napplet-host/android/src/main/assets/runtime/host.js": "59b42430fa57229acea852ad8310147b5d1315b036a389e7d0bbc51effbfd061",
+    "modules/napplet-host/android/src/main/assets/runtime/host.js": "afac0f459deef4a401101bdd3c71dbff44800279d75b9ecb18f2dcd30018d574",
     "modules/napplet-host/android/src/main/assets/runtime/index.html": "1026e214e2bd05ecd753be39e18dfd1007a811f79195aa757df45d0a52782620",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/ApprovalLeaseRegistry.java": "ed09c0eca35652a0ecd03b784d1b1cce48d6d72122142e33b7f169fb3e6e47d9",
     "modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host/ApprovalTransport.kt": "8894c39f6d32140b8872fae7328ba98e8ded936768f539a1d185875dcbeb33d8",
