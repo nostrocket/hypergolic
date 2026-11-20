@@ -69,6 +69,7 @@ then use a fresh output directory outside the repository:
 
 ```sh
 # Configure the pinned tools described in docs/development.md.
+HYPERGOLIC_VARIANT=development pnpm run runtime:build
 python3 -B tests/native/android-boundary/build.py --output /tmp/android-boundary-build-01
 ```
 
