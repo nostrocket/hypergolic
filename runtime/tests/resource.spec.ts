@@ -112,6 +112,28 @@ test('trusted media gate pauses, retains position, rejects hidden play and requi
 });
 
 
+test('game audio suspends on blur and resumes on the next focused gesture',async({page})=>{
+  const frame=await open(page),button=frame.locator('#load');
+  await button.evaluate(element=>{
+    element.addEventListener('click',()=>{
+      const context=new AudioContext(),oscillator=context.createOscillator(),quiet=context.createGain();
+      quiet.gain.value=0;oscillator.connect(quiet).connect(context.destination);oscillator.start();
+      Reflect.set(window,'gameAudio',context);void context.resume();
+    },{once:true});
+  });
+  await button.click();
+  const state=()=>button.evaluate(()=>Reflect.get(window,'gameAudio').state);
+  await expect.poll(state).toBe('running');
+  await page.evaluate(()=>(window as any).__hypergolicMediaActive(false));
+  await expect.poll(state).toBe('suspended');
+  expect(await button.evaluate(async()=>{try{await Reflect.get(window,'gameAudio').resume();return 'played';}catch(error){return (error as DOMException).name;}})).toBe('NotAllowedError');
+  await page.evaluate(()=>(window as any).__hypergolicMediaActive(true));
+  await expect(button).toBeEnabled();
+  await expect.poll(state).toBe('suspended');
+  await button.click();await expect.poll(state).toBe('running');
+  await button.evaluate(()=>Reflect.get(window,'gameAudio').close());
+});
+
 test('canonical single and bulk success envelopes carry MIME matching the reconstructed Blob', async ({page}) => {
   await open(page);
   const guest = page.frames().find(value => value.parentFrame() === page.mainFrame())!;

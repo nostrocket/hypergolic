@@ -28,8 +28,52 @@ function gameControlSelectors() {
   const editable = ':is(textarea, [contenteditable]:not([contenteditable="false"]), input:not([type="button"], [type="submit"], [type="reset"]))';
   return [buttons, editable] as const;
 }
+/** Real-time contexts are tracked when they resume or connect their first node. */
+function installWebAudioGate(isActive: () => boolean) {
+  const constructor = window.AudioContext ?? (window as Window & {webkitAudioContext?:typeof AudioContext}).webkitAudioContext;
+  const contexts = new Set<{deref(): AudioContext | undefined}>();
+  const seen = new WeakSet<AudioContext>(), interrupted = new WeakSet<AudioContext>();
+  if (!constructor) return {pause() {}, gesture() {}};
+  const {suspend, resume} = constructor.prototype, connect = AudioNode.prototype.connect;
+  function pauseContext(context: AudioContext) {
+    if (context.state === 'running') interrupted.add(context);
+    if (context.state !== 'closed') void suspend.call(context).catch(() => {});
+  }
+  function track(context: BaseAudioContext) {
+    if (!(context instanceof constructor) || seen.has(context)) return;
+    seen.add(context);
+    for (const ref of contexts) if (!ref.deref()) contexts.delete(ref);
+    const ref = typeof WeakRef === 'function' ? new WeakRef(context) : {deref:() => context};
+    contexts.add(ref);
+    context.addEventListener('statechange', () => {
+      if (context.state === 'closed') contexts.delete(ref);
+      else if (!isActive() && context.state === 'running') pauseContext(context);
+    });
+    if (!isActive()) pauseContext(context);
+  }
+  Object.defineProperty(AudioNode.prototype,'connect',{configurable:false,writable:false,value:function(this:AudioNode,...args:unknown[]) {
+    track(this.context);return Reflect.apply(connect,this,args);
+  }});
+  Object.defineProperty(constructor.prototype,'resume',{configurable:false,writable:false,value:function(this:AudioContext) {
+    track(this);
+    if (!isActive() || interrupted.has(this)) return Promise.reject(new DOMException('The napplet is inactive.', 'NotAllowedError'));
+    interrupted.delete(this);return resume.call(this);
+  }});
+  Object.defineProperty(constructor.prototype,'suspend',{configurable:false,writable:false,value:function(this:AudioContext) {
+    interrupted.delete(this);return suspend.call(this);
+  }});
+  return {
+    pause() { for (const ref of contexts) { const context=ref.deref();if(context)pauseContext(context); } },
+    gesture() {
+      for (const ref of contexts) {
+        const context=ref.deref();
+        if(context && interrupted.delete(context))void resume.call(context).catch(() => {});
+      }
+    },
+  };
+}
 /** Executes before publisher scripts in the opaque guest. Captures the parent and DOM methods. */
-function guestMediaGate(selectors: readonly [string, string], installInput?: (allowed: () => boolean) => () => void): void {
+function guestMediaGate(selectors: readonly [string, string], installAudio: typeof installWebAudioGate, installInput?: (allowed: () => boolean) => () => void): void {
   const [buttonSelector, editableSelector] = selectors;
   const owner = window.parent;
   const sourceOf = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(MessageEvent.prototype,'source')!.get!);
@@ -66,11 +110,12 @@ function guestMediaGate(selectors: readonly [string, string], installInput?: (al
   const query = Document.prototype.querySelectorAll.bind(document);
   const getPaused = Object.getOwnPropertyDescriptor(prototype, 'paused')!.get!;
   let active = false, lastGesture = -Infinity;
+  const webAudio = installAudio(() => active && !inputEnded && !document.hidden);
   const now = performance.now.bind(performance);
-  const gesture = (event: Event): void => { if (active && event.isTrusted) lastGesture = now(); };
+  const gesture = (event: Event): void => { if (active && !inputBlocked && !inputEnded && event.isTrusted) {lastGesture = now();webAudio.gesture();} };
   for (const type of ['pointerdown','keydown','click']) window.addEventListener(type,gesture,true);
   const mayPlay = (): boolean => active && now() - lastGesture < 1500;
-  const stop = (): void => { for (const media of query('audio,video')) pause.call(media); };
+  const stop = (): void => { webAudio.pause();for (const media of query('audio,video')) pause.call(media); };
   Object.defineProperty(prototype, 'play', {configurable:false,writable:false,value:function(this:HTMLMediaElement){
     if (!mayPlay()) return Promise.reject(new DOMException('The napplet is inactive.', 'NotAllowedError'));
     return play.call(this);
@@ -108,5 +153,5 @@ export function injectResourceMediaGate(html: string, mappletsTouch = false): st
     -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important;
   }
   @layer hypergolic { ${controls}:not(${editable}, ${editable} *) { touch-action: manipulation; } }</style>`;
-  return html.replace(head, value => `${value}${style}${mappletsTouch ? mappletsTouchStyle : ''}<script>(${guestMediaGate.toString()})((${gameControlSelectors.toString()})()${install ? `, ${install}` : ''});</script>`);
+  return html.replace(head, value => `${value}${style}${mappletsTouch ? mappletsTouchStyle : ''}<script>(${guestMediaGate.toString()})((${gameControlSelectors.toString()})(), ${installWebAudioGate.toString()}${install ? `, ${install}` : ''});</script>`);
 }
