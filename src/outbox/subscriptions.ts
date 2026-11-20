@@ -23,10 +23,6 @@ export function createOutboxSubscriptions(port:NativeRelayStreamPort,reads:Outbo
     if(signal.aborted){release();throw new OutboxQueryError('relay timeout');}
     return release;
   }
-  async function routeAll(current:number) {
-    await Promise.all([...sessions.values()].map(value=>value.refresh()));
-    if(foreground&&epoch===current)manager.setForeground(true);
-  }
   function session(owner:RelaySubscriptionOwner) {
     const registration=decodeNativeRegistration(owner.registration);
     if(!registration.domains.includes('outbox')||sessions.has(registration.generation)||sessions.size>=SUBSCRIPTION_LIMITS.sessions)throw new OutboxQueryError('policy denied');
@@ -88,7 +84,10 @@ export function createOutboxSubscriptions(port:NativeRelayStreamPort,reads:Outbo
     setForeground(value:boolean) {
       if(foreground===value)return;foreground=value;epoch++;manager.setForeground(false);
       for(const value of sessions.values())value.pause();
-      if(value)void routeAll(epoch);
+      if(value){
+        manager.setForeground(true);
+        for(const session of sessions.values())void session.refresh();
+      }
     },
     revokeAll(){epoch++;for(const value of sessions.values())value.revoke();manager.revokeAll();},
   });

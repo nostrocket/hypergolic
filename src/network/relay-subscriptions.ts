@@ -118,13 +118,18 @@ function createSession(owner:RelaySubscriptionOwner,registration:NativeRegistrat
         subscription.initialTimer=setTimeout(()=> {
           subscription.initialTimer=null;
           if(subscription.ended||!process.foreground)return;
-          for(const connection of subscription.connections)if(connection.state==='opening'){stopConnection(connection);connection.state='failed';}
+          for(const connection of subscription.connections)if(connection.state==='opening'){
+            stopConnection(connection);
+            connection.state='failed';
+            connection.attempts=SUBSCRIPTION_LIMITS.retries;
+          }
           if(subscription.connections.some(connection=>connection.state==='eose'))eose(subscription);else finish(subscription,'relay timeout');
         },subscription.initialTimeoutMs);
       }
       function resume() {
         try{active();}catch{revoke();return;}
         for(const subscription of Array.from(subscriptions.values())) {
+          if(subscription.planned)continue; // Outbox starts each connection after refreshing its routes.
           subscription.epoch++;subscription.eose=false;subscription.backfill=0;
           subscription.connections.forEach(connection=>{connection.attempts=0;connection.state='opening';});
           subscription.connections.forEach(connection=>connect(subscription,connection));deadline(subscription);
