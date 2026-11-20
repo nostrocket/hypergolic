@@ -348,7 +348,7 @@ test('Kehto request IDs use secure random bytes when randomUUID is unavailable',
   expect(result.lengths).toEqual([16]);
   expect(['#F5A04B', '#AA4708']).toContain(result.theme.colors.primary);
   const requests = await page.evaluate(() => (window as any).__received.filter((value: any) => value?.type === 'theme.get'));
-  expect(requests.at(-1).id).toMatch(/^napplet-[0-9a-f]{32}$/);
+  expect(requests.at(-1).id).toMatch(/^hg-[1-9][0-9]*-[0-9a-f]{32}$/);
 });
 
 test('Kehto refuses to emit a request when secure randomness is unavailable', async ({ page }) => {
