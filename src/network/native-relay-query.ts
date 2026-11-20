@@ -48,6 +48,18 @@ async function boundedPeerRead(port: NativeQueryPort, request: PeerRequest, budg
   try {return await Promise.race([port.queryPublishedRelay(operation, relay, wire, subscription), expired]);}
   finally {clearTimeout(timer); signal.removeEventListener('abort', stop);}
 }
+function readPeerFrames(port: NativeQueryPort, request: PeerRequest, lifetime: ReturnType<typeof queryLifetime>,
+  budget: number, peers: number, index: number, completeRelays: boolean, outbox: boolean): Promise<string[]> {
+  if (completeRelays || (!outbox && peers > 1)) {
+    const remaining=lifetime.remaining();
+    const share=completeRelays ? completePeerBudget(budget,peers,remaining)
+      : Math.max(1,Math.min(remaining,Math.floor(budget / (Math.ceil(peers / 2) + 1))));
+    return boundedPeerRead(port, request, share, lifetime.signal);
+  }
+  const {operation,relay,wire,subscription}=request;
+  return outbox ? port.queryPublishedRelay(operation,relay,wire,subscription,lifetime.peerBudget(peers-index))
+    : port.queryPublishedRelay(operation,relay,wire,subscription);
+}
 type PeerRead = (relay: string, index: number) => Promise<'complete' | 'invalid' | 'failed'>;
 async function readPeers(relays: readonly string[], readRelay: PeerRead, retry: boolean): Promise<void> {
   // Two peers leave native capacity for other reads. A failed connection gets
@@ -202,18 +214,22 @@ export function createNativeRelayQuery(port: NativeQueryPort,
     if (new Set(relays).size !== relays.length) throw new RelayQueryError('relay query unavailable');
     return relays;
   }
+  function prepare(input:readonly QueryFilter[],catalogRelay?:string,detailed?:DetailedQueryOptions) {
+    const wireFilters = parseQueryFilters(input, counts.events, detailed?.maximumFilters, detailed?.allowSearch, counts.events);
+    const {search, ...structuredFilter} = wireFilters[0]!;
+    const ranked = search !== undefined;
+    const filters = ranked ? [structuredFilter] : wireFilters;
+    const budget = detailed?.timeoutMs ?? timeoutMs;
+    if (!Number.isSafeInteger(budget) || budget < 1 || budget > timeoutMs) throw new RelayQueryError();
+    const configured = configuredRelays();
+    const relays = catalogRelay === undefined ? configured : configured.filter(relay => relay === catalogRelay);
+    if (ranked && relays.length !== 1) throw new RelayQueryError();
+    if (relays.length === 0) throw new RelayQueryError('relay query unavailable');
+    return {wireFilters,filters,ranked,budget,relays};
+  }
   async function runQuery(input: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void, partialAtDeadline: boolean,
     catalogRelay?: string, detailed?: DetailedQueryOptions): Promise<RelayQueryResult> {
-      const wireFilters = parseQueryFilters(input, counts.events, detailed?.maximumFilters, detailed?.allowSearch, counts.events);
-      const {search, ...structuredFilter} = wireFilters[0]!;
-      const ranked = search !== undefined;
-      const filters = ranked ? [structuredFilter] : wireFilters;
-      const budget = detailed?.timeoutMs ?? timeoutMs;
-      if (!Number.isSafeInteger(budget) || budget < 1 || budget > timeoutMs) throw new RelayQueryError();
-      const configured = configuredRelays();
-      const relays = catalogRelay === undefined ? configured : configured.filter(relay => relay === catalogRelay);
-      if (ranked && relays.length !== 1) throw new RelayQueryError();
-      if (relays.length === 0) throw new RelayQueryError('relay query unavailable');
+      const {wireFilters,filters,ranked,budget,relays}=prepare(input,catalogRelay,detailed);
       if (concurrent >= QUERY_LIMITS.concurrent) throw new RelayQueryBusyError();
       const active = () => { if (signal.aborted) throw new RelayQueryError('relay query cancelled'); assertActive(); };
       active();
@@ -242,14 +258,7 @@ export function createNativeRelayQuery(port: NativeQueryPort,
             try {
               active();
               checkDeadline?.();
-              const boundedRaw = !options.outbox && relays.length > 1;
-              const frames = completeRelays || boundedRaw
-                ? await boundedPeerRead(port, {operation, relay, wire, subscription},
-                  completeRelays ? completePeerBudget(budget, relays.length, lifetime.remaining())
-                    : Math.max(1, Math.min(lifetime.remaining(), Math.floor(budget / (Math.ceil(relays.length / 2) + 1)))), lifetime.signal)
-                : options.outbox
-                  ? await port.queryPublishedRelay(operation,relay,wire,subscription,lifetime.peerBudget(relays.length - index))
-                  : await port.queryPublishedRelay(operation,relay,wire,subscription);
+              const frames=await readPeerFrames(port,{operation,relay,wire,subscription},lifetime,budget,relays.length,index,completeRelays,options.outbox===true);
               active();
               if (lifetime.aborted()) throw new RelayQueryError();
               try {
