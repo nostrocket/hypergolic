@@ -21,7 +21,7 @@ test('a busy guest receives bounded quota replies and can release its existing w
   send({type:'unknown', id:'ignored'});
   send({type:'storage.keys', id:'x'.repeat(129)});
   expect(replies).toEqual([
-    {type:'storage.keys.error', id:'waiting', error:'quota-exceeded'},
+    {type:'storage.keys.result', id:'waiting', error:'quota-exceeded'},
     {type:'relay.closed', subId:'stream', reason:'quota-exceeded'},
   ]);
   expect(dispatched).toHaveLength(67);

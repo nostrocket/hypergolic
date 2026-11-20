@@ -1,3 +1,6 @@
+import { outboxReadFailure } from '../../src/outbox/query-contract';
+import { resourceFailure } from '../../src/resources/resource-contract';
+import { queryFailure, storageFailure } from '../../src/runtime/capability-protocol';
 import {COMMON_OPERATIONS,parseCommonRequest,commonFailure} from '../../src/common/common-contract';
 import {parseOutboxSubscribe,parseOutboxClose} from '../../src/outbox/subscription-contract';
 import {parseConfigMessage} from '../../src/presentation/config-contract';
@@ -29,6 +32,10 @@ export function quotaReply(value: unknown, domains: readonly string[]): object |
   }
   if (!privilegedRequests.has(type) && !additionalCorrelatedRequests.has(type)) return null;
   if (type === 'resource.cancel') return null;
+  const header = {type, id};
+  const denial = commonFailure(header, error) ?? outboxReadFailure(header, error) ??
+    resourceFailure(header, 'quota-exceeded') ?? storageFailure(header, error) ?? queryFailure(header, error);
+  if (denial) return denial;
   if (type === 'relay.publish' || type === 'outbox.publish') return {type: type + '.result', id, ok: false, error};
   if (type.startsWith('cvm.') || type === 'media.session.create') return {type: type + '.result', id, error};
   // The injected SDK accepts this error envelope even for operations with custom success fields.
