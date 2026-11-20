@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {finalizeEvent} from 'nostr-tools/pure';
 import {injectNappletNamespacePrelude} from '@kehto/shell';
+import {injectMediaFacade} from '../src/media-guest.ts';
 import {injectMeshFacade} from '../src/mesh-guest.ts';
 import {injectSupportReport} from '../src/support-report.ts';
 
@@ -17,10 +18,10 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => {await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));});
 async function open(page: Page, options: {ready?: boolean; timeout?: number; html?: string; granted?: boolean} = {}): Promise<Frame> {
-  const declared = options.granted === false ? [] : ['mesh'];
+  const declared = options.granted === false ? [] : ['media', 'mesh'];
   // Same insertion order as renderGuest: facade executes before the installed namespace prelude.
   const namespace = injectNappletNamespacePrelude(injectSupportReport(options.html ?? basic), {domains: declared});
-  const html = options.granted === false ? namespace : injectMeshFacade(namespace, {timeoutMs: options.timeout ?? 17000});
+  const html = options.granted === false ? namespace : injectMeshFacade(injectMediaFacade(namespace), {timeoutMs: options.timeout ?? 17000});
   await page.goto(base);
   await page.evaluate(({html, ready, declared}) => {
     const state = {requests: [] as any[], readyRequests: 0, frame: document.createElement('iframe'),

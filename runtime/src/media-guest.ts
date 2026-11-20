@@ -75,7 +75,7 @@ function installMediaFacade(): void {
     onCommand: () => ({close() {}}),
     onControls: () => ({close() {}}),
   });
-  guest.napplet = {media:facade};
+  guest.napplet = {...guest.napplet, media: facade};
 }
 
 export function injectMediaFacade(html: string): string {
