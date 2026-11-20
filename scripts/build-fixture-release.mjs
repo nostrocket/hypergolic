@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {BUNDLED_FIXTURES} from '../src/runtime/bundled-catalog.ts';
 const root = new URL('../', import.meta.url), artifacts = {};
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
-for (const [id, expected] of Object.entries(BUNDLED_FIXTURES)) {
+for (const [id, expected] of Object.entries(process.env.HYPERGOLIC_VARIANT === 'development' ? BUNDLED_FIXTURES : {})) {
   if (id === 'napplet-discovery' || id === 'nap-support' || id === 'approval-lab-v1' || id === 'approval-lab-v2' || id === 'approval-lab-v3' || id === 'feed-lab-v1') continue;
   const bytes = await readFile(new URL(`runtime/fixtures/${id}.html`, root));
   const html = new TextDecoder('utf-8', {fatal: true}).decode(bytes);
@@ -17,10 +17,8 @@ for (const [id, expected] of Object.entries(BUNDLED_FIXTURES)) {
   artifacts[id] = {html, sha256: expected.sha256, aggregate: expected.aggregateHash, tags: manifest.tags};
 }
 const routing = artifacts['routing-lab'];
-artifacts['routing-lab-peer'] = {...routing, tags: routing.tags.map(tag => tag[0] === 'd' ? ['d','routing-lab-peer'] : tag).concat([['archetype','note','napplet:note/open']])};
+if (routing) artifacts['routing-lab-peer'] = {...routing, tags: routing.tags.map(tag => tag[0] === 'd' ? ['d','routing-lab-peer'] : tag).concat([['archetype','note','napplet:note/open']])};
 const bytes = Buffer.from(JSON.stringify({schema: 1, artifacts}));
 assert(bytes.length < 1024 * 1024);
-for (const destination of ['modules/napplet-host/android/src/main/assets/runtime/fixture-release.json','modules/napplet-host/ios/Resources/runtime/fixture-release.json']) {
-  await writeFile(new URL(destination, root), bytes);
-}
+await writeFile(new URL('runtime/.fixture-release.json', root), bytes);
 console.log(`Sealed ${Object.keys(artifacts).length} trusted fixture release artifacts: ${hash(bytes)}`);

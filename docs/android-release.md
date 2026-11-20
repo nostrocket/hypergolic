@@ -1,24 +1,19 @@
 # Android release candidates
 
-The first Android release uses `space.hypergolic`, version `0.1.0`, versionCode
-`1`, and ARM64. Expo remains the app framework; this build path uses GitHub
-Actions and Gradle directly and needs no Expo/EAS account.
+Production packages use `space.hypergolic` on Android and iOS. Android
+release candidates target ARM64. `app.json` supplies the version and Android
+version code, which also sets the iOS build number. The Android release command
+uses GitHub Actions and Gradle and requires no Expo or EAS account.
 
-`app.json` holds the version and development ID. `app.config.js` selects the
-production ID from `config/android-release.json` when
-`HYPERGOLIC_VARIANT=production`. The release command sets this itself. Ordinary
-development commands keep `org.nostrocket.hypergolic.dev`; it installs separately
-from production. Neither installation transfers the other's identities or data.
-The iOS bundle identifier remains a development identifier.
+Expo configuration defaults to production. The `start`, `android`, `ios` and
+`build:tester` scripts explicitly use the development variant and the separate
+`org.nostrocket.hypergolic.dev` application ID. For a direct development
+prebuild or export, set `HYPERGOLIC_VARIANT=development` in the environment.
 
-New production identities start with an empty workspace and the normal Discover
-entry; development identities retain the three UX Lab fixtures. Production Settings hides native signer checks, fixture publishing, signed-host
-labs and bundled test launchers. The fixture publisher is not constructed and
-the bundled-launch handler is disabled. About shows installed version/build,
-website, downloads, help, privacy and source/notices links. Native fixture assets
-and test implementations still exist in the binary; hiding entry points does not
-prove their removal or replace native authority tests. Ordinary Discover and
-verified published opening remain available.
+New production identities start with an empty workspace and Discover. The
+production runtime includes Discover and NAP Support. Development builds also
+include the test napplets, fixture publishing and native signer checks.
+Verified published napplets can open in both variants.
 
 ## Production signing identity
 

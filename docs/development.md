@@ -20,6 +20,10 @@ The manifests, lockfiles and config plugins own package and native dependency
 versions. CI uses Xcode 27.1. Local `.tools/` helpers are optional and absent from
 a fresh clone. Configure `JAVA_HOME`, `ANDROID_HOME` and `PATH` for your installed tools.
 
+Development commands use a separate application identifier. Set
+`HYPERGOLIC_VARIANT=development` before using direct Expo, CocoaPods or
+Gradle commands for a development installation.
+
 ## Install
 
 Run from the repository root:

@@ -16,6 +16,7 @@ dist/
 __pycache__/
 
 # Generated trusted fixture release catalog; rebuilt from reviewed runtime inputs.
+/runtime/.fixture-release.json
 /modules/napplet-host/android/src/main/assets/runtime/fixture-release.json
 /modules/napplet-host/ios/Resources/runtime/fixture-release.json
 

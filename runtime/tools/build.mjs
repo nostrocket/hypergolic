@@ -26,8 +26,14 @@ assert.deepEqual(manifest.tags.filter(t => t[0] === 'requires'), []);
 assert(/^<!doctype html>\s*<html lang="en">\s*<head>/i.test(html), 'Only reviewed generated fixture HTML is admitted');
 assert.equal((html.match(/<head>/gi) ?? []).length, 1);
 assert(!/Content-Security-Policy|<base\b|<iframe\b|<script[^>]+src=/i.test(html));
+const variant = process.argv.includes('--development') ? 'development' : process.env.HYPERGOLIC_VARIANT ?? 'production';
+assert(['development', 'production'].includes(variant), 'Invalid runtime variant');
+const catalog = variant === 'development' ? BUNDLED_FIXTURES : {
+  'napplet-discovery': BUNDLED_FIXTURES['napplet-discovery'],
+  'nap-support': BUNDLED_FIXTURES['nap-support'],
+};
 const fixtures = {};
-for (const [name, reviewed] of Object.entries(BUNDLED_FIXTURES)) {
+for (const [name, reviewed] of Object.entries(catalog)) {
   const source = await readFile(new URL(`fixtures/${name}.html`, root));
   const content = new TextDecoder('utf-8', { fatal: true }).decode(source);
   assert(Buffer.from(content, 'utf8').equals(source));
@@ -52,9 +58,6 @@ const bundle = await build({
   root: root.pathname,
   define: {
     __BUNDLED_FIXTURES__: JSON.stringify(fixtures),
-    __UX_HTML__: JSON.stringify(html),
-    __UX_SHA256__: JSON.stringify(lock.sha256),
-    __UX_AGGREGATE__: JSON.stringify(lock.aggregateHash),
   },
   build: {
     outDir: 'dist', emptyOutDir: true, target: 'es2022', sourcemap: false,
@@ -118,5 +121,5 @@ for (const name of ['index.html', 'host.js']) {
   const value = await readFile(new URL(`dist/${name}`, root));
   files[name] = { sha256: sha256(value), bytes: value.byteLength };
 }
-await writeFile(new URL('assets-manifest.json', root), JSON.stringify({ schema: 1, fixture: lock, fixtures: BUNDLED_FIXTURES, bundledPackages: bundledPackages.map(({ name, version, license }) => ({ name, version, license })), assets: files }, null, 2) + '\n');
-console.log(JSON.stringify({ fixture: lock, assets: files }, null, 2));
+await writeFile(new URL('assets-manifest.json', root), JSON.stringify({ schema: 1, variant, fixtures: catalog, bundledPackages: bundledPackages.map(({ name, version, license }) => ({ name, version, license })), assets: files }, null, 2) + '\n');
+console.log(JSON.stringify({ variant, fixtures: Object.keys(catalog), assets: files }, null, 2));

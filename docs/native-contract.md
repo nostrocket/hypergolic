@@ -123,7 +123,7 @@ Web URLs and `nevent` are not selected napplet entry points.
 Verify a fresh NIP-01 ID/signature, exact kind/publisher/`d`, one `/index.html`
 SHA-256 path and original artifact bytes. Compute the aggregate from that path
 hash. `x` is optional under the pinned revisions but must match when present.
-The selected single self-contained HTML limit is 2 MiB; signed manifest is 64 KiB.
+The selected single self-contained HTML limit is 20 MiB; signed manifest is 64 KiB.
 HTTPS Blossom tags are retrieval hints, not authority. First-open publisher/access
 consent remains distinct from cryptographic validity. [Admission](nap-support.md)
 records the requested set and supported grant intersection.

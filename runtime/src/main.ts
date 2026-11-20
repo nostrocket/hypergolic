@@ -56,7 +56,7 @@ const hostWindow = window as Window & { HypergolicHost?: NativeHost };
 const parameters = new URL(window.location.href).searchParams;
 const sessionId = parameters.get('sessionId') ?? '';
 const source = parameters.get('source');
-const fixtureName = parameters.get('fixture') ?? 'ux-lab';
+const fixtureName = parameters.get('fixture') ?? '';
 const fixture = source === null && Object.prototype.hasOwnProperty.call(__BUNDLED_FIXTURES__, fixtureName) ? __BUNDLED_FIXTURES__[fixtureName] : undefined;
 type RuntimeMetadata = Readonly<{
   aggregateHash: string; appId: string; title: string;
