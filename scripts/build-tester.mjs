@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { acquirePackagingLock } from './packaging-lock.mjs';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { access, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
@@ -77,7 +78,7 @@ export async function buildTester({ root = ROOT, env = process.env, args = proce
   const outputRoot = path.join(root, '.tools', 'tester-apks');
   await mkdir(outputRoot, { recursive: true });
   const lock = path.join(outputRoot, '.build.lock');
-  await writeFile(lock, `${process.pid}\n`, { flag: 'wx' });
+  const releaseLock = await acquirePackagingLock(lock);
   let temporary;
   try {
     console.log('Building a development preview; this does not run the v1 acceptance gates.');
@@ -123,7 +124,7 @@ export async function buildTester({ root = ROOT, env = process.env, args = proce
     return destination;
   } finally {
     if (temporary) await rm(temporary, { recursive: true, force: true });
-    await rm(lock, { force: true });
+    await releaseLock();
   }
 }
 

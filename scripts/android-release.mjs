@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { acquirePackagingLock } from './packaging-lock.mjs';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { access, copyFile, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
@@ -103,7 +104,7 @@ export async function buildRelease({ root = ROOT, env = process.env, output, run
   const sdk = tools(cleanEnv);
   const lock = path.join(root, '.tools/tester-apks/.build.lock');
   await mkdir(path.dirname(lock), { recursive: true });
-  await writeFile(lock, `${process.pid}\n`, { flag: 'wx' });
+  const releaseLock = await acquirePackagingLock(lock);
   try {
     return await transaction(output, async directory => {
       invoke('pnpm', ['run', 'prebuild:android']);
@@ -117,7 +118,7 @@ export async function buildRelease({ root = ROOT, env = process.env, output, run
         applicationId: config.applicationId, version: config.version, versionCode: config.versionCode,
         sourceCommit: commit, unsignedSha256: sha256(await readFile(unsigned)) }, null, 2) + '\n');
     });
-  } finally { await rm(lock, { force: true }); }
+  } finally { await releaseLock(); }
 }
 
 export async function signRelease({ root = ROOT, env = process.env, input, output, run = command } = {}) {
