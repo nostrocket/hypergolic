@@ -135,3 +135,5 @@ Custom unmarked controls need markup from the game author.
   Edit on Home and Unpin from Home in the napplet menu.
 
 A focused napplet uses the landscape viewport. **All napplets** stays available in the upper corner and returns to the overview without closing the napplet. Android Back also opens the overview after dismissing any open keyboard or shell surface.
+
+The workspace keeps up to eight native napplet views loaded. Opening another card shows a prompt to close a loaded card first. Existing drafts stay in their running views until you choose which card to close.

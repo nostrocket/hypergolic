@@ -18,3 +18,12 @@ export function workspaceSessionActivity(context: Readonly<{
 export function isHostActivityBlocked(blocked: boolean, obscured: boolean): boolean {
   return blocked || obscured;
 }
+
+/** Keep live drafts in place. A new view can start after its owner closes a loaded card. */
+export const MAX_LOADED_VIEWS = 8;
+export function loadedWorkspaceViews(previous: ReadonlySet<string>, workspace: Workspace): ReadonlySet<string> {
+  const retained = new Set(workspace.sessions.filter(session => previous.has(session.id)).map(session => session.id));
+  const focused = workspace.focusedId;
+  if (focused && !workspace.overview && retained.size < MAX_LOADED_VIEWS) retained.add(focused);
+  return retained.size === previous.size && [...retained].every(id => previous.has(id)) ? previous : retained;
+}

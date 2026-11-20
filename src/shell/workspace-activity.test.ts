@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { workspaceSessionActivity, isHostActivityBlocked, isWorkspaceFullscreen } from './workspace-activity.ts';
+import { loadedWorkspaceViews, MAX_LOADED_VIEWS, workspaceSessionActivity, isHostActivityBlocked, isWorkspaceFullscreen } from './workspace-activity.ts';
+
+import {emptyWorkspace, openNapplet, closeNapplet, focusNapplet} from './workspace.ts';
+import {bundledUXDescriptor} from './fixtures.ts';
 
 const focused = {focused: true, overview: false, busy: false, interactive: true, checkingClose: false,
   blocked: false, hostActivityBlocked: false};
@@ -39,4 +42,21 @@ test('fullscreen follows the native window only while a napplet is focused outsi
   assert.equal(isWorkspaceFullscreen({focusedId: null, overview: false}, landscape), false);
   assert.equal(isWorkspaceFullscreen(focused, {width: 844, height: 0}), false);
   assert.equal(isWorkspaceFullscreen(focused, {width: 390, height: 390}), false);
+});
+
+test('opening a ninth card keeps existing live views and waits until a slot is free', () => {
+  let workspace = emptyWorkspace();
+  let loaded: ReadonlySet<string> = new Set();
+  for (let i = 1; i <= MAX_LOADED_VIEWS + 1; i++) {
+    workspace = openNapplet(workspace, bundledUXDescriptor(i));
+    loaded = loadedWorkspaceViews(loaded, workspace);
+  }
+  const waiting = workspace.focusedId!;
+  assert.equal(loaded.size, MAX_LOADED_VIEWS);
+  assert.equal(loaded.has(waiting), false);
+  workspace = closeNapplet(workspace, 'ux-lab-1');
+  loaded = loadedWorkspaceViews(loaded, workspace);
+  assert.equal(loaded.size, MAX_LOADED_VIEWS - 1);
+  workspace = focusNapplet(workspace, waiting);
+  assert.equal(loadedWorkspaceViews(loaded, workspace).has(waiting), true);
 });
