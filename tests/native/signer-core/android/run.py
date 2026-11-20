@@ -139,7 +139,13 @@ try:
                         return
             time.sleep(0.2)
         raise RuntimeError('Native UI action absent: ' + label)
-    tap('Approve once', 'approve-review'); tap('Reject', 'reject-review')
+    tap('Approve once', 'approve-review')
+    tap('Next page', 'reject-first-page')
+    tap('Previous page', 'reject-second-page')
+    second_page = ET.parse(out / 'reject-second-page.xml')
+    if not any('Review tail before rejection.' in row.get('text', '') for row in second_page.iter('node')):
+        raise RuntimeError('Exact signer review tail missing from final page')
+    tap('Reject', 'reject-review')
     deadline = time.monotonic() + 15
     receipt = None
     while time.monotonic() < deadline:

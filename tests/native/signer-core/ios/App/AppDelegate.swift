@@ -72,7 +72,8 @@ import UIKit
   }
   private func review() {
     guard let pubkey else { status.text = "Generate an identity first"; return }
-    let content = "iOS native exact event 🛰️ /\u{2028}\u{2029}\n\t"
+    let prefix = ProcessInfo.processInfo.arguments.contains("paged-review") ? String(repeating: "x", count: 5000) : ""
+    let content = prefix + "iOS native exact event 🛰️ /\u{2028}\u{2029}\n\t"
     let json = "{\"pubkey\":\"\(pubkey)\",\"created_at\":1791979200,\"kind\":1,\"tags\":[[\"r\",\"wss://example.com\"]],\"content\":\(ExactSignerEvent.quote(content))}"
     Task {
       do {

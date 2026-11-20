@@ -6,8 +6,10 @@ import Synchronization
     print("SIGNER_UI_ASSERTIONS=\(signerAssertionCount.withLock { $0 })")
     super.tearDown()
   }
-  private func ready() -> XCUIApplication {
-    let app = XCUIApplication(); app.launch()
+  private func ready(paged: Bool = false) -> XCUIApplication {
+    let app = XCUIApplication()
+    if paged { app.launchArguments.append("paged-review") }
+    app.launch()
     app.buttons["probe.generate"].tap()
     signerAssertTrue(app.staticTexts["Disposable identity ready"].waitForExistence(timeout: 5))
     app.buttons["probe.review"].tap()
@@ -29,7 +31,14 @@ import Synchronization
     signerAssertTrue(app.staticTexts["Signed exact event once"].waitForExistence(timeout: 5))
   }
   func testRejectReturnsNoSignature() {
-    let app = ready(); app.buttons["signer.reject"].tap()
+    let app = ready(paged: true)
+    signerAssertTrue(app.staticTexts["Page 1 of 2"].exists)
+    app.buttons["Next page"].tap()
+    signerAssertTrue(app.staticTexts["Page 2 of 2"].exists)
+    signerAssertTrue((app.textViews["signer.exactEvent"].value as? String)?.contains("iOS native exact event") == true)
+    app.buttons["Previous page"].tap()
+    signerAssertTrue(app.staticTexts["Page 1 of 2"].exists)
+    app.buttons["signer.reject"].tap()
     signerAssertTrue(app.staticTexts["Review denied"].waitForExistence(timeout: 5))
     signerAssertFalse(app.buttons["signer.approve"].exists)
     app.buttons["probe.review"].tap()
