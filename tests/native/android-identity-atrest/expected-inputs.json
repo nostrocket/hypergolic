@@ -3,7 +3,7 @@
   "scope": "Reviewed current owning native identity reader and ordinary Expo/JS bootstrap. Pin changes require scope review. No actual device proof.",
   "secureStoreVersion": "57.0.3",
   "sources": {
-    "modules/identity-owner/android/src/main/java/org/nostrocket/hypergolic/identityowner/SecureStoreIdentityRecords.java": "b94e0b2071e03aa9e9cd82827f4b0e47130c68f6f0a7a75c20017abfdf9b95c8",
+    "tests/native/android-identity-atrest/src/org/nostrocket/hypergolic/identityowner/SecureStoreIdentityRecords.java": "b94e0b2071e03aa9e9cd82827f4b0e47130c68f6f0a7a75c20017abfdf9b95c8",
     "modules/identity-owner/android/src/main/java/org/nostrocket/hypergolic/identityowner/DeletionAuthority.java": "b8a3b1d4ae5236c3388c056806f650faecf56a331cbc4f440b43730a4dae6470",
     "modules/identity-owner/android/src/main/java/org/nostrocket/hypergolic/identityowner/BackupNsec.java": "52c8a1b9e647add92b762d53a1f401d5e7fa856558fd3b3c91463c5a38ef9ad4",
     "src/security/identity-vault.ts": "b675170b1bcc420475ee11b6e5f66b30eeb70ea9601a4cd61e5350b113288d25",

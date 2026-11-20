@@ -58,7 +58,9 @@ python3 scripts/test-android-identity-records.py --serial emulator-5554 \
 ```
 
 To build the private test APK, compile the owning modules in the isolated fixture,
-copy the instrumentation source into its Android app's `src/androidTest/java` at
+copy `RecordsInstrumentation.java` and the historical reader from
+`tests/native/android-identity-atrest/src/org/nostrocket/hypergolic/identityowner/SecureStoreIdentityRecords.java`
+into the Android app's `src/androidTest/java` at
 the matching package path, and set `testBuildType "release"` plus
 `testInstrumentationRunner "org.nostrocket.hypergolic.identityowner.RecordsInstrumentation"`.
 Build `assembleRelease assembleReleaseAndroidTest`, attest the source/artifacts,
