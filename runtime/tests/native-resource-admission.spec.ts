@@ -179,3 +179,16 @@ test('duplicate cancellation retains its queued native control after the root de
     expect(h.calls().filter(call => call.type === 'resource.cancel')).toHaveLength(1);
   } finally {h.restore();}
 });
+
+test('writes with a lost native response return an uncertain outcome with original correlation', async () => {
+  const h = harness({'storage.set':10, 'relay.publish':10});
+  try {
+    const storage = h.client.request({type:'storage.set', id:'change', key:'draft', value:'text'});
+    const relay = h.client.request({type:'relay.publish', id:'send', event:{kind:1}});
+    h.advance(10);
+    expect(await storage).toEqual({type:'storage.set.result', id:'change', error:'storage result uncertain'});
+    expect(await relay).toEqual({type:'relay.publish.result', id:'send', ok:false, error:'publication result unknown'});
+    h.reply('send', {ok:true});
+    expect(h.calls()).toHaveLength(2);
+  } finally { h.restore(); }
+});

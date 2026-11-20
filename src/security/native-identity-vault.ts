@@ -315,10 +315,13 @@ export class NativeIdentityVault implements IdentityVaultPort {
     try {
       const unsigned = { ...snapshot.event, pubkey: before.selectedPubkey };
       const raw = await this.module.reviewAndSignNativeEventAsync(source.kind, source.token, JSON.stringify(unsigned), before.vaultId, before.revision);
-      try { await authority.awaitForeground?.(); } catch { throw new VaultError('SIGNER_UNCERTAIN'); }
-      authority.assertActive();
-      if (authority.signal.aborted || this.getSnapshot() !== before) denied();
-      return validateSignedEvent(snapshot, parse(raw, 2 * 1024 * 1024 + 1024));
+      try {
+        await authority.awaitForeground?.();
+        authority.assertActive();
+      } catch { throw new VaultError('SIGNER_UNCERTAIN'); }
+      if (authority.signal.aborted || this.snapshot !== before) throw new VaultError('SIGNER_UNCERTAIN');
+      try { return validateSignedEvent(snapshot, parse(raw, 2 * 1024 * 1024 + 1024)); }
+      catch { throw new VaultError('SIGNER_RESPONSE_INVALID'); }
     } catch (error) { throw nativeError(error); }
     finally { authority.signal.removeEventListener('abort', cancel); }
   }

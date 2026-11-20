@@ -43,8 +43,8 @@ final class LinkLeaseRegistry: @unchecked Sendable {
     e.dispatched = true; requests[token] = e; return true
   }}
   func finish(_ token: String) -> Bool {locked {
-    guard let e = requests.removeValue(forKey: token), let s = sessions[e.generation], owns(s), clock() < e.expires else {return false}
-    return e.dispatched || foreground && s.focused
+    guard let e = requests.removeValue(forKey: token), let s = sessions[e.generation], owns(s) else {return false}
+    return e.dispatched || clock() < e.expires && foreground && s.focused
   }}
   func focus(_ generation: String, _ value: Bool) -> [String] {locked {
     sessions[generation]?.focused = value; return value ? [] : cancel(generation, false)
@@ -52,7 +52,7 @@ final class LinkLeaseRegistry: @unchecked Sendable {
   func setForeground(_ value: Bool) -> [String] {locked {foreground = value; return value ? [] : cancel(nil, false)}}
   func revoke(_ generation: String) -> [String] {locked {sessions.removeValue(forKey: generation); return cancel(generation, true)}}
   func expire() -> [String] {locked {
-    let now = clock(), tokens = requests.filter {now >= $0.value.expires}.map { $0.key }
+    let now = clock(), tokens = requests.filter {!$0.value.dispatched && now >= $0.value.expires}.map { $0.key }
     for token in tokens {requests.removeValue(forKey: token)}; return tokens
   }}
   private func cancel(_ generation: String?, _ all: Bool) -> [String] {

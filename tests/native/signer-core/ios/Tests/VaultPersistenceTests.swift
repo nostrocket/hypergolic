@@ -425,10 +425,10 @@ final class SignerCoreTests: XCTestCase, @unchecked Sendable {
         if failurePoint == .possibleSigningDispatch {
           check(!dispatchState.possible)
           // Model one possible wire send through the production dispatch boundary,
-          // then a lost response. The exchange performs no actual network I/O.
+          // then a framing failure. The exchange performs no actual network I/O.
           try control.dispatch { signingDispatches.withLock { $0 += 1 } }
           check(dispatchState.possible)
-          throw NativeSignerRelayTransport.Failure.uncertain
+          throw NativeSignerRelayTransport.Failure.invalidResponse
         }
         throw NativeSignerRelayTransport.Failure.unavailable
       default:

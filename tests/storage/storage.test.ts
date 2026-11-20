@@ -146,7 +146,7 @@ for (const step of ['BEGIN IMMEDIATE', 'INSERT INTO app_versions', 'SELECT versi
     const { sqlite, database } = await setup(t);
     const binding = database.bindStorage(registration()); let tripped = false;
     sqlite.onStep = sql => { if (!tripped && sql.startsWith(step)) { tripped = true; binding.revoke(); } };
-    await assert.rejects(binding.port.set('key', 'old-owner'), assertCode('REVOKED'));
+    await assert.rejects(binding.port.set('key', 'old-owner'), assertCode(step === 'COMMIT' ? 'STORAGE_INDETERMINATE' : 'REVOKED'));
     assert(tripped); sqlite.onStep = undefined;
     const reader = database.bindStorage(registration()).port;
     assert.equal(await reader.get('key'), step === 'COMMIT' ? 'old-owner' : null);

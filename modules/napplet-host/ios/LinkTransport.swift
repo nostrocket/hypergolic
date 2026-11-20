@@ -67,6 +67,9 @@ enum LinkTransport {
   private static func dispatch(_ token: String) {
     guard let p = pending[token] else {return}
     guard leases.claim(token) else {finish(token, "denied", "blocked-by-policy"); return}
+    // A claim just before review expiry still gets time for its OS receipt.
+    // The runtime waits 27 seconds from admission.
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {finish(token, "denied", "handoff-result-unknown")}
     UIApplication.shared.open(p.url, options: [:]) {accepted in
       Task {@MainActor in finish(token, accepted ? "opened" : "denied", accepted ? nil : "blocked-by-policy")}
     }

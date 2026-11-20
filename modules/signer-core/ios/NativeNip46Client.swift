@@ -105,7 +105,7 @@ final class NativeNip46Client: @unchecked Sendable {
     do {
       for (index, relay) in relays.enumerated() {
         do { _ = try await exchange(relay, subscription, "[\"EVENT\"," + outer + "]", deadline, control, validate); break }
-        catch NativeSignerRelayTransport.Failure.unavailable where index + 1 < relays.count {
+        catch NativeSignerRelayTransport.Failure.unavailable where index + 1 < relays.count && state?.possible != true {
           // Only this transport status proves no RPC EVENT bytes could have been sent.
           guard current(), !Task.isCancelled, budget.isValid(deadline: deadline) else { throw NativeVaultFailure.signerExpired }
           continue
@@ -118,7 +118,6 @@ final class NativeNip46Client: @unchecked Sendable {
       if failure == .signerExpired, state?.possible == true { throw NativeVaultFailure.signerUncertain }; throw failure
     }
     catch let failure as NativeSignerRelayTransport.Failure {
-      if case .invalidResponse = failure { throw NativeVaultFailure.signerResponseInvalid }
       if state?.possible == true { throw NativeVaultFailure.signerUncertain }
       switch failure { case .invalidResponse: throw NativeVaultFailure.signerResponseInvalid
       case .expired, .cancelled: throw NativeVaultFailure.signerExpired

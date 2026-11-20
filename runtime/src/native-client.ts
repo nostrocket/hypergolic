@@ -82,6 +82,14 @@ function receiveControl(envelope:ControlEnvelope,generation:string,streams:Map<n
 }
 /** Internal native revocation: settle transport bookkeeping without a guest receipt. */
 export class NativeRequestRevoked extends Error {}
+function uncertainWrite(type: string, id: string): {type:string; id:string; error:string; ok?:false} | null {
+  if (type === 'storage.set' || type === 'storage.remove') return {type:type + '.result', id, error:'storage result uncertain'};
+  const common = ['common.follow','common.unfollow','common.react','common.report'].includes(type);
+  if (common || type === 'relay.publish' || type === 'outbox.publish') {
+    return {type:type + '.result', id, ok:false, error:common ? 'publication-result-unknown' : 'publication result unknown'};
+  }
+  return null;
+}
 type PendingRequest={type:string;id:string;timer:number;resolve:(message:NappletMessage)=>void;reject:(reason?: Error)=>void};
 function receiveOrdinary(envelope:{sequence:number;response:unknown},pending:Map<number,PendingRequest>,released:()=>void):void {
   const request = pending.get(envelope.sequence);
@@ -92,7 +100,11 @@ function receiveOrdinary(envelope:{sequence:number;response:unknown},pending:Map
     const response = JSON.parse(envelope.response);
     if (!response || (response.type !== request.type + '.result' && !((request.type.startsWith('resource.') || request.type.startsWith('legacy.image.')) && response.type === request.type + '.error')) || response.id !== request.id) throw new Error('Native response mismatch');
     request.resolve(response);
-  } catch (error) { request.reject(error instanceof NativeRequestRevoked ? error : undefined); }
+  } catch (error) {
+    const receipt = uncertainWrite(request.type, request.id);
+    if (receipt && !(error instanceof NativeRequestRevoked)) request.resolve(receipt);
+    else request.reject(error instanceof NativeRequestRevoked ? error : undefined);
+  }
   finally { pending.delete(envelope.sequence); window.clearTimeout(request.timer); released(); }
 }
 // A seal may wait for a ten-minute review followed by one minute of transfer.
@@ -172,7 +184,12 @@ function enqueueRequest(native: NativeHost, pending: Map<number, PendingRequest>
           expiry: window.setTimeout(() => releaseUpload(uploads, counter), uploadListenerLifetimeMs),
           uploadId: upload.uploadId, delivery: 0, bytesSent: 0, onStatus: upload.onStatus,
         });
-        const timer = window.setTimeout(() => { pending.delete(counter); reject(); released(); }, timeoutMs);
+        const timer = window.setTimeout(() => {
+          pending.delete(counter);
+          const receipt = uncertainWrite(type, id);
+          if (receipt) resolve(receipt); else reject();
+          released();
+        }, timeoutMs);
         pending.set(counter, { type, id, timer, resolve: response => {
           if (upload) {
             // Only a correlated nonterminal seal needs to keep its status listener.
