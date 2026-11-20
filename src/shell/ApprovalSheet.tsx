@@ -69,6 +69,18 @@ function AppDataRecordReview({record, content}: {record: NonNullable<ApprovalIte
   </View>;
 }
 
+function NewFollowListConsent({confirmed, busy, onChange}: {confirmed: boolean; busy: boolean; onChange(): void}) {
+  const {styles} = useShellStyles(createStyles);
+  return <View style={styles.record}>
+    <Text accessibilityRole="header" style={styles.title}>Create a new follow list?</Text>
+    <Text style={styles.value}>Your configured relays returned no follow list. Publishing this list may replace an existing one held by other relays.</Text>
+    <Pressable accessibilityRole="checkbox" accessibilityState={{checked: confirmed}} disabled={busy}
+      testID="confirm-new-follow-list" onPress={onChange} style={styles.details}>
+      <Text style={styles.detailsText}>{confirmed ? '✓ ' : '□ '}Create a list using only the accounts shown here</Text>
+    </Pressable>
+  </View>;
+}
+
 function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismiss }: Omit<ApprovalSheetProps, 'item'> & { item: ApprovalItem }) {
   const { styles } = useShellStyles(createStyles);
   const control = useReviewControl(item.id);
@@ -109,14 +121,7 @@ function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismis
               <Text testID="approval-recommendation-excluded" selectable style={styles.destination}>{item.recommendationExcludedRelays.join('\n')}</Text>
             </View>}</>}
           {record && <AppDataRecordReview record={record} content={item.event.event.content}/>}
-          {needsNewList && <View style={styles.record}>
-            <Text accessibilityRole="header" style={styles.title}>Create a new follow list?</Text>
-            <Text style={styles.value}>Your configured relays returned no follow list. Publishing this list may replace an existing one held by other relays.</Text>
-            <Pressable accessibilityRole="checkbox" accessibilityState={{checked: confirmedNewList}} disabled={busy}
-              testID="confirm-new-follow-list" onPress={() => setConfirmedNewList(value => !value)} style={styles.details}>
-              <Text style={styles.detailsText}>{confirmedNewList ? '✓ ' : '□ '}Create a list using only the accounts shown here</Text>
-            </Pressable>
-          </View>}
+          {needsNewList && <NewFollowListConsent confirmed={confirmedNewList} busy={busy} onChange={() => setConfirmedNewList(value => !value)}/>}
           {item.common && <><Text style={styles.label}>Targets</Text><Text selectable style={styles.mono}>{commonTargets(item.common)}</Text></>}
           {item.common?.request.type==='common.report'&&<><Text style={styles.label}>Report reason</Text><Text style={styles.value}>{item.common.request.reason}</Text></>}
           <Text testID="approval-sheet-content" selectable style={styles.content}>{item.event.event.content}</Text>
