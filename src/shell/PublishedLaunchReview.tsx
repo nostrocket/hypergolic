@@ -176,6 +176,7 @@ export function PublishedLaunchReview({ target, source, changesAccess, onAccept,
           <Text ref={heading} accessibilityRole="header" style={styles.heading}>{title ?? `Open ${target.metadata.title}?`}</Text>
           <LaunchIdentity key={`${target.publisher}:${target.eventId}:${target.metadata.icon ?? ''}`} target={target} source={source} />
           {readOnly ? <Text style={styles.body}>Legacy read-only mode supplies compatibility libraries and bounded public content. Declared capability access is not granted. Signing, publishing and uploads are unavailable.</Text> : <RequestedAccess key={`access:${target.eventId}`} target={target} changesAccess={changesAccess} />}
+          <Text style={styles.detail}>Hypergolic restricts direct network connections. Full network isolation is still being tested on mobile devices.</Text>
           {children}
           <TechnicalDetails key={`technical:${target.eventId}`} target={target} source={source} />
         </ScrollView>
