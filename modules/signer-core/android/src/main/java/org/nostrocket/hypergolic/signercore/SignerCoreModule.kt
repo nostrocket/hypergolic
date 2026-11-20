@@ -221,6 +221,15 @@ class SignerCoreModule : Module() {
 
   private fun cancelVaultAction() { claimedOwner(); revoke(false) }
 
+  private val vaultDispatcher = Dispatchers.IO.limitedParallelism(1)
+
+  private suspend fun <T> vaultData(epoch: Long, operation: () -> T): T = withContext(vaultDispatcher) {
+    synchronized(session.lock) {
+      session.require(epoch, ::active)
+      operation()
+    }
+  }
+
   private suspend fun <T> exclusiveAction(block: suspend (Long) -> T): T {
     val (current, revokeCompleted) = synchronized(session.lock) {
       if (signing != null) throw NativeVault.Error("AUTHORIZATION_DENIED")
@@ -319,7 +328,7 @@ class SignerCoreModule : Module() {
     } }
 
     AsyncFunction("isNativeVaultAvailableAsync") Coroutine { -> vaultAction {
-      withContext(Dispatchers.Main.immediate) {
+      withContext(vaultDispatcher) {
         active() && runCatching {
           java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
           true
@@ -330,7 +339,7 @@ class SignerCoreModule : Module() {
     AsyncFunction("openNativeVaultAsync") Coroutine { -> vaultAction {
       val records = synchronized(session.lock) { ensureVault() }
       mutationAction(records) {
-        withContext(Dispatchers.Main.immediate) {
+        withContext(vaultDispatcher) {
           synchronized(session.lock) { vaultOwned().open(appContext) }
         }
       }
@@ -339,7 +348,7 @@ class SignerCoreModule : Module() {
     AsyncFunction("prepareNativeImportAsync") Coroutine { vaultId: String, value: Double -> vaultAction {
       withContext(Dispatchers.Main.immediate) { exclusiveAction { current ->
         val expected = revision(value)
-        synchronized(session.lock) { vaultOwned().assertRevision(appContext, vaultId, expected) }
+        vaultData(current) { vaultOwned().assertRevision(appContext, vaultId, expected) }
         val activity = appContext.currentActivity ?: throw NativeVault.Error("AUTHORIZATION_DENIED")
         var key = importer.show(activity) { active() && session.activated && session.epoch == current }
         if (key == null) null else try {
@@ -370,7 +379,7 @@ class SignerCoreModule : Module() {
       mutationAction(records) {
       withContext(Dispatchers.Main.immediate) { exclusiveAction { current ->
         val expected = revision(value)
-        val selected = synchronized(session.lock) { records.importIdentity(appContext, handle, vaultId, expected) }
+        val selected = vaultData(current) { records.importIdentity(appContext, handle, vaultId, expected) }
         val activity = appContext.currentActivity ?: throw NativeVault.Error("AUTHORIZATION_DENIED")
         val accepted = confirmation.confirm(activity, "Import this identity?",
           "Public key:\n$selected\n\nUse its local key for signing. Your active identity will change. Pending requests will be cancelled.") {
@@ -381,12 +390,9 @@ class SignerCoreModule : Module() {
           throw NativeVault.Error("AUTHORIZATION_DENIED")
         }
         actions?.cancel()
-        synchronized(session.lock) {
-          session.require(current, ::active)
-          val result = vaultOwned().commitImport(appContext, handle, vaultId, expected)
-          clearImportTimer()
-          result
-        }
+        val result = vaultData(current) { vaultOwned().commitImport(appContext, handle, vaultId, expected) }
+        clearImportTimer()
+        result
       } }
       }
     } }
@@ -396,7 +402,7 @@ class SignerCoreModule : Module() {
       mutationAction(records) {
         withContext(Dispatchers.Main.immediate) { exclusiveAction { current ->
           val expected = revision(value)
-          synchronized(session.lock) { records.assertRevision(appContext, vaultId, expected) }
+          vaultData(current) { records.assertRevision(appContext, vaultId, expected) }
           if (!NativeSigningKey.validPublicKey(pubkey)) throw NativeVault.Error("AUTHORIZATION_DENIED")
           val activity = appContext.currentActivity ?: throw NativeVault.Error("AUTHORIZATION_DENIED")
           val accepted = confirmation.confirm(activity, "Use public identity?",
@@ -405,10 +411,7 @@ class SignerCoreModule : Module() {
           }
           if (!accepted) throw NativeVault.Error("AUTHORIZATION_DENIED")
           actions?.cancel()
-          synchronized(session.lock) {
-            session.require(current, ::active)
-            vaultOwned().addPublicIdentity(appContext, pubkey, vaultId, expected)
-          }
+          vaultData(current) { vaultOwned().addPublicIdentity(appContext, pubkey, vaultId, expected) }
         } }
       }
     } }
@@ -418,7 +421,7 @@ class SignerCoreModule : Module() {
       mutationAction(records) {
       withContext(Dispatchers.Main.immediate) { exclusiveAction { current ->
         val expected = revision(value)
-        val snapshot = synchronized(session.lock) { records.assertRevision(appContext, vaultId, expected); JSONObject(records.publicSnapshot(appContext)) }
+        val snapshot = vaultData(current) { records.assertRevision(appContext, vaultId, expected); JSONObject(records.publicSnapshot(appContext)) }
         if (snapshot.getString("selectedPubkey") != pubkey) {
           val activity = appContext.currentActivity ?: throw NativeVault.Error("AUTHORIZATION_DENIED")
           val accepted = confirmation.confirm(activity, "Switch identity?", "Public key:\n$pubkey\n\nPending requests will be cancelled.") {
@@ -427,10 +430,7 @@ class SignerCoreModule : Module() {
           if (!accepted) throw NativeVault.Error("AUTHORIZATION_DENIED")
         }
         actions?.cancel()
-        synchronized(session.lock) {
-          session.require(current, ::active)
-          vaultOwned().select(appContext, pubkey, vaultId, expected)
-        }
+        vaultData(current) { vaultOwned().select(appContext, pubkey, vaultId, expected) }
       } }
       }
     } }
@@ -501,8 +501,8 @@ class SignerCoreModule : Module() {
     } }
 
     AsyncFunction("getNativeSigningMethodsAsync") Coroutine { pubkey: String, vaultId: String, value: Double -> vaultAction {
-      withContext(Dispatchers.Main.immediate) {
-        synchronized(session.lock) { vaultOwned().methods(appContext, pubkey, vaultId, revision(value)) }
+      withContext(vaultDispatcher) {
+        vaultData(current) { vaultOwned().methods(appContext, pubkey, vaultId, revision(value)) }
       }
     } }
 
@@ -525,10 +525,7 @@ class SignerCoreModule : Module() {
               active() && session.activated && session.epoch == current
             }) throw NativeVault.Error("AUTHORIZATION_DENIED")
           }
-          synchronized(session.lock) {
-            session.require(current, ::active)
-            records.selectMethod(appContext, pubkey, method, vaultId, expected)
-          }
+          vaultData(current) { records.selectMethod(appContext, pubkey, method, vaultId, expected) }
         } }
       }
     } }
@@ -538,17 +535,14 @@ class SignerCoreModule : Module() {
       mutationAction(records) {
         withContext(Dispatchers.Main.immediate) { exclusiveAction { current ->
           val expected = revision(value)
-          synchronized(session.lock) { records.methods(appContext, pubkey, vaultId, expected) }
+          vaultData(current) { records.methods(appContext, pubkey, vaultId, expected) }
           if (method != "nip46" && method != "nip55") throw NativeVault.Error("SIGNER_UNSUPPORTED")
           val activity = appContext.currentActivity ?: throw NativeVault.Error("AUTHORIZATION_DENIED")
           if (!confirmation.confirm(activity, "Disconnect saved signer?",
             "Identity:\n$pubkey\n\nRemove this saved signing capability. Account data and any local key remain. No signing method will be chosen automatically.", "Disconnect signer") {
             active() && session.activated && session.epoch == current
           }) throw NativeVault.Error("AUTHORIZATION_DENIED")
-          synchronized(session.lock) {
-            session.require(current, ::active)
-            records.disconnect(appContext, pubkey, method, vaultId, expected)
-          }
+          vaultData(current) { records.disconnect(appContext, pubkey, method, vaultId, expected) }
         } }
       }
     } }
@@ -558,17 +552,14 @@ class SignerCoreModule : Module() {
       mutationAction(records) {
         withContext(Dispatchers.Main.immediate) { exclusiveAction { current ->
           val expected = revision(value)
-          synchronized(session.lock) { records.methods(appContext, pubkey, vaultId, expected) }
+          vaultData(current) { records.methods(appContext, pubkey, vaultId, expected) }
           val activity = appContext.currentActivity ?: throw NativeVault.Error("AUTHORIZATION_DENIED")
           if (!confirmation.confirm(activity, "Remove local private key?",
             "Identity:\n$pubkey\n\nYou need a backup to restore this private key. Account data and any remote signer remain. No signing method will be chosen automatically.", "Continue to authentication") {
             active() && session.activated && session.epoch == current
           }) throw NativeVault.Error("AUTHORIZATION_DENIED")
           actionsFor(current, true).delete(activity, pubkey, vaultId, expected, true)
-          synchronized(session.lock) {
-            session.require(current, ::active)
-            records.publicSnapshot(appContext)
-          }
+          vaultData(current) { records.publicSnapshot(appContext) }
         } }
       }
     } }
@@ -595,10 +586,7 @@ class SignerCoreModule : Module() {
         vaultOwned()
         val activity = appContext.currentActivity ?: throw NativeVault.Error("AUTHORIZATION_DENIED")
         actionsFor(current).delete(activity, pubkey, vaultId, revision(value))
-        synchronized(session.lock) {
-          session.require(current, ::active)
-          vaultOwned().publicSnapshot(appContext)
-        }
+        vaultData(current) { vaultOwned().publicSnapshot(appContext) }
       } }
       }
     } }
