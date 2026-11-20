@@ -38,6 +38,7 @@ export interface PublishedRuntimeBinding { readonly publishedArtifact: string; r
 export interface RuntimeNativePort extends NativeCapabilityPort { newInstanceId(): string; subscriptions?: NativeRelaySubscriptionPort }
 export interface RuntimeOwner {
   publishedCapabilities(session: NappletDescriptor): PublishedCapabilities | null;
+  retainForPin(artifact: VerifiedNappletArtifact, signal: AbortSignal, active: () => void): Promise<() => void>;
   resolveDiscovered(link: string, expectedEventId: string, signal: AbortSignal, active: () => void): Promise<VerifiedNappletArtifact>;
   prepareDiscovered(artifact: VerifiedNappletArtifact, signal: AbortSignal, assertActive: () => void,
     reviewLaunch: (changesAccess: boolean, legacyReadOnlyAvailable?: boolean) => Promise<boolean | 'legacy-read-only-v1'>, existing?: NappletDescriptor): Promise<NappletDescriptor>;
@@ -134,7 +135,7 @@ export function createRuntimeOwner(database: ShellDatabase,
   approvals?: ApprovalPorts,
   published?: Omit<PublishedSessionDependencies, 'identity' | 'database' | 'newInstanceId'>, queries?: RelayQueryService, subscriptions?: ReturnType<typeof createRelaySubscriptions>, resources?: ResourceHost, uploads?: UploadService, identityData?: IdentityDataPort, routing?: Readonly<{broker: RoutingBroker; catalog: RoutingCatalog}>, notify?: NotifyBroker, config?: ConfigBroker, outbox?: OutboxReadService, outboxStreams?:ReturnType<typeof createOutboxSubscriptions>, discovery?: DiscoveryOpenBroker,cvm?:CvmService): RuntimeOwner {
   const coordinator = published ? createPublishedSessionCoordinator({
-    ...published, identity, database, newInstanceId: () => native.newInstanceId(),
+    ...published, identity, database, currentWorkspace: () => identity.getSnapshot().session.workspace.getSnapshot().workspace, newInstanceId: () => native.newInstanceId(),
   }) : null;
   const prepared = new Map<string, PreparedPublishedSession>();
   const running = new Map<string, PublishedRuntimeBinding>();
@@ -208,6 +209,10 @@ export function createRuntimeOwner(database: ShellDatabase,
       if (prepared.has(id) || running.has(id)) { ready.revoke(); throw new ShellStorageError('CONFLICT'); }
       prepared.set(id, ready);
       return ready.descriptor;
+    },
+    retainForPin(artifact: VerifiedNappletArtifact, signal: AbortSignal, active: () => void) {
+      if (!coordinator) throw new ShellStorageError('REVOKED');
+      return coordinator.retainForPin(artifact, signal, active);
     },
     resolveDiscovered(link: string, expectedEventId: string, signal: AbortSignal, active: () => void) {
       if (!coordinator) throw new ShellStorageError('REVOKED');

@@ -76,6 +76,35 @@ test('skips an artifact whose full row cannot fit without evicting the saved pin
   assert.equal(await cache.get('cached', big.manifest.eventId), null);
   assert.ok(await cache.get('cached', pin.manifest.eventId));
   await cache.close();
+  const held = await openPublishedArtifactCache(sqlite, {owner, epoch: 1, currentEpoch: () => 1,
+    protectedEvents: () => new Set([pin.manifest.eventId, big.manifest.eventId])});
+  await held.put(big);
+  assert.ok(await held.get('cached', big.manifest.eventId));
+  assert.ok(await held.get('cached', pin.manifest.eventId));
+  await held.close();
+});
+
+test('cache pressure preserves open or pinned events and other accounts', async t => {
+  const sqlite = new DiskSQLite(); t.after(() => sqlite.cleanup());
+  const owner = registration({user, publisher, appId: 'cached'});
+  const pin = await makeArtifact();
+  const keep = new Set([pin.manifest.eventId]);
+  const cache = await openPublishedArtifactCache(sqlite, {owner, epoch: 1, currentEpoch: () => 1, protectedEvents: () => keep});
+  await cache.put(pin);
+  const other = await openPublishedArtifactCache(sqlite, {owner: registration({...owner, user: '34'.repeat(32)}), epoch: 1, currentEpoch: () => 1});
+  await other.put(pin);
+  for (let index = 0; index < 34; index++) {
+    const content = new TextEncoder().encode(`<!doctype html><html><head></head><body>${index}</body></html>`);
+    await cache.put(await makeArtifact('cached', content));
+  }
+  assert.ok(await cache.get('cached', pin.manifest.eventId));
+  assert.ok(await other.get('cached', pin.manifest.eventId));
+  keep.clear();
+  await cache.put(await makeArtifact('cached', new TextEncoder().encode('<!doctype html><html><head></head><body>last</body></html>')));
+  assert.equal(await cache.get('cached', pin.manifest.eventId), null);
+  assert.ok(await other.get('cached', pin.manifest.eventId));
+  await cache.close();
+  await other.close();
 });
 
 test('tampered database bytes are rejected and evicted instead of being trusted', async t => {

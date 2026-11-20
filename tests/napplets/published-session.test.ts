@@ -70,21 +70,32 @@ test('first open verifies, reviews, caches and stages; pinned restart uses cache
       readHtml: async () => { reads++; return getEmbeddedTestHtmlBytes(); },
     },
   };
-  const service = createPublishedSessionCoordinator(ports);
+  let workspace = emptyWorkspace();
+  const service = createPublishedSessionCoordinator({...ports, currentWorkspace: () => workspace});
   const opened = await service.openLink(LINK, new AbortController().signal, async request => {
     reviews++; assert.deepEqual(request.domains, ['theme']); return true;
   });
   assert.equal(opened.descriptor.eventId, EMBEDDED_TEST_EVENT.id);
   assert.equal(JSON.parse(JSON.parse(opened.hostInput).configuration).fixture, 'published');
   assert.deepEqual(calls.slice(0, 4), [`register:${SESSION}`, 'begin', 'append', 'finish']);
+  const row = () => sqlite.raw(PUBLISHED_ARTIFACT_CACHE_DATABASE).prepare('SELECT row_id FROM verified_published_artifacts').get()?.row_id;
+  const originalRow = row();
   opened.revoke();
   const reopened = await service.reopenPinned(opened.descriptor, new AbortController().signal,
     async () => { assert.fail('saved exact grant must reopen silently'); });
   assert.equal(JSON.parse(reopened.hostInput).eventId, opened.descriptor.eventId);
+  opened.revoke();
+  assert.equal(calls.filter(call => call === `revoke:${SESSION}`).length, 1);
+  assert.equal(row(), originalRow);
   assert.equal(queries, 1);
   assert.equal(reads, 1);
   assert.equal(reviews, 1);
   reopened.revoke();
+  workspace = {...workspace, pins: [{...opened.descriptor, eventId: 'f'.repeat(64)}]};
+  const conflictingService = createPublishedSessionCoordinator({...ports, currentWorkspace: () => workspace,
+    source: {...ports.source, query: async () => [EMBEDDED_TEST_EVENT]}});
+  await assert.rejects(conflictingService.openLink(LINK, new AbortController().signal, async () =>
+    assert.fail('conflicting Home pin must be detected before review')), {code: 'PUBLISHED_PIN_CONFLICT'});
   epoch++;
   assert.throws(() => reopened.assertActive());
 });
@@ -620,6 +631,11 @@ test('exact discovery review binds staging, then transfers lifetime to the mount
   const sourceActive = () => { if (!focused) throw new Error('Caller unfocused'); };
   const signal = new AbortController();
   const artifact = await owner.resolveDiscovered(LINK, EMBEDDED_TEST_EVENT.id, signal.signal, sourceActive);
+  const releasePin = await owner.retainForPin(artifact, signal.signal, sourceActive);
+  const pinRow = sqlite.raw(PUBLISHED_ARTIFACT_CACHE_DATABASE).prepare('SELECT event_id FROM verified_published_artifacts').get();
+  assert.equal(pinRow?.event_id, EMBEDDED_TEST_EVENT.id);
+  assert.deepEqual(calls, []);
+  releasePin();
   const busy = new ReviewBusyError();
   await assert.rejects(owner.prepareDiscovered(artifact, signal.signal, sourceActive, async changesAccess => {
     assert.equal(changesAccess, true);

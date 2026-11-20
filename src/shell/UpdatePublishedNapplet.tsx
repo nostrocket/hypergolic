@@ -1,3 +1,4 @@
+import { PublishedLoadError } from '../napplets/loader';
 import { MEDIA_ACCESS_DETAIL } from '../runtime/support-report';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
@@ -60,7 +61,11 @@ export function UpdatePublishedNapplet({ session, check }: {
       request => requestDecision({ kind: 'update', request }, controller),
       request => requestDecision({ kind: 'access', request }, controller))
       .then(updated => { if (!controller.signal.aborted && !updated) setStatus('This is the latest verified version available from your Lookup relays.'); })
-      .catch(() => { if (!controller.signal.aborted) setStatus('Update cancelled or unavailable. The current version remains open.'); })
+      .catch(error => {
+        if (!controller.signal.aborted) setStatus(error instanceof PublishedLoadError && error.code === 'PUBLISHED_NOT_FOUND'
+          ? 'The saved revision is unavailable. To choose a replacement, close this card, remove its Home pin and reopen the publication.'
+          : 'Update cancelled or unavailable. The current version remains open.');
+      })
       .finally(() => {
         if (pending.current === controller) pending.current = null;
         if (!controller.signal.aborted) setBusy(false);

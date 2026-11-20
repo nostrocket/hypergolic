@@ -14,6 +14,7 @@ export type PublishedArtifactCacheAuthority = Readonly<{
   owner: TrustedApp;
   epoch: number;
   currentEpoch: () => number;
+  protectedEvents?: () => ReadonlySet<string>;
 }>;
 
 export interface PublishedArtifactCache {
@@ -27,7 +28,7 @@ const HEX64 = /^[0-9a-f]{64}$/;
 const IDENTIFIER_MAX_BYTES = 255;
 const MAX_STORED_ROW_BYTES = MAX_HTML_BYTES + MAX_MANIFEST_BYTES;
 type Row = { publisher: string; identifier: string; event_id: string; signed_event: string; html: Uint8Array; byte_count: number };
-type Stats = { count: number; bytes: number };
+const MAX_ACCOUNT_BYTES = 64 * 1024 * 1024;
 const CACHE_TABLE = `CREATE TABLE verified_published_artifacts (
     row_id INTEGER PRIMARY KEY AUTOINCREMENT,
     user TEXT NOT NULL, publisher TEXT NOT NULL, identifier TEXT NOT NULL, event_id TEXT NOT NULL,
@@ -43,10 +44,26 @@ const eventFrom = (artifact: VerifiedNappletArtifact) => ({
   content: artifact.manifest.content, sig: artifact.manifest.sig,
 });
 
-function checkStats(stats: Stats[]): Stats {
-  if (stats.length !== 1 || !Number.isSafeInteger(stats[0]!.count) || stats[0]!.count < 0 ||
-      !Number.isSafeInteger(stats[0]!.bytes) || stats[0]!.bytes < 0) return fail('CORRUPT_STORAGE');
-  return stats[0]!;
+async function pruneCache(io: Access, user: string, protectedEvents: () => ReadonlySet<string>) {
+  const rows = await io.all<{row_id: number; event_id: string; byte_count: number}>(
+    'SELECT row_id, event_id, byte_count FROM verified_published_artifacts WHERE user = ? ORDER BY row_id DESC', user);
+  // Inspect pins after the read. Keep the newest cold entries within both budgets.
+  const keep = protectedEvents();
+  let bytes = 0, coldBytes = 0, coldRows = 0;
+  for (const row of rows) {
+    if (!Number.isSafeInteger(row.byte_count) || row.byte_count < 0 || row.byte_count > MAX_STORED_ROW_BYTES) fail('CORRUPT_STORAGE');
+    if (keep.has(row.event_id)) bytes += row.byte_count;
+  }
+  if (bytes > MAX_ACCOUNT_BYTES) fail('QUOTA_EXCEEDED');
+  for (const row of rows) {
+    if (keep.has(row.event_id)) continue;
+    if (coldRows < PUBLISHED_ARTIFACT_CACHE_MAX_ROWS && coldBytes + row.byte_count <= PUBLISHED_ARTIFACT_CACHE_MAX_BYTES &&
+        bytes + row.byte_count <= MAX_ACCOUNT_BYTES) {
+      coldRows++; coldBytes += row.byte_count; bytes += row.byte_count;
+    } else {
+      await io.run('DELETE FROM verified_published_artifacts WHERE row_id = ? AND user = ?', row.row_id, user);
+    }
+  }
 }
 
 async function initialize(io: Access): Promise<void> {
@@ -143,19 +160,12 @@ export async function openPublishedArtifactCache(
         const byteCount = eventBytes.byteLength + artifact.htmlByteLength;
         if (eventBytes.byteLength > MAX_MANIFEST_BYTES || artifact.htmlByteLength > MAX_HTML_BYTES || byteCount > MAX_STORED_ROW_BYTES) return fail('QUOTA_EXCEEDED');
         await request(options, async io => {
-          if (byteCount > PUBLISHED_ARTIFACT_CACHE_MAX_BYTES) return;
           const htmlBytes = artifact.htmlBytes;
           await io.run('DELETE FROM verified_published_artifacts WHERE user = ? AND publisher = ? AND identifier = ? AND event_id = ?',
             user, publisher, identifier, artifact.manifest.eventId);
           await io.run(`INSERT INTO verified_published_artifacts (user, publisher, identifier, event_id, signed_event, html, byte_count)
             VALUES (?, ?, ?, ?, ?, ?, ?)`, user, publisher, identifier, artifact.manifest.eventId, signedEvent, htmlBytes, byteCount);
-          let stats = checkStats(await io.all<Stats>('SELECT count(*) AS count, COALESCE(sum(byte_count), 0) AS bytes FROM verified_published_artifacts'));
-          while (stats.count > PUBLISHED_ARTIFACT_CACHE_MAX_ROWS || stats.bytes > PUBLISHED_ARTIFACT_CACHE_MAX_BYTES) {
-            const oldest = await io.all<{ row_id: number; byte_count: number }>('SELECT row_id, byte_count FROM verified_published_artifacts ORDER BY row_id LIMIT 1');
-            if (oldest.length !== 1 || !Number.isSafeInteger(oldest[0]!.byte_count) || oldest[0]!.byte_count < 0) return fail('CORRUPT_STORAGE');
-            await io.run('DELETE FROM verified_published_artifacts WHERE row_id = ?', oldest[0]!.row_id);
-            stats = { count: stats.count - 1, bytes: stats.bytes - oldest[0]!.byte_count };
-          }
+          await pruneCache(io, user, authority.protectedEvents ?? (() => new Set()));
         });
       },
       revoke: () => binding.revoke(),

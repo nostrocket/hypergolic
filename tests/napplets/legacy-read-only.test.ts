@@ -142,7 +142,7 @@ test('discovered installed unmounted pins persist their newly prepared descripto
       mayDeliver: () => true, mayReview: () => true, reviewRevision: () => 7, send: () => false,
       newChannelId: () => 'channel', subscribe: () => () => {}},
     capability: {take: () => wire, isActive: () => held, finish: (_token, value) => {held = false; response = value;}},
-    runtime: () => ({resolveDiscovered: async () => artifact,
+    runtime: () => ({retainForPin: async () => () => {}, resolveDiscovered: async () => artifact,
       prepareDiscovered: async (_artifact, _signal, active, review, existing) => {
         assert.deepEqual(existing, saved); assert.equal(await review(false), true); active(); mounted = true; return next;
       }, publishedReadyGeneration: candidate => candidate.id === id && mounted ? 'mounted-target' : null, discardPublished() {}}),
