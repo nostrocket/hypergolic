@@ -20,13 +20,17 @@ test('production has its own identity; development stays compatible; unknown var
   const previous = process.env.HYPERGOLIC_VARIANT;
   try {
     delete process.env.HYPERGOLIC_VARIANT;
+    assert.equal(configure({config:base}).extra.hypergolic.variant,'production');
+    process.env.HYPERGOLIC_VARIANT='development';
     assert.equal(configure({config:base}).android.package,'org.nostrocket.hypergolic.dev');
+    assert.equal(configure({config:base}).ios.bundleIdentifier,base.ios.bundleIdentifier);
     process.env.HYPERGOLIC_VARIANT='production';
     const production=configure({config:base});
     assert.equal(production.android.package,'space.hypergolic');
     assert.equal(production.extra.hypergolic.variant,'production');
     assert.equal(production.version,base.version);
-    assert.equal(production.ios.bundleIdentifier,base.ios.bundleIdentifier);
+    assert.equal(production.ios.bundleIdentifier,'space.hypergolic');
+    assert.equal(production.ios.buildNumber,String(base.android.versionCode));
     process.env.HYPERGOLIC_VARIANT='typo';
     assert.throws(()=>configure({config:base}),/variant/i);
   } finally { if(previous===undefined) delete process.env.HYPERGOLIC_VARIANT; else process.env.HYPERGOLIC_VARIANT=previous; }

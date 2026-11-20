@@ -8,8 +8,8 @@
     "node": "24.20.0"
   },
   "scripts": {
-    "start": "expo start",
-    "android": "expo run:android",
+    "start": "node scripts/development.mjs start",
+    "android": "node scripts/development.mjs run:android",
     "prebuild:android": "pnpm run runtime:build && expo prebuild --platform android --no-install --template ./node_modules/expo/template.tgz",
     "export:android": "pnpm run runtime:build && expo export --platform android",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.tests.json",
@@ -24,7 +24,7 @@
     "runtime:build": "node scripts/build-runtime.mjs",
     "runtime:test": "pnpm --dir runtime verify",
     "test:shell": "node --experimental-strip-types --test src/shell/*.test.ts",
-    "ios": "expo run:ios",
+    "ios": "node scripts/development.mjs run:ios",
     "prebuild:ios": "pnpm run runtime:build && expo prebuild --platform ios --no-install --template ./node_modules/expo/template.tgz",
     "export:ios": "pnpm run runtime:build && expo export --platform ios",
     "test:quality": "node --test tests/quality/*.test.mjs",

@@ -64,6 +64,7 @@ export async function buildTester({ root = ROOT, env = process.env, args = proce
   for (const tool of Object.values(tools)) await access(tool, constants.X_OK);
   // Build children never need signing configuration or passwords.
   const childEnv = Object.fromEntries(Object.entries(env).filter(([name]) => !name.startsWith('HYPERGOLIC_KEY')));
+  childEnv.HYPERGOLIC_VARIANT = 'development';
   const invoke = (command, argv, capture = false) => run(command, argv, { cwd: root, env: childEnv, capture });
   const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
   assert.equal(process.versions.node, manifest.engines.node, `Use Node ${manifest.engines.node}.`);
