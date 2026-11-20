@@ -21,6 +21,7 @@ final class ApprovalTransportRegistry: @unchecked Sendable {
     var commonPlan:NativeCommonPlan?
     var approval: NativeApprovalHandle?
     var signingSnapshot: String?
+    var publicationDispatched = false
     var nativeSigningClaimed = false
     var nativeHandoffPending = false
   }
@@ -233,6 +234,7 @@ final class ApprovalTransportRegistry: @unchecked Sendable {
       guard let row = rows[token], !row.nativeHandoffPending, sessionLiveLocked(row), let approval = row.approval,
         authority.isApproved(approval), row.outboxPlan?.owns(operation) == true, !operation.wasAttempted,
         ContinuousClock.now < operation.deadline else { throw NativeOutboxPlan.Failure.revoked }
+      rows[token]?.publicationDispatched = true
       operation.markAttempted(); send()
     }
   }
@@ -410,8 +412,13 @@ final class ApprovalTransportRegistry: @unchecked Sendable {
 
   private func denial(_ row: Row, error: String = "approval denied") -> Delivery {
     guard let id = row.wireId else { return Delivery(reply: row.reply, response: nil) }
-    let value: [String: Any] = ["type": resultType(row), "id": id,
-      "ok": false, "error": error == "approval denied" && NativeCommonPlan.operations.contains(requestType(row)) ? "user-denied":error]
+    let common = NativeCommonPlan.operations.contains(requestType(row))
+    let message: String
+    if row.publicationDispatched {
+      if appDataClaim(row) == true { message = "app-data-publication-unknown" }
+      else { message = common ? "publication-result-unknown" : "publication result unknown" }
+    } else { message = common && error == "approval denied" ? "user-denied" : error }
+    let value: [String: Any] = ["type": resultType(row), "id": id, "ok": false, "error": message]
     let data = try? JSONSerialization.data(withJSONObject: value)
     return Delivery(reply: row.reply, response: data.map { String(decoding: $0, as: UTF8.self) })
   }

@@ -76,7 +76,7 @@ final class NativeOutboxPlan: @unchecked Sendable {
     else { throw Failure.invalid }
     let request = try object(requestText)
     try fields(plan, ["requestId", "event", "destinations", "requiredInboxes", "ownSource", "ancillary"])
-    guard (derived == nil && (domains.contains("outbox") && request["type"] as? String == "outbox.publish" || NativeAppDataPolicy.rawRelay(registration, request)) || derived != nil && NativeCommonPlan.granted(registration) && NativeCommonPlan.operations.contains(request["type"] as? String ?? "")), let id = request["id"] as? String,
+    guard (derived == nil && (domains.contains("outbox") && request["type"] as? String == "outbox.publish" || domains.contains("relay") && request["type"] as? String == "relay.publish") || derived != nil && NativeCommonPlan.granted(registration) && NativeCommonPlan.operations.contains(request["type"] as? String ?? "")), let id = request["id"] as? String,
       plan["requestId"] as? String == id, let event = plan["event"] as? [String: Any],
       let source = derived ?? request["event"] as? [String: Any], let captured = event["event"] as? [String: Any],
       event["selectedPubkey"] as? String == identity else { throw Failure.invalid }
@@ -91,6 +91,10 @@ final class NativeOutboxPlan: @unchecked Sendable {
       let required = plan["requiredInboxes"] as? [String], required.allSatisfy({ destinations.contains($0) })
     else { throw Failure.invalid }
     for relay in destinations { try relayURL(relay) }
+    if request["type"] as? String == "relay.publish" {
+      try fields(request, ["type", "id", "event"])
+      guard plan["ancillary"] is NSNull, required.isEmpty else { throw Failure.invalid }
+    }
     if NativeAppDataPolicy.claims(request) {
       try NativeAppDataPolicy.validatePublication(registration, request, destinations: destinations)
       guard plan["ancillary"] is NSNull, request["type"] as? String != "relay.publish" || required.isEmpty else { throw Failure.invalid }

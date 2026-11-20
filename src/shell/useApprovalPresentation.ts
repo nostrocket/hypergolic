@@ -2,7 +2,7 @@ import type { ReviewSlot } from './review-slot';
 import {useEffect, useState} from 'react';
 import { VaultError } from '../security/identity-vault-model';
 import { isSignerFailureCode, signerFailureMessage } from '../security/signing-methods';
-import type {ApprovalItem,ApprovalService} from '../security/approval-service';
+import {PublicationUncertainError,type ApprovalItem,type ApprovalService} from '../security/approval-service';
 import type {OutboxPublicationReceipt} from '../outbox/publication-receipt';
 import type {RelayOutcome} from '../network/relay-service';
 import {appDataPublicationStatus} from './app-data-publication-status';
@@ -31,7 +31,7 @@ export function useApprovalPresentation(service:ApprovalService,epoch:number,rev
    setStored(current=>current===pending?{...pending,held:null,busy:false,receipt,outcome}:current);
   }).catch(error=>{
    reviewSlot?.releaseApproval(item.id);
-   const outcome=error instanceof VaultError&&isSignerFailureCode(error.code)?signerFailureMessage(error.code):'Approval was not completed.';
+   const outcome=error instanceof PublicationUncertainError?'The event may have been published.':error instanceof VaultError&&isSignerFailureCode(error.code)?signerFailureMessage(error.code):'Approval was not completed.';
    setStored(current=>current===pending?{...pending,held:null,busy:false,outcome}:current);
   });
  };

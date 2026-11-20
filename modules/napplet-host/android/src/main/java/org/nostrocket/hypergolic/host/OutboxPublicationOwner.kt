@@ -37,9 +37,13 @@ internal object OutboxPublicationOwner {
           override fun send(action: PublishedRelayWssQuery.SendAction) {
             ApprovalTransport.leases.performApproved(token) {
               if (isCancelled) throw IOException("Publication revoked or timed out")
+              // Commit this one-use dispatch while the lease is live.
+              ApprovalTransport.markDispatched(token)
               operation.attempted = true
-              action.run()
             }
+            // TLS writes can block. Revocation can now complete while the write unwinds.
+            if (isCancelled) throw IOException("Publication stopped")
+            action.run()
           }
         }
         PublishedRelayWssQuery.publish(NativeOutboxPlan.transportUrl(relay), operation.frame, control, acknowledgement::classify)

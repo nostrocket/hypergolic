@@ -67,7 +67,7 @@ queued or written bytes do not prove acceptance. Success requires at least one
 explicit acceptance; preserve the richer per-relay native outcomes.
 
 Failure before send is distinct from missing receipt after possible send. The
-latter remains unknown; revocation cannot recall bytes. Source/vault liveness is
+latter remains unknown; revocation cannot recall bytes. On Android the lease registry commits each one-use dispatch before the socket write. Its monitor is released during blocking I/O so lifecycle callbacks can revoke pending sends. Source/vault liveness is
 rechecked before effects and final delivery. Lost authority after possible
 external signing/result is uncertain, not proof nothing was signed. Cleanup
 revokes before releasing effect resources and targets only captured operations.
