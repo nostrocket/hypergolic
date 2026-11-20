@@ -218,7 +218,28 @@ public final class DurabilityProof {
     }
   }
 
+  static void bufferGrowth() throws Exception {
+    byte[][] backing = new byte[1][];
+    java.io.OutputStream capture = new java.io.OutputStream() {
+      public void write(int value) { throw new AssertionError(); }
+      public void write(byte[] data, int offset, int count) { backing[0] = data; }
+    };
+    try (NativeSecretBuffer buffer = new NativeSecretBuffer(1)) {
+      buffer.write(1);
+      buffer.writeTo(capture);
+      buffer.write(2);
+      check(Arrays.equals(backing[0], new byte[1]), "single-byte growth wipes retired array");
+      buffer.writeTo(capture);
+      buffer.write(new byte[]{3, 4, 5});
+      check(Arrays.equals(backing[0], new byte[backing[0].length]), "bulk growth wipes retired array");
+      check(Arrays.equals(buffer.toByteArray(), new byte[]{1, 2, 3, 4, 5}), "growth preserves encoded value");
+      buffer.writeTo(capture);
+    }
+    check(Arrays.equals(backing[0], new byte[backing[0].length]), "close wipes final backing");
+  }
+
   public static void main(String[] args) throws Exception {
+    bufferGrowth();
     Security.addProvider(new KeyStoreProvider());
     normal();
     for (String s : List.of("file", "child", "parent")) failure(s);

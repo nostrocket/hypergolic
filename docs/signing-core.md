@@ -6,6 +6,8 @@ backup and cryptography. JavaScript receives public snapshots, opaque candidates
 or signed public events. No incoming signer-provider interface is implemented.
 Full Phase 2/3 and protected-device acceptance remain open; see [testing](testing.md).
 
+Native encoders clear their owned secret buffers, including retired allocations. Platform cryptography, text controls and managed strings can retain internal copies until their runtime releases them.
+
 ## Authority and key boundary
 
 The trusted shell claims its native identity-owner context before activating the
