@@ -141,6 +141,6 @@ test('preview omits corrupt catalog rows and defaults without repairing them', a
   await assert.rejects(catalog.importDefault(owner, {archetype, current: null, target: null}), {code: 'REVOKED'});
   assert.deepEqual({...counts()}, {handlers: 1, defaults: 1});
   assert.deepEqual(await catalog.list(owner), {handlers: [], defaults: []});
-  assert.deepEqual({...counts()}, {handlers: 0, defaults: 0});
+  assert.deepEqual({...counts()}, {handlers: 1, defaults: 1});
   await catalog.close();
 });

@@ -1,4 +1,6 @@
 import test from 'node:test';
+import {readFileSync, writeFileSync} from 'node:fs';
+import {join} from 'node:path';
 import assert from 'node:assert/strict';
 import { artifact, modernHandler,snapshotHandler } from './fixtures.ts';
 import { openRoutingCatalog, ROUTING_DATABASE } from '../../src/routing/routing-catalog.ts';
@@ -142,5 +144,31 @@ test('named v1 migration is atomic and older named catalog access cannot delete 
   assert.deepEqual(await catalog.list(owner(second)),{handlers:[],defaults:[]});
   await catalog.remove(owner(),{publisher:snapshot.manifest.pubkey,appId});
   assert.deepEqual((await catalog.list(owner())).defaults,[]);
+  await catalog.close();
+});
+
+test('an incompatible legacy catalog is retained and current routing survives restart', async t => {
+  const sqlite = new DiskSQLite(); t.after(() => sqlite.cleanup());
+  const legacy = sqlite.raw('hypergolic-routing-v1.db');
+  legacy.exec("CREATE TABLE earlier_handler (name TEXT); INSERT INTO earlier_handler VALUES ('retained')");
+  let catalog = await openRoutingCatalog(sqlite, 'ios');
+  assert.deepEqual(await catalog.list(owner()), {handlers: [], defaults: []});
+  const item = await artifact();
+  await catalog.remember(owner(), item);
+  await catalog.close();
+  catalog = await openRoutingCatalog(sqlite, 'ios');
+  assert.equal((await catalog.list(owner())).handlers[0]?.eventId, item.manifest.eventId);
+  assert.equal(legacy.prepare('SELECT name FROM earlier_handler').get()?.name, 'retained');
+  await catalog.close();
+});
+
+test('a damaged SQLite header is preserved when starting a new catalog', async t => {
+  const sqlite = new DiskSQLite(); t.after(() => sqlite.cleanup());
+  const path = join(sqlite.directory, 'hypergolic-routing-v1.db');
+  const original = Buffer.alloc(4096, 23);
+  writeFileSync(path, original);
+  const catalog = await openRoutingCatalog(sqlite, 'ios');
+  assert.deepEqual(await catalog.list(owner()), {handlers: [], defaults: []});
+  assert.deepEqual(readFileSync(path), original);
   await catalog.close();
 });

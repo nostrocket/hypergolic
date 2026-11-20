@@ -183,8 +183,9 @@ function exactSchema(objects: readonly Record<string,unknown>[]): boolean {
     objects[1]!.name === 'routing_defaults' && objects[1]!.type === 'table' && objects[1]!.sql === DEFAULTS;
 }
 
+type LegacyRows = {rows: (Row & {user: string})[]; defaults: (DefaultRow & {user: string})[]};
 /** Open the old catalog read-only and read one bounded, consistent snapshot. */
-async function copyNamedCatalog(sqlite: SQLiteModule, into: Access): Promise<void> {
+async function readNamedCatalog(sqlite: SQLiteModule): Promise<LegacyRows | null> {
   const legacy = await sqlite.openDatabaseAsync(NAMED_ROUTING_DATABASE,DB_OPTIONS);
   try {
     await legacy.execAsync('PRAGMA query_only = ON');
@@ -192,27 +193,55 @@ async function copyNamedCatalog(sqlite: SQLiteModule, into: Access): Promise<voi
     await legacy.execAsync('BEGIN');
     const versions = await legacy.getAllAsync<{user_version:number}>('PRAGMA user_version');
     const objects = await legacy.getAllAsync<Record<string,unknown>>(SCHEMA_SQL);
-    if (versions.length !== 1) return fail('CORRUPT_STORAGE');
-    if (versions[0]!.user_version === 0 && objects.length === 0) return;
-    if (versions[0]!.user_version !== 1 || !exactSchema(objects)) return fail('CORRUPT_STORAGE');
+    if (versions.length !== 1) return fail('STORAGE_FAILURE');
+    if (versions[0]!.user_version !== 1 || !exactSchema(objects)) return null;
     const bounds = await legacy.getAllAsync<{rows:number;bytes:number;defaults:number}>(
       'SELECT count(*) AS rows, COALESCE(sum(length(CAST(signed_event AS BLOB))),0) AS bytes, (SELECT count(*) FROM routing_defaults) AS defaults FROM routing_catalog');
     const b = bounds[0];
-    if (bounds.length !== 1 || !b || !count(b.rows) || b.rows > CATALOG_LIMITS.total || !count(b.bytes) ||
-        b.bytes > CATALOG_LIMITS.bytes || !count(b.defaults) || b.defaults > CATALOG_LIMITS.total * 16) return fail('CORRUPT_STORAGE');
+    if (bounds.length !== 1 || !b || !count(b.rows) || !count(b.bytes) || !count(b.defaults)) return fail('STORAGE_FAILURE');
+    if (b.rows > CATALOG_LIMITS.total || b.bytes > CATALOG_LIMITS.bytes || b.defaults > CATALOG_LIMITS.total * 16) return null;
+    const invalid = await legacy.getAllAsync<{invalid: number}>(`SELECT
+      EXISTS(SELECT 1 FROM routing_catalog WHERE length(CAST(user AS BLOB)) != 64 OR length(CAST(publisher AS BLOB)) != 64
+        OR length(CAST(event_id AS BLOB)) != 64 OR length(CAST(app_id AS BLOB)) NOT BETWEEN 1 AND 255)
+      OR EXISTS(SELECT 1 FROM routing_defaults WHERE length(CAST(user AS BLOB)) != 64 OR length(CAST(publisher AS BLOB)) != 64
+        OR length(CAST(archetype AS BLOB)) NOT BETWEEN 1 AND 64 OR length(CAST(app_id AS BLOB)) NOT BETWEEN 1 AND 255) AS invalid`);
+    if (invalid.length !== 1) return fail('STORAGE_FAILURE');
+    if (invalid[0]!.invalid) return null;
     const rows = await legacy.getAllAsync<Row & {user:string}>(
-      'SELECT user,publisher,app_id,event_id,signed_event FROM routing_catalog WHERE length(CAST(user AS BLOB))=64 AND length(CAST(publisher AS BLOB))=64 AND length(CAST(event_id AS BLOB))=64 AND length(CAST(app_id AS BLOB)) BETWEEN 1 AND 255');
+      'SELECT user,publisher,app_id,event_id,signed_event FROM routing_catalog');
     const defaults = await legacy.getAllAsync<DefaultRow & {user:string}>(
-      'SELECT user,archetype,publisher,app_id FROM routing_defaults WHERE length(CAST(user AS BLOB))=64 AND length(CAST(publisher AS BLOB))=64 AND length(CAST(archetype AS BLOB)) BETWEEN 1 AND 64 AND length(CAST(app_id AS BLOB)) BETWEEN 1 AND 255');
-    if (rows.length !== b.rows || defaults.length !== b.defaults || rows.some(row=>snapshotEventId(row.app_id))) return fail('CORRUPT_STORAGE');
-    for (const row of rows) if (await into.run('INSERT INTO routing_catalog (user,publisher,app_id,event_id,signed_event) VALUES (?,?,?,?,?)',
-      row.user,row.publisher,row.app_id,row.event_id,row.signed_event) !== 1) return fail('STORAGE_FAILURE');
-    for (const row of defaults) if (await into.run('INSERT INTO routing_defaults (user,archetype,publisher,app_id) VALUES (?,?,?,?)',
-      row.user,row.archetype,row.publisher,row.app_id) !== 1) return fail('STORAGE_FAILURE');
+      'SELECT user,archetype,publisher,app_id FROM routing_defaults');
+    if (rows.length !== b.rows || defaults.length !== b.defaults) return fail('STORAGE_FAILURE');
+    if (rows.some(row => snapshotEventId(row.app_id))) return null;
+    const keys = new Set(rows.map(row => JSON.stringify([row.user, row.publisher, row.app_id])));
+    if (defaults.some(row => !keys.has(JSON.stringify([row.user, row.publisher, row.app_id])))) return null;
+    const counts = new Map<string, number>();
+    for (const row of rows) {
+      const owned = (counts.get(row.user) ?? 0) + 1;
+      if (owned > CATALOG_LIMITS.perIdentity) return null;
+      counts.set(row.user, owned);
+    }
+    return {rows, defaults};
   } finally {
     try { if (await legacy.isInTransactionAsync()) await legacy.execAsync('ROLLBACK'); }
     finally { await legacy.closeAsync(); }
   }
+}
+
+async function copyNamedCatalog(sqlite: SQLiteModule, into: Access): Promise<void> {
+  // Keep the read-only v1 file available for recovery. Failures writing v2 always roll back.
+  let legacy: LegacyRows | null;
+  try { legacy = await readNamedCatalog(sqlite); }
+  catch (error) {
+    if (error instanceof Error && /SQLITE_(?:CORRUPT|NOTADB)\b|database disk image is malformed|file is not a database/i.test(error.message)) return;
+    throw error;
+  }
+  if (!legacy) return;
+  const {rows, defaults} = legacy;
+  for (const row of rows) if (await into.run('INSERT INTO routing_catalog (user,publisher,app_id,event_id,signed_event) VALUES (?,?,?,?,?)',
+    row.user,row.publisher,row.app_id,row.event_id,row.signed_event) !== 1) return fail('STORAGE_FAILURE');
+  for (const row of defaults) if (await into.run('INSERT INTO routing_defaults (user,archetype,publisher,app_id) VALUES (?,?,?,?)',
+    row.user,row.archetype,row.publisher,row.app_id) !== 1) return fail('STORAGE_FAILURE');
 }
 
 /** App-owned catalog and explicit preferences; removal does not touch napplet data or artifacts. */
