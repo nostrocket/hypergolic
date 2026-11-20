@@ -12,7 +12,6 @@ internal object RelayStreamWssOwner {
     Thread(task, "napplet-relay-stream").apply { isDaemon = true }
   })
   private val rows = mutableMapOf<String, Row>()
-  private val consumed = mutableSetOf<String>()
   @Volatile private var foreground = false
   private class Row(val id: String, val token: String, val legacy: Boolean, val emit: (Map<String, Any>) -> Unit) : PublishedRelayWssQuery.StreamControl {
     @Volatile var cancelled = false
@@ -39,11 +38,11 @@ internal object RelayStreamWssOwner {
   }
   @Synchronized fun start(id: String, token: String, url: String, request: String, subId: String,
     emit: (Map<String, Any>) -> Unit): Boolean {
-    if (!foreground || !PublishedRelayWssRequestOwner.isCanonicalUuid(id) || consumed.size >= 65_536 ||
-      consumed.contains(id) || rows.size >= 16 || rows.values.count { it.token == token } >= RelaySubscriptionTransport.registry.connectionLimit(token) || !RelaySubscriptionTransport.registry.isActive(token)) return false
+    if (!foreground || !PublishedRelayWssRequestOwner.isCanonicalUuid(id) ||
+       rows.size >= 16 || rows.values.count { it.token == token } >= RelaySubscriptionTransport.registry.connectionLimit(token) || !RelaySubscriptionTransport.registry.isActive(token)) return false
     if (!LegacyReadOnlyContext.permitsWire(RelaySubscriptionTransport.registry.capturedSnapshot(token), url, request, subId)) return false
     try { PublishedRelayResponseClassifier.validateRequest(request, subId); PublishedRelayWssQuery.parseUrl(url) } catch (_: Exception) { return false }
-    consumed.add(id)
+    if (!NativeTransportTickets.consume(id)) return false
     val legacy = org.json.JSONObject(RelaySubscriptionTransport.registry.capturedSnapshot(token) ?: return false).getJSONObject("registration").has("legacyReadOnly")
     val row = Row(id, token, legacy, emit); rows[id] = row
     try { pool.execute {
@@ -57,7 +56,7 @@ internal object RelayStreamWssOwner {
   @Synchronized fun acknowledge(id: String, sequence: Long) { rows[id]?.acknowledge(sequence) }
   @Synchronized fun cancel(id: String) {
     val row = rows.remove(id); row?.cancel()
-    if (row == null && PublishedRelayWssRequestOwner.isCanonicalUuid(id) && consumed.size < 65_536) consumed.add(id)
+    if (row == null) NativeTransportTickets.consume(id)
   }
   @Synchronized fun cancelToken(token: String) { rows.values.filter { it.token == token }.map { it.id }.forEach(::cancel) }
   @Synchronized fun setForeground(value: Boolean) { foreground = value; if (!value) revokeAll() }

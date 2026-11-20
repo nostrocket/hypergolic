@@ -1,3 +1,4 @@
+import { RequestHistory } from '../runtime/request-history.ts';
 import { decodeNativeRegistration, decodeNativeRequest, CAPABILITY_LIMITS, type NativeRegistration } from '../runtime/capability-protocol.ts';
 import type { NativeCapabilityPort, CapabilityOwner } from '../runtime/capability-broker.ts';
 import type { RoutingNativePort } from '../routing/routing-port.ts';
@@ -5,7 +6,7 @@ import { routingRecord, routingText } from '../routing/routing-contract.ts';
 import { ShellStorageError, type TrustedApp, type TrustedUser } from '../storage/ports.ts';
 import { parseNotifyMessage, NOTIFY_CONTROLS, NOTIFY_LIMITS, type NotifyMessage, type NotifyAction, type NotifyPriority } from './notify-contract.ts';
 import type { NotifyPermissions } from './notify-permissions.ts';
-type Endpoint = {registration: NativeRegistration; assertActive(): void; seen: Set<string>; channels: Map<string, Extract<NotifyMessage, {type: 'notify.channel.register'}>>; window: number; sends: number; asks: number};
+type Endpoint = {registration: NativeRegistration; assertActive(): void; seen: RequestHistory; channels: Map<string, Extract<NotifyMessage, {type: 'notify.channel.register'}>>; window: number; sends: number; asks: number};
 export type NotificationCard = Readonly<{id: string; origin: NativeRegistration; title: string; body: string; channel: string; priority: NotifyPriority; actions: readonly NotifyAction[]; created: number; toastUntil: number}>;
 export type NotifyReview = Readonly<{id: string; origin: NativeRegistration; channel: string; label: string}>;
 type Pending = NotifyReview & {active(): void; resolve(allow: boolean): void};
@@ -149,10 +150,10 @@ export class NotifyBroker {
       const id = routingText(wrapper.id, 128); if (!Number.isSafeInteger(wrapper.revision) || (wrapper.revision as number) < 0) return;
       this.refresh(); const revision = wrapper.revision as number, policy = this.policyRevision;
       let endpoint = this.endpoints.get(expected.generation);
-      if (!endpoint) {if (this.endpoints.size >= 64) return; endpoint = {registration: expected, assertActive: owner.assertActive, seen: new Set(), channels: new Map(), window: this.now(), sends: 0, asks: 0}; this.endpoints.set(expected.generation, endpoint);}
+      if (!endpoint) {if (this.endpoints.size >= 64) return; endpoint = {registration: expected, assertActive: owner.assertActive, seen: new RequestHistory(CAPABILITY_LIMITS.sessionRequests), channels: new Map(), window: this.now(), sends: 0, asks: 0}; this.endpoints.set(expected.generation, endpoint);}
       else if (JSON.stringify(endpoint.registration) !== JSON.stringify(expected)) return;
       const selected = endpoint; const active = () => {if (!this.capability.isActive(token) || policy !== this.policyRevision) revoked(); owner.assertActive(); this.active(selected, revision);}; active();
-      if (selected.seen.has(id) || selected.seen.size >= CAPABILITY_LIMITS.sessionRequests) return; selected.seen.add(id);
+      if (selected.seen.claim(id)) return;
       let result: Readonly<Record<string, unknown>> | null;
       const control = routingRecord(wrapper.message, ['type'], Object.keys(wrapper.message as object).filter(key => key !== 'type'));
       if (control.type === 'notify.__register') {routingRecord(control, ['type']); this.push(selected, {type: 'notify.controls', controls: NOTIFY_CONTROLS}); result = null;}

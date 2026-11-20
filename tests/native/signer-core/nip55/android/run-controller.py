@@ -65,7 +65,7 @@ def main():
                     'NativeAndroidSignerBinding', 'NativeAndroidSignerInventory', 'NativeAndroidSignerParcel',
                     'NativeAndroidSignerResult', 'NativeAndroidSignerActivityController', 'NativeAndroidSignerPicker']
     host_names = ['PublicAddressPolicy', 'PublishedHttpsResponseReader', 'PublishedHttpsTransport',
-                  'PublishedHttpsRequestOwner', 'PublishedRelayWebSocketHandshake', 'PublishedRelayWebSocketFrames',
+                  'NativeTransportTickets', 'PublishedHttpsRequestOwner', 'PublishedRelayWebSocketHandshake', 'PublishedRelayWebSocketFrames',
                   'PublishedRelayWebSocketClientFrames', 'PublishedRelayWssQuery', 'PublishedRelayWssIo',
                   'PublishedRelayResponseClassifier', 'NativeSignerRelayOpening', 'NativeSignerRelay']
     sources = [signer / (name + '.java') for name in signer_names]

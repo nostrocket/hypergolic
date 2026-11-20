@@ -72,6 +72,7 @@ class NappletHostModule : Module() {
       PublishedRelayWssRequestOwner.INSTANCE.setForeground(true)
     }
     OnActivityEntersBackground {
+      NativeTransportTickets.revokeAll()
       SelectedFilePicker.foreground(false)
       UploadTransport.foreground(false)
       CvmTransport.foreground(false)
@@ -88,6 +89,7 @@ class NappletHostModule : Module() {
     }
     OnActivityResult { activity, result -> SelectedFilePicker.result(activity, result.requestCode, result.resultCode, result.data) }
     OnActivityDestroys {
+      NativeTransportTickets.revokeAll()
       SelectedFilePicker.cancel()
       SelectedFilePicker.foreground(false)
       UploadTransport.foreground(false)
@@ -281,7 +283,7 @@ class NappletHostModule : Module() {
     Function("cancelApproval") { token: String -> ApprovalTransport.cancel(token) }
     Function("finishApproval") { token: String, response: String? -> ApprovalTransport.finish(token, response) }
     Function("resumeApprovals") { ApprovalTransport.resume() }
-    Function("newInstanceId") { java.util.UUID.randomUUID().toString() }
+    Function("newInstanceId") { NativeTransportTickets.issue() }
     Function("synchronizeLinkOwner") { user: String, epoch: Double, available: Boolean ->
       require(user.matches(Regex("[0-9a-f]{64}")) && epoch.isFinite() && epoch >= 0 && epoch <= 9_007_199_254_740_991.0 && epoch % 1.0 == 0.0)
       check(LinkTransport.synchronizeOwner(user, epoch.toLong(), available)) { "Stale link owner" }

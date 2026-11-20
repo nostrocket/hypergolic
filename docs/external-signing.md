@@ -98,6 +98,10 @@ hop requires the exact bounded handoff ticket. Lock, account/method changes,
 cancellation, protected-data loss and expiry revoke work independently.
 
 Each native preparation/signing operation owns its panel, task, callback and timer.
+Android reuses its reserved 16-bit Activity codes only with a matching per-launch request ID.
+After a code has cycled, a platform cancellation with no ID is indistinguishable from an old
+callback. The request then ends through its owner cancellation or deadline.
+
 Late callbacks cannot consume or cancel a replacement request. Android handoff
 cancellation is notified at most once. Prepared resources not delivered because
 prompt cancellation wins must be closed.

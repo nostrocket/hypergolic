@@ -56,7 +56,7 @@ final class FixtureReleaseTransport: @unchecked Sendable {
     do {
       var result=try UploadWire.object(raw)
       guard result["ok"] as? Bool == true else {return raw}
-      let encoded=try await https.fetch(operationId:UUID().uuidString.lowercased(),url:row.server + "/" + row.review.sha256)
+      let encoded=try await https.fetch(operationId:NativeTransportTickets.shared.issue(),url:row.server + "/" + row.review.sha256)
       guard let bytes=Data(base64Encoded:encoded), owner.verifyRetrieved(token,bytes:bytes) else {throw UploadWire.Invalid.value}
       result["retrievedSha256"]=FixtureReleaseAuthority.hash(bytes);result["retrievedSize"]=bytes.count
       return try UploadWire.json(result)

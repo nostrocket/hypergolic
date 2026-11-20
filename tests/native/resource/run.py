@@ -10,7 +10,7 @@ IOS = ROOT / 'modules/napplet-host/ios'
 HERE = Path(__file__).resolve().parent
 with tempfile.TemporaryDirectory(prefix='hypergolic-resource-proof-') as temporary:
     out = Path(temporary)
-    java = ['CapabilityLeaseRegistry', 'ResourceHttpsRequestOwner', 'PublishedHttpsRequestOwner',
+    java = ['CapabilityLeaseRegistry', 'ResourceHttpsRequestOwner', 'NativeTransportTickets', 'PublishedHttpsRequestOwner',
             'PublishedHttpsTransport', 'PublishedHttpsResponseReader', 'PublicAddressPolicy']
     subprocess.run(['javac', '-Xlint:all', '-Werror', '-d', str(out),
                     *[str(ANDROID / (name+'.java')) for name in java], str(HERE/'ResourceOwnerProof.java')], check=True)

@@ -37,7 +37,7 @@ def run(command, timeout=120):
     return result.stdout
 host = ROOT / 'modules/napplet-host/android/src/main/java/org/nostrocket/hypergolic/host'
 signer = ROOT / 'modules/signer-core/android/src/main/java/org/nostrocket/hypergolic/signercore'
-host_names = ['PublicAddressPolicy', 'PublishedHttpsResponseReader', 'PublishedHttpsTransport', 'PublishedHttpsRequestOwner',
+host_names = ['PublicAddressPolicy', 'PublishedHttpsResponseReader', 'PublishedHttpsTransport', 'NativeTransportTickets', 'PublishedHttpsRequestOwner',
     'PublishedRelayWebSocketHandshake', 'PublishedRelayWebSocketFrames', 'PublishedRelayWebSocketClientFrames',
     'PublishedRelayWssQuery', 'NativeSignerRelayOpening', 'NativeSigningHold', 'PublishedRelayWssIo', 'PublishedRelayResponseClassifier', 'NativeSignerRelay']
 signer_names = ['NativeSigningKey', 'NativeEvent', 'NativeSignerCore', 'NativeReviewPanel', 'NativeSecretBuffer',

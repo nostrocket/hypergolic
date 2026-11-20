@@ -1,3 +1,4 @@
+import { RequestHistory } from '../runtime/request-history.ts';
 import { ReviewBusyError } from '../shell/review-slot.ts';
 import { decodeNativeRegistration, decodeNativeRequest, CAPABILITY_LIMITS, type NativeRegistration } from '../runtime/capability-protocol.ts';
 import type { NativeCapabilityPort, CapabilityOwner } from '../runtime/capability-broker.ts';
@@ -9,7 +10,7 @@ import { RoutingChannels } from './routing-channels.ts';
 import { RoutingReviewService } from './routing-review.ts';
 import {routingAppLabel,snapshotEventId} from '../napplets/published-identity.ts';
 export type RoutingTargetPort = Readonly<{ activate(handler: CatalogHandler, request: IntentRequest, signal: AbortSignal, assertActive: () => void, origin: NativeRegistration, revision: number): Promise<string | null> }>;
-type Endpoint = { registration: NativeRegistration; assertActive(): void; seen: Set<string>; topics: Set<string> };
+type Endpoint = { registration: NativeRegistration; assertActive(): void; seen: RequestHistory; topics: Set<string> };
 const revoked = (): never => { throw new ShellStorageError('REVOKED'); };
 const sameHandler = (a: Readonly<{ publisher: string; appId: string; eventId: string }>, b: Readonly<{ publisher: string; appId: string; eventId: string }>) => a.publisher === b.publisher && a.appId === b.appId && a.eventId === b.eventId;
 const actions = (handler: CatalogHandler, role: string): readonly string[] => {
@@ -230,14 +231,14 @@ export class RoutingBroker {
       let endpoint = this.endpoints.get(generation);
       if (!endpoint) {
         if (this.endpoints.size >= ROUTING_LIMITS.endpoints) return;
-        endpoint = { registration: expected, assertActive: owner.assertActive, seen: new Set(), topics: new Set() };
+        endpoint = { registration: expected, assertActive: owner.assertActive, seen: new RequestHistory(CAPABILITY_LIMITS.sessionRequests), topics: new Set() };
         this.endpoints.set(generation, endpoint);
       } else if (JSON.stringify(endpoint.registration) !== JSON.stringify(expected)) return;
       const selected = endpoint, capturedRevision = revision as number;
       const active = () => { if (!this.capability.isActive(token) || controller.signal.aborted) revoked(); owner.assertActive(); this.active(selected, capturedRevision, domain); };
       active();
-      if (selected.seen.has(id) || selected.seen.size >= CAPABILITY_LIMITS.sessionRequests) return;
-      selected.seen.add(id); this.controllers.add(controller);
+      if (selected.seen.claim(id)) return;
+      this.controllers.add(controller);
       let result: Readonly<Record<string, unknown>> | null;
       if (control.type === 'routing.__register') { routingRecord(wrapper.message, ['type']); result = null; }
       else {

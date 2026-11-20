@@ -55,7 +55,7 @@ internal object FixtureReleaseTransport {
     val result = JSONObject(UploadTransport.putTrustedFixture(transfer))
     if(!result.optBoolean("ok"))return result.toString()
     return try {
-      val bytes = PublishedHttpsRequestOwner.INSTANCE.fetch(UUID.randomUUID().toString(),row.server + "/" + row.review.sha256) { owner.uploadApproved(token) }
+      val bytes = PublishedHttpsRequestOwner.INSTANCE.fetch(NativeTransportTickets.issue(),row.server + "/" + row.review.sha256) { owner.uploadApproved(token) }
       require(owner.verifyRetrieved(token,bytes))
       result.put("retrievedSha256",FixtureReleaseAuthority.hash(bytes)).put("retrievedSize",bytes.size).toString()
     } catch (_: Exception) { JSONObject().put("ok",false).put("error","upload accepted; payload retrieval unverified").toString() }

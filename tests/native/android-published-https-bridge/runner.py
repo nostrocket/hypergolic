@@ -18,6 +18,7 @@ with tempfile.TemporaryDirectory(prefix="published-https-owner-proof-") as temp:
         str(JAVA_ROOT / "PublishedHttpsTransport.java"),
         str(JAVA_ROOT / "PublishedHttpsResponseReader.java"),
         str(JAVA_ROOT / "PublicAddressPolicy.java"),
+        str(JAVA_ROOT / "NativeTransportTickets.java"),
         str(JAVA_ROOT / "PublishedHttpsRequestOwner.java"),
         str(PROOF),
     ], check=True)

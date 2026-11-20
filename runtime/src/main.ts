@@ -291,7 +291,7 @@ function mount(artifact: RuntimeMetadata) {
   const deadline = window.setTimeout(() => fail('runtime-timeout'), 10_000);
 
   const receiveGuest = guestMessageReceiver(frame, source, {
-    routing, discoveryOpen, catalogPage, recommendations: discoveryToken && !artifact.published && artifact.domains.includes('relay') ? createRecommendationsReceiver(source,native,discoveryToken,live) : null, keys, sendMedia: hasMedia ? native.sendMedia : null,
+    domains: artifact.domains, routing, discoveryOpen, catalogPage, recommendations: discoveryToken && !artifact.published && artifact.domains.includes('relay') ? createRecommendationsReceiver(source,native,discoveryToken,live) : null, keys, sendMedia: hasMedia ? native.sendMedia : null,
     cvm:artifact.domains.includes('cvm')?createCvmGuestReceiver(source,native.cvm,live):null,
     closed: () => stopped, live,
     dispatch(event) {

@@ -3,17 +3,14 @@ package org.nostrocket.hypergolic.host;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import org.nostrocket.hypergolic.host.PublishedRelayResponseClassifier.ResponseProfile;
 
 /** Process-scoped owner for trusted-shell initial relay lookups. */
 public final class PublishedRelayWssRequestOwner {
   private static final int MAX_CONCURRENT = 4;
-  private static final int MAX_OPERATIONS = 65_536;
   private static final PublishedHttpsTransport.AddressPolicy POLICY = PublishedHttpsRequestOwner.addressPolicy();
   public static final PublishedRelayWssRequestOwner INSTANCE = new PublishedRelayWssRequestOwner();
 
@@ -23,7 +20,6 @@ public final class PublishedRelayWssRequestOwner {
 
   private final Object lock = new Object();
   private final Map<String, Operation> active = new HashMap<>();
-  private final Set<String> consumed = new HashSet<>();
   private final Query query;
   private volatile boolean foreground;
 
@@ -64,10 +60,8 @@ public final class PublishedRelayWssRequestOwner {
     Operation operation = new Operation();
     synchronized (lock) {
       if (!foreground) throw new IOException("Published relay transport is inactive");
-      if (consumed.contains(operationId)) throw new IOException("Relay operation id was already used");
       if (active.size() >= MAX_CONCURRENT) throw new IOException("Too many published relay requests");
-      if (consumed.size() >= MAX_OPERATIONS) throw new IOException("Published relay operation limit reached");
-      consumed.add(operationId);
+      if (!NativeTransportTickets.consume(operationId)) throw new IOException("Invalid or used operation id");
       active.put(operationId, operation);
     }
     try {
@@ -90,9 +84,7 @@ public final class PublishedRelayWssRequestOwner {
     synchronized (lock) {
       Operation operation = active.get(operationId);
       if (operation != null) { operation.cancelled = true; return true; }
-      if (consumed.contains(operationId) || consumed.size() >= MAX_OPERATIONS) return false;
-      consumed.add(operationId); // A cancellation that beats coroutine registration is one-use too.
-      return true;
+      return NativeTransportTickets.consume(operationId);
     }
   }
 

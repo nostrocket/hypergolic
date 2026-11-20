@@ -1,3 +1,4 @@
+import { RequestHistory } from './request-history.ts';
 import {CapabilityReadAdmission, CapabilityReadBusy} from './capability-read-admission.ts';
 import {readCommon} from '../common/common-service.ts';
 import {commonFailure,type CommonRequest} from '../common/common-contract.ts';
@@ -108,17 +109,15 @@ async function readIdentity(request: IdentityRequest, service: IdentityDataPort 
 }
 async function readCatalog(value: unknown, paging: ReturnType<typeof createCatalogPaging>,
   recommendations: ReturnType<typeof createCatalogRecommendations> | undefined,
-  seen: Set<string>, pending: CapabilityReadAdmission, active: () => void): Promise<CapabilityReply | null> {
+  seen: RequestHistory, pending: CapabilityReadAdmission, active: () => void): Promise<CapabilityReply | null> {
   if (!value || typeof value !== 'object' || !('id' in value) || !('type' in value)) return null;
   const {id, type} = value;
   if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) return null;
   const page = type === CATALOG_PAGE ? parseCatalogPageRequest(value) : null;
   if (!page && !recommendations) return null;
-  const key = JSON.stringify([type, id]);
   const reply = {type: type + '.result', id};
   const failure = page ? {...reply, error: 'Catalog paging unavailable'} : {...reply, result: {status: 'unavailable'}};
-  if (seen.has(key) || seen.size >= CAPABILITY_LIMITS.sessionRequests || page && pending.size >= 2) return failure;
-  seen.add(key);
+  if (page && pending.size >= 2 || seen.claim(id, String(type))) return failure;
   try {
     const work = (signal: AbortSignal) => page ? paging(page, signal, active) : recommendations!.dispatch(value, signal, active);
     const result = await (page ? pending.run(active, work) : pending.schedule(active, work));
@@ -146,7 +145,7 @@ export function createCapabilityBroker(database: ShellDatabase, native: NativeCa
   const expected = JSON.stringify(registration);
   const resource = resources ? createResourceBroker(resources, owner) : null;
   const catalog = discovery && registration.domains.includes('relay') && queries?.catalog ? createCatalogPaging(queries.catalog) : null;
-  const seen = new Set<string>();
+  const seen = new RequestHistory(CAPABILITY_LIMITS.sessionRequests);
   let disposed = false;
   const pending = new CapabilityReadAdmission();
   const assertActive = (token: string): void => {
@@ -154,7 +153,7 @@ export function createCapabilityBroker(database: ShellDatabase, native: NativeCa
     owner.assertActive();
   };
   return Object.freeze({
-    revoke: () => { disposed = true; resource?.revoke(); seen.clear(); pending.revoke(); },
+    revoke: () => { disposed = true; resource?.revoke(); pending.revoke(); },
     async dispatch(token: string): Promise<void> {
       let response: string | null = null;
       let claimed = false;
@@ -193,13 +192,11 @@ export function createCapabilityBroker(database: ShellDatabase, native: NativeCa
         }
         const domain = request.type.split('.')[0]!;
         if (!registration.domains.includes(domain)) return;
-        const correlation = JSON.stringify([request.type, request.id]);
-        if (seen.has(correlation) || seen.size >= CAPABILITY_LIMITS.sessionRequests) {
+        if (seen.claim(request.id, request.type)) {
           const failure = commonFailure(request) ?? outboxReadFailure(request, 'policy denied') ?? queryFailure(request, 'request already used or session limit reached') ?? storageFailure(request, 'request already used or session limit reached');
           if (failure) response = JSON.stringify(failure);
           return;
         }
-        seen.add(correlation);
         let result: CapabilityReply;
         if (domain === 'common') {
           const work = (signal:AbortSignal) => readCommon(request as CommonRequest,registration,

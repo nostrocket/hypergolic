@@ -177,6 +177,23 @@ test('correlation history is bounded without silently forgetting used IDs', asyn
   assert.equal(sqlite.calls.length, before);
 });
 
+test('SDK requests continue across the session cap and old correlations remain spent', async t => {
+  const {database} = await setup(t), native = new NativeLeases(), config = registration();
+  const broker = createCapabilityBroker(database, native, {registration:config, assertActive() {}});
+  const id = (sequence: number) => `hg-${sequence}-0123456789abcdef0123456789abcdef`;
+  const invoke = async (sequence: number) => {
+    const token = native.add(config, {type:'storage.keys', id:id(sequence)});
+    await broker.dispatch(token);
+    return native.results.get(token);
+  };
+  for (let i = 1; i <= CAPABILITY_LIMITS.sessionRequests + 2; i++) {
+    assert.deepEqual(await invoke(i), {type:'storage.keys.result', id:id(i), keys:[]});
+  }
+  for (const i of [1, CAPABILITY_LIMITS.sessionRequests]) {
+    assert.match((await invoke(i) as {error:string}).error, /already used/);
+  }
+});
+
 test('capability requests retain strict field checks without Object.hasOwn', () => {
   const descriptor = Object.getOwnPropertyDescriptor(Object, 'hasOwn');
   assert.ok(descriptor);

@@ -11,6 +11,29 @@ import { parseRelaySubscribe, parseRelayClose } from '../../src/network/relay-su
 const privilegedRequests = new Set([...COMMON_OPERATIONS,'identity.getPublicKey', 'identity.getRelays', 'identity.getProfile',
   'identity.getFollows', 'identity.getMutes', 'identity.getBlocked', 'identity.getList',
   'identity.getZaps', 'identity.getBadges', 'storage.get', 'storage.set', 'storage.remove', 'storage.keys', 'relay.query', 'outbox.query', 'outbox.getEvent', 'outbox.resolveRelays', 'outbox.publish', 'resource.info', 'resource.bytes', 'resource.bytesMany', 'resource.cancel']);
+const additionalCorrelatedRequests = new Set(['relay.publish', 'theme.get', 'link.open', 'upload.info',
+  'upload.upload', 'upload.status', 'intent.invoke', 'intent.available', 'intent.handlers', 'inc.channel.open',
+  'inc.channel.list', 'config.get', 'config.registerSchema', 'keys.registerAction', 'notify.send',
+  'notify.permission.request', 'media.session.create', 'cvm.discover', 'cvm.request', 'cvm.close']);
+
+/** Project only small correlation headers. Over-limit payloads never reach capability adapters. */
+export function quotaReply(value: unknown, domains: readonly string[]): object | null {
+  if (!value || typeof value !== 'object') return null;
+  const {type, id, subId} = value as Record<string, unknown>;
+  if (typeof type !== 'string' || type.length > 64 || !domains.includes(type.split('.')[0]!) ||
+      typeof id !== 'string' || !id.length || id.length > 128 || new TextEncoder().encode(id).length > 128) return null;
+  const error = 'quota-exceeded';
+  if (type === 'relay.subscribe' || type === 'outbox.subscribe') {
+    if (typeof subId !== 'string' || !subId.length || subId.length > 128 || new TextEncoder().encode(subId).length > 128) return null;
+    return {type: type === 'relay.subscribe' ? 'relay.closed' : 'outbox.closed', subId, reason: error};
+  }
+  if (!privilegedRequests.has(type) && !additionalCorrelatedRequests.has(type)) return null;
+  if (type === 'resource.cancel') return null;
+  if (type === 'relay.publish' || type === 'outbox.publish') return {type: type + '.result', id, ok: false, error};
+  if (type.startsWith('cvm.') || type === 'media.session.create') return {type: type + '.result', id, error};
+  // The injected SDK accepts this error envelope even for operations with custom success fields.
+  return {type: type + '.error', id, error};
+}
 export function validEnvelope(value: unknown): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const message = value as Record<string, unknown>;
