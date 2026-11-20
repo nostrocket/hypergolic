@@ -8,7 +8,7 @@ import {CommonError,type CommonSocialRequest} from '../common/common-contract.ts
 import type {NativeRegistration} from '../runtime/capability-protocol.ts';
 import { SigningForeground, signingHandoffState, type SigningHandoffReader } from './signing-handoff.ts';
 import {OutboxApprovalPreparation,type OutboxPublicationPlanner} from '../outbox/approval-preparation.ts';
-import type {OutboxPublishRequest} from '../outbox/publication-contract.ts';
+import {assertOutboxEventFrameFits, type OutboxPublishRequest} from '../outbox/publication-contract.ts';
 import type {OutboxPublicationPlan} from '../outbox/publication-plan.ts';
 import {captureOutboxPublicationReceipt,type OutboxPublicationReceipt} from '../outbox/publication-receipt.ts';
 import { captureEventSnapshot, type EventSnapshot } from './event-snapshot.ts';
@@ -42,7 +42,7 @@ export interface NativeApprovalLeasePort {
 export type EffectAuthority = Readonly<{ assertActive(): void; signal: AbortSignal; nativeSource?: NativeSigningSource; awaitForeground?(): Promise<void> }>;
 export interface ApprovalEffects extends SigningHandoffReader {
   sign(snapshot: EventSnapshot, execution: EffectAuthority): Promise<unknown>;
-  publishEvent(event: VerifiedSignedEvent, destinations: readonly string[], execution: EffectAuthority): Promise<readonly RelayOutcome[]>;
+  publishEvent?(event: VerifiedSignedEvent, destinations: readonly string[], execution: EffectAuthority): Promise<readonly RelayOutcome[]>;
 }
 export interface TrustedApprovalOwner { assertActive(origin: ApprovalOrigin,domain?:'outbox'|'common'): void }
 export type ApprovalItem = Readonly<{ recommendation?: string; recommendationExcludedRelays?: readonly string[]; id: string; origin: ApprovalOrigin; event: EventSnapshot; outbox?:OutboxPublicationPlan;common?:CommonSocialPlan;appData?:AppDataPlan }>;
@@ -160,6 +160,13 @@ export class ApprovalService {
         revalidateRecommendation = bindRecommendation(event) ?? denied();
         recommendation = event.event.tags.at(-1)?.[1];
         ({event, recommendationExcludedRelays} = recommendationScope(event, revalidateRecommendation));
+      }
+      if (!this.effects.publishEvent) {
+        assertOutboxEventFrameFits(event.event, event.selectedPubkey);
+        const plan: OutboxPublicationPlan = {requestId:taken.requestId, event,
+          destinations:event.destinations.map(relay => ({relay, sources:[{kind:'explicit'}]})),
+          ownSource:'skipped', requiredInboxes:[], ancillary:null};
+        if (!this.native.prepareOutbox?.(taken.lease, plan)) denied();
       }
       this.entries.push({ recommendation, recommendationExcludedRelays, revalidateRecommendation, requestId: taken.requestId, id: `approval_${++nextPresentationId}`, origin: captureOrigin(taken.origin), event, lease: taken.lease, controller: null });
       this.publish(); return true;
@@ -314,7 +321,9 @@ export class ApprovalService {
         this.receipts.set(receipt.primary.outcomes,receipt);return receipt.primary.outcomes;
       }
       publicationStarted = true; entry.publicationStarted = true;
-      const outcomes = await this.effects.publishEvent(verified, entry.event.destinations, execution);
+      const outcomes = this.effects.publishEvent
+        ? await this.effects.publishEvent(verified, entry.event.destinations, execution)
+        : await (this.native.publishOutbox?.(entry.lease, 'primary', verified, entry.event.destinations, execution, true) ?? denied());
       execution.assertActive();
       const captured = captureRelayOutcomes(outcomes, entry.event.destinations, verified.id);
       if (captured.some(row => row.status === 'unknown')) this.closeRisks.set(entry.origin.sessionId, entry.origin.epoch);

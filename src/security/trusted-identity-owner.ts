@@ -43,7 +43,6 @@ import { ApprovalService } from './approval-service';
 import { createApprovalOwner, createUploadOwner } from './approval-owner';
 import { loadNativeApprovalPort } from '../runtime/native-approval-port';
 import { loadNativeRelayQuery } from '../network/native-relay-query-port';
-import { publishEvent } from '../network/relay-service';
 import { openNativeRelaySettings, type NativeRelaySettings } from '../network/relay-settings-native';
 import { Platform } from 'react-native';
 import { createRuntimeOwner, type RuntimeOwner } from '../runtime/runtime-owner';
@@ -132,7 +131,6 @@ async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android
     }), {
       handoffState: source => vault.signingHandoffState(source),
       sign: (snapshot, execution) => vault.signApproved(snapshot, execution),
-      publishEvent,
     },outbox.publication,outbox.common,outbox.appData);
     const uploads=createWorkspaceUploads(vault,transition,()=>runtime);
     const capability = loadNativeCapabilityPort(), routingNative = loadRoutingNativePort();

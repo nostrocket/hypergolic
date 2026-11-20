@@ -321,3 +321,26 @@ test('Discover recommendations bind the reviewed list and recheck before signing
   native.issue('unprepared', owner, 'request', template);
   assert.equal(make(native).enqueue('unprepared', [relay], owner, () => null), false);
 });
+
+test('plain Relay prepares and consumes an exact native primary publication', async () => {
+  const native = new Native();
+  native.issue('one');
+  let prepared: readonly string[] = [];
+  const port: NativeApprovalLeasePort = Object.assign(native, {
+    prepareOutbox: ((_, plan) => {
+      prepared = plan.event.destinations;
+      assert.equal(plan.ancillary, null);
+      assert.deepEqual(plan.requiredInboxes, []);
+      return true;
+    }) satisfies NonNullable<NativeApprovalLeasePort['prepareOutbox']>,
+    publishOutbox: (async (_, group, event, destinations, execution) => {
+      execution.assertActive();
+      assert.equal(group, 'primary');
+      assert.deepEqual(destinations, prepared);
+      return destinations.map(relay => ({relay, eventId:event.id, status:'accepted', reason:''}));
+    }) satisfies NonNullable<NativeApprovalLeasePort['publishOutbox']>,
+  });
+  const service = new ApprovalService(port, {assertActive() {}}, {sign:async snapshot => sign(snapshot)});
+  const results = await service.approve(current(service, 'one'));
+  assert.equal(results[0]?.status, 'accepted');
+});

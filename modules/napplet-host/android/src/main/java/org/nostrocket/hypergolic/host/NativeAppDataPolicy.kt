@@ -18,13 +18,6 @@ internal object NativeAppDataPolicy {
         (name in listOf("L", "l") && (0 until row.length()).any { row.opt(it) == "soy.app-data/1" })
     }
   }
-  /** Reuses only the private publication carrier; an actual Relay grant remains required. */
-  fun rawRelay(registration: JSONObject, request: JSONObject): Boolean = runCatching {
-    require(request.getString("type") == "relay.publish" && claims(request))
-    val domains = registration.getJSONArray("domains")
-    require((0 until domains.length()).any { domains.get(it) == "relay" })
-    validatePublication(registration, request, emptyList()); true
-  }.getOrDefault(false)
   fun validatePublication(registration: JSONObject, request: JSONObject, destinations: List<String>) {
     val domains = registration.getJSONArray("domains")
     val grants = (0 until domains.length()).map { domains.getString(it) }

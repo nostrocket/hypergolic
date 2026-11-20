@@ -144,6 +144,14 @@ enum CapabilityTransport { static let leases = CapabilityLeaseRegistry() }
     var noGrant = try JSONSerialization.jsonObject(with: Data(snapshot.utf8)) as! [String: Any]
     var registration = noGrant["registration"] as! [String: Any]; registration["domains"] = ["relay"]; noGrant["registration"] = registration
     denied { _ = try NativeOutboxPlan.capture(snapshot: wire(noGrant), raw: raw) }
+    var relayRequest = try NativeOutboxPlan.object(noGrant["request"] as! String)
+    relayRequest["type"] = "relay.publish"; relayRequest.removeValue(forKey:"options")
+    noGrant["request"] = try wire(relayRequest)
+    denied { _ = try NativeOutboxPlan.capture(snapshot: wire(noGrant), raw: raw) }
+    var relayPlan = fixture["plan"] as! [String: Any]
+    relayPlan["ancillary"] = NSNull(); relayPlan["requiredInboxes"] = [String]()
+    let rawOwner = try NativeOutboxPlan.capture(snapshot: wire(noGrant), raw: wire(relayPlan))
+    check(try rawOwner.reserve(group:"primary", wire:primary, relay:relay).eventId == send.eventId)
     denied { _ = try NativeOutboxPlan.capture(snapshot: snapshot, raw: String(repeating: "[", count: 30) + "0" + String(repeating: "]", count: 30)) }
     let leases = CapabilityLeaseRegistry(); check(leases.register("owner-a"))
     let registry = ApprovalTransportRegistry(leases: leases, schedule: { _, _ in })

@@ -15,11 +15,6 @@ enum NativeAppDataPolicy {
         ["L", "l"].contains(name ?? "") && row.contains { $0 as? String == "soy.app-data/1" }
     }
   }
-  static func rawRelay(_ registration: [String: Any], _ request: [String: Any]) -> Bool {
-    guard request["type"] as? String == "relay.publish", claims(request),
-      let domains = registration["domains"] as? [String], domains.contains("relay") else { return false }
-    do { try validatePublication(registration, request, destinations: []); return true } catch { return false }
-  }
   /// Exact native source policy and the original Relay grant remain independent of Outbox.
   static func validatePublication(_ registration: [String: Any], _ request: [String: Any], destinations: [String]) throws {
     guard let publisher = registration["publisher"] as? String, let appId = registration["appId"] as? String,
