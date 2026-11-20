@@ -1,3 +1,4 @@
+import { RequestHistory } from '../../src/runtime/request-history';
 import type { HostOperationContext, NappletMessage } from '@kehto/runtime';
 import { captureUploadBytes, parseUploadRequest, captureUploadResult, UploadError, UPLOAD_ERRORS, UPLOAD_LIMITS } from '../../src/uploads/upload-contract';
 type NativeUploadClient = {request(message: NappletMessage, upload?: Readonly<{uploadId: string; onStatus(message: NappletMessage): void}>): Promise<NappletMessage>};
@@ -11,7 +12,7 @@ function base64(bytes: Uint8Array): string {
 /** Trusted top document reverse byte carrier. Public callers still supply Blob/ArrayBuffer through structured clone. */
 export function createUploadAdapter(native: NativeUploadClient, captureRecipient: () => () => boolean) {
   let busy = false;
-  const callerIds = new Set<string>();
+  const callerIds = new RequestHistory(1024);
   return async ({message, send}: HostOperationContext): Promise<void> => {
     const live = captureRecipient();
     let request: ReturnType<typeof parseUploadRequest>;
@@ -27,10 +28,10 @@ export function createUploadAdapter(native: NativeUploadClient, captureRecipient
       catch {if (live()) send({type: request.type + '.result', id: request.id, error: 'policy denied'});}
       return;
     }
-    if (busy || callerIds.has(request.id) || callerIds.size >= 1024) {
+    if (busy || callerIds.claim(request.id)) {
       if (live()) send({type: 'upload.upload.result', id: request.id, error: 'quota exceeded'}); return;
     }
-    busy = true; callerIds.add(request.id);
+    busy = true;
     // This starts the intrinsic copy synchronously, before any asynchronous native work.
     const captured = captureUploadBytes(request.request.data);
     let token: string | null = null, sealed = false;

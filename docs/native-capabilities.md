@@ -47,7 +47,7 @@ event.
 | Pending requests | Four/generation, eight/global |
 | Native lease | 25 seconds |
 | Serialized snapshot | 2 MiB UTF-8, including nested JSON escaping |
-| Correlation history | 1,024 operation/ID pairs per broker |
+| Correlation history | SDK IDs carry a sequence and secure random suffix. Each broker supports 256 positions of reordering and permanently rejects older sequences. Opaque legacy IDs retain exact history up to 1,024 operation/ID pairs. |
 | Storage | 1 KiB key, 256 KiB value, 512 KiB namespace including keys/values |
 
 Android uses elapsed monotonic time; iOS uses `ContinuousClock`, including sleep.

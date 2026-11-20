@@ -1,3 +1,4 @@
+import {RequestHistory} from '../../src/runtime/request-history';
 import {createMeshNative, type NativeMeshContext} from './mesh-native.ts';
 import {createCvmNative} from './cvm-native';
 import {createResourceAdmission} from './native-resource-admission';
@@ -187,23 +188,28 @@ function createCapabilityRequester(native: NativeHost, generation: string, pendi
 }
 
 function createPresentationRequests(request: (message: NappletMessage) => Promise<NappletMessage>) {
+  let sequence = 0;
+  const nextId = () => {
+    if (!Number.isSafeInteger(++sequence)) throw new Error('Presentation sequence exhausted');
+    return `hg-${sequence}-${crypto.randomUUID()}`;
+  };
   return {
     async routing(message: RoutingMessage | Readonly<{type: 'routing.__register'}>): Promise<NappletMessage | null> {
-      const id = 'routing-' + crypto.randomUUID();
+      const id = nextId();
       const wrapper = {type: 'routing.call', id, message}, response = await request(wrapper);
       if (!('response' in response)) throw new Error('Missing routing response');
       if (message.type === 'routing.__register') { if (response.response !== null) throw new Error('Invalid registration response'); return null; }
       return captureRoutingReply(response.response, message);
     },
     async notify(message: NotifyMessage | Readonly<{type: 'notify.__register'}>): Promise<NappletMessage | null> {
-      const id = 'notify-' + crypto.randomUUID(), wrapper = {type: 'routing.call', id, message};
+      const id = nextId(), wrapper = {type: 'routing.call', id, message};
       const response = await request(wrapper);
       if (!('response' in response)) throw new Error('Missing notification response');
       if (message.type === 'notify.__register') {if (response.response !== null) throw new Error('Invalid registration response'); return null;}
       return captureNotifyReply(response.response, message);
     },
     async config(message: ConfigMessage): Promise<NappletMessage | null> {
-      const id = 'config-' + crypto.randomUUID(), wrapper = {type: 'routing.call', id, message};
+      const id = nextId(), wrapper = {type: 'routing.call', id, message};
       const response = await request(wrapper);
       if (!('response' in response)) throw new Error('Missing configuration response');
       if (message.type === 'config.get' && response.response === null) return null;
@@ -215,7 +221,7 @@ function createPresentationRequests(request: (message: NappletMessage) => Promis
 function createStreamAdmission(streams: Map<number,StreamState>, canStart: () => boolean,
   start: (request: StreamRequest, deliver: StreamState['deliver']) => void) {
   const waitingScoped = new Map<string, WaitingStream>();
-  const callerIds = new Set<string>();
+  const callerIds = new RequestHistory(SUBSCRIPTION_LIMITS.callerIds);
   const hasOutbox = () => Array.from(streams.values()).some(stream => stream.domain === 'outbox');
   function removeWaiting(subId:string):WaitingStream|undefined {
     const waiting=waitingScoped.get(subId);
@@ -240,23 +246,23 @@ function createStreamAdmission(streams: Map<number,StreamState>, canStart: () =>
       const outbox=message.type==='outbox.subscribe',request=outbox?parseOutboxSubscribe(message):parseRelaySubscribe(message);
       const mixed = outbox || hasOutbox();
       const sessionLimit = mixed ? SUBSCRIPTION_LIMITS.session : SUBSCRIPTION_LIMITS.rawSession;
-      if(!canStart()||callerIds.has(request.subId)||callerIds.size>=4096)throw new Error('Native subscription unavailable');
+      if(!canStart())throw new Error('Native subscription unavailable');
       if(streams.size>=sessionLimit){
         if(mixed||request.type!=='relay.subscribe'||!request.relay||waitingScoped.size>=SUBSCRIPTION_LIMITS.rawSession)throw new Error('Native subscription unavailable');
+        if(callerIds.claim(request.subId))throw new Error('Native subscription unavailable');
         const expiresAt=performance.now()+scopedStartTimeoutMs;
         const timer=window.setTimeout(()=>{const waiting=removeWaiting(request.subId);if(waiting)closeWaiting(waiting);},scopedStartTimeoutMs);
         waitingScoped.set(request.subId,{request,deliver,expiresAt,timer});
-        callerIds.add(request.subId);
         return;
       }
-      callerIds.add(request.subId);
+      if(callerIds.claim(request.subId))throw new Error('Native subscription unavailable');
       start(request,deliver);
     },
     released,
     removeWaiting,
     destroy() {
       for(const waiting of waitingScoped.values())window.clearTimeout(waiting.timer);
-      waitingScoped.clear();callerIds.clear();
+      waitingScoped.clear();
     },
   });
 }

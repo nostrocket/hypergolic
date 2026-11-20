@@ -1,3 +1,4 @@
+import { RequestHistory } from '../runtime/request-history.ts';
 import { createResourceScheduler } from './resource-scheduler.ts';
 import { mapResourceItems } from './bounded-map.ts';
 import { decode } from 'nostr-tools/nip19';
@@ -23,13 +24,13 @@ type Item = Readonly<{ url: string; ok: true; value: ResourceBytes }> |
 type CacheEntry = { value: ResourceBytes; used: number };
 type Active = (signal?: AbortSignal, authority?: ResourceAuthority) => void;
 async function executeResource(request: ResourceRequest, authority: ResourceAuthority, active: Active,
-  pending: Map<string, AbortController>, seen: Set<string>, info: () => ReturnType<typeof resourceInfo>,
+  pending: Map<string, AbortController>, seen: RequestHistory, info: () => ReturnType<typeof resourceInfo>,
   now: () => number, bytes: (target: ResourceTarget, signal: AbortSignal, authority: ResourceAuthority) => Promise<ResourceBytes>)
   : Promise<Readonly<Record<string, unknown>> | null> {
 active(undefined, authority);
 if (request.type === 'resource.cancel') { pending.get(request.id)?.abort(); return null; }
-if (seen.has(request.id) || seen.size >= 1024) throw new ResourceError('invalid-request');
-seen.add(request.id);
+const rejected = seen.claim(request.id);
+if (rejected) throw new ResourceError(rejected === 'quota' ? 'quota-exceeded' : 'invalid-request');
 if (request.type === 'resource.info') return { type: 'resource.info.result', id: request.id, info: info() };
 const start = now(), deadline = start + RESOURCE_LIMITS.requestMs;
 const original = authority;
@@ -146,7 +147,7 @@ function bindResourceSession(resolvers: ResourceResolvers, process: ResourceProc
       const captured = Object.freeze({ ...registration, domains: Object.freeze([...registration.domains]) });
       const cache = new Map<string, CacheEntry>();
       const pending = new Map<string, AbortController>();
-      const seen = new Set<string>();
+      const seen = new RequestHistory(1024);
       const admission = process.scheduler.bind();
       let disposed = false, cacheBytes = 0, deliveredBytes = 0;
       let windowStart = now(), requests = 0;
@@ -165,7 +166,7 @@ function bindResourceSession(resolvers: ResourceResolvers, process: ResourceProc
       const lifetime = { destroy() {
         if (disposed) return;
         disposed = true; admission.close(); for (const value of pending.values()) value.abort(); pending.clear();
-        process.cacheBytes -= cacheBytes; cacheBytes = 0; cache.clear(); seen.clear(); sessions.delete(lifetime);
+        process.cacheBytes -= cacheBytes; cacheBytes = 0; cache.clear(); sessions.delete(lifetime);
       }, evict, oldest: () => cache.values().next().value?.used ?? Infinity };
       sessions.add(lifetime);
       function countURL(): void {

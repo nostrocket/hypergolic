@@ -1,3 +1,4 @@
+import {RequestHistory} from '../runtime/request-history.ts';
 import {captureLegacyReadOnly} from '../napplets/legacy-read-only.ts';
 import { OUTBOX_LIST_LIMITS } from '../outbox/relay-list.ts';
 import { parsePublishedRelayMessage } from '../napplets/published-relay-wire.ts';
@@ -53,7 +54,7 @@ type LegacyAuthority=Readonly<{relays:readonly string[];isTokenActive(token:stri
 function createSession(owner:RelaySubscriptionOwner,registration:NativeRegistration,process:SessionProcess,legacy?:LegacyAuthority) {
   const {port,newId,now,retryMs,sessions}=process;
       let revoked=false;
-      const subscriptions=new Map<string,Subscription>(),callerIds=new Set<string>();
+      const subscriptions=new Map<string,Subscription>(),callerIds=new RequestHistory(SUBSCRIPTION_LIMITS.callerIds);
       const active=()=>{if(revoked)throw new RelaySubscriptionError('relay owner revoked');owner.assertActive();};
       function stopConnection(connection:Connection) {
         connection.revision++;
@@ -133,12 +134,12 @@ function createSession(owner:RelaySubscriptionOwner,registration:NativeRegistrat
       function pause() {for(const subscription of subscriptions.values()){subscription.epoch++;if(subscription.initialTimer!==null)clearTimeout(subscription.initialTimer);subscription.initialTimer=null;subscription.connections.forEach(stopConnection);}}
       function revoke() {
         if(revoked)return;
-        revoked=true;for(const subscription of Array.from(subscriptions.values()))finish(subscription);callerIds.clear();sessions.delete(registration.generation);
+        revoked=true;for(const subscription of Array.from(subscriptions.values()))finish(subscription);sessions.delete(registration.generation);
       }
       sessions.set(registration.generation,{pause,resume,revoke});
       return sessionCommands({process,subscriptions,callerIds,active,connect,deadline,finish,revoke,stopConnection,legacy});
 }
-type CommandScope={legacy?:LegacyAuthority;process:SessionProcess;subscriptions:Map<string,Subscription>;callerIds:Set<string>;
+type CommandScope={legacy?:LegacyAuthority;process:SessionProcess;subscriptions:Map<string,Subscription>;callerIds:RequestHistory;
   active:()=>void;connect:(subscription:Subscription,connection:Connection)=>void;deadline:(subscription:Subscription)=>void;
   finish:(subscription:Subscription,reason?:string)=>void;revoke:()=>void;stopConnection:(connection:Connection)=>void};
 function sessionCommands(scope:CommandScope) {
@@ -158,7 +159,7 @@ function sessionCommands(scope:CommandScope) {
         if(scope.legacy&&(plan!==undefined||!authorityToken||!scope.legacy.isTokenActive(authorityToken)||request.relay===undefined||!scope.legacy.relays.includes(request.relay)))throw new RelaySubscriptionError('legacy native read authority denied');
         const mixed = plan !== undefined || Array.from(subscriptions.values()).some(subscription => subscription.planned);
         const sessionLimit = mixed ? SUBSCRIPTION_LIMITS.session : SUBSCRIPTION_LIMITS.rawSession;
-        if(callerIds.has(request.subId)||callerIds.size>=SUBSCRIPTION_LIMITS.callerIds||subscriptions.size>=sessionLimit||process.total>=SUBSCRIPTION_LIMITS.process)throw new RelaySubscriptionError('relay subscription limit or reused ID');
+        if(subscriptions.size>=sessionLimit||process.total>=SUBSCRIPTION_LIMITS.process)throw new RelaySubscriptionError('relay subscription limit or reused ID');
         let selected:readonly string[];
         if(plan) {
           if(request.relay!==undefined||!Number.isSafeInteger(plan.limit)||plan.limit<0||plan.limit>32||!Number.isSafeInteger(plan.timeoutMs)||plan.timeoutMs<1||plan.timeoutMs>15000)throw new RelaySubscriptionError('relay plan denied');
@@ -172,7 +173,8 @@ function sessionCommands(scope:CommandScope) {
           selected=request.relay===undefined?relays.slice(0,SUBSCRIPTION_LIMITS.relays):[request.relay];
         }
         const subscription:Subscription={request,emit:send,connections:connections(selected),ids:new Set(),ended:false,eose:false,epoch:0,authorityToken,planned:!!plan,legacy:!!scope.legacy,backfillLimit:plan?.limit??32,backfill:0,initialTimeoutMs:plan?.timeoutMs??15000,initialTimer:null};
-        callerIds.add(request.subId);subscriptions.set(request.subId,subscription);process.total++;
+        if(callerIds.claim(request.subId))throw new RelaySubscriptionError('relay subscription limit or reused ID');
+        subscriptions.set(request.subId,subscription);process.total++;
         if(process.foreground){subscription.connections.forEach(connection=>connect(subscription,connection));deadline(subscription);}
       }
       return Object.freeze({
