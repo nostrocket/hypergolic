@@ -12,7 +12,7 @@ private func denied(_ operation: () async throws -> Void, file: StaticString = #
   do { try await operation(); check(false, file: file, line: line) } catch { check(true, file: file, line: line) }
 }
 private final class Ports: KeychainBackend, EncryptedFiles, @unchecked Sendable {
-  private struct State { var keys: [String: Data] = [:]; var record: Data?; var writes = 0; var adds = 0; var failWrite = false; var failAfterWrite = false; var gate: Gate? }
+  private struct State { var keys: [String: Data] = [:]; var record: Data?; var writes = 0; var adds = 0; var directory = false; var failWrite = false; var failAfterWrite = false; var gate: Gate? }
   final class Gate: @unchecked Sendable {
     let entered = DispatchSemaphore(value: 0), release = DispatchSemaphore(value: 0)
     func waitEntered() -> Bool { entered.wait(timeout: .now() + 3) == .success }
@@ -37,7 +37,9 @@ private final class Ports: KeychainBackend, EncryptedFiles, @unchecked Sendable 
   }
   func updateReceipt(_ value: Data) throws { state.withLock { $0.keys[KeychainItem.receipt.rawValue] = value } }
   func hasArtifacts() throws -> Bool { state.withLock { $0.record != nil } }
-  func prepare() throws { }
+  func directoryExists() throws -> Bool { state.withLock { $0.directory } }
+  func prepare() throws { state.withLock { $0.directory = true } }
+  func simulateReinstall() { state.withLock { $0.record = nil; $0.directory = false } }
   func read(_ slot: SecretSlot) throws -> Data? { state.withLock { $0.record } }
   func writeAtomically(_ slot: SecretSlot, data: Data) throws {
     try state.withLock { $0.writes += 1; if $0.failWrite { $0.failWrite = false; throw StoreFailure.unavailable }; $0.record = data; if $0.failAfterWrite { $0.failAfterWrite = false; throw StoreFailure.unavailable } }
@@ -171,12 +173,23 @@ final class SignerCoreTests: XCTestCase, @unchecked Sendable {
     ports.removeRecord()
     await denied { _ = try await core.open(authority: permit, current: { permit.current() }) }; check(ports.writes == 1 && ports.adds == 2)
   }
-  func testFailedInitialWriteLeavesRecoveryStateAndNoSuccess() async throws {
+  func testReinstallWithIsolatedKeychainMetadataStartsFresh() async throws {
+    let ports = Ports(), permit = Permit(), core = NativeVaultCore(testingStorage: storage(ports))
+    let first = try snapshot(await core.open(authority: permit, current: { true }))
+    ports.simulateReinstall()
+    let installed = NativeVaultCore(testingStorage: storage(ports))
+    let next = try snapshot(await installed.open(authority: permit, current: { true }))
+    check(next.id != first.id && next.selected != first.selected && next.count == 1)
+    check(try snapshot(await installed.open(authority: permit, current: { true })).selected == next.selected)
+  }
+  func testFailedInitialWriteCanResumeWithoutReplacingCiphertext() async throws {
     let ports = Ports(), permit = Permit(), store = storage(ports); ports.failNextWrite()
     await denied { try await store.initialize(vaultID: "native-test-vault-0001", plaintext: Data([1]), authority: permit) }
     check(ports.adds == 2 && ports.writes == 1)
-    await denied { _ = try await store.read() }
-    await denied { try await store.initialize(vaultID: "native-test-vault-0001", plaintext: Data([2]), authority: permit) }; check(ports.adds == 2)
+    check(try await store.read() == nil)
+    try await store.initialize(vaultID: "native-test-vault-0002", plaintext: Data([2]), authority: permit)
+    check(try await store.read()?.plaintext == Data([2]))
+    check(ports.adds == 2)
   }
   func testFailedReplacementCannotReportCommitOrChangeBytes() async throws {
     let ports = Ports(), permit = Permit(), store = storage(ports), old = Data([1, 2, 3])

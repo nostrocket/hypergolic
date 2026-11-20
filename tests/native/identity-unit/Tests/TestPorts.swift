@@ -45,6 +45,7 @@ final class FakeFiles: EncryptedFiles, Sendable {
       return result
     }
   }
+  func directoryExists() throws -> Bool { true }
   func hasArtifacts() throws -> Bool { try step("artifacts", empty: false) { !$0.values.isEmpty || $0.artifact } }
   func prepare() throws { try step("prepare", empty: ()) { $0.prepared = true } }
   func read(_ slot: SecretSlot) throws -> Data? { try step("read:\(slot.name)", empty: nil) { $0.values[slot.name] } }

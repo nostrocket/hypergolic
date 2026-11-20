@@ -48,6 +48,7 @@ private final class Ports: KeychainBackend, EncryptedFiles, Sendable {
     }
   }
   func updateReceipt(_ value: Data) throws { state.withLock { $0.keys[.receipt] = value } }
+  func directoryExists() throws -> Bool { true }
   func hasArtifacts() throws -> Bool { state.withLock { $0.record != nil } }
   func prepare() throws {}
   func read(_ slot: SecretSlot) throws -> Data? { state.withLock { $0.record } }

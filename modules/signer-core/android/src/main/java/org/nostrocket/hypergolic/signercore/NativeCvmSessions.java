@@ -137,8 +137,8 @@ public final class NativeCvmSessions implements AutoCloseable {
         if(decoded.paymentInteraction!=null)value.put("paymentInteraction",decoded.paymentInteraction);events.message(id,value.toString());return;
       }
       if("EOSE".equals(type)){if(frame.length()!=2||!subscription.equals(frame.get(1)))throw denied();return;}
-      if("NOTICE".equals(type)){if(frame.length()!=2||!(frame.get(1)instanceof String))throw denied();return;}
-      throw denied(); // AUTH/CLOSED and unknown messages do not create authentication or replay.
+      if("NOTICE".equals(type) || "AUTH".equals(type)){if(frame.length()!=2||!(frame.get(1)instanceof String))throw denied();return;}
+      throw denied(); // CLOSED and unknown messages do not create authentication or replay.
     }
     public boolean isCancelled(){try{current();return false;}catch(RuntimeException unavailable){return true;}}
     public void attach(Socket socket)throws IOException{synchronized(this){if(closing)throw new IOException("CVM session closed");sockets.add(socket);}if(isCancelled()){try{socket.close();}catch(IOException|RuntimeException|Error unknown){uncertain=true;}throw new IOException("CVM session closed");}}

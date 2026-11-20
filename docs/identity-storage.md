@@ -53,7 +53,10 @@ uses one AES-GCM authenticated file in a separate native namespace. The wrapping
 key and guard receipt use `WhenUnlockedThisDeviceOnly` Keychain storage. Enforce
 complete file protection, backup exclusion, permissions, fixed regular-file paths,
 atomic replacement and decrypted readback. Inconsistent established state fails
-closed.
+closed. After reinstall removes the entire directory, surviving Keychain metadata
+can initialize the new installation. A pending receipt distinguishes interrupted
+first writes from a missing file in an established directory. Android can reuse
+an existing wrapping key when the native signer directory is empty.
 
 ## Simulator limitation
 

@@ -53,13 +53,17 @@ final class NativeVault implements AutoCloseable {
     remoteCandidates = new NativeConnectionCandidate.Registry(this, clock, this::hasCandidate);
   }
   private void owned(Object context) { if (owner != context || poisoned) throw new Error("AUTHORIZATION_DENIED"); }
+  private void readFailed(RuntimeException failure) {
+    if (!(failure instanceof Error) || !"VAULT_READ_UNAVAILABLE".equals(((Error) failure).code)) poisoned = true;
+    close();
+  }
   private State opened(Object context) {
     owned(context);
     if (!initialized) throw new Error("NOT_READY");
     if (state == null) {
       byte[] encoded=null;
       try { encoded=file.read(); if(encoded==null)throw new Error("RECOVERY_REQUIRED");state=decode(encoded); }
-      catch(RuntimeException failure) { poisoned=true;retireLocalLeases();releaseState();throw failure; }
+      catch(RuntimeException failure) { readFailed(failure); throw failure; }
       finally { if(encoded!=null)Arrays.fill(encoded,(byte)0); }
     }
     return state;
@@ -90,12 +94,13 @@ final class NativeVault implements AutoCloseable {
       encoded = file.read();
       if (encoded != null) state = decode(encoded);
       else {
+        if (initialized) throw new Error("RECOVERY_REQUIRED");
         State next = new State();
         try { next.id = id(); next.revision=1; Record first = new Record(new NativeSigningKey(), timestamp(), 0); next.records.add(first); next.selected=first.pubkey; persist(next,true); state=next; }
         catch (RuntimeException failure) { next.close(); throw failure; }
       }
       initialized=true; return snapshot(state);
-    } catch (RuntimeException failure) { poisoned=true; close(); throw failure; }
+    } catch (RuntimeException failure) { readFailed(failure); throw failure; }
     finally { if (encoded != null) Arrays.fill(encoded,(byte)0); }
   }
   private void verifyCurrent() {
@@ -104,7 +109,7 @@ final class NativeVault implements AutoCloseable {
     try {
       actual = file.read(); expected=actual==null?null:hash(actual);
       if (actual == null || !MessageDigest.isEqual(state.persistedHash,expected)) throw new Error("READBACK_FAILED");
-    } catch (RuntimeException failure) { poisoned=true; close(); throw failure; }
+    } catch (RuntimeException failure) { readFailed(failure); throw failure; }
     finally { if (actual != null) Arrays.fill(actual,(byte)0); if (expected != null) Arrays.fill(expected,(byte)0); }
   }
   State expected(Object context,String vault,long revision) {

@@ -9,13 +9,12 @@ enum UploadPhotoPreparation {
     let existing = UploadFileProfile.prepare(input)
     if let existing, existing.metadataPolicy == "attachment-unchanged" {return existing}
     guard !input.isEmpty, input.count <= NativeUploadAuthority.maxBytes,
+      let type = UploadPhotoContainer.validatedType(input),
       let source = CGImageSourceCreateWithData(input as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
+      let rawType = CGImageSourceGetType(source), rawType as String == type,
       CGImageSourceGetStatus(source) == .statusComplete, CGImageSourceGetCount(source) == 1,
       CGImageSourceCopyAuxiliaryDataInfoAtIndex(source, 0, kCGImageAuxiliaryDataTypeHDRGainMap) == nil,
       CGImageSourceCopyAuxiliaryDataInfoAtIndex(source, 0, kCGImageAuxiliaryDataTypeISOGainMap) == nil,
-      let rawType = CGImageSourceGetType(source),
-      ["public.jpeg", "public.png", "com.compuserve.gif", "org.webmproject.webp", "public.heic"].contains(rawType as String),
-      UploadPhotoContainer.validate(input, rawType as String),
       let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
       let width = properties[kCGImagePropertyPixelWidth] as? Int,
       let height = properties[kCGImagePropertyPixelHeight] as? Int,

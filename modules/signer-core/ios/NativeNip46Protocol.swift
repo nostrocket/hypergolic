@@ -96,14 +96,14 @@ enum NativeNip46Protocol {
     do {
     let verified = try NativeNostrSignedEvent(json: outer, peer: peer, maximumBytes: maximumEnvelope)
     let event = verified.event, client = try key.publicKey()
-    guard event.kind == 24133, event.tags == [["p", client]], event.createdAt <= now + 30,
-      now <= event.createdAt + 120 else { throw NativeVaultFailure.signerResponseInvalid }
+    guard event.kind == 24133, event.tags == [["p", client]] else { throw NativeVaultFailure.signerResponseInvalid }
     var bytes = try key.decryptAuthenticated(peer: peer, payload: Data(event.content.utf8)); defer { bytes.resetBytes(in: 0..<bytes.count) }
     guard let raw = String(data: bytes, encoding: .utf8) else { throw NativeVaultFailure.signerResponseInvalid }
     var parser = SignerJSONParser(raw, maximumBytes: maximumPlaintext)
     guard case .object(let object) = try parser.parse(), Set(object.keys).isSubset(of: Set(["id", "result", "error"])),
       case .string(let replyID) = object["id"] else { throw NativeVaultFailure.signerResponseInvalid }
     guard replyID == id else { return nil }
+    guard event.createdAt <= now + 30, now <= event.createdAt + 120 else { throw NativeVaultFailure.signerResponseInvalid }
     if case .string(let result) = object["result"], result == "auth_url" {
       guard let authURL else { throw NativeVaultFailure.signerUnsupported }
       guard case .string(let url) = object["error"], !url.isEmpty, url.utf8.count <= 2048 else { throw NativeVaultFailure.signerResponseInvalid }

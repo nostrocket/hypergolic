@@ -6,6 +6,10 @@ enum RoutingTransport {
   struct Stub: Sendable { func foreground(_ value: Bool) {}; func revoke(_ generation: String) {} }
   static let shared = Stub()
 }
+enum CvmTransport {
+  struct Stub: Sendable { func foreground(_ value: Bool) {} }
+  static let shared = Stub()
+}
 enum LinkTransport { static func foreground(_ value: Bool) {} }
 enum UploadTransport { static func foreground(_ value: Bool) {} }
 enum IdentityListAccess {

@@ -39,6 +39,11 @@ final class NativeRemoteBinding implements AutoCloseable {
     return Collections.unmodifiableList(result);
   }
 
+  /** Both lists have already passed validateRelays, including its uniqueness check. */
+  static boolean sameRelays(List<String> left, List<String> right) {
+    return left.size() == right.size() && left.containsAll(right);
+  }
+
   NativeRemoteBinding copy() {
     NativeSigningKey copied = client.copy();
     try { return new NativeRemoteBinding(copied, peer, relays); }

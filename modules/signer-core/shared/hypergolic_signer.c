@@ -134,6 +134,7 @@ int hypergolic_signer_sign_digest(hypergolic_signer_key *key, const unsigned cha
                                  hypergolic_signer_entropy entropy, void *context,
                                  unsigned char out64[64]) {
     unsigned char randomness[64] = {0}, signature[64] = {0};
+    secp256k1_xonly_pubkey public_key;
     int success = 0;
     if (!out64) return 0;
     memset(out64, 0, 64);
@@ -142,8 +143,10 @@ int hypergolic_signer_sign_digest(hypergolic_signer_key *key, const unsigned cha
     if (!secp256k1_context_randomize(key->context, randomness)) goto cleanup;
     if (!secp256k1_schnorrsig_sign32(key->context, signature, digest32,
                                     &key->keypair, randomness + 32)) goto cleanup;
-    success = 1;
+    if (!secp256k1_keypair_xonly_pub(key->context, &public_key, NULL, &key->keypair) ||
+        !secp256k1_schnorrsig_verify(key->context, signature, digest32, 32, &public_key)) goto cleanup;
     memcpy(out64, signature, 64);
+    success = 1;
 cleanup:
     clear_memory(signature, sizeof(signature));
     clear_memory(randomness, sizeof(randomness));

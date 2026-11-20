@@ -31,6 +31,7 @@ public struct SystemEntropy: EntropySource {
 public protocol DeletionAuthorization: Sendable { func consumeDeletion(pubkey: String, token: String) throws }
 
 public protocol EncryptedFiles: Sendable {
+  func directoryExists() throws -> Bool
   func hasArtifacts() throws -> Bool
   func prepare() throws
   func read(_ slot: SecretSlot) throws -> Data?
