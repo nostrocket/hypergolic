@@ -144,55 +144,8 @@ public final class PublishedRelayWssQuery {
     try {
       InetAddress[] addresses = checkedAddresses(resolve(relay.host, deadline, abort, InetAddress::getAllByName, DNS), policy);
       try (SSLSocket tls = connect(relay, addresses, policy, abort, deadline, defaultFactory(), HttpsURLConnection.getDefaultHostnameVerifier())) {
-        DeadlineInput input = new DeadlineInput(tls.getInputStream(), tls, deadline);
-        OutputStream output = tls.getOutputStream();
         byte[] nonce = new byte[16]; RANDOM.nextBytes(nonce);
-        sendHandshake(output, relay, nonce);
-        PublishedRelayWebSocketHandshake.validate(readHandshake(input, abort), nonce);
-        output.write(requestFrame); output.flush();
-        PublishedRelayWebSocketFrames frames = new PublishedRelayWebSocketFrames();
-        PublishedRelayResponseClassifier classifier = new PublishedRelayResponseClassifier(subscriptionId);
-        byte[] buffer = new byte[PublishedRelayWebSocketFrames.MAX_READ];
-        long window = System.nanoTime(), lastRead = window;
-        boolean awaitingPong = false;
-        int frameCount = 0, wireBytes = 0;
-        while (true) {
-          abort.check();
-          int count;
-          try { count = input.read(buffer); }
-          catch (SocketTimeoutException idle) {
-            if (!deadline.persistent || deadline.expired()) throw idle;
-            if (!awaitingPong && System.nanoTime() - lastRead >= TimeUnit.SECONDS.toNanos(45)) {
-              deadline.awaitPong();
-              awaitingPong = true;
-              output.write(PublishedRelayWebSocketClientFrames.ping()); output.flush();
-            }
-            continue;
-          }
-          if (count < 0) throw new IOException("Relay stream closed");
-          long current = System.nanoTime(); lastRead = current;
-          if (current - window >= 1_000_000_000L) { window = current; frameCount = 0; wireBytes = 0; }
-          wireBytes += count;
-          if (wireBytes > 2 * 1024 * 1024) throw new IOException("Relay stream byte rate exceeded");
-          byte[] chunk = java.util.Arrays.copyOf(buffer, count);
-          List<PublishedRelayWebSocketFrames.Event> batch = frames.feed(chunk);
-          if (batch.size() > 64 - frameCount) throw new IOException("Relay stream frame rate exceeded");
-          frameCount += batch.size();
-          // Validate the full decoded read before any application delivery.
-          for (PublishedRelayWebSocketFrames.Event event : batch) {
-            if ("error".equals(event.type) || "close".equals(event.type)) throw new IOException("Invalid or closed relay stream");
-            if ("text".equals(event.type)) classifier.classify(event.text);
-          }
-          for (PublishedRelayWebSocketFrames.Event event : batch) {
-            abort.check();
-            if ("text".equals(event.type)) {
-              if (!deadline.persistent && classifier.classify(event.text) == TextKind.EOSE) deadline.persistent();
-              control.text(event.text);
-            } else if (awaitingPong && "pong".equals(event.type) && event.bytes.length == 0) {
-              awaitingPong = false; deadline.persistent();
-            } else if ("ping".equals(event.type)) { output.write(PublishedRelayWebSocketClientFrames.pong(event.bytes)); output.flush(); }
-          }
-        }
+        PublishedRelayWssIo.readStream(tls, relay, nonce, requestFrame, subscriptionId, control, deadline, abort);
       }
     } catch (IllegalArgumentException invalid) { throw new IOException("Invalid relay stream", invalid); }
     finally { abort.close(); }
