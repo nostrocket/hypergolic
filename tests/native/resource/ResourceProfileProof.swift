@@ -36,6 +36,19 @@ import Foundation
       do { _ = try PublishedHTTPResponse.parse(duplicate, maximumBodyBytes: 10 * 1024 * 1024, resourceProfile: true); throw NSError(domain:"Ambiguous header accepted",code:5) }
       catch PublishedHTTPResponse.Failure.invalidResponse { checks += 1 }
     }
+    let tickets = NativeTransportTickets()
+    let unused = tickets.issue()
+    let used = tickets.issue()
+    try check(tickets.consume(used))
+    for _ in 0...65_536 {
+      try check(tickets.consume(tickets.issue()))
+    }
+    try check(!tickets.consume(unused))
+    try check(!tickets.consume(used))
+    let revoked = tickets.issue()
+    tickets.revokeAll()
+    try check(!tickets.consume(revoked))
+    try check(tickets.consume(tickets.issue()))
     print("{\"language\":\"Swift\",\"resourceProfileChecks\":\(checks),\"failed\":0}")
   }
 }

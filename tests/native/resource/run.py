@@ -16,6 +16,6 @@ with tempfile.TemporaryDirectory(prefix='hypergolic-resource-proof-') as tempora
                     *[str(ANDROID / (name+'.java')) for name in java], str(HERE/'ResourceOwnerProof.java')], check=True)
     subprocess.run(['java', '-cp', str(out), 'org.nostrocket.hypergolic.host.ResourceOwnerProof'], check=True)
     subprocess.run(['swiftc', '-swift-version', '6', '-warnings-as-errors', '-module-cache-path', str(out/'swift-cache'),
-                    *[str(IOS/(name+'.swift')) for name in ['CapabilityLeaseRegistry','PublishedHTTPResponse']],
+                    *[str(IOS/(name+'.swift')) for name in ['CapabilityLeaseRegistry','PublishedHTTPResponse','NativeTransportTickets']],
                     str(HERE/'ResourceProfileProof.swift'), '-o', str(out/'swift-proof')], check=True)
     subprocess.run([str(out/'swift-proof')], check=True)
