@@ -171,12 +171,46 @@ function bindStorage(connection: StorageConnection, registration: TrustedRegistr
       return action(io, params, rows);
     }));
   }
+  // A SQLite data_version changes when another connection commits. This connection's
+  // own mutations run serially and validate the complete namespace before writing.
+  const validated = new Map<Scope, number>();
+  async function dataVersion(io: Access): Promise<number> {
+    const rows = await io.all<{data_version: number}>('PRAGMA data_version');
+    if (rows.length !== 1 || !safeCount(rows[0]!.data_version)) return fail('CORRUPT_STORAGE');
+    return rows[0]!.data_version;
+  }
+  function read<T>(scope: Scope | undefined, options: RequestOptions | undefined, select: (io: Access, params: Params) => Promise<T>) {
+    const selected = scopeValue(scope);
+    const params = [...owner, aggregate, selected, selected === 'instance' ? instance : ''];
+    return binding.submit(options, async check => {
+      const io = connection.access(check);
+      const before = await dataVersion(io);
+      if (validated.get(selected) === before) {
+        const result = await select(io, params);
+        if (await dataVersion(io) === before) return result;
+      }
+      const fresh = await transaction(check, async locked => {
+        await retained(locked, owner, aggregate);
+        await namespace(locked, params);
+        return {version: await dataVersion(locked), value: await select(locked, params)};
+      });
+      validated.set(selected, fresh.version);
+      return fresh.value;
+    });
+  }
   return Object.freeze({ revoke: binding.revoke, port: Object.freeze({
     get: (key: string, scope?: Scope, options?: RequestOptions) => {
       const selectedKey = text(key, LIMITS.keyBytes, true);
-      return request(scope, options, async (_io, _params, rows) => rows.find(row => row.key === selectedKey)?.value ?? null);
+      return read(scope, options, async (io, params) => {
+        const rows = await io.all<{value: string}>(`SELECT value FROM saved_strings WHERE ${NAMESPACE} AND key = ?`, ...params, selectedKey);
+        if (rows.length > 1) return fail('CORRUPT_STORAGE');
+        return rows.length ? rows[0]!.value : null;
+      });
     },
-    keys: (scope?: Scope, options?: RequestOptions) => request(scope, options, async (_io, _params, rows) => Object.freeze(rows.map(row => row.key))),
+    keys: (scope?: Scope, options?: RequestOptions) => read(scope, options, async (io, params) => {
+      const rows = await io.all<{key: string}>(`SELECT key FROM saved_strings WHERE ${NAMESPACE} ORDER BY key COLLATE BINARY`, ...params);
+      return Object.freeze(rows.map(row => row.key));
+    }),
     set: (key: string, value: string, scope?: Scope, options?: RequestOptions) => {
       const selectedKey = text(key, LIMITS.keyBytes, true), selectedValue = text(value, LIMITS.valueBytes, true);
       return request(scope, options, async (io, params, rows) => {

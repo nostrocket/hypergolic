@@ -20,6 +20,22 @@ test('one private fixed connection, durable platform pragmas and prepared opaque
   assert.equal(await restored.bindStorage(registration()).port.get(key), '值\u0000tail💫');
 });
 
+test('validated indexed reads avoid unrelated values and recheck external writes', async t => {
+  const {sqlite, database} = await setup(t);
+  const port = database.bindStorage(registration()).port;
+  await port.set('first', 'reviewed');
+  await port.set('other', 'stored');
+  assert.equal(await port.get('first'), 'reviewed');
+  const before = sqlite.calls.length;
+  assert.deepEqual(await port.keys(), ['first', 'other']);
+  assert.equal(await port.get('first'), 'reviewed');
+  const reads = sqlite.calls.slice(before);
+  assert(!reads.some(({sql}) => sql.includes('BEGIN IMMEDIATE') || sql.includes('SELECT key, value')));
+  assert(reads.some(({sql}) => sql.startsWith('SELECT value FROM saved_strings') && sql.endsWith('AND key = ?')));
+  sqlite.raw().prepare("UPDATE saved_strings SET value = x'0102' WHERE key = 'other'").run();
+  await assert.rejects(port.get('first'), assertCode('CORRUPT_STORAGE'));
+});
+
 test('full user/publisher/app/version/scope/instance crossproduct has no namespace bleed', async t => {
   const { database } = await setup(t, 'android');
   const cases: { registration: TrustedRegistration; value: string }[] = [];
@@ -164,7 +180,7 @@ test('abort before execution and during SQL rolls back without making missing re
   sqlite.onStep = sql => { if (sql.startsWith('INSERT INTO saved_strings')) during.abort(); };
   await assert.rejects(port.set('key', 'value', 'shared', { signal: during.signal }), assertCode('CANCELLED'));
   sqlite.onStep = undefined; assert.equal(await port.get('key'), null);
-  sqlite.faults.push({ prefix: 'SELECT key, value', mode: 'before' });
+  sqlite.faults.push({ prefix: 'SELECT value FROM saved_strings', mode: 'before' });
   await assert.rejects(port.get('missing'), assertCode('STORAGE_FAILURE'));
 });
 
