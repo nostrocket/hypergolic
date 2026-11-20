@@ -50,13 +50,18 @@ test('removal atomically clears defaults for this identity and leaves other iden
   await catalog.remove(owner(), key); assert.deepEqual(await catalog.list(owner()), { handlers: [], defaults: [] });
   assert.equal((await catalog.list(owner(second))).defaults.length, 1); await catalog.close();
 });
-test('tampered signed metadata is evicted together with its preferred-handler authority', async t => {
+test('unverified catalog entries and defaults are excluded until a valid manifest is available', async t => {
   const sqlite = new DiskSQLite(); t.after(() => sqlite.cleanup());
   const catalog = await openRoutingCatalog(sqlite, 'ios'), a = await artifact();
   await catalog.remember(owner(), a); await catalog.prefer(owner(), 'note', { publisher: a.manifest.pubkey, appId: 'notes' });
   const db = sqlite.raw(ROUTING_DATABASE);
   db.prepare("UPDATE routing_catalog SET signed_event = replace(signed_event, 'napplet:note/open', 'napplet:evil/open')").run();
-  assert.deepEqual(await catalog.list(owner()), { handlers: [], defaults: [] }); await catalog.close();
+  assert.deepEqual(await catalog.list(owner()), { handlers: [], defaults: [] });
+  assert.equal(db.prepare('SELECT count(*) AS n FROM routing_catalog').get()?.n, 1);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM routing_defaults').get()?.n, 1);
+  await catalog.remember(owner(), a);
+  assert.equal((await catalog.list(owner())).defaults[0]?.publisher, a.manifest.pubkey);
+  await catalog.close();
 });
 test('late identity revocation rolls back a write and blocks pending read results', async t => {
   const sqlite = new DiskSQLite(); t.after(() => sqlite.cleanup());

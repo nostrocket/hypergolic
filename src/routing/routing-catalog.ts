@@ -161,18 +161,15 @@ async function read(io: Access, user: string, check: () => void, repair = true):
   const rows = await io.all<Row>('SELECT publisher, app_id, event_id, signed_event FROM routing_catalog WHERE user = ? ORDER BY publisher, app_id', user);
   if (rows.length > CATALOG_LIMITS.perIdentity) return fail('CORRUPT_STORAGE');
   const verified = await completed(rows.map(row => verifiedRow(row, check))); check();
-  const handlers: CatalogHandler[] = [], damaged: Row[] = [];
-  for (let index = 0; index < rows.length; index++) {const handler = verified[index]; if (handler) handlers.push(handler); else damaged.push(rows[index]!);}
-  if (repair) {
-    const removed = await completed(damaged.map(row => io.run('DELETE FROM routing_catalog WHERE user = ? AND publisher = ? AND app_id = ?', user, row.publisher, row.app_id)));
-    if (removed.some(changes => changes !== 1)) return fail('STORAGE_FAILURE');
-  }
+  const handlers = verified.filter((handler): handler is CatalogHandler => handler !== null);
   const rowsDefaults = await io.all<DefaultRow>('SELECT archetype, publisher, app_id FROM routing_defaults WHERE user = ? ORDER BY archetype', user);
   if (rowsDefaults.length > CATALOG_LIMITS.perIdentity * 16) return fail('CORRUPT_STORAGE');
   const defaults: HandlerPreference[] = [], invalid: string[] = [];
   for (const row of rowsDefaults) {
     const handler = handlers.find(item => item.publisher === row.publisher && item.appId === row.app_id);
-    if (!handler?.roles.some(role => role.archetype === row.archetype)) invalid.push(row.archetype);
+    // An unavailable verifier or unknown manifest format must not erase a preference.
+    if (!handler) continue;
+    if (!handler.roles.some(role => role.archetype === row.archetype)) invalid.push(row.archetype);
     else defaults.push(Object.freeze({archetype: row.archetype, publisher: row.publisher, appId: row.app_id}));
   }
   if (repair) await completed(invalid.map(archetype => io.run('DELETE FROM routing_defaults WHERE user = ? AND archetype = ?', user, archetype)));
