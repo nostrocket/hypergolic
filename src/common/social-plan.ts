@@ -43,8 +43,11 @@ export function createCommonSocialPlanner(port:CommonPlanningPort,now:()=>number
   const owners=new Set<string>(),plans=new WeakMap<CommonSocialPlan,Readonly<{user:string;registration:NativeRegistration}>>();
   async function observed(filters:readonly QueryFilter[],registration:NativeRegistration,signal:AbortSignal,active:()=>void){
     active();const result=await port.query(filters,registration,signal,active);active();
-    if(result.incomplete)throw new CommonError('relay-timeout');
-    return latestIdentityEvent(result.events.map(row=>verifyQueryEvent(row.event,filters)));
+    const event=latestIdentityEvent(result.events.map(row=>verifyQueryEvent(row.event,filters)));
+    if(result.incomplete && !(event && filters.length===1 && filters[0]?.ids?.length===1 && filters[0].ids[0]===event.id)) {
+      throw new CommonError('relay-timeout');
+    }
+    return event;
   }
   const followFilters=(user:string)=>parseQueryFilters([{authors:[user],kinds:[3],limit:32}]);
   return Object.freeze({
