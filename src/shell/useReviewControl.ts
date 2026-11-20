@@ -2,7 +2,7 @@ import {useEffect, useRef, useState, useSyncExternalStore} from 'react';
 import type {ReviewSlot} from './review-slot';
 
 const empty = () => null;
-const subscribe = () => () => {};
+const subscribe = () => empty;
 
 /** Arm only this presentation, after its modal is visible. */
 export function useReviewControl(id: string | null) {
@@ -12,6 +12,7 @@ export function useReviewControl(id: string | null) {
   return {
     ready: id !== null && armed === id,
     onShow() {
+      setArmed(null);
       clearTimeout(timer.current);
       timer.current = setTimeout(() => setArmed(id), 700);
     },
