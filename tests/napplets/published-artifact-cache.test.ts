@@ -12,7 +12,7 @@ import { DiskSQLite } from '../storage/harness.ts';
 const SECRET = new Uint8Array(32); SECRET[31] = 27;
 const publisher = getPublicKey(SECRET), user = '12'.repeat(32), html = new TextEncoder().encode('<!doctype html><html><head><title>Cache</title></head><body>ok</body></html>');
 const hex = (bytes: Uint8Array) => Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
-async function sha(bytes: Uint8Array) { return hex(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))); }
+async function sha(bytes: Uint8Array) { return hex(new Uint8Array(await crypto.subtle.digest('SHA-256', Uint8Array.from(bytes)))); }
 async function makeArtifact(identifier = 'cached', content = html) {
   const htmlHash = await sha(content), aggregate = await sha(new TextEncoder().encode(`${htmlHash} /index.html\n`));
   const event = finalizeEvent({ kind: 35129, created_at: 1_800_000_000, content: '', tags: [

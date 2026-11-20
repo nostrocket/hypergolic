@@ -134,7 +134,7 @@ test('a verified Outbox manifest carries its exact approved publisher/version/re
     ['d', 'outbox-admission'], ['path', '/index.html', hash], ['x', aggregate, 'aggregate'],
     ['requires', 'outbox'], ['requires', 'relay'], ['requires', 'theme'], ['requires', 'fs'],
   ]}, secret)));
-  const coordinate = {kind: 35129, pubkey: pub, identifier: 'outbox-admission', relays: []};
+  const coordinate = {kind: 35129, pubkey: pub, identifier: 'outbox-admission', relayHints: []} as const;
   const artifact = await verifyArtifact(await verifyManifest(coordinate, event), bytes);
   const descriptor = descriptorForPublishedArtifact(artifact, SESSION);
   const live = {value: true}, owner = registration({user: USER, publisher: pub, appId: descriptor.appId,
@@ -153,9 +153,9 @@ test('a verified Outbox manifest carries its exact approved publisher/version/re
 
 
 test('the WK published Outbox fixture verifies through the owning manifest and exact-artifact verifier', async () => {
-  const event = JSON.parse(await readFile(new URL('../native/ios-boundary/Fixtures/published-outbox-manifest.json', import.meta.url), 'utf8'));
-  const bytes = new Uint8Array(await readFile(new URL('../../runtime/fixtures/ux-lab.html', import.meta.url)));
-  const coordinate = {kind: 35129, pubkey: event.pubkey, identifier: 'outbox-native-test', relays: []};
+  const event = JSON.parse(await readFile('tests/native/ios-boundary/Fixtures/published-outbox-manifest.json', 'utf8'));
+  const bytes = new Uint8Array(await readFile('runtime/fixtures/ux-lab.html'));
+  const coordinate = {kind: 35129, pubkey: event.pubkey, identifier: 'outbox-native-test', relayHints: []} as const;
   const manifest = await verifyManifest(coordinate, event);
   const artifact = await verifyArtifact(manifest, bytes);
   assert.deepEqual(artifact.manifest.requiredDomains, ['outbox', 'relay', 'theme']);
