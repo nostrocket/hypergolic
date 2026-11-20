@@ -25,6 +25,10 @@ function setup(configured: string | null = null) {
   const discarded: string[] = [];
   const ports: DiscoveryControllerPorts = {address: configured, workspace: () => workspace, visible: () => visible,
     bundled, commit: next => { workspace = next; }, openPublished: async () => published('2'),
+    commitUpdate: async (previous, next, active) => {
+      active();
+      ports.commit({...workspace, sessions: workspace.sessions.map(session => session.id === previous.id ? next : session), focusedId: next.id});
+    },
     updatePublished: async (_session, _signal, review) => { updates++; assert.equal(await review(update), true); return published('2'); },
     discard: id => { discarded.push(id); }, review: async () => true, unavailable: () => { failures++; }};
   return {ports, state: () => workspace, set: (session: NappletDescriptor) => {workspace = openNapplet(emptyWorkspace(), session);},

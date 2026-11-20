@@ -50,6 +50,7 @@ export interface RuntimeOwner {
     reviewConsent: (request: NappletConsentReview) => Promise<boolean>): Promise<NappletDescriptor | null>;
   openPublished(session: NappletDescriptor, signal: AbortSignal, review: (request: NappletConsentReview) => Promise<boolean>): Promise<PublishedRuntimeBinding>;
   prepareInstalled(handler: CatalogHandler, signal: AbortSignal, review: (request: NappletConsentReview) => Promise<boolean>): Promise<NappletDescriptor>;
+  commitPublishedUpdate(previous: NappletDescriptor, next: NappletDescriptor, assertActive: () => void): Promise<void>;
   discardPublished(sessionId: string): void;
   revokeAllPublished(): void;
   assertPublishedApproval(origin: ApprovalOrigin,domain?:'outbox'|'common'): void;
@@ -140,6 +141,8 @@ export function createRuntimeOwner(database: ShellDatabase,
   const closeCapabilityReviews = (id: string) => {
     approvals?.service.close(id); uploads?.close(id); cvm?.close(id); approvals?.closeReview?.(id);
   };
+  const updating = new Set<string>();
+  const updateSources = new WeakMap<PreparedPublishedSession, NappletDescriptor>();
   const exactSession = (session: NappletDescriptor): NappletDescriptor => {
     const state = identity.getSnapshot().session.workspace.getSnapshot();
     const current = state.workspace.sessions.find(value => value.id === session.id);
@@ -155,7 +158,7 @@ export function createRuntimeOwner(database: ShellDatabase,
     const configuration = JSON.parse(host.configuration) as Omit<NativeRegistration, 'generation'>;
     const entry = discovery && isDiscoveryEntry(selected) ? { broker: discovery, source: selected } : undefined;
     const assertActive = () => {
-      if (revoked) throw new ShellStorageError('REVOKED');
+      if (revoked || updating.has(selected.id)) throw new ShellStorageError('REVOKED');
       assertPreparedActive();
       exactSession(selected);
     };
@@ -242,6 +245,7 @@ export function createRuntimeOwner(database: ShellDatabase,
         exactSession(session);
         ready.assertActive();
         if (prepared.has(ready.descriptor.id) || running.has(ready.descriptor.id)) throw new ShellStorageError('CONFLICT');
+        updateSources.set(ready, session);
         prepared.set(ready.descriptor.id, ready);
         return ready.descriptor;
       } catch (error) { ready.revoke(); throw error; }
@@ -282,6 +286,24 @@ export function createRuntimeOwner(database: ShellDatabase,
       const ready = await coordinator.reopenPinned(descriptor, signal, review);
       if (prepared.has(id) || running.has(id)) {ready.revoke(); throw new ShellStorageError('CONFLICT');}
       prepared.set(id, ready); return ready.descriptor;
+    },
+    async commitPublishedUpdate(previous: NappletDescriptor, next: NappletDescriptor, assertActive: () => void) {
+      const ready = prepared.get(next.id);
+      const workspace = identity.getSnapshot().session.workspace;
+      const check = () => {
+        assertActive();
+        exactSession(previous);
+        const source = ready && updateSources.get(ready);
+        if (!ready || !source || !samePublishedPin(source, previous) || prepared.get(next.id) !== ready || !samePublishedPin(ready.descriptor, next)) throw new ShellStorageError('CONFLICT');
+        ready.assertActive();
+        if (workspace.getSnapshot().workspace.sessions.some(session => session.id !== previous.id && session.source === 'published' &&
+          session.publisher === previous.publisher && session.appId === previous.appId)) throw new Error('Close other cards for this napplet before updating.');
+      };
+      check();
+      if (updating.has(previous.id)) throw new ShellStorageError('BUSY');
+      updating.add(previous.id);
+      try { await workspace.acceptUpdate({previous, next, assertActive: check}); }
+      finally { updating.delete(previous.id); }
     },
     discardPublished(sessionId: string) {
       prepared.get(sessionId)?.revoke(); prepared.delete(sessionId);
