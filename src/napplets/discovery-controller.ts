@@ -1,7 +1,7 @@
 import type { NappletConsentReview } from './first-open-consent.ts';
 import type { PublishedUpdateReview } from './published-session.ts';
 import type { NappletDescriptor, Workspace } from '../shell/workspace.ts';
-import { focusNapplet, openNapplet } from '../shell/workspace.ts';
+import { conflictsWithPublishedRevision, focusNapplet, openNapplet } from '../shell/workspace.ts';
 import { discoveryCoordinate, isDiscoveryEntry } from './discovery-entry.ts';
 
 type Review = (request: NappletConsentReview) => Promise<boolean>;
@@ -24,9 +24,10 @@ function replaceCatalog(ports: DiscoveryControllerPorts, selected: NappletDescri
   ports.beforeClose?.(selected);
   active();
   const current = ports.workspace();
+  if (selected.source === 'bundled' && conflictsWithPublishedRevision(current, next)) throw new Error('Catalog revision has changed');
   if (current.sessions.some(session => session.id === next.id)) throw new Error('Catalog session already exists');
   const sessions = current.sessions.map(session => session.id === selected.id ? next : session);
-  ports.commit({sessions, focusedId: next.id, overview: false});
+  ports.commit({...current, home: false, sessions, focusedId: next.id, overview: false});
   if (ports.workspace().focusedId !== next.id) throw new Error('Catalog update could not be applied');
 }
 

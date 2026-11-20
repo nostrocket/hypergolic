@@ -13,7 +13,7 @@ import type { RoutingNativePort } from '../routing/routing-port.ts';
 import type { RoutingReviewRequest, RoutingReviewService } from '../routing/routing-review.ts';
 import { resolveBundledSession } from '../shell/fixtures.ts';
 import { isDiscoveryEntry } from './discovery-entry.ts';
-import { focusNapplet, openNapplet, samePublishedPin, type NappletDescriptor } from '../shell/workspace.ts';
+import { conflictsWithPublishedRevision, focusNapplet, openNapplet, samePublishedPin, type NappletDescriptor } from '../shell/workspace.ts';
 import { ShellStorageError } from '../storage/ports.ts';
 import { DISCOVERY_LEASE_MS, parseDiscoveryOpen, type DiscoveryOpenOutcome } from './discovery-open-contract.ts';
 import { publishedCapabilityCompatibility } from './first-open-consent.ts';
@@ -23,7 +23,7 @@ import { PublishedTransferError } from './native-transfer.ts';
 
 type Ports = Readonly<{
   identity: Pick<IdentityTransition, 'getSnapshot' | 'subscribe'>;
-  runtime: () => Pick<RuntimeOwner, 'resolveDiscovered' | 'prepareDiscovered' | 'publishedReadyGeneration' | 'discardPublished'> | null;
+  runtime: () => Pick<RuntimeOwner, 'resolveDiscovered' | 'retainForPin' | 'prepareDiscovered' | 'publishedReadyGeneration' | 'discardPublished'> | null;
   capability: NativeCapabilityPort;
   native: RoutingNativePort;
   reviews: RoutingReviewService;
@@ -170,7 +170,8 @@ async function openExact(ports: Ports, launch: Launch, attempt: Attempt, active:
   const exact = (session: NappletDescriptor) => session.eventId === eventId && session.version === version;
   const installed = matches();
   // Different saved revisions continue through the ordinary explicit update flow.
-  if (installed.some(session => !exact(session))) return 'conflict';
+  const coordinate = {publisher, appId, eventId, version};
+  if (conflictsWithPublishedRevision(workspace.getSnapshot().workspace, coordinate)) return 'conflict';
   const loaded = installed.find(session => runtime.publishedReadyGeneration(session) !== null);
   const existing = loaded ?? installed[0];
   const requiredDomains = Object.freeze([...manifest.requiredDomains].sort());
@@ -181,8 +182,14 @@ async function openExact(ports: Ports, launch: Launch, attempt: Attempt, active:
   if (request.action === 'pin') {
     active();
     const shortcut = existing ?? descriptorForPublishedArtifact(artifact, ports.native.newChannelId());
-    workspace.change(pinNapplet(workspace.getSnapshot().workspace, shortcut));
-    await workspace.flush();
+    const release = await runtime.retainForPin(artifact, signal, active);
+    try {
+      active();
+      const current = workspace.getSnapshot().workspace;
+      if (conflictsWithPublishedRevision(current, coordinate)) return 'conflict';
+      workspace.change(pinNapplet(current, shortcut));
+      await workspace.flush();
+    } finally { release(); }
     active();
     if (!isPinned(workspace.getSnapshot().workspace, shortcut)) return 'failed';
     return 'pinned';
@@ -198,7 +205,7 @@ async function openExact(ports: Ports, launch: Launch, attempt: Attempt, active:
   }
   active();
   const current = workspace.getSnapshot().workspace;
-  if (matches().some(session => !exact(session)) ||
+  if (conflictsWithPublishedRevision(current, coordinate) ||
       (existing ? !current.sessions.some(session => session.id === existing.id && sameTarget(session, existing))
         : matches().length > 0)) return 'conflict';
   if (!existing && current.sessions.length >= 64) return 'workspace-full';

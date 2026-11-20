@@ -3,7 +3,7 @@ import type { RuntimeOwner } from '../runtime/runtime-owner';
 import type { NappletConsentReview } from '../napplets/first-open-consent';
 import type { PublishedUpdateReview } from '../napplets/published-session';
 import { PublishedLoadError } from '../napplets/loader.ts';
-import { openNapplet, replacePublishedNapplet, samePublishedPin, type NappletDescriptor, type Workspace } from './workspace.ts';
+import { conflictsWithPublishedRevision, openNapplet, replacePublishedNapplet, samePublishedPin, type NappletDescriptor, type Workspace } from './workspace.ts';
 
 /** Settings only presents static copy for a known loader failure. */
 export function publishedOpenFailureText(error: unknown): string {
@@ -13,6 +13,7 @@ export function publishedOpenFailureText(error: unknown): string {
         case 'PUBLISHED_LOOKUP_UNAVAILABLE': return 'Hypergolic could not complete its relay lookup. Check your Lookup relays and connection, then try again.';
         case 'PUBLISHED_NOT_FOUND': return 'No matching signed publication was found on your Lookup relays. Check the address and try again.';
         case 'PUBLISHED_UNSUPPORTED_MANIFEST': return 'The signed napplet manifest uses an unsupported format.';
+        case 'PUBLISHED_PIN_CONFLICT': return 'A different revision of this napplet is open or pinned. Open that card and check for an update.';
         case 'PUBLISHED_REVISION_CONFLICT': return 'Lookup returned conflicting signed revisions. Try again later.';
         case 'PUBLISHED_DOWNLOAD_UNAVAILABLE': return 'Hypergolic found the signed publication but could not download the napplet file. Try again.';
         case 'PUBLISHED_HASH_MISMATCH': return 'The downloaded file does not match the hash in the signed publication.';
@@ -38,6 +39,7 @@ export function publishedSettingsActions({ runtime, blocked, getWorkspace, posit
     try {
       if (signal.aborted || blocked) throw new Error('Published napplet cancelled');
       const workspace = getWorkspace();
+      if (!previous && conflictsWithPublishedRevision(workspace, descriptor)) throw new PublishedLoadError('PUBLISHED_PIN_CONFLICT');
       if (!previous && workspace.sessions.length >= 64) throw new Error('Published napplet unavailable');
       const next = previous ? replacePublishedNapplet(workspace, previous.id, descriptor) : openNapplet(workspace, descriptor);
       if (previous) onBeforeClose?.(previous);
