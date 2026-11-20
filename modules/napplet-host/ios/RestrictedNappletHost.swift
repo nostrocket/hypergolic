@@ -382,6 +382,12 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     configuration.dataDetectorTypes = []
     let controller = configuration.userContentController
     controller.add(rules)
+    controller.addUserScript(WKUserScript(source: """
+      if (window.parent !== window.top) window.top.postMessage({type: 'hypergolic.nested-document'}, '*');
+      for (const name of ['RTCPeerConnection', 'webkitRTCPeerConnection', 'RTCDataChannel', 'RTCIceTransport']) {
+        Object.defineProperty(globalThis, name, {value: undefined, writable: false, configurable: false});
+      }
+      """, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .page))
     let receiver = DiagnosticReceiver(owner: self)
     self.receiver = receiver
     controller.addScriptMessageHandler(receiver, contentWorld: bridgeWorld, name: bridgeName)

@@ -64,9 +64,9 @@ const bundle = await build({
 });
 const document = `<!doctype html>
 <html lang="en"><head>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; worker-src blob:; child-src 'self'; frame-src 'self'; media-src blob:; object-src 'none'; manifest-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; webrtc 'block'; worker-src blob:; child-src 'self'; frame-src 'self'; media-src blob:; object-src 'none'; manifest-src 'none'; base-uri about:; form-action 'none'">
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hypergolic runtime</title><script src="host.js" defer></script>
+<title>Hypergolic runtime</title><script src="host.js" defer></script><base href="about:blank">
 </head><body><p role="status">Loading napplet…</p></body></html>\n`;
 await writeFile(new URL('dist/index.html', root), document);
 const moduleIds = [...new Set((Array.isArray(bundle) ? bundle : [bundle]).flatMap(result =>

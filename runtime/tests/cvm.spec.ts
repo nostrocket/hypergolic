@@ -38,3 +38,8 @@ test('120s operation survives ordinary30s; server callbacks require genuine pare
  await page.evaluate(()=>{(window as any).__cvm.event();(window as any).__cvm.finish();});await expect.poll(()=>guest.evaluate(()=>(window as any).__done)).toBe(true);expect(await guest.evaluate(()=>(window as any).__events.length)).toBe(1);expect(await guest.evaluate(()=>(window as any).__legacy[0].server.pubkey)).toBe(pubkey);
 });
 test('ungranted opaque guest has no namespace and raw CVM cannot reach native',async({page})=>{const guest=await open(page,false);expect(await guest.evaluate(()=>typeof(window as any).napplet.cvm)).toBe('undefined');await guest.evaluate(()=>parent.postMessage({type:'cvm.request',id:'forged',server:{pubkey:'4'.repeat(64)},message:{jsonrpc:'2.0',id:1,method:'ping'}},'*'));await page.waitForTimeout(50);expect(await page.evaluate(()=>(window as any).__cvm.requests)).toEqual([]);});
+
+test('the published guest inherits a neutral document base', async ({page}) => {
+  const guest = await open(page);
+  expect(await guest.evaluate(() => document.baseURI)).toBe('about:blank');
+});
