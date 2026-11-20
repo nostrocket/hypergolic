@@ -27,13 +27,14 @@ struct VettedAddressCursor<Address> {
 /// HTTPS fetch over a numeric, vetted endpoint. URLSession cannot bind a DNS result
 /// before connecting, so this owner resolves first and never gives NWConnection a name.
 enum PublishedPinnedHTTPS {
-  private final class ResolutionSlots: @unchecked Sendable {
+  final class ResolutionSlots: @unchecked Sendable {
     private let lock = NSLock(); private var count = 0
     private let limit: Int
     init(_ limit: Int) { self.limit = limit }
     func acquire() -> Bool { lock.withLock { guard count < limit else { return false }; count += 1; return true } }
     func release() { lock.withLock { count -= 1 } }
   }
+  private static let ordinaryResolutionSlots = ResolutionSlots(4)
   private static let recoveryResolutionSlots = ResolutionSlots(2)
   private static let mediaResolutionSlots = ResolutionSlots(1)
   enum Failure: Error { case invalidURL, resolution, privateAddress, connection, cancelled }
@@ -309,8 +310,8 @@ enum PublishedPinnedHTTPS {
     private func resolveCurrent() {
       guard active() else { finish(.failure(Failure.cancelled)); return }
       let slots = mediaFile != nil || liveStream != nil ? PublishedPinnedHTTPS.mediaResolutionSlots
-        : request.recoveryProfile ? PublishedPinnedHTTPS.recoveryResolutionSlots : nil
-      guard slots?.acquire() ?? true else { finish(.failure(Failure.resolution)); return }
+        : request.recoveryProfile ? PublishedPinnedHTTPS.recoveryResolutionSlots : PublishedPinnedHTTPS.ordinaryResolutionSlots
+      guard slots.acquire() else { finish(.failure(Failure.resolution)); return }
       let host = request.host
       DispatchQueue.global(qos: .utility).async {
         let result = Result {
@@ -319,7 +320,7 @@ enum PublishedPinnedHTTPS {
 #endif
           return try PublishedPinnedHTTPS.resolve(host)
         }
-        slots?.release()
+        slots.release()
         self.queue.async {
           guard !self.ended else { return }
           switch result {
