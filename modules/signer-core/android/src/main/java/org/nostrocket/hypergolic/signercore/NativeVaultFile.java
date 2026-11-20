@@ -56,7 +56,9 @@ final class NativeVaultFile {
   }
   private boolean exists() {
     File base = file.getBaseFile();
-    return base.exists() || new File(base.getPath()+".bak").exists() || new File(base.getPath()+".new").exists();
+    String[] entries = base.getParentFile().list();
+    if (entries == null) throw new NativeVault.Error("STORAGE_FAILURE");
+    return entries.length != 0;
   }
   private SecretKey key(boolean create) throws Exception {
     if (keystore.containsAlias(ALIAS)) {
@@ -76,10 +78,7 @@ final class NativeVaultFile {
   synchronized byte[] read() {
     byte[] encoded = null;
     try {
-      if (!exists()) {
-        if (keystore.containsAlias(ALIAS)) throw new NativeVault.Error("RECOVERY_REQUIRED");
-        return null;
-      }
+      if (!exists()) return null;
       try (java.io.FileInputStream input = file.openRead(); NativeSecretBuffer bytes = new NativeSecretBuffer(MAX_CLEAR_BYTES + 34)) {
         byte[] chunk = new byte[1024]; int count;
         while ((count=input.read(chunk)) != -1) {
@@ -105,7 +104,6 @@ final class NativeVaultFile {
     FileOutputStream stream = null;
     try {
       if (clear == null || clear.length == 0 || clear.length > MAX_CLEAR_BYTES || initialize == exists()) throw new Exception();
-      if (initialize && keystore.containsAlias(ALIAS)) throw new NativeVault.Error("RECOVERY_REQUIRED");
       Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
       cipher.init(Cipher.ENCRYPT_MODE, key(initialize)); cipher.updateAAD(HEADER);
       byte[] iv = cipher.getIV(); if (iv.length != 12) throw new Exception();

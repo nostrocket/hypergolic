@@ -33,13 +33,17 @@ public actor NativeSignerVaultStorage {
     var bytes = try keychain.read(.wrappingKey)
     defer { if bytes != nil { bytes!.resetBytes(in: 0..<bytes!.count) } }
     let guardRecord = try keychain.read(.receipt)
-    if bytes == nil && guardRecord == nil {
-      guard try !files.hasArtifacts() else { throw StoreFailure.recoveryRequired }
+    if guardRecord == nil {
+      guard bytes == nil || bytes?.count == 32, try !files.hasArtifacts() else { throw StoreFailure.recoveryRequired }
       return nil
     }
     guard let key = bytes, key.count == 32, let guardRecord, guardRecord.count <= 128,
       let fields = try? JSONSerialization.jsonObject(with: guardRecord) as? [String], fields.count == 2,
-      fields[0] == "HGSV1", Receipt.isID(fields[1]) else { throw StoreFailure.recoveryRequired }
+      ["HGSV1", "HGSV1-pending"].contains(fields[0]), Receipt.isID(fields[1]) else { throw StoreFailure.recoveryRequired }
+    // Reinstall removes the entire protected directory. A missing file inside an
+    // established directory is a different condition and still requires recovery.
+    if try !files.directoryExists() { return nil }
+    if fields[0] == "HGSV1-pending", try !files.hasArtifacts() { return nil }
     return Context(vaultID: fields[1], key: SymmetricKey(data: key))
   }
   private func decrypt(_ encrypted: Data, context: Context) throws -> Data {
@@ -64,16 +68,23 @@ public actor NativeSignerVaultStorage {
   private func initializeCurrent(vaultID: String, plaintext: Data) throws {
     guard Receipt.isID(vaultID), try context() == nil,
       !plaintext.isEmpty, plaintext.count <= Self.maximumBytes - magic.count - 28 else { throw StoreFailure.itemConflict }
-    try files.prepare()
-    var wrapping = try entropy.bytes(count: 32)
+    var wrapping = try keychain.read(.wrappingKey) ?? Data()
+    let needsKey = wrapping.isEmpty
+    if needsKey { wrapping = try entropy.bytes(count: 32) }
     defer { wrapping.resetBytes(in: 0..<wrapping.count) }
     guard wrapping.count == 32 else { throw StoreFailure.unavailable }
-    try keychain.add(.wrappingKey, value: wrapping)
+    if needsKey { try keychain.add(.wrappingKey, value: wrapping) }
     guard try keychain.read(.wrappingKey) == wrapping else { throw StoreFailure.unavailable }
-    let receipt = try JSONSerialization.data(withJSONObject: ["HGSV1", vaultID])
-    try keychain.add(.receipt, value: receipt)
-    guard try keychain.read(.receipt) == receipt else { throw StoreFailure.unavailable }
+
+    let pending = try JSONSerialization.data(withJSONObject: ["HGSV1-pending", vaultID])
+    if try keychain.read(.receipt) == nil { try keychain.add(.receipt, value: pending) }
+    else { try keychain.updateReceipt(pending) }
+    guard try keychain.read(.receipt) == pending else { throw StoreFailure.unavailable }
+    try files.prepare()
     try write(plaintext, context: Context(vaultID: vaultID, key: SymmetricKey(data: wrapping)))
+    let receipt = try JSONSerialization.data(withJSONObject: ["HGSV1", vaultID])
+    try keychain.updateReceipt(receipt)
+    guard try keychain.read(.receipt) == receipt else { throw StoreFailure.unavailable }
   }
   public func replace(vaultID: String, expectedPlaintextDigest: Data, plaintext: Data, authority: any NativeSignerStorageAuthority) throws {
     try authority.performMutation {

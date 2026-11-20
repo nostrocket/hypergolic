@@ -170,13 +170,10 @@ public final class DurabilityProof {
       }
       check(!acknowledged, "failed initial file sync cannot acknowledge identity creation");
       fault = "none";
-      boolean denied = false;
-      try {
-        storage(root).read();
-      } catch (NativeVault.Error e) {
-        denied = true;
-      }
-      check(denied, "partial initial key state requires recovery and cannot become fresh absence");
+      NativeVaultFile fresh = storage(root);
+      check(fresh.read() == null, "empty store is retryable after interrupted setup");
+      fresh.write(NEXT, true);
+      check(Arrays.equals(storage(root).read(), NEXT), "retry produces a readable initial record");
     } finally {
       clear(root);
     }

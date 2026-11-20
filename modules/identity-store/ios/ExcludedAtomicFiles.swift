@@ -79,6 +79,7 @@ public struct ExcludedAtomicFiles: EncryptedFiles {
     if case .secret(let key) = slot, !Receipt.isPubkey(key) { throw StoreFailure.invalidInput }
     return root.appendingPathComponent(slot.name + ".sealed", isDirectory: false)
   }
+  public func directoryExists() throws -> Bool { try checkRoot() }
   public func hasArtifacts() throws -> Bool {
     guard try checkRoot() else { return false }
     return try !FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty
