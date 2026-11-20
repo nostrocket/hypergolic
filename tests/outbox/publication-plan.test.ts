@@ -26,7 +26,7 @@ test('publication parser freezes exact template/options and never infers p-tag i
 });
 test('malformed publication options, guest authority, auth events and accessors fail before resolution',async()=>{
  const h=setup();let invoked=false;
- for(const input of [{...request,user},{...request,options:{toOutbox:1}},{...request,options:{toInboxes:[recipient.slice(1)]}},{...request,options:{relays:['wss://127.0.0.1']}},{...request,options:{relays:Array(1)}},{...request,event:{...event,pubkey:user}},{...request,event:{...event,kind:22242}},{...request,event:{...event,kind:24242}},{...request,options:{get relays(){invoked=true;return [];}}}])await assert.rejects(h.planner.plan(input,user,signal(),()=>{}));
+ for(const input of [{...request,user},{...request,options:{toOutbox:1}},{...request,options:{toInboxes:[recipient.slice(1)]}},{...request,options:{relays:['wss://127.0.0.1']}},{...request,options:{relays:Array(1)}},{...request,event:{...event,pubkey:user}},{...request,event:{...event,kind:22242}},{...request,event:{...event,kind:24242}},{...request,event:{...event,kind:27235}},{...request,options:{get relays(){invoked=true;return [];}}}])await assert.rejects(h.planner.plan(input,user,signal(),()=>{}));
  assert.equal(invoked,false);assert.equal(h.calls.length,0);
  assert.deepEqual(outboxPublishFailure(request,'required inbox unavailable'),{type:'outbox.publish.result',id:request.id,ok:false,error:'required inbox unavailable'});
 });

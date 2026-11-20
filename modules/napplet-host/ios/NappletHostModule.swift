@@ -25,6 +25,7 @@ public final class NappletHostModule: Module {
     Name("HypergolicNappletHost")
     Events("onRelayStream", "onRelayLifecycle", "onUploadProgress", "onRoutingLifecycle")
     OnCreate {
+      Task { @MainActor in RestrictedNappletHost.removeAbandonedRules() }
       UploadTransport.observeProgress { event in streamEmitter?.emit(event: "onUploadProgress", payload: ["token": event.token, "bytesSent": event.bytesSent, "bytesTotal": event.bytesTotal]) }
       RoutingTransport.shared.observeLifecycle { snapshot in streamEmitter?.emit(event: "onRoutingLifecycle", payload: ["snapshot": snapshot]) }
       _ = CapabilityTransport.lifecycle

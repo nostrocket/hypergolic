@@ -1,3 +1,4 @@
+import {isAuthenticationEventKind} from '../security/authentication-event.ts';
 import {captureUnsignedEventTemplate, type UnsignedEventTemplate} from '../security/event-snapshot.ts';
 import {normalizeRelayUrl} from '../network/relay-settings.ts';
 import {publicKey, text, utf8Bytes} from '../storage/codec.ts';
@@ -23,7 +24,7 @@ export function parseOutboxPublish(input:unknown, user:string):OutboxPublishRequ
     const options=Object.hasOwn(value,'options') ? outboxRecord(value.options) : {};
     if(Object.keys(options).some(key=>!['toOutbox','toInboxes','relays'].includes(key)) || (Object.hasOwn(options,'toOutbox')&&typeof options.toOutbox!=='boolean'))throw new OutboxPublicationError();
     const event=captureUnsignedEventTemplate(value.event,user);assertOutboxEventFrameFits(event,user);
-    if(event.kind===22242 || event.kind===24242)throw new OutboxPublicationError('policy denied');
+    if(isAuthenticationEventKind(event.kind))throw new OutboxPublicationError('policy denied');
     return Object.freeze({type:'outbox.publish',id:text(value.id,128),event,
       options:Object.freeze({toOutbox:options.toOutbox!==false,
         toInboxes:Object.hasOwn(options,'toInboxes') ? outboxList(options.toInboxes,OUTBOX_LIST_LIMITS.authors,publicKey) : Object.freeze([]),

@@ -245,6 +245,8 @@ function explicitSelfClosing(tagText: string): boolean {
 function validateHtmlEnvelope(html: string): void {
   const {doctypeEnd} = publishedHtmlHead(html);
   const stack: {name: string; children: Namespace}[] = [];
+  const closeTag = /<\/([a-z][a-z0-9:-]*)\s*>/iy;
+  const openTag = /<([a-z][a-z0-9:-]*)(?=[\s/>])/iy;
   let cursor = doctypeEnd;
   let htmlCount = 0; let headCount = 0; let bodyCount = 0; let bodySeen = false;
   while (cursor < html.length) {
@@ -259,14 +261,16 @@ function validateHtmlEnvelope(html: string): void {
       if (end < 0) return fail();
       cursor = end + 3; continue;
     }
-    const closing = /^<\/([a-z][a-z0-9:-]*)\s*>/i.exec(html.slice(open));
+    closeTag.lastIndex = open;
+    const closing = closeTag.exec(html);
     if (closing) {
       const name = closing[1]!.toLowerCase();
       if (stack.pop()?.name !== name) return fail();
       cursor = open + closing[0].length; continue;
     }
-    if (/^<!|^<\?/.test(html.slice(open))) return fail();
-    const nameMatch = /^<([a-z][a-z0-9:-]*)(?=[\s/>])/i.exec(html.slice(open));
+    if (html.startsWith('<!', open) || html.startsWith('<?', open)) return fail();
+    openTag.lastIndex = open;
+    const nameMatch = openTag.exec(html);
     if (!nameMatch) return fail();
     const name = nameMatch[1]!.toLowerCase();
     let quote = '';

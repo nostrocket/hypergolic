@@ -24,7 +24,7 @@ public final class NativeMeshAuthority: @unchecked Sendable {
     public let requestId,user,unsigned,canonical,eventId:String
     public let kind,ttl:Int;public let createdAt:Int64;public let expiresAt:Int64?
     fileprivate init(id:String,user:String,kind:Int,content:String,tags:[[String]],ttl:Int,created:Int64)throws{
-      guard (0...65535).contains(kind),kind != 22242,kind != 24242,content.utf8.count<=8192,tags.count<=256,tags.allSatisfy({(1...64).contains($0.count)}) else{throw Failure.invalid}
+      guard (0...65535).contains(kind),kind != 22242,kind != 24242,kind != 27235,content.utf8.count<=8192,tags.count<=256,tags.allSatisfy({(1...64).contains($0.count)}) else{throw Failure.invalid}
       var expiration:Int64?
       for tag in tags where tag[0]=="expiration"{guard expiration==nil,tag.count==2,!tag[1].isEmpty,tag[1].utf8.count<=16,tag[1].utf8.allSatisfy({(48...57).contains($0)}),let value=Int64(tag[1]),NativeMeshAuthority.validRevision(value),value>created else{throw Failure.invalid};expiration=value}
       expiresAt=expiration
