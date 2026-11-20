@@ -177,10 +177,9 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
           if (data.optString("sessionId") != generation) return@addWebMessageListener
           if (data.optString("type") == "routing-ack") {
             if (data.keys().asSequence().toSet() != setOf("type", "sessionId", "sequence", "delivery")) return@addWebMessageListener
-            val seq = data.opt("sequence"); val delivery = data.opt("delivery")
-            if ((seq !is Int && seq !is Long) || (delivery !is Int && delivery !is Long)) return@addWebMessageListener
-            if ((delivery as Number).toLong() !in 1..9_007_199_254_740_991L || !CapabilityTransport.leases.consumeSequence(generation, (seq as Number).toLong())) return@addWebMessageListener
-            RoutingTransport.acknowledge(generation, delivery.toLong())
+            if (!ready || consumeTransportSequence(data) == null) return@addWebMessageListener
+            val delivery = transportInteger(data.opt("delivery")) ?: return@addWebMessageListener
+            RoutingTransport.acknowledge(generation, delivery)
             return@addWebMessageListener
           }
           if (data.optString("type") == "relay-stream-ack") {
@@ -194,12 +193,10 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
             return@addWebMessageListener
           }
           if (data.optString("type") == "cvm") {
-            if (!ready || published == null || configuration?.cvmProfile != "free-foreground-v1" ||
-                data.keys().asSequence().toSet() != setOf("type", "sessionId", "sequence", "message")) return@addWebMessageListener
-            val sequence = data.opt("sequence")
-            if ((sequence !is Int && sequence !is Long) || !CapabilityTransport.leases.consumeSequence(generation, (sequence as Number).toLong())) return@addWebMessageListener
+            val sequence = consumeMessageSequence(data) ?: return@addWebMessageListener
+            if (published == null || configuration?.cvmProfile != "free-foreground-v1") return@addWebMessageListener
             val carrier = data.opt("message") as? String ?: return@addWebMessageListener
-            val capturedSequence = sequence.toLong()
+            val capturedSequence = sequence
             val token = CvmTransport.receive(generation, carrier, { response ->
               if (live && !disposed && view === webView && view.url == expectedUrl) reply.postMessage(
                 JSONObject().put("type","cvm.response").put("sessionId",generation).put("sequence",capturedSequence).put("response",response ?: JSONObject.NULL).toString())
@@ -211,10 +208,8 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
             return@addWebMessageListener
           }
           if (data.optString("type") == "media") {
-            if (!ready || published == null || configuration?.grantedDomains?.contains("media") != true ||
-                data.keys().asSequence().toSet() != setOf("type", "sessionId", "sequence", "message")) return@addWebMessageListener
-            val sequence = data.opt("sequence")
-            if ((sequence !is Int && sequence !is Long) || !CapabilityTransport.leases.consumeSequence(generation, (sequence as Number).toLong())) return@addWebMessageListener
+            consumeMessageSequence(data) ?: return@addWebMessageListener
+            if (published == null || configuration?.grantedDomains?.contains("media") != true) return@addWebMessageListener
             if (!UploadJsonBounds.accepts(text, 32 * 1024)) return@addWebMessageListener
             val request = data.optJSONObject("message") ?: return@addWebMessageListener
             val deliver: (JSONObject) -> Unit = { event ->
@@ -526,21 +521,14 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
 
   private fun receiveStreamAck(data: JSONObject) {
     if (!ready || data.keys().asSequence().toSet() != setOf("type", "sessionId", "sequence", "streamSequence", "delivery")) return
-    val values = listOf("sequence", "streamSequence", "delivery").map { name ->
-      val value = data.opt(name)
-      if (value !is Int && value !is Long) return
-      (value as Number).toLong().takeIf { it in 1..9_007_199_254_740_991L } ?: return
-    }
-    if (!CapabilityTransport.leases.consumeSequence(generation, values[0])) return
-    RelaySubscriptionTransport.acknowledge(generation, values[1], values[2])
+    consumeTransportSequence(data) ?: return
+    val stream = transportInteger(data.opt("streamSequence")) ?: return
+    val delivery = transportInteger(data.opt("delivery")) ?: return
+    RelaySubscriptionTransport.acknowledge(generation, stream, delivery)
   }
   private fun receiveSubscription(data: JSONObject, push: (String) -> Unit) {
     val config = configuration ?: return
-    if (!ready || data.keys().asSequence().toSet() != setOf("type", "sessionId", "sequence", "message")) return
-    val number = data.opt("sequence")
-    if (number !is Int && number !is Long) return
-    val sequence = (number as Number).toLong()
-    if (sequence !in 1..9_007_199_254_740_991L || !CapabilityTransport.leases.consumeSequence(generation, sequence)) return
+    val sequence = consumeMessageSequence(data) ?: return
     val message = data.opt("message") as? String ?: return
     val request = runCatching { UploadWire.objectValue(message, CapabilityLeaseRegistry.MAX_BYTES) }.getOrNull() ?: return
     val subId = request.opt("subId") as? String ?: return
@@ -555,6 +543,17 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     onHostEvent(mapOf("type" to "capability", "lane" to (if (legacy) "legacy-subscription" else if (outbox) "outbox-subscription" else "subscription"), "sessionId" to config.sessionId, "generation" to generation, "token" to token))
   }
 
+  private fun consumeMessageSequence(data: JSONObject): Long? {
+    if (!ready || data.keys().asSequence().toSet() != setOf("type", "sessionId", "sequence", "message")) return null
+    return consumeTransportSequence(data)
+  }
+  private fun consumeTransportSequence(data: JSONObject): Long? =
+    transportInteger(data.opt("sequence"))?.takeIf { CapabilityTransport.leases.consumeSequence(generation, it) }
+
+  private fun transportInteger(value: Any?): Long? {
+    if (value !is Int && value !is Long) return null
+    return (value as Number).toLong().takeIf { it in 1..9_007_199_254_740_991L }
+  }
   private fun mayDeferCapability(request: JSONObject?, config: CapabilityConfiguration): Boolean {
     if (request == null) return false
     val type = request.opt("type") as? String ?: return false
@@ -580,10 +579,10 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     val fields = setOf("type", "sessionId", "sequence", "message")
     if (!ready || data.keys().asSequence().toSet() != (if (deferred) fields + "deferred" else fields)) return
     val number = data.get("sequence")
-    if ((number !is Int && number !is Long) || data.get("message") !is String) return
+    if (number !is Int && number !is Long) return
     val sequence = (number as Number).toLong()
     if (sequence !in 1..9_007_199_254_740_991L) return
-    val message = data.getString("message")
+    val message = data.opt("message") as? String ?: run { CapabilityTransport.leases.consumeSequence(generation, sequence); replyRaw(null); return }
     val operation = UUID.randomUUID().toString()
     val now = android.os.SystemClock.elapsedRealtime()
     pendingNativeReplies.entries.removeAll { it.value <= now }
@@ -622,7 +621,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
       onHostEvent(mapOf("type" to "capability", "lane" to lane, "sessionId" to config.sessionId, "generation" to generation, "token" to token))
       return
     }
-    if (!UploadJsonBounds.accepts(message, CapabilityLeaseRegistry.MAX_BYTES)) { reply(null); return }
+    if (!UploadJsonBounds.accepts(message, CapabilityLeaseRegistry.MAX_BYTES)) { CapabilityTransport.leases.consumeSequence(generation, sequence); reply(null); return }
     if (request?.optString("type") == "link.open") {
       if (!CapabilityTransport.leases.consumeSequence(generation, sequence)) { reply(null); return }
       LinkTransport.receive(generation, config, message, appContext.currentActivity, reply)
