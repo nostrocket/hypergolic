@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {finalizeEvent,getPublicKey} from 'nostr-tools/pure';
-import {ApprovalService,type NativeTakenApproval,type NativeApprovalLease,type NativeApprovalLeasePort,type ApprovalOrigin} from '../../src/security/approval-service.ts';
+import {ApprovalService,PublicationUncertainError,type NativeTakenApproval,type NativeApprovalLease,type NativeApprovalLeasePort,type ApprovalOrigin} from '../../src/security/approval-service.ts';
 import {createOutboxPublicationPlanner,type OutboxPublicationPlan} from '../../src/outbox/publication-plan.ts';
 import {parseOutboxPublish} from '../../src/outbox/publication-contract.ts';
 import {parseOutboxRelayList} from '../../src/outbox/relay-list.ts';
@@ -70,8 +70,9 @@ test('background, close and revision revoke unresolved preparation before late r
 test('native lease expiry during discovery cancels preparation and suppresses late review',async()=>{
  let finish!:()=>void;const h=harness(async()=>{await new Promise<void>(resolve=>{finish=resolve;});return {list:own,source:'cache',incomplete:false};}),lease=h.native.issue('one',{});h.service.enqueue('one',[]);h.native.state(lease).live=false;await new Promise(resolve=>setTimeout(resolve,35));finish();await new Promise(resolve=>setTimeout(resolve,1));assert.equal(h.service.getSnapshot().pending,0);assert.equal(h.signs(),0);
 });
-test('malformed primary native receipts stop ancillary publication and deny result delivery',async()=>{
- const h=harness();h.native.malformed=true;h.native.issue('one');const item=await settled(h);await assert.rejects(h.service.approve(item!.id));assert.equal(h.native.sent.length,1);assert.equal(h.native.responses[0],null);
+test('malformed primary native receipts stop ancillary publication and report the unknown outcome',async()=>{
+ const h=harness();h.native.malformed=true;h.native.issue('one');const item=await settled(h);await assert.rejects(h.service.approve(item!.id),PublicationUncertainError);assert.equal(h.native.sent.length,1);
+ assert.deepEqual(JSON.parse(h.native.responses[0]!),{type:'outbox.publish.result',id:'one',ok:false,error:'publication result unknown'});
 });
 test('native bridge hooks are mandatory; no legacy JS transport fallback is permitted',()=>{
  const h=harness();h.native.issue('one');h.native.prepareOutbox=undefined as any;assert.equal(h.service.enqueue('one',[]),false);assert.equal(h.service.getSnapshot().pending,0);assert.equal(h.signs(),0);assert.equal(h.native.sent.length,0);
