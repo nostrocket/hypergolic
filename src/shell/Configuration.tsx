@@ -1,5 +1,4 @@
-import {publishedAppLabel} from '../napplets/published-identity';
-import { TrustedBand } from './TrustedBand';
+import {boundedPublishedTitle, publishedAppLabel} from '../napplets/published-identity';
 import {useState, useSyncExternalStore} from 'react';
 import {AccessibilityInfo, Keyboard, FlatList, StyleSheet, Text, View} from 'react-native';
 import { ShellModal as Modal } from './ShellModal';
@@ -7,9 +6,9 @@ import { ShellPressable as Pressable } from './ShellPressable';
 import { ShellTextInput as TextInput } from './ShellTextInput';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import type {ConfigBroker, ConfigReview} from '../presentation/config-broker';
-import {CONFIG_LIMITS, configSecretFields, type ConfigSchema, type ConfigValue} from '../presentation/config-schema';
+import {CONFIG_LIMITS, ConfigKeyInputError, configSecretFields, type ConfigSchema, type ConfigValue} from '../presentation/config-schema';
 import {ShellStorageError} from '../storage/ports';
-import {formatNpub} from '../security/public-identity';
+import {compactPublisher, formatNpub} from '../security/public-identity';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 type Field = {path: readonly string[]; schema: ConfigSchema; section: string};
 const fieldKey = (path: readonly string[]) => JSON.stringify(path);
@@ -60,29 +59,33 @@ function Editor({service, review}: {service: ConfigBroker; review: ConfigReview}
       await service.commit(review.id, values, changes);
     } catch (error) {
       if (service.getSnapshot().review?.id !== review.id) return;
-      const message = error instanceof ShellStorageError && error.code === 'STORAGE_INDETERMINATE' ? 'The save could not be confirmed. Reopen settings to check stored values before trying again.' : 'Configuration needs valid values. Check required fields, limits and allowed choices.';
+      const message = error instanceof ConfigKeyInputError ? error.message : error instanceof ShellStorageError && error.code === 'STORAGE_INDETERMINATE' ? 'The save could not be confirmed. Reopen settings to check stored values before trying again.' : 'Configuration needs valid values. Check required fields, limits and allowed choices.';
       setStatus({busy: false, error: message}); AccessibilityInfo.announceForAccessibility(message);
     }
   };
   const renderField = ({item: field, index}: {item: Field; index: number}) => {
-      const key = fieldKey(field.path), id = fieldId(field.path), secret = secretPaths.has(key), value = secret ? secrets[key] ?? '' : draft[key] ?? '', label = field.schema.title ?? field.path.join('.');
+      const key = fieldKey(field.path), id = fieldId(field.path), secret = secretPaths.has(key), value = secret ? secrets[key] ?? '' : draft[key] ?? '', label = boundedPublishedTitle(field.schema.title ?? field.path.join('.')) || 'Field';
       return <View key={key} style={styles.field}>
-        {field.section !== '' && (index === 0 || rows[index - 1]!.section !== field.section) && <Text accessibilityRole="header" style={styles.title}>{field.section}</Text>}
+        {field.section !== '' && (index === 0 || rows[index - 1]!.section !== field.section) && <Text accessibilityRole="header" style={styles.title}>{boundedPublishedTitle(field.section)}</Text>}
         <Text style={styles.title}>{label}</Text>
-        {(field.schema.description || field.schema.markdownDescription) && <Text style={styles.detail}>{field.schema.description ?? field.schema.markdownDescription}</Text>}
-        {field.schema.format && <Text style={styles.detail}>Format hint: {field.schema.format}</Text>}
-        {field.schema.deprecationMessage && <Text style={styles.detail}>{field.schema.deprecationMessage}</Text>}
+        {(field.schema.description || field.schema.markdownDescription) && <Text style={styles.detail}>{boundedPublishedTitle(field.schema.description ?? field.schema.markdownDescription ?? '')}</Text>}
+        {field.schema.format && <Text style={styles.detail}>Format hint: {boundedPublishedTitle(field.schema.format)}</Text>}
+        {field.schema.deprecationMessage && <Text style={styles.detail}>{boundedPublishedTitle(field.schema.deprecationMessage)}</Text>}
         {secret ? <>
           <Text style={styles.detail}>{review.secretPresent[key] ? 'A value is saved. Leave this input unchanged to keep it.' : 'No secret value is saved.'}{field.schema.type === 'array' ? ' Enter a JSON array of strings.' : ''}</Text>
           <TextInput testID={'config-secret-' + id} accessibilityLabel={label + ' (secret)'} secureTextEntry autoCapitalize="none" autoCorrect={false} autoComplete="off" textContentType="none" importantForAutofill="no" maxLength={CONFIG_LIMITS.bytes} value={value} onChangeText={text => setSecrets(old => ({...old, [key]: text}))} style={styles.input} returnKeyType="done" onSubmitEditing={Keyboard.dismiss}/>
           <Action id={'config-secret-clear-' + id} label={secrets[key] === null ? 'Value will be cleared on save' : 'Clear saved value'} onPress={() => setSecrets(old => ({...old, [key]: null}))}/>
-        </> : field.schema.enum ? field.schema.enum.map((option, choice) => <Action key={choice} id={'config-choice-' + id + '-' + choice} label={(value === (typeof option === 'string' ? option : JSON.stringify(option)) ? 'Selected: ' : '') + (typeof option === 'string' ? option : JSON.stringify(option)) + (field.schema.enumDescriptions?.[choice] ? ' · ' + field.schema.enumDescriptions[choice] : '')} onPress={() => setDraft(old => ({...old, [key]: typeof option === 'string' ? option : JSON.stringify(option)}))}/>) : field.schema.type === 'boolean' ? <>
+        </> : field.schema.enum ? field.schema.enum.map((option, choice) => <Action key={choice} id={'config-choice-' + id + '-' + choice} label={(value === (typeof option === 'string' ? option : JSON.stringify(option)) ? 'Selected: ' : '') + boundedPublishedTitle(typeof option === 'string' ? option : JSON.stringify(option)) + (field.schema.enumDescriptions?.[choice] ? ' · ' + boundedPublishedTitle(field.schema.enumDescriptions[choice]) : '')} onPress={() => setDraft(old => ({...old, [key]: typeof option === 'string' ? option : JSON.stringify(option)}))}/>) : field.schema.type === 'boolean' ? <>
           <Action id={'config-choice-' + id + '-true'} label={value === 'true' ? 'Selected: On' : 'On'} onPress={() => setDraft(old => ({...old, [key]: 'true'}))}/><Action id={'config-choice-' + id + '-false'} label={value === 'false' ? 'Selected: Off' : 'Off'} onPress={() => setDraft(old => ({...old, [key]: 'false'}))}/>
         </> : <TextInput testID={'config-field-' + id} accessibilityLabel={label} autoCapitalize="none" autoCorrect={false} multiline={field.schema.type === 'array' || field.schema.type === 'object'} maxLength={CONFIG_LIMITS.bytes} value={value} onChangeText={text => setDraft(old => ({...old, [key]: text}))} style={styles.input} returnKeyType="done" onSubmitEditing={Keyboard.dismiss}/>}
         {!secret && <Action id={'config-reset-' + id} label="Reset to declared default" onPress={() => setDraft(old => {const next = {...old}; delete next[key]; return next;})}/>}
       </View>;
   };
-  return <Modal visible transparent animationType="fade" onRequestClose={() => service.closeReview(review.id)}><View style={[styles.shade, {paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right}]}><TrustedBand label="Napplet settings" /><FlatList automaticallyAdjustKeyboardInsets testID="configuration-settings" keyboardShouldPersistTaps="handled" data={rows} keyExtractor={field => fieldKey(field.path)} renderItem={renderField} initialNumToRender={8} windowSize={5} removeClippedSubviews={false} contentContainerStyle={[styles.sheet, {paddingBottom: Math.max(insets.bottom, 24)}]} ListHeaderComponent={<View style={styles.group}>
+  return <Modal visible transparent animationType="fade" onRequestClose={() => service.closeReview(review.id)}><View style={[styles.shade, {paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right}]}><View style={styles.attribution}>
+    <Text accessibilityRole="header" numberOfLines={2} style={styles.title}>Settings for {review.origin.snapshot?.title ?? publishedAppLabel(review.origin.appId)}</Text>
+    <Text style={styles.detail}>{review.origin.fixture === 'published' ? `Publisher · ${compactPublisher(review.origin.publisher)}` : 'Built into Hypergolic'}</Text>
+    <Text style={styles.detail}>This napplet supplies the fields and receives saved values. Keep your Nostr private key out of this form.</Text>
+  </View><FlatList automaticallyAdjustKeyboardInsets testID="configuration-settings" keyboardShouldPersistTaps="handled" data={rows} keyExtractor={field => fieldKey(field.path)} renderItem={renderField} initialNumToRender={8} windowSize={5} removeClippedSubviews={false} contentContainerStyle={[styles.sheet, {paddingBottom: Math.max(insets.bottom, 24)}]} ListHeaderComponent={<View style={styles.group}>
     <Text accessibilityRole="header" style={styles.heading}>Napplet configuration</Text>
     <Text style={styles.title}>{review.origin.snapshot?.title ?? publishedAppLabel(review.origin.appId)}</Text><Text selectable style={styles.detail}>{formatNpub(review.origin.publisher)}</Text>
     {review.origin.snapshot && <Text selectable style={styles.detail}>Snapshot (kind 5129) · {review.origin.snapshot.eventId}</Text>}
@@ -99,6 +102,7 @@ export function Configuration({service, blocked}: {service: ConfigBroker; blocke
   return !blocked && review ? <Editor key={review.id} service={service} review={review}/> : null;
 }
 const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.create({
+  attribution: {backgroundColor: colors.surface, paddingVertical: 8, paddingHorizontal: 20},
   group: {gap: 12}, shade: {flex: 1, backgroundColor: colors.shade}, sheet: {backgroundColor: colors.background, padding: 24, gap: 12}, field: {gap: 8, paddingVertical: 8},
   heading: { fontFamily: fonts.display,color: colors.text, fontSize: 28, }, title: { fontFamily: fonts.strong,color: colors.text, fontSize: 18, }, detail: { fontFamily: fonts.body,color: colors.muted, fontSize: 14, lineHeight: 21},
   input: { fontFamily: fonts.body,borderColor: colors.border, borderWidth: 1, borderRadius: 0, minHeight: 44, padding: 12, color: colors.text, fontSize: 16}, button: {backgroundColor: colors.surface, minHeight: 44, padding: 12, borderRadius: 0}, action: { textTransform: 'uppercase', letterSpacing: 1.8, fontFamily: fonts.strong,color: colors.accent, fontSize: 14},
