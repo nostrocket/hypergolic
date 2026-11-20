@@ -32,7 +32,10 @@ function harness(noop=false,unknown=false,preparationFailure=false){
 async function prepared(h:ReturnType<typeof harness>){assert(h.service.enqueue('private-native-token',[relay],registration));for(let i=0;i<20;i++){await setImmediate();if(h.service.getSnapshot().current||h.service.getSnapshot().pending===0)return;}assert.fail('Preparation did not settle');}
 test('original Common intent reaches exact review/sign/native-send and returns original Common correlation',async()=>{
   const h=harness();await prepared(h);const item=h.service.getSnapshot().current;assert(item?.common);assert.equal(item.event.event.kind,3);
-  const outcomes=await h.service.approve(item.id);assert.equal(outcomes[0]?.status,'accepted');
+  await assert.rejects(h.service.approve(item.id));
+  await assert.rejects(h.service.approve(item.id,'previous-review'));
+  assert.deepEqual(h.calls,['prepare-common']);
+  const outcomes=await h.service.approve(item.id,item.id);assert.equal(outcomes[0]?.status,'accepted');
   assert.deepEqual(h.calls,['prepare-common','prepare-signing','approve','sign','publish','finish']);
   const reply=h.responses[0] as Record<string,unknown>;assert.equal(reply.type,'common.follow.result');assert.equal(reply.id,'original-id');assert.equal(reply.ok,true);assert.ok(reply.eventId);
 });
@@ -41,7 +44,7 @@ test('idempotent complete basis ends through dedicated no-op lane without review
 });
 test('fresh changed basis cancels before native approve/sign and returns a clear correlated failure',async()=>{
   const h=harness();await prepared(h);const item=h.service.getSnapshot().current!;h.change();
-  await assert.rejects(h.service.approve(item.id),/follow-list-changed/);assert(h.calls.includes('fail:follow-list-changed'));assert(!h.calls.includes('approve'));assert(!h.calls.includes('sign'));assert(!h.calls.includes('publish'));assert.equal(h.service.getSnapshot().pending,0);
+  await assert.rejects(h.service.approve(item.id,item.id),/follow-list-changed/);assert(h.calls.includes('fail:follow-list-changed'));assert(!h.calls.includes('approve'));assert(!h.calls.includes('sign'));assert(!h.calls.includes('publish'));assert.equal(h.service.getSnapshot().pending,0);
 });
 test('close before approval revokes and releases prepared Common ownership with no public effects',async()=>{
   const h=harness();await prepared(h);h.service.close(registration.sessionId);assert.equal(h.service.getSnapshot().pending,0);assert(h.calls.includes('cancel'));assert(!h.calls.includes('approve'));assert(!h.calls.includes('sign'));assert(!h.calls.includes('publish'));
@@ -49,7 +52,7 @@ test('close before approval revokes and releases prepared Common ownership with 
 
 
 test('a lost native publication result remains unknown and retains close risk, never a false known failure',async()=>{
-  const h=harness(false,true);await prepared(h);const item=h.service.getSnapshot().current!;const outcomes=await h.service.approve(item.id);
+  const h=harness(false,true);await prepared(h);const item=h.service.getSnapshot().current!;const outcomes=await h.service.approve(item.id,item.id);
   assert.equal(outcomes[0]?.status,'unknown');assert.equal((h.responses[0] as Record<string,unknown>).error,'publication-result-unknown');assert.equal(h.service.hasCloseRisk(registration.sessionId),true);assert.equal(h.calls.filter(value=>value==='publish').length,1);
 });
 

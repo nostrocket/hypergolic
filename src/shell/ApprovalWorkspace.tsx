@@ -43,7 +43,7 @@ export function ApprovalWorkspace({ service, uploads, cvm, reviewSlot, epoch, wo
     {cvm&&<CvmReview service={cvm} slot={reviewSlot} workspace={workspace}/> }
     <ApprovalResults snapshot={snapshot} presentation={presentation} shown={shown!==null} showReceipt={showReceipt}/>
     <ApprovalSheet item={shown} nappletTitle={title} busy={held} error={null}
-      onApprove={id => {if(mayApprove(id)&&snapshot.current?.id===id)presentation.approve(snapshot.current);}}
+      onApprove={(id, confirmedNewListId) => {if(mayApprove(id)&&snapshot.current?.id===id)presentation.approve(snapshot.current, confirmedNewListId);}}
       onReject={id => {if(!held&&mayApprove(id))service.reject(id);}} onDismiss={id => {if(!held&&mayApprove(id))service.dismiss(id);}} />
   </UploadProvider></ApprovalProvider>;
 }

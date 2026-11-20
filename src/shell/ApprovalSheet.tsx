@@ -6,7 +6,7 @@ import { ShellModal as Modal } from './ShellModal';
 import { ShellPressable as Pressable } from './ShellPressable';
 import { formatNpub } from '../security/public-identity.ts';
 import {snapshotEventId} from '../napplets/published-identity';
-import type { ApprovalItem } from '../security/approval-service.ts';
+import { requiresNewFollowListConfirmation, type ApprovalItem } from '../security/approval-service.ts';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,7 +15,7 @@ export type ApprovalSheetProps = Readonly<{
   nappletTitle: string;
   busy: boolean;
   error: string | null;
-  onApprove: (id: string) => void;
+  onApprove: (id: string, confirmedNewListId?: string) => void;
   onReject: (id: string) => void;
   onDismiss: (id: string) => void;
 }>;
@@ -76,6 +76,9 @@ function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismis
   const identityNpub = formatNpub(item.event.selectedPubkey);
   const manifestEventId = snapshotEventId(item.origin.appId);
   const record = item.appData?.record;
+  const [confirmedNewList, setConfirmedNewList] = useState(false);
+  const needsNewList = requiresNewFollowListConfirmation(item);
+  const approveDisabled = busy || (needsNewList && !confirmedNewList);
   const dismiss = () => { if (!busy) onDismiss(item.id); };
   return <Modal visible transparent animationType="none" onRequestClose={dismiss} onShow={() => {
     approve.current?.focus();
@@ -98,6 +101,14 @@ function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismis
               <Text testID="approval-recommendation-excluded" selectable style={styles.destination}>{item.recommendationExcludedRelays.join('\n')}</Text>
             </View>}</>}
           {record && <AppDataRecordReview record={record} content={item.event.event.content}/>}
+          {needsNewList && <View style={styles.record}>
+            <Text accessibilityRole="header" style={styles.title}>Create a new follow list?</Text>
+            <Text style={styles.value}>Your configured relays returned no follow list. Publishing this list may replace an existing one held by other relays.</Text>
+            <Pressable accessibilityRole="checkbox" accessibilityState={{checked: confirmedNewList}} disabled={busy}
+              testID="confirm-new-follow-list" onPress={() => setConfirmedNewList(value => !value)} style={styles.details}>
+              <Text style={styles.detailsText}>{confirmedNewList ? '✓ ' : '□ '}Create a list using only the accounts shown here</Text>
+            </Pressable>
+          </View>}
           {item.common && <><Text style={styles.label}>Targets</Text><Text selectable style={styles.mono}>{commonTargets(item.common)}</Text></>}
           {item.common?.request.type==='common.report'&&<><Text style={styles.label}>Report reason</Text><Text style={styles.value}>{item.common.request.reason}</Text></>}
           <Text testID="approval-sheet-content" selectable style={styles.content}>{item.event.event.content}</Text>
@@ -117,7 +128,7 @@ function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismis
           {error && <Text accessibilityLiveRegion="polite" style={styles.error}>{error}</Text>}
         </ScrollView>
         <View style={[styles.actions, landscape && styles.actionsLandscape]}>
-          <Pressable ref={approve} testID="approval-sheet-approve" accessibilityRole="button" accessibilityLabel="Continue to signer" accessibilityState={{ disabled: busy }} disabled={busy} onPress={() => onApprove(item.id)} style={({ pressed }) => [styles.approve, landscape && styles.actionLandscape, (pressed || busy) && styles.pressed]}><Text style={styles.approveText}>{busy ? 'Signing and publishing…' : 'Continue to signer'}</Text></Pressable>
+          <Pressable ref={approve} testID="approval-sheet-approve" accessibilityRole="button" accessibilityLabel="Continue to signer" accessibilityState={{ disabled: approveDisabled }} disabled={approveDisabled} onPress={() => onApprove(item.id, confirmedNewList ? item.id : undefined)} style={({ pressed }) => [styles.approve, landscape && styles.actionLandscape, (pressed || approveDisabled) && styles.pressed]}><Text style={styles.approveText}>{busy ? 'Signing and publishing…' : 'Continue to signer'}</Text></Pressable>
           <Pressable testID="approval-sheet-reject" accessibilityRole="button" accessibilityState={{ disabled: busy }} disabled={busy} onPress={() => onReject(item.id)} style={({ pressed }) => [styles.reject, landscape && styles.actionLandscape, (pressed || busy) && styles.pressed]}><Text style={styles.rejectText}>Reject</Text></Pressable>
           <Pressable testID="approval-sheet-dismiss" accessibilityRole="button" accessibilityLabel="Dismiss signing request" accessibilityState={{ disabled: busy }} disabled={busy} onPress={dismiss} style={({ pressed }) => [styles.dismiss, landscape && styles.actionLandscape, (pressed || busy) && styles.pressed]}><Text style={styles.dismissText}>Dismiss</Text></Pressable>
         </View>

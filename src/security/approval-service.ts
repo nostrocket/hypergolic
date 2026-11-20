@@ -46,6 +46,10 @@ export interface ApprovalEffects extends SigningHandoffReader {
 }
 export interface TrustedApprovalOwner { assertActive(origin: ApprovalOrigin,domain?:'outbox'|'common'): void }
 export type ApprovalItem = Readonly<{ recommendation?: string; recommendationExcludedRelays?: readonly string[]; id: string; origin: ApprovalOrigin; event: EventSnapshot; outbox?:OutboxPublicationPlan;common?:CommonSocialPlan;appData?:AppDataPlan }>;
+export function requiresNewFollowListConfirmation(item: ApprovalItem): boolean {
+  return item.common?.request.type === 'common.follow' && item.common.basis === null;
+}
+
 export type ApprovalSnapshot = Readonly<{ focusedSessionId: string | null; reviewPaused: boolean; current: ApprovalItem | null; pending: number; pendingSessionIds: readonly string[] }>;
 type Entry = ApprovalItem & { revalidateRecommendation?: CatalogRecommendationGuard; requestId: string; lease: NativeApprovalLease; controller: AbortController | null; signingPending?: boolean; publicationStarted?: boolean };
 const PER_SESSION = 4, GLOBAL = 16;
@@ -234,10 +238,10 @@ export class ApprovalService {
     }
     execution.assertActive();return captureOutboxPublicationReceipt(entry.outbox,verified,primary,ancillary);
   }
-  async approve(id: string): Promise<readonly RelayOutcome[]> {
+  async approve(id: string, confirmedNewListId?: string): Promise<readonly RelayOutcome[]> {
     this.refresh();
     const item = this.snapshot.current;
-    if (!item || item.id !== id) denied();
+    if (!item || item.id !== id || (requiresNewFollowListConfirmation(item) && confirmedNewListId !== id)) denied();
     const entry = this.entries.find(candidate => candidate.id === id)!;
     let response: string | null = null;
     let publicationStarted = false;

@@ -17,10 +17,10 @@ function publicationStatus(results:readonly RelayOutcome[]):string {
 export function useApprovalPresentation(service:ApprovalService,epoch:number,reviewSlot?:ReviewSlot){
  const [stored,setStored]=useState<Presentation|null>(null);
  const state=stored?.epoch===epoch&&stored.service===service?stored:null;
- const approve=(item:ApprovalItem)=>{
+ const approve=(item:ApprovalItem,confirmedNewListId?:string)=>{
   if(reviewSlot ? !reviewSlot.holdApproval(item) : state?.busy)return;
   const pending:Presentation={service,epoch,id:item.id,held:item,busy:true,receipt:null,outcome:null};setStored(pending);
-  void service.approve(item.id).then(results=>{
+  void service.approve(item.id,confirmedNewListId).then(results=>{
    const receipt=service.outboxReceipt(results),outcome=receipt?null:item.appData?appDataPublicationStatus(results):publicationStatus(results);
    if(!receipt)reviewSlot?.releaseApproval(item.id);
    setStored(current=>current===pending?{...pending,held:null,busy:false,receipt,outcome}:current);
