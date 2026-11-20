@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {setImmediate} from 'node:timers/promises';
 import {finalizeEvent,getPublicKey,type NostrEvent} from 'nostr-tools/pure';
 import {createNativeApprovalPort,type ApprovalModule} from '../../src/runtime/approval-port.ts';
-import {ApprovalService} from '../../src/security/approval-service.ts';
+import {ApprovalService,PublicationUncertainError} from '../../src/security/approval-service.ts';
 import {createAppDataPlanner} from '../../src/app-data/app-data-plan.ts';
 import {deriveAppDataScope,dataTags} from '../../src/app-data/app-data-contract.ts';
 import {captureEventSnapshot} from '../../src/security/event-snapshot.ts';
@@ -77,7 +77,7 @@ test('first rejected worker cannot release record while another native worker is
   const h=harness('drain'),gate=deferred();h.failFirst();h.setPublishGate(gate.promise);await ready(h);let settled=false;
   const work=h.service.approve(h.service.getSnapshot().current!.id).finally(()=>{settled=true;});await setImmediate();assert.equal(settled,false);h.service.close(h.registration.sessionId);
   const second=harness('drain');await ready(second);assert.equal(second.service.getSnapshot().current,null);
-  gate.resolve();await assert.rejects(work,/APPROVAL_DENIED/);second.reset();await ready(second);assert(second.service.getSnapshot().current);second.service.close(second.registration.sessionId);
+  gate.resolve();await assert.rejects(work,PublicationUncertainError);second.reset();await ready(second);assert(second.service.getSnapshot().current);second.service.close(second.registration.sessionId);
 });
 test('malformed d-only claim and missing trusted context never fall through generic publication',async()=>{
   const malformed=harness('marker','relay'),event=template('marker');event.tags=event.tags.filter(tag=>tag[0]==='d');malformed.changeRequest({type:'relay.publish',id:'marker',event});await ready(malformed);assert.equal(malformed.service.getSnapshot().current,null);assert(!malformed.calls.includes('sign'));assert(!malformed.calls.includes('prepare-native'));assert.equal((malformed.responses[0] as {error:string}).error,'app-data-invalid-tags');
@@ -87,7 +87,7 @@ test('malformed d-only claim and missing trusted context never fall through gene
 test('Network mutation while first four native sends settle blocks later configured-peer dispatch',async()=>{
   const many=Array.from({length:8},(_,i)=>`wss://peer${i}.example.com`),h=harness('settings-send','outbox',many),gate=deferred();h.setPublishGate(gate.promise);await ready(h);
   const work=h.service.approve(h.service.getSnapshot().current!.id);await setImmediate();assert.equal(h.calls.filter(c=>c==='native-publish').length,4);
-  h.setNetwork([...many].reverse());gate.resolve();await assert.rejects(work,/app-data-settings-changed/);
+  h.setNetwork([...many].reverse());gate.resolve();await assert.rejects(work,PublicationUncertainError);
   assert.equal(h.calls.filter(c=>c==='native-publish').length,4);assert(h.service.hasCloseRisk(h.registration.sessionId));assert.equal(h.service.getSnapshot().pending,0);
 });
 
