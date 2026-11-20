@@ -26,7 +26,10 @@ internal object RelaySubscriptionTransport {
     main.postDelayed({ synchronized(this) { if (!registry.isActive(token)) close(token) } }, 25_000)
     return token
   }
-  @Synchronized fun hasCapacity(token: String): Boolean = registry.mayDeliver(token) && (rows[token]?.sizes?.size ?: 4) < 4
+  @Synchronized fun hasCapacity(token: String): Boolean {
+    val row = rows[token] ?: return false
+    return registry.mayDeliver(token) && row.sizes.size < 4 && row.sizes.values.sum() + 66 * 1024 <= 256 * 1024
+  }
   @Synchronized fun send(token: String, response: String): Int {
     val row = rows[token] ?: return -1
     if (registry.isActive(token) && !registry.mayDeliver(token)) return 0

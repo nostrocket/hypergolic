@@ -82,3 +82,13 @@ test('configured-destination denial sends a terminal only through the exact acce
   h.admit({...request('revoked'),relay:'wss://not-configured.nostr.net'});
   assert.equal(h.messages.length,1);
 });
+
+test('renderer capacity holds raw stream messages until an acknowledgement frees a slot',async t=>{
+  const h=harness(t);let capacity=false;h.native.canSend=()=>capacity;
+  const token=h.admit();h.frame();
+  h.calls[0]!.frame(JSON.stringify(['EOSE',h.calls[0]!.sub]));
+  assert.deepEqual(h.messages,[]);assert.ok(h.native.isActive(token));
+  capacity=true;
+  await new Promise(resolve=>setTimeout(resolve,40));
+  assert.deepEqual(h.messages.map(message=>(message as {type:string}).type),['relay.event','relay.eose']);
+});
