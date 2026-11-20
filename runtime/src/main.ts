@@ -234,7 +234,15 @@ function createGuestEndpoint(artifact: RuntimeMetadata, hooks: ShellAdapter) {
     : artifact.domains.includes('resource') ? csp.replace("media-src 'none'", 'media-src blob:') : csp;
   originRegistry.register(source, sessionId, identity);
   originRegistry.setEnvironment(source, environment);
-  return { bridge, frame, source, media, environment, policy };
+  function destroyFrame(closeNative: () => void) {
+    bridge.runtime.destroyWindow(sessionId);
+    originRegistry.unregister(sessionId);
+    closeNative();
+    bridge.destroy();
+    frame.remove();
+    frame.removeAttribute('srcdoc');
+  }
+  return { bridge, frame, source, media, environment, policy, destroyFrame };
 }
 
 function createLoadHandler(frame: HTMLIFrameElement, source: Window,
@@ -252,6 +260,25 @@ function createLoadHandler(frame: HTMLIFrameElement, source: Window,
   };
 }
 
+function bindFrameListeners(frame: HTMLIFrameElement, source: Window,
+  legacyGuard: ReturnType<typeof createLegacyDocumentGuard> | undefined,
+  receiveGuest: (event: MessageEvent) => void, loaded: () => void) {
+  const receive = (event: MessageEvent): void => {
+    if (event.isTrusted && (source.length > 0 || event.data?.type === 'hypergolic.nested-document')) {
+      fail('frame-navigation');
+      return;
+    }
+    if (legacyGuard) legacyGuard.receive(event, receiveGuest);
+    else receiveGuest(event);
+  };
+  window.addEventListener('message', receive);
+  frame.addEventListener('load', loaded);
+  return () => {
+    window.removeEventListener('message', receive);
+    frame.removeEventListener('load', loaded);
+  };
+}
+
 function mount(artifact: RuntimeMetadata) {
   let legacyGuard: ReturnType<typeof createLegacyDocumentGuard> | undefined;
   const live = () => !stopped && frame.contentWindow === source && (artifact.legacyReadOnly !== undefined ? legacyGuard?.isActive() === true : ready && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) !== undefined);
@@ -266,7 +293,7 @@ function mount(artifact: RuntimeMetadata) {
     const entry = bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId);
     return () => !stopped && entry !== undefined && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) === entry;
   }, artifact, shellTheme.theme, routing.setContext);
-  const { bridge, frame, source, media, environment, policy } = createGuestEndpoint(artifact, hooks);
+  const { bridge, frame, source, media, environment, policy, destroyFrame } = createGuestEndpoint(artifact, hooks);
   const hasMedia = artifact.published && artifact.domains.includes('media');
   let ready = false;
   const legacyMount = createLegacyMount(artifact.legacyReadOnly, artifact.appId, frame, source, native, live,
@@ -316,6 +343,7 @@ function mount(artifact: RuntimeMetadata) {
     },
   });
   const loaded = createLoadHandler(frame, source, media, legacyGuard, () => fail('frame-navigation'));
+  const unbind = bindFrameListeners(frame, source, legacyGuard, receiveGuest, loaded);
   cleanup = (): void => {
     shellTheme.close();
     closeCheck();
@@ -326,25 +354,9 @@ function mount(artifact: RuntimeMetadata) {
     keys?.close();
     media.close();
     window.clearTimeout(deadline);
-    window.removeEventListener('message', receive);
-    frame.removeEventListener('load', loaded);
-    bridge.runtime.destroyWindow(sessionId);
-    originRegistry.unregister(sessionId);
-    native.destroy();
-    bridge.destroy();
-    frame.remove();
-    frame.removeAttribute('srcdoc');
+    unbind();
+    destroyFrame(() => native.destroy());
   };
-  const receive = (event: MessageEvent): void => {
-    if (event.isTrusted && (source.length > 0 || event.data?.type === 'hypergolic.nested-document')) {
-      fail('frame-navigation');
-      return;
-    }
-    if (legacyGuard) legacyGuard.receive(event, receiveGuest);
-    else receiveGuest(event);
-  };
-  window.addEventListener('message', receive);
-  frame.addEventListener('load', loaded);
   return {frame, environment, policy, discoveryToken, legacyNonce};
 }
 
