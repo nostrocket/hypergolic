@@ -502,7 +502,7 @@ class SignerCoreModule : Module() {
 
     AsyncFunction("getNativeSigningMethodsAsync") Coroutine { pubkey: String, vaultId: String, value: Double -> vaultAction {
       withContext(vaultDispatcher) {
-        vaultData(current) { vaultOwned().methods(appContext, pubkey, vaultId, revision(value)) }
+        synchronized(session.lock) { vaultOwned().methods(appContext, pubkey, vaultId, revision(value)) }
       }
     } }
 
@@ -511,7 +511,7 @@ class SignerCoreModule : Module() {
       mutationAction(records) {
         withContext(Dispatchers.Main.immediate) { exclusiveAction { current ->
           val expected = revision(value)
-          val metadata = synchronized(session.lock) { JSONObject(records.methods(appContext, pubkey, vaultId, expected)) }
+          val metadata = vaultData(current) { JSONObject(records.methods(appContext, pubkey, vaultId, expected)) }
           if (metadata.optString("selectedMethod") != method) {
             if (method != "local" && method != "nip46" && method != "nip55") throw NativeVault.Error("SIGNER_UNSUPPORTED")
             val activity = appContext.currentActivity ?: throw NativeVault.Error("AUTHORIZATION_DENIED")
