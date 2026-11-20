@@ -66,6 +66,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
 
   init {
     synchronized(publishedViews) { publishedViews.add(this) }
+    if (WebViewFeature.isFeatureSupported(WebViewFeature.MUTE_AUDIO)) WebViewCompat.setAudioMuted(webView, true)
     webView.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
     webView.setBackgroundColor(0xff120e0a.toInt())
     webView.settings.apply {
@@ -389,6 +390,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     finiteVideo.focusChanged(); liveRadio.focusChanged()
     updateInputActivity()
     val playingAllowed = active && mediaForeground
+    if (WebViewFeature.isFeatureSupported(WebViewFeature.MUTE_AUDIO)) WebViewCompat.setAudioMuted(webView, !playingAllowed)
     if (loaded) webView.evaluateJavascript("window.__hypergolicMediaActive?.($playingAllowed)", null)
     // Loaded foreground views also render the live overview. Focus gates media and
     // privileged actions separately; pausing an unfocused renderer blanks its card.
