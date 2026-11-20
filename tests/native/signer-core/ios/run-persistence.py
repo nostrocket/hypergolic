@@ -47,6 +47,8 @@ EXTRA = [
     'modules/napplet-host/ios/LegacyReadOnlyContext.swift',
     'modules/napplet-host/ios/ApprovalTransport.swift',
     'modules/napplet-host/ios/NativeOutboxPlan.swift',
+    'modules/napplet-host/ios/NativeCommonPlan.swift',
+    'modules/napplet-host/ios/NativeCommonNpub.swift',
     'modules/napplet-host/ios/PublishedRelayWebSocketClientFrames.swift',
     'modules/identity-store/ios/Contracts.swift',
     'modules/identity-store/ios/SystemKeychain.swift',
