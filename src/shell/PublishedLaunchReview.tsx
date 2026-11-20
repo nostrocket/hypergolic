@@ -168,7 +168,7 @@ export function PublishedLaunchReview({ target, source, changesAccess, onAccept,
   const insets = useSafeAreaInsets();
   const heading = useRef<TextInstance>(null);
   const control = useReviewControl(target.eventId);
-  return <ShellModal visible transparent animationType="none" onRequestClose={onCancel} onShow={() => {
+  return <ShellModal key={target.eventId} visible transparent animationType="none" onRequestClose={onCancel} onShow={() => {
     control.onShow();
     if (heading.current) AccessibilityInfo.sendAccessibilityEvent(heading.current, 'focus');
   }}>
