@@ -124,7 +124,7 @@ diff --git a/dist/index.js b/dist/index.js
          off();
          reject(new Error(`${message.type} timed out`));
 -      }, requestTimeoutMs);
-+      }, requestTimeoutsMs[message.type] ?? requestTimeoutMs);
++      }, options.timeoutMs ?? requestTimeoutsMs[message.type] ?? requestTimeoutMs);
        post(outbound);
      });
    }
@@ -411,9 +411,10 @@ diff --git a/dist/index.js b/dist/index.js
 -        resultOrError,
 +        (msg) => {
 +          if (msg.status !== "opened" && msg.status !== "denied") throw new Error("invalid link result");
-+          return { status: msg.status };
++          return typeof url === "string" && url.startsWith("nostr:naddr1") && msg.status === "denied" && typeof msg.error === "string" ? { status: msg.status, error: msg.error } : { status: msg.status };
 +        },
-         { rejectOnError: false }
+-        { rejectOnError: false }
++        { rejectOnError: false, timeoutMs: typeof url === "string" && url.startsWith("nostr:naddr1") ? requestTimeoutsMs["link.openNapplet"] : undefined }
        )
      };
 @@ -2396,7 +2559,12 @@

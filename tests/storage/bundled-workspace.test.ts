@@ -98,6 +98,7 @@ test('the exact prior Support descriptor survives upgrade without reseeding or c
 });
 
 for (const version of [
+  '013ae4e8a8ca58bf29f684f3acdde671cb95985cc28f8122c5f8bb776dcae5e8',
   '1b9f4d2e499b93fd40ee93e726514461913ba1f7518e06d19b5b6dba2a7f3ff7',
   '1ce8c075ced201b946663d4dff552c279ad220f713ee31c6978071ed127c1178',
   '3f4fa666ad26dcdcc749dfd8d49d112317c21f16df1044beea9ee5993031c8c2',
@@ -125,7 +126,7 @@ for (const version of [
   assert.deepEqual((await binding.port.load())?.snapshot, snapshotWorkspace(original));
   assert.equal(isDiscoveryEntry(previous), true);
   assert.deepEqual(resolveBundledSession(previous), resolveBundledSession(current));
-  assert.deepEqual(resolveBundledSession(previous).domains, ['relay', 'resource', 'theme']);
+  assert.deepEqual(resolveBundledSession(previous).domains, ['relay', 'resource', 'theme', 'link']);
 
   for (const patch of [{version:'a'.repeat(64)}, {publisher:'bundled-unsigned-peer'}, {appId:'state-lab'},
     {source:'published' as const}, {eventId:'b'.repeat(64)}, {title:'Other'}]) {

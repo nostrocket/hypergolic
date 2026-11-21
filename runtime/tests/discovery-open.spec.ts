@@ -16,7 +16,7 @@ type GuestWindow = Window & { hypergolic?: { publishedOpen?: {
   version: number; read(reset: boolean, round: string, after: number): Promise<unknown>;
 } }; receivedOpenStatus?: string; receivedOpenResult?: {status: string; reason?: string} };
 
-async function openRuntime(page: Page, fixture: string, catalogEvents: object[] = [], feedEvents: NostrEvent[] = []) {
+async function openRuntime(page: Page, fixture: string, catalogEvents: {event: NostrEvent}[] = [], feedEvents: NostrEvent[] = []) {
   await page.addInitScript(({catalogEvents, feedEvents}) => {
     if (window !== window.top) return;
     const root = window as unknown as TestWindow;
@@ -52,6 +52,11 @@ async function openRuntime(page: Page, fixture: string, catalogEvents: object[] 
             respond({type: 'routing.call.result', id: request.id, response: status});
           };
         }
+        if (request.type === 'routing.call' && request.message.type === 'link.open') {
+          state.calls.push(request.message);
+          state.finish = status => respond({type: 'routing.call.result', id: request.id,
+            response: {type: 'link.open.result', id: request.message.id, status}});
+        }
         if (request.type === 'relay.catalogPage') {
           state.catalogCalls.push(request);
           respond({type: 'relay.catalogPage.result', id: request.id, result: {
@@ -59,10 +64,10 @@ async function openRuntime(page: Page, fixture: string, catalogEvents: object[] 
             more: false, partial: false, gap: false, bounded: false,
           }});
         }
-        if (request.type === 'relay.query') {
-          const events = feedEvents.filter(event => request.filters.some((filter: {kinds: number[]; authors?: string[]}) =>
+        if (request.type === 'relay.query' || request.type === 'outbox.query') {
+          const events = [...catalogEvents.map(row => row.event), ...feedEvents].filter(event => request.filters.some((filter: {kinds: number[]; authors?: string[]}) =>
             filter.kinds.includes(event.kind) && (!filter.authors || filter.authors.includes(event.pubkey))));
-          respond({type: 'relay.query.result', id: request.id, events: events.map(event => ({event}))});
+          respond({type: request.type + '.result', id: request.id, events: events.map(event => ({event}))});
         }
       },
     };
@@ -159,8 +164,8 @@ test('packaged Discover scopes late and completed row feedback to its search', a
   await open.click();
   await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length)).toBe(1);
   const calls = await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls);
-  expect(calls[0]).toEqual({type, id: expect.any(String), expectedEventId: event.id,
-    address: naddrEncode({kind: 35129, pubkey: event.pubkey, identifier: 'feedback-control'})});
+  expect(calls[0]).toEqual({type: 'link.open', id: expect.any(String),
+    url: 'nostr:' + naddrEncode({kind: 35129, pubkey: event.pubkey, identifier: 'feedback-control'})});
   await search.fill('A different search');
   await expect(guest.getByText('No matches in the loaded results.')).toBeVisible();
   await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.finish?.('opened'));
@@ -172,7 +177,7 @@ test('packaged Discover scopes late and completed row feedback to its search', a
   await open.click();
   await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length)).toBe(2);
   await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.finish?.('opened'));
-  await expect(feedback).toHaveText('Opened in Hypergolic.');
+  await expect(feedback).toHaveText('Link accepted by your shell.');
   await search.fill('Another different search');
   await expect(feedback).toBeHidden();
   await expect(feedback).toBeEmpty();
@@ -180,7 +185,7 @@ test('packaged Discover scopes late and completed row feedback to its search', a
 });
 
 for (const declaration of ['R', 'O']) {
-  test(`packaged Discover trusts independent Outbox availability for ${declaration}`, async ({page}) => {
+  test(`packaged Discover displays publisher-declared Outbox access for ${declaration}`, async ({page}) => {
     const event = finalizeEvent({kind: 35129, created_at: Math.floor(Date.now() / 1000) - 10,
       content: 'Independent Outbox catalog control.', tags: [['d', 'outbox-control'],
         ['title', 'Independent Outbox'], ['x', 'c'.repeat(64)], [declaration, 'outbox']]},
@@ -197,33 +202,25 @@ for (const declaration of ['R', 'O']) {
     await guest.getByRole('button', {name: 'Open Napplet', exact: true}).click();
     await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length)).toBe(1);
     const calls = await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls);
-    expect(calls[0]).toEqual({type, id: expect.any(String), expectedEventId: event.id,
-      address: naddrEncode({kind: 35129, pubkey: event.pubkey, identifier: 'outbox-control'})});
+    expect(calls[0]).toEqual({type: 'link.open', id: expect.any(String),
+      url: 'nostr:' + naddrEncode({kind: 35129, pubkey: event.pubkey, identifier: 'outbox-control'})});
     await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.finish?.('opened'));
-    await expect(guest.locator('.detail-actions .feedback')).toHaveText('Opened in Hypergolic.');
+    await expect(guest.locator('.detail-actions .feedback')).toHaveText('Link accepted by your shell.');
   });
 }
 
-test('packaged Discover pins then unpins from listing and details without opening', async ({page}) => {
+test('packaged Discover leaves pinning to the shell and uses no private paging calls', async ({page}) => {
   const event = finalizeEvent({kind: 35129, created_at: Math.floor(Date.now() / 1000) - 10,
     content: 'Pin test', tags: [['d', 'pin-control'], ['title', 'Pin control'], ['x', 'c'.repeat(64)]]}, new Uint8Array(32).fill(1));
   const guest = await openRuntime(page, 'napplet-discovery', [{event}]);
-  await guest.getByRole('button', {name: 'Pin Pin control to Home', exact: true}).click();
-  await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length)).toBe(1);
-  expect((await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls))[0]).toEqual({
-    type, id: expect.any(String), action: 'pin', expectedEventId: event.id,
-    address: naddrEncode({kind: 35129, pubkey: event.pubkey, identifier: 'pin-control'}),
-  });
-  await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.finish?.('pinned'));
-  await expect(guest.locator('#row-open-status')).toHaveText('Pinned to Home.');
   await guest.getByRole('button', {name: 'Details for Pin control', exact: true}).click();
-  await guest.getByRole('button', {name: 'Unpin Pin control from Home', exact: true}).click();
-  await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length)).toBe(2);
-  await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.finish?.('unpinned'));
-  await expect(guest.locator('.detail-actions .feedback')).toHaveText('Unpinned from Home.');
-  await expect(guest.getByRole('button', {name: 'Pin Pin control to Home', exact: true})).not.toHaveAttribute('aria-disabled', 'true');
+  await expect(guest.getByRole('button', {name: /pin.+home/i})).toHaveCount(0);
+  const calls = await page.evaluate(() => {
+    const {calls, pinStateCalls, catalogCalls} = (window as unknown as TestWindow).discoveryOpenTest;
+    return [...calls, ...pinStateCalls, ...catalogCalls];
+  });
+  expect(calls).toEqual([]);
 });
-
 
 test('pin state is bounded and foreground pin/unpin bypasses queued background reads', async ({page}) => {
   const guest = await openRuntime(page, 'napplet-discovery');

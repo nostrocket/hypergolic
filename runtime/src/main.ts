@@ -1,3 +1,4 @@
+import { DISCOVERY_LEASE_MS } from '../../src/napplets/discovery-open-contract';
 import {createRecommendationsReceiver} from './discovery-recommendations';
 import {createLegacyImageMount} from './legacy-image-mount';
 import {injectLegacyImages} from './legacy-image-guest';
@@ -210,6 +211,7 @@ function createGuestFrame(title: string): HTMLIFrameElement {
 
 function approvalTimeouts(artifact: RuntimeMetadata): Readonly<Record<string, number>> {
   return Object.freeze({
+    ...(artifact.domains.includes('link') ? {'link.openNapplet': DISCOVERY_LEASE_MS + 5_000} : {}),
     ...(artifact.domains.includes('relay')
       ? { 'relay.publish': artifact.publishTimeoutMs ?? 660_000 } : {}),
     ...(artifact.domains.includes('outbox') ? { 'outbox.publish': 660_000 } : {}),

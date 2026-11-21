@@ -15,9 +15,9 @@ assert(!/Content-Security-Policy|<base\b|<iframe\b|<script[^>]+src=/i.test(html)
 const digest = value => createHash('sha256').update(value).digest('hex');
 const sha256 = digest(bytes);
 const aggregateHash = digest(`${sha256} /index.html\n`);
-const bundle = {title: 'Discover', appId: 'napplet-discovery', sha256, aggregateHash, domains: ['relay', 'resource', 'theme']};
+const bundle = {title: 'Discover', appId: 'napplet-discovery', sha256, aggregateHash, domains: ['relay', 'resource', 'theme', 'link']};
 const manifest = {kind: 35129, content: 'Find published Napplets and open them in your workspace.',
-  tags: [['d', bundle.appId], ['title', bundle.title], ['path', '/index.html', sha256], ['x', aggregateHash, 'aggregate'], ['requires', 'relay'], ['requires', 'resource']], aggregateHash};
+  tags: [['d', bundle.appId], ['title', bundle.title], ['path', '/index.html', sha256], ['x', aggregateHash, 'aggregate'], ['R', 'relay'], ...['link', 'resource', 'theme', 'lists', 'outbox'].map(domain => ['O', domain])], aggregateHash};
 const root = new URL('../', import.meta.url);
 await writeFile(new URL('runtime/fixtures/napplet-discovery.html', root), bytes);
 await writeFile(new URL('runtime/fixtures/napplet-discovery-manifest.json', root), JSON.stringify(manifest, null, 2) + '\n');

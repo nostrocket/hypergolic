@@ -13,7 +13,10 @@ async function open(page: import('@playwright/test').Page, mode: string, legacy 
         const receipt = {type: 'link.open.result', id: mode === 'wrong-id' ? 'wrong' : link.id, status: mode === 'opened' ? 'opened' : 'denied', ...(mode === 'opened' ? {} : {error: 'user-denied'})};
         const response = request.type === 'routing.call' ? {type: 'routing.call.result', id: request.id, response: receipt} : receipt;
         const data = JSON.stringify({type: 'capability.result', sessionId: envelope.sessionId, sequence: envelope.sequence, response: mode === 'revoked' ? null : JSON.stringify(response)});
-        for (const listener of listeners) listener({data});
+        if (mode === 'delayed-denial') window.setTimeout(() => {
+          for (const listener of listeners) listener({data});
+        }, 45_000);
+        else for (const listener of listeners) listener({data});
       }};
   }, {mode, legacy});
   await page.goto('/assets/runtime/index.html?sessionId=links-browser&fixture=resource-lab');
@@ -56,4 +59,14 @@ test('SDK napplet link delegates to in-shell review with its request ID intact',
   const calls = await page.evaluate(() => (window as any).linkCalls);
   expect(calls).toHaveLength(1);
   expect(calls[0]).toMatchObject({type: 'routing.call', message: {type: 'link.open', url: 'nostr:naddr1example'}});
+});
+
+test('a pending napplet review outlives a short web-link handoff and returns its denial reason', async ({page}) => {
+  const frame = await open(page, 'delayed-denial');
+  await page.clock.install();
+  await frame.locator('#link-url').fill('nostr:naddr1example');
+  await frame.locator('#open-link').click();
+  await expect.poll(() => page.evaluate(() => (window as any).linkCalls.length)).toBe(1);
+  await page.clock.fastForward(45_001);
+  await expect(frame.locator('#link-result')).toHaveText(JSON.stringify({status: 'denied', error: 'user-denied'}));
 });

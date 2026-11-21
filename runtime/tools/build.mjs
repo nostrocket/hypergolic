@@ -47,7 +47,15 @@ for (const [name, reviewed] of Object.entries(catalog)) {
   assert.deepEqual(record.tags.filter(t => t[0] === 'path'), [['path', '/index.html', reviewed.sha256]]);
   assert.deepEqual(record.tags.filter(t => t[0] === 'x'), [['x', reviewed.aggregateHash, 'aggregate']]);
   assert.equal(record.aggregateHash, reviewed.aggregateHash);
-  assert.deepEqual(record.tags.filter(t => t[0] === 'requires').map(t => t[1]).sort(), reviewed.domains.filter(d => d !== 'theme').sort());
+  if (name === 'napplet-discovery') {
+    const required = record.tags.filter(t => t[0] === 'R').map(t => t[1]);
+    const optional = record.tags.filter(t => t[0] === 'O').map(t => t[1]);
+    assert.deepEqual(required, ['relay']);
+    assert(reviewed.domains.includes('relay'));
+    assert(reviewed.domains.every(domain => required.includes(domain) || optional.includes(domain)));
+  } else {
+    assert.deepEqual(record.tags.filter(t => t[0] === 'requires').map(t => t[1]).sort(), reviewed.domains.filter(d => d !== 'theme').sort());
+  }
   assert(/^<!doctype html>\s*<html lang="en">\s*<head>/i.test(content));
   assert.equal((content.match(/<head>/gi) ?? []).length, 1);
   assert(!/Content-Security-Policy|<base\b|<iframe\b|<script[^>]+src=/i.test(content));
