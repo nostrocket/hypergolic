@@ -525,3 +525,29 @@ test('an ordinary published catalog can request a verified coordinate through it
   await env.run('private-pin', {source: catalog, message: {...request, action: 'pin'}});
   assert.equal(env.responses.get('private-pin'), null);
 });
+
+test('portable link denials conceal lookup outcomes, respect cancellation and bound repeated prompts', async () => {
+  const caller = {...registration, domains: ['link']};
+  const env = setup(undefined, undefined, undefined, caller);
+  const message = {type: 'link.open', id: 'link1', url: 'nostr:' + address};
+  const invalid = {...message, url: 'nostr:naddr1broken'};
+  await env.run('invalid', {message: invalid});
+  assert.deepEqual(env.responses.get('invalid'), {type: 'link.open.result', id: 'link1', status: 'denied', error: 'invalid-url'});
+  assert.equal(env.lookups.length, 0);
+
+  const decline = env.run('decline', {message});
+  env.decide((await env.review()).id, false);
+  await decline;
+  assert.deepEqual(env.responses.get('decline'), {type: 'link.open.result', id: 'link1', status: 'denied', error: 'user-denied'});
+
+  const denied = {type: 'link.open.result', id: 'link1', status: 'denied', error: 'blocked-by-policy'};
+  for (const reason of ['PUBLISHED_NOT_FOUND', 'PUBLISHED_REVISION_CONFLICT'] as const) {
+    env.failLookup(new PublishedLoadError(reason));
+    await env.run(reason, {message});
+    assert.deepEqual(env.responses.get(reason), denied);
+  }
+  await env.run('rate', {message});
+  assert.deepEqual(env.responses.get('rate'), denied);
+  assert.equal(env.lookups.length, 3);
+  assert.deepEqual(env.state().sessions, [source]);
+});
