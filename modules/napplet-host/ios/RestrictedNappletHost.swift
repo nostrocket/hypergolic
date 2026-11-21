@@ -41,6 +41,12 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
   private var zoomResetSequence = 0
   private var zoomResetInterruptedAt: TimeInterval = 0
   private var closeCheckDeadline: TimeInterval = 0
+  private enum RestoredEditorFocus { case none, armed, afterReview }
+  private var restoredEditorFocus = RestoredEditorFocus.none
+  private var guestFrame: WKFrameInfo?
+  private var focusEvaluationPending = false
+  private var focusRetry: DispatchWorkItem?
+  private var focusRetryUntil: TimeInterval = 0
   private var pendingNativeReplies: [String: TimeInterval] = [:]
   private var closeUnsafeUntil: TimeInterval = 0
   private var ready = false
@@ -82,6 +88,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     self.onWebViewCreated = onWebViewCreated
     super.init(frame: .zero)
     NotificationCenter.default.addObserver(self, selector: #selector(mediaBackground), name: UIApplication.willResignActiveNotification, object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(editorWindowBecameKey), name: UIWindow.didBecomeKeyNotification, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(mediaForeground), name: UIApplication.didBecomeActiveNotification, object: nil)
     clipsToBounds = true
     backgroundColor = UIColor(red: 18/255, green: 14/255, blue: 10/255, alpha: 1)
@@ -149,6 +156,11 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
       if !pendingNativeReplies.isEmpty || closeUnsafeUntil > now { guarded = "dirty" }
       else if id.hasPrefix("resume-"), active || !RoutingTransport.shared.finishCheckpoint(generation, id: id) { guarded = "unknown" }
     }
+    if guarded == "clean", id.hasPrefix("restore-"), publishedSource != nil {
+      restoredEditorFocus = .armed
+      focusRetryUntil = ProcessInfo.processInfo.systemUptime + 2
+      focusRestoredEditor()
+    }
     onEvent?(["type": "close-check", "sessionId": sessionId ?? "", "generation": generation, "id": id, "state": guarded])
   }
 
@@ -160,7 +172,76 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     guard inputBlocked != blocked else { return }
     inputBlocked = blocked
     if blocked { webView?.endEditing(true) }
+    else if restoredEditorFocus != .none {
+      restoredEditorFocus = .afterReview
+      focusRetryUntil = ProcessInfo.processInfo.systemUptime + 2
+      focusRestoredEditor()
+    }
     updateInputActivity()
+  }
+  @objc private func editorWindowBecameKey(_ notification: Notification) {
+    if let key = notification.object as? UIWindow, key === window { focusRestoredEditor() }
+  }
+  private func focusRestoredEditor() {
+    guard restoredEditorFocus != .none, live, ready, loaded, !disposed, active, !inputBlocked,
+      UIApplication.shared.applicationState == .active, let view = webView, let window = view.window,
+      window.isKeyWindow, view.url == expectedURL else { return }
+    // React can unblock the guest before UIKit finishes dismissing its review.
+    if window.rootViewController?.presentedViewController != nil {
+      scheduleRestoredFocus()
+      return
+    }
+    guard !focusEvaluationPending, let frame = guestFrame, frame.webView === view else { return }
+    let phase = restoredEditorFocus
+    // Run synchronously in the verified guest frame so WebKit establishes an
+    // editing session. The opaque iframe keeps all text and selection data.
+    let script = """
+      (() => {
+        const field = document.activeElement;
+        if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) ||
+          !field.closest('[role="group"][aria-label="Entry editor"]') ||
+          !['Entry title', 'Entry body', 'Links to notes, people or relays'].includes(field.getAttribute('aria-label'))) return false;
+        const { selectionStart, selectionEnd, selectionDirection } = field;
+        if (selectionStart === null || selectionEnd === null) return false;
+        field.blur();
+        field.focus({ preventScroll: true });
+        field.setSelectionRange(selectionStart, selectionEnd, selectionDirection ?? 'none');
+        return document.activeElement === field;
+      })()
+      """
+    focusEvaluationPending = true
+    view.evaluateJavaScript(script, in: frame, in: .defaultClient) { [weak self, weak view] result in
+      guard let self, self.webView === view else { return }
+      self.focusEvaluationPending = false
+      guard self.restoredEditorFocus != .none else { return }
+      if case let .success(value) = result, value as? Bool == true, self.restoredEditorFocus == phase {
+        if phase == .afterReview { self.cancelRestoredFocus() }
+      } else { self.scheduleRestoredFocus() }
+    }
+  }
+  private func scheduleRestoredFocus() {
+    guard !inputBlocked, focusRetry == nil, ProcessInfo.processInfo.systemUptime < focusRetryUntil else { return }
+    let retry = DispatchWorkItem { [weak self] in
+      self?.focusRetry = nil
+      self?.focusRestoredEditor()
+    }
+    focusRetry = retry
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: retry)
+  }
+  private func cancelRestoredFocus() {
+    restoredEditorFocus = .none
+    focusRetry?.cancel()
+    focusRetry = nil
+  }
+  override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+    let target = super.hitTest(point, with: event)
+    if target != nil, event?.type == .touches,
+      event?.allTouches?.contains(where: { $0.phase == .began }) == true { cancelRestoredFocus() }
+    return target
+  }
+  override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+    cancelRestoredFocus()
+    super.pressesBegan(presses, with: event)
   }
   private func updateInputActivity(foreground: Bool? = nil) {
     guard loaded, !disposed, let view = webView else { return }
@@ -171,6 +252,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
   func setActive(_ isActive: Bool) {
     guard active != isActive else { return }
     active = isActive
+    if !isActive { cancelRestoredFocus() }
     if !isActive {zoomResetInterruptedAt = ProcessInfo.processInfo.systemUptime; selectedFilePicker.cancel()}
     if configuration != nil { ApprovalTransport.setFocused(generation, active: isActive); UploadTransport.focus(generation, active: isActive); LinkTransport.focus(generation, isActive); RoutingTransport.shared.focus(generation, isActive) }
     updateMediaPlayback()
@@ -180,6 +262,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
 
   @objc private func mediaBackground() {
     zoomResetInterruptedAt = ProcessInfo.processInfo.systemUptime
+    cancelRestoredFocus()
     closeCheckId = nil; selectedFilePicker.background(); updateMediaPlayback(foreground: false)
   }
   @objc private func mediaForeground() { updateMediaPlayback(foreground: true) }
@@ -809,6 +892,8 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     disposed = true
     finiteVideo.retire();liveRadio.dispose()
     closeCheckId = nil
+    guestFrame = nil
+    cancelRestoredFocus()
     pendingNativeReplies.removeAll()
     selectedFilePicker.cancel()
     NotificationCenter.default.removeObserver(self)
@@ -851,6 +936,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
       initialNavigationAllowed = true
       decisionHandler(.allow)
     } else if !ready && action.navigationType == .other && ["about:blank", "about:srcdoc"].contains(url.absoluteString) {
+      if url.absoluteString == "about:srcdoc", frame.webView === view { guestFrame = frame }
       decisionHandler(.allow)
     } else {
       decisionHandler(.cancel)

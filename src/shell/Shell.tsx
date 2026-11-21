@@ -76,6 +76,13 @@ export interface ShellProps {
 const noRoutingSubscription = () => () => undefined;
 const noRoutingReview = () => null;
 
+/** A routing review covers guest input while its originating session stays active. */
+function useStageInputBlocked(shellBlocked: boolean): boolean {
+  const reviews = useContext(OwnerContext)?.routing?.reviews;
+  const current = useSyncExternalStore(reviews?.subscribe ?? noRoutingSubscription, reviews?.getSnapshot ?? noRoutingReview);
+  return shellBlocked || current !== null;
+}
+
 function useReducedMotion(): boolean {
   const [reduced, setReduced] = useState(true);
   useEffect(() => {
@@ -91,8 +98,6 @@ export function Shell({ views: managedViews, blocked = false, hostActivityBlocke
   const { styles } = useShellStyles(createStyles);
   const runtime = useContext(RuntimeContext);
   const owner = useContext(OwnerContext);
-  const reviews = owner?.routing?.reviews;
-  const routingReview = useSyncExternalStore(reviews?.subscribe ?? noRoutingSubscription, reviews?.getSnapshot ?? noRoutingReview);
   const [localWorkspace, setLocalWorkspace] = useState(() => initialWorkspace ?? initialWorkspaceForBuild());
   const workspace = controlledWorkspace ?? localWorkspace;
   const views = useWorkspaceViews(workspace, managedViews, runtime, pendingApprovals, canCloseWithoutWarning);
@@ -218,8 +223,7 @@ export function Shell({ views: managedViews, blocked = false, hostActivityBlocke
     blocked: navigationBlocked, dragging: handleDragging, settings, closing: closingId !== null, discovery: discovery.review !== null,
   });
   const obscured = settings || menuVisible || closingId !== null || discovery.review !== null;
-  // A native routing review covers guest input while its originating session stays active.
-  const stageBlocked = navigationBlocked || obscured || routingReview !== null;
+  const stageBlocked = useStageInputBlocked(navigationBlocked || obscured);
   const {resetZoom, registerZoomTarget, zoomResetAvailable} = useZoomReset({workspace, identity: identity?.npub, lifetime: runtime,
     active: AppState.currentState === 'active', blocked: navigationBlocked, dragging: handleDragging, settings,
     closing: closingId !== null, reviewing: discovery.review !== null}, clearMenu);
