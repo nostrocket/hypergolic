@@ -98,10 +98,13 @@ test('the exact prior Support descriptor survives upgrade without reseeding or c
 });
 
 for (const version of [
+  'd090578d980c6b5eae07bc6ff1d17484eafdf478266caeddbd24c3958d163e2b',
+  '013ae4e8a8ca58bf29f684f3acdde671cb95985cc28f8122c5f8bb776dcae5e8',
   '1b9f4d2e499b93fd40ee93e726514461913ba1f7518e06d19b5b6dba2a7f3ff7',
   '1ce8c075ced201b946663d4dff552c279ad220f713ee31c6978071ed127c1178',
   '3f4fa666ad26dcdcc749dfd8d49d112317c21f16df1044beea9ee5993031c8c2',
   '62da6d87e3ffce98eeacb43c113f4896ed4b8d544790da21e8852e7545f6a098',
+  '27b942464ddf6fbb2479922acc06e33bc0926edfff36dd8f2d55336380836fda',
   '2b78ae100e81888b746058917fee9bf14d9f3c843441eae419240077a79c5703',
   '141fc8164afafc4dbee6f781fa8316c4dcdc4de46485eec81ef095bbe448ce82',
   'beedd15987c54107612ed736a1118097c20838fb46dd45381c745b1e79f09f8e',
@@ -125,7 +128,7 @@ for (const version of [
   assert.deepEqual((await binding.port.load())?.snapshot, snapshotWorkspace(original));
   assert.equal(isDiscoveryEntry(previous), true);
   assert.deepEqual(resolveBundledSession(previous), resolveBundledSession(current));
-  assert.deepEqual(resolveBundledSession(previous).domains, ['relay', 'resource', 'theme']);
+  assert.deepEqual(resolveBundledSession(previous).domains, ['relay', 'resource', 'theme', 'link', 'lists']);
 
   for (const patch of [{version:'a'.repeat(64)}, {publisher:'bundled-unsigned-peer'}, {appId:'state-lab'},
     {source:'published' as const}, {eventId:'b'.repeat(64)}, {title:'Other'}]) {

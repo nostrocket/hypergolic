@@ -9,13 +9,14 @@ import java.util.Set;
 /** Small host-side binding rules shared by the Android parser and its JVM proof. */
 final class PublishedCapabilityBinding {
   private static final Set<String> DOMAINS = Collections.unmodifiableSet(
-      new HashSet<>(Arrays.asList("identity", "storage", "theme", "relay", "resource", "upload", "link", "intent", "inc", "notify", "config", "outbox", "keys", "media", "common", "cvm")));
+      new HashSet<>(Arrays.asList("identity", "storage", "theme", "relay", "resource", "upload", "link", "intent", "inc", "notify", "config", "outbox", "keys", "media", "common", "cvm", "lists")));
 
   private PublishedCapabilityBinding() { }
 
   static boolean validDomains(Collection<String> domains) {
     return domains != null && domains.size() <= DOMAINS.size() &&
-        new HashSet<>(domains).size() == domains.size() && DOMAINS.containsAll(domains);
+        new HashSet<>(domains).size() == domains.size() && DOMAINS.containsAll(domains) &&
+        (!domains.contains("lists") || domains.contains("relay"));
   }
 
   static boolean matches(String fixture, String configSession, String configPublisher,

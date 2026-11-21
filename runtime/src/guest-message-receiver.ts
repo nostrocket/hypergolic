@@ -1,9 +1,4 @@
 import { quotaReply } from './guest-envelope';
-import {RECOMMENDATION, type createRecommendationsReceiver} from './discovery-recommendations';
-import { CATALOG_PAGE } from '../../src/napplets/catalog-page-contract';
-import { DISCOVERY_OPEN } from '../../src/napplets/discovery-open-contract';
-import type { createCatalogPageReceiver } from './discovery-catalog';
-import type { createDiscoveryOpenReceiver } from './discovery-open';
 import type { createGuestRouting } from './intent-delivery';
 import { isKeysMessage, type createKeysSession } from './keys-adapter';
 import { mediaRequestId, projectMediaRequest } from './media-wire';
@@ -12,9 +7,6 @@ import type { createNativeClient } from './native-client';
 type GuestMessageRoutes = Readonly<{
   domains: readonly string[];
   routing: ReturnType<typeof createGuestRouting>;
-  discoveryOpen: ReturnType<typeof createDiscoveryOpenReceiver> | null;
-  recommendations?: ReturnType<typeof createRecommendationsReceiver> | null;
-  catalogPage: ReturnType<typeof createCatalogPageReceiver> | null;
   keys: ReturnType<typeof createKeysSession> | null;
   sendMedia: ReturnType<typeof createNativeClient>['sendMedia'] | null;
   cvm?:((value:unknown)=>void)|null;
@@ -37,15 +29,6 @@ export function guestMessageReceiver(frame: HTMLIFrameElement, source: Window, r
       return;
     }
     if (routes.routing.connect(event)) return;
-    if (event.data?.type === DISCOVERY_OPEN) {
-      routes.discoveryOpen?.(event.data);
-      return;
-    }
-    if (event.data?.type === RECOMMENDATION) {routes.recommendations?.(event.data);return;}
-    if (event.data?.type === CATALOG_PAGE) {
-      routes.catalogPage?.(event.data);
-      return;
-    }
     if (isKeysMessage(event.data)) {
       if (routes.live()) routes.keys?.receive(event.data);
       return;

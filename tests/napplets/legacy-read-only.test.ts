@@ -9,8 +9,7 @@ import {createPublishedSessionCoordinator, type PublishedSessionDependencies} fr
 import {EMBEDDED_TEST_COORDINATE, EMBEDDED_TEST_EVENT, getEmbeddedTestHtmlBytes} from '../../src/napplets/embedded-test-fixture.ts';
 import {loadEmbeddedTestArtifact} from '../../src/napplets/embedded-test-fixture.ts';
 import {setup} from '../storage/harness.ts';
-import {createDiscoveryOpenBroker} from '../../src/napplets/discovery-open-broker.ts';
-import {DISCOVERY_OPEN} from '../../src/napplets/discovery-open-contract.ts';
+import {createNappletLinkBroker} from '../../src/links/napplet-link-broker.ts';
 import {descriptorForPublishedArtifact} from '../../src/napplets/published-host-input.ts';
 import type {TransitionSnapshot} from '../../src/security/identity-transition.ts';
 import type {WorkspaceController} from '../../src/storage/workspace-controller.ts';
@@ -134,23 +133,23 @@ test('discovered installed unmounted pins persist their newly prepared descripto
     subscribe: () => () => {}, change: value => {workspace = value;}, acceptUpdate: async () => { throw Error('Unexpected update'); }, flush: async () => {}, freeze() {}, resume() {}, revoke() {}};
   const transition = {phase: 'ready', session: {workspace: controller, epoch: 1, vault: {selectedPubkey: user}}} as TransitionSnapshot;
   const reviews = new RoutingReviewService();
-  const message = {type: DISCOVERY_OPEN, id: 'guest-open', address: naddrEncode(EMBEDDED_TEST_COORDINATE), expectedEventId: artifact.manifest.eventId};
+  const message = {type: 'link.open', id: 'guest-open', url: 'nostr:' + naddrEncode(EMBEDDED_TEST_COORDINATE)};
   const wire = JSON.stringify({registration: origin, request: JSON.stringify({type: 'routing.call', id: 'open-request', message, revision: 2, focusRevision: 7})});
   let response: string | null = null;
-  const broker = createDiscoveryOpenBroker({identity: {getSnapshot: () => transition, subscribe: () => () => {}}, reviews,
+  const broker = createNappletLinkBroker({identity: {getSnapshot: () => transition, subscribe: () => () => {}}, reviews,
     native: {state: () => ({user, epoch: 1, revision: 2, available: true, ownerAvailable: true, foreground: true}),
       mayDeliver: () => true, mayReview: () => true, reviewRevision: () => 7, send: () => false,
       newChannelId: () => 'channel', subscribe: () => () => {}},
     capability: {take: () => wire, isActive: () => held, finish: (_token, value) => {held = false; response = value;}},
-    runtime: () => ({retainForPin: async () => () => {}, resolveDiscovered: async () => artifact,
-      prepareDiscovered: async (_artifact, _signal, active, review, existing) => {
+    runtime: () => ({resolveNappletLink: async () => artifact,
+      prepareNappletLink: async (_artifact, _signal, active, review, existing) => {
         assert.deepEqual(existing, saved); assert.equal(await review(false), true); active(); mounted = true; return next;
       }, publishedReadyGeneration: candidate => candidate.id === id && mounted ? 'mounted-target' : null, discardPublished() {}}),
   });
   const running = broker.dispatch('open-token', {registration: origin, assertActive() {}}, source);
   for (let attempt = 0; attempt < 30 && reviews.getSnapshot() === null; attempt++) await new Promise(resolve => setTimeout(resolve, 1));
   assert(reviews.getSnapshot()); reviews.decide(reviews.getSnapshot()!.id, {allow: true}); await running;
-  assert(response); assert.equal(JSON.parse(response).response, 'opened');
+  assert(response); assert.equal(JSON.parse(response).response.status, 'opened');
   assert.deepEqual(workspace.sessions.map(value => value.id), [id, source.id]);
   assert.equal(workspace.sessions[0], next); assert.equal(workspace.focusedId, id);
 });

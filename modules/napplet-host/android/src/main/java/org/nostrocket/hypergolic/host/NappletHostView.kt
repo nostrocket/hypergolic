@@ -183,7 +183,6 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
             claims.snapshot?.let { result.put("snapshot", it.toWire()) }
             configuration?.legacyReadOnly?.let { result.put("legacyReadOnly", JSONObject(it.metadata)) }
             configuration?.appData?.let { result.put("appData", JSONObject(it)) }
-            if (configuration?.publishedOpen == true) result.put("publishedOpen", true)
             reply.postMessage(result.toString())
             return@addWebMessageListener
           }
@@ -628,7 +627,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
       val token = RoutingTransport.receive(generation, sequence, message, push, reply) ?: return
       val type = request.optJSONObject("message")?.optString("type")
       val lane = when {
-        type == RoutingTransport.PUBLISHED_OPEN -> "published-open"
+        type == "link.open" -> "napplet-link"
         type?.startsWith("notify.") == true -> "presentation"
         type?.startsWith("config.") == true -> "configuration"
         else -> "routing"

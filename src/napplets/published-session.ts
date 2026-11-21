@@ -12,7 +12,6 @@ import { descriptorForPublishedArtifact, publishedHostInput } from './published-
 import { stageAdmittedPublishedArtifact } from './admitted-transfer.ts';
 import { registerTransferSession, PublishedTransferError, type NativePublishedTransferPort } from './native-transfer.ts';
 import { assertVerifiedArtifact, type VerifiedNappletArtifact } from './verified-artifact.ts';
-import {verifiedPublicationIdentity} from './verified-publication-identity.ts';
 import {matchesPublishedAppKey,snapshotEventId} from './published-identity.ts';
 
 export class PublishedSessionError extends Error {
@@ -276,23 +275,10 @@ export function createPublishedSessionCoordinator(dependencies: PublishedSession
   return Object.freeze({
     openLink: async (link: string, signal: AbortSignal, review: ConsentReview) =>
       (await preparePublishedSession(ports, { link }, signal, review)) ?? fail(),
-    async retainForPin(artifact: VerifiedNappletArtifact, signal: AbortSignal, active: () => void) {
-      assertVerifiedArtifact(artifact);
-      const authority = ports.identity.sessionAuthority();
-      const {appId} = verifiedPublicationIdentity(artifact.manifest);
-      const check = () => { authority.assertActive(); active(); if (signal.aborted) fail(); };
-      check();
-      const release = ports.hold(artifact.manifest.eventId);
-      try {
-        const cache = await cacheFor(ports, authority, {user: authority.user, publisher: artifact.manifest.pubkey, appId, assertActive: check});
-        try { await cache.put(artifact, {signal}); } finally { await cache.close(); }
-        check();
-        return release;
-      } catch (error) { release(); throw error; }
-    },
-    resolveExact: (link: string, expectedEventId: string, signal: AbortSignal, assertActive: () => void) =>
+    resolveExact: (link: string, signal: AbortSignal, assertActive: () => void, networkReadGranted = false) =>
       loadPublishedArtifact(link, { source: ports.source, lookupRelays: ports.lookupRelays(),
-        networkRelays: ports.networkRelays?.() ?? [], signal, assertActive, expectedEventId }),
+        ...(networkReadGranted ? {networkRelays: ports.networkRelays?.() ?? []} : {}),
+        signal, assertActive }),
     prepareExact: (candidate: VerifiedNappletArtifact, exactOpen: ExactOpenPreparation, signal: AbortSignal) =>
       preparePublishedSession(ports, { candidate, exactOpen }, signal, async () => false),
     reopenPinned: async (descriptor: NappletDescriptor, signal: AbortSignal, review: ConsentReview) =>

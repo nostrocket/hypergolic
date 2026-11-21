@@ -33,7 +33,6 @@ struct CapabilityConfiguration {
   let commonProfile:String?
   let cvmProfile:String?
   let legacyReadOnly:LegacyReadOnlyContext?
-  let publishedOpen: Bool
   let publisher: String
   let appId: String
   let version: String
@@ -41,13 +40,8 @@ struct CapabilityConfiguration {
     enum Invalid: Error { case configuration }
     guard raw.utf8.count <= 8192, let bytes = raw.data(using: .utf8),
       var value = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
-      Set(value.keys).subtracting(["publishedOpen","commonProfile","cvmProfile","mediaProfile","appData","legacyReadOnly","snapshot"]) == Set(["sessionId", "epoch", "user", "publisher", "appId", "version", "instanceId", "fixture", "domains"])
+      Set(value.keys).subtracting(["commonProfile","cvmProfile","mediaProfile","appData","legacyReadOnly","snapshot"]) == Set(["sessionId", "epoch", "user", "publisher", "appId", "version", "instanceId", "fixture", "domains"])
       else { throw Invalid.configuration }
-    let open = value.removeValue(forKey: "publishedOpen")
-    if let open {
-      guard let flag = open as? NSNumber, CFGetTypeID(flag) == CFBooleanGetTypeID(), flag.boolValue,
-        value["fixture"] as? String == "published" else { throw Invalid.configuration }
-    }
     for name in ["sessionId", "instanceId", "fixture"] {
       guard let text = value[name] as? String, text.range(of: "^[A-Za-z0-9_-]{1,80}$", options: .regularExpression) != nil else { throw Invalid.configuration }
     }
@@ -64,7 +58,7 @@ struct CapabilityConfiguration {
       let fixture = value["fixture"] as? String, let sessionId = value["sessionId"] as? String else { throw Invalid.configuration }
     guard appId.hasPrefix(" 5129:") == (expectedSnapshot != nil) else { throw Invalid.configuration }
     if let expectedSnapshot {
-      guard fixture == "published", open == nil, value["appData"] == nil, value["legacyReadOnly"] == nil,
+      guard fixture == "published", value["appData"] == nil, value["legacyReadOnly"] == nil,
         let supplied = value["snapshot"] as? [String: Any],
         try JSONSerialization.data(withJSONObject: supplied, options: .sortedKeys)
           == JSONSerialization.data(withJSONObject: expectedSnapshot, options: .sortedKeys)
@@ -74,7 +68,7 @@ struct CapabilityConfiguration {
     let expected: Set<String>
     switch fixture {
     case "ux-lab", "close-lab": expected = ["theme"]
-    case "napplet-discovery": expected = ["relay", "resource", "theme"]
+    case "napplet-discovery": expected = ["relay", "resource", "theme", "link", "lists"]
     case "state-lab", "state-lab-peer": expected = ["identity", "storage", "theme"]
     case "approval-lab", "approval-lab-v1", "approval-lab-v2", "approval-lab-v3": expected = ["identity", "relay", "theme"]
     case "upload-lab", "upload-queue-lab": expected = ["upload", "theme"]
@@ -85,8 +79,9 @@ struct CapabilityConfiguration {
     case "feed-lab": expected = Set(domains).contains("outbox") ? ["identity", "outbox", "relay", "theme"] : ["identity", "relay", "theme"]
     case "published":
       expected = Set(domains)
-      let supported: Set<String> = ["identity", "storage", "theme", "relay", "resource", "upload", "link", "intent", "inc", "notify", "config", "outbox", "keys", "media", "common", "cvm"]
-      guard domains.count <= supported.count, expected.isSubset(of: supported) else {
+      let supported: Set<String> = ["identity", "storage", "theme", "relay", "resource", "upload", "link", "intent", "inc", "notify", "config", "outbox", "keys", "media", "common", "cvm", "lists"]
+      guard domains.count <= supported.count, expected.isSubset(of: supported),
+            !expected.contains("lists") || expected.contains("relay") else {
         throw Invalid.configuration
       }
     default: throw Invalid.configuration
@@ -115,7 +110,6 @@ struct CapabilityConfiguration {
       self.legacyReadOnly = try LegacyReadOnlyContext(fields, publisher: publisher, appId: appId, version: version, fixture: fixture, domains: expected)
     } else { self.legacyReadOnly = nil }
     self.domains = expected
-    self.publishedOpen = (fixture == "napplet-discovery" && appId == "napplet-discovery") || open != nil
     self.publisher = publisher
     self.appId = appId
     self.version = version
@@ -200,12 +194,12 @@ enum CapabilityTransport {
       if leases.retained(token) { dispatch(token) }
     }
   }
-  static func admit(_ generation: String, sequence: UInt64, snapshot: String, publishedOpen: Bool = false,
+  static func admit(_ generation: String, sequence: UInt64, snapshot: String, nappletLink: Bool = false,
                     reply: @escaping @MainActor @Sendable (String?) -> Void) -> String? {
-    guard let token = leases.admit(generation, sequence: sequence, snapshot: snapshot, publishedOpen: publishedOpen) else { return nil }
+    guard let token = leases.admit(generation, sequence: sequence, snapshot: snapshot, nappletLink: nappletLink) else { return nil }
     let access: IdentityListAccess.Ticket?
     do {access = try IdentityListAccess.shared.captureJSON(snapshot)} catch {_ = leases.finish(token); drain(); return nil}
-    remember(token, Pending(generation: generation, access: access, reply: reply), lifetime: publishedOpen ? 120 : 25)
+    remember(token, Pending(generation: generation, access: access, reply: reply), lifetime: nappletLink ? 120 : 25)
     return token
   }
   private static func remember(_ token: String, _ request: Pending, lifetime: Double) {

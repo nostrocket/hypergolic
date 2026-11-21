@@ -7,9 +7,9 @@ import java.util.Map;
 public final class RoutingEndpointRegistry {
   private static final long MAX = 9_007_199_254_740_991L;
   private static final class Endpoint {
-    final String user; final long epoch; final boolean intent; final boolean inc; final boolean notify; final boolean config; final boolean publishedOpen;
+    final String user; final long epoch; final boolean intent; final boolean inc; final boolean notify; final boolean config; final boolean link;
     boolean ready; boolean focused; long reviewRevision;
-    Endpoint(String user, long epoch, boolean intent, boolean inc, boolean notify, boolean config, boolean publishedOpen) { this.user = user; this.epoch = epoch; this.intent = intent; this.inc = inc; this.notify = notify; this.config = config; this.publishedOpen = publishedOpen; }
+    Endpoint(String user, long epoch, boolean intent, boolean inc, boolean notify, boolean config, boolean link) { this.link = link; this.user = user; this.epoch = epoch; this.intent = intent; this.inc = inc; this.notify = notify; this.config = config; }
   }
   private final Map<String, Endpoint> endpoints = new HashMap<>();
   private String user = "";
@@ -31,9 +31,9 @@ public final class RoutingEndpointRegistry {
   public synchronized boolean register(String generation, String ownerUser, long ownerEpoch, boolean intent, boolean inc, boolean notify, boolean config) {
     return register(generation, ownerUser, ownerEpoch, intent, inc, notify, config, false, false);
   }
-  public synchronized boolean register(String generation, String ownerUser, long ownerEpoch, boolean intent, boolean inc, boolean notify, boolean config, boolean publishedOpen, boolean trackPublished) {
-    if (revision == MAX || generation == null || !generation.matches("[A-Za-z0-9_-]{1,80}") || !available || !user.equals(ownerUser) || ownerEpoch != epoch || !(intent || inc || notify || config || publishedOpen || trackPublished) || endpoints.containsKey(generation) || endpoints.size() >= 64) return false;
-    endpoints.put(generation, new Endpoint(ownerUser, ownerEpoch, intent, inc, notify, config, publishedOpen)); return true;
+  public synchronized boolean register(String generation, String ownerUser, long ownerEpoch, boolean intent, boolean inc, boolean notify, boolean config, boolean trackPublished, boolean link) {
+    if (revision == MAX || generation == null || !generation.matches("[A-Za-z0-9_-]{1,80}") || !available || !user.equals(ownerUser) || ownerEpoch != epoch || !(intent || inc || notify || config || trackPublished || link) || endpoints.containsKey(generation) || endpoints.size() >= 64) return false;
+    endpoints.put(generation, new Endpoint(ownerUser, ownerEpoch, intent, inc, notify, config, link)); return true;
   }
   public synchronized void ready(String generation) { Endpoint endpoint = endpoints.get(generation); if (endpoint != null) endpoint.ready = true; }
   public synchronized boolean focus(String generation, boolean value) {
@@ -47,7 +47,7 @@ public final class RoutingEndpointRegistry {
   }
   public synchronized boolean mayDeliver(String generation, String domain) {
     Endpoint endpoint = endpoints.get(generation);
-    return active(generation) && (("intent".equals(domain) && endpoint.intent) || ("inc".equals(domain) && endpoint.inc) || ("notify".equals(domain) && endpoint.notify) || ("config".equals(domain) && endpoint.config) || ("published-open".equals(domain) && endpoint.publishedOpen));
+    return active(generation) && (("link".equals(domain) && endpoint.link) || ("intent".equals(domain) && endpoint.intent) || ("inc".equals(domain) && endpoint.inc) || ("notify".equals(domain) && endpoint.notify) || ("config".equals(domain) && endpoint.config));
   }
   public synchronized boolean mayReview(String generation) { return active(generation) && endpoints.get(generation).focused && endpoints.get(generation).reviewRevision < MAX; }
   public synchronized long reviewRevision(String generation) { return mayReview(generation) ? endpoints.get(generation).reviewRevision : -1; }

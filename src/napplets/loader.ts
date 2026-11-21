@@ -19,15 +19,13 @@ export interface PublishedLoadOptions {
   readonly signal: AbortSignal;
   /** Reopening an installed version must never substitute a newer or older event. */
   readonly pinnedEventId?: string;
-  /** A Discover result must still match the latest eligible event on the trusted query. */
-  readonly expectedEventId?: string;
-  /** Owner-selected Network destinations are admitted only for an exact Discover request. */
+  /** Owner-selected Network destinations for reviewed catalog opens with Network read authority. */
   readonly networkRelays?: readonly string[];
   /** Session/identity/epoch ownership is checked on each side of every await. */
   readonly assertActive: () => void;
 }
 type PublishedLoadCode = 'PUBLISHED_LOAD_FAILED' | 'PUBLISHED_NOT_FOUND' | 'PUBLISHED_PIN_CONFLICT' | 'PUBLISHED_UNSUPPORTED_MANIFEST' |
-  'PUBLISHED_REVISION_CONFLICT' | 'PUBLISHED_REVISION_CHANGED' | 'PUBLISHED_LOOKUP_UNAVAILABLE' |
+  'PUBLISHED_REVISION_CONFLICT' | 'PUBLISHED_LOOKUP_UNAVAILABLE' |
   'PUBLISHED_DOWNLOAD_UNAVAILABLE' | 'PUBLISHED_HASH_MISMATCH' | 'PUBLISHED_INVALID_HTML';
 
 export class PublishedLoadError extends Error {
@@ -58,10 +56,9 @@ function active(options: PublishedLoadOptions): void {
 /** Prepare a verified candidate. This function never opens a WebView or grants publisher trust. */
 export async function loadPublishedArtifact(link: unknown, options: PublishedLoadOptions): Promise<VerifiedNappletArtifact> {
   const coordinate = resolvePublishedReference(link);
-  const discovery = options.expectedEventId !== undefined;
+  const discovery = options.networkRelays !== undefined;
   if ((options.pinnedEventId !== undefined && !HEX64.test(options.pinnedEventId)) ||
-      (discovery && (options.pinnedEventId !== undefined || !HEX64.test(options.expectedEventId!))) ||
-      (!discovery && options.networkRelays !== undefined) ||
+      (discovery && options.pinnedEventId !== undefined) ||
       (coordinate.kind === 5129 && (discovery || (options.pinnedEventId !== undefined && options.pinnedEventId !== coordinate.eventId)))) throw new PublishedLoadError();
   const relays = Object.freeze([...new Set([
     ...checkedRole(options.lookupRelays), ...checkedRole(options.networkRelays ?? []),
@@ -97,9 +94,6 @@ export async function loadPublishedArtifact(link: unknown, options: PublishedLoa
   // Distinct valid replies at the same timestamp are ambiguous replaceable events.
   if (options.pinnedEventId === undefined && verified.some(candidate => candidate.created_at === chosen.created_at && candidate.id !== chosen.id)) {
     throw new PublishedLoadError('PUBLISHED_REVISION_CONFLICT');
-  }
-  if (options.expectedEventId !== undefined && chosen.eventId !== options.expectedEventId) {
-    throw new PublishedLoadError('PUBLISHED_REVISION_CHANGED');
   }
   let bytes: Uint8Array;
   try { bytes = await options.source.readHtml(chosen.expectedHtmlHash, chosen.serverHints, MAX_NAPPLET_HTML_BYTES, options.signal); }

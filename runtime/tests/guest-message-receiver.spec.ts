@@ -8,7 +8,7 @@ test('a busy guest receives bounded quota replies and can release its existing w
   const receive = guestMessageReceiver(frame, source, {
     domains: ['storage', 'relay', 'resource', 'outbox'], live: () => true, closed: () => false,
     routing: {connect: () => false} as Parameters<typeof guestMessageReceiver>[2]['routing'],
-    keys:null, discoveryOpen:null, catalogPage:null, sendMedia:null,
+    keys:null, sendMedia:null,
     dispatch(event) { dispatched.push(event.data.type); },
   });
   const send = (data: object) => receive({source, data, ports: [], isTrusted: true} as unknown as MessageEvent);

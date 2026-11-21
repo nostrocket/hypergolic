@@ -10,9 +10,11 @@ const MEDIA_SUPPORT_PROFILE = `${PROFILE_PREFIX}-media-file-v1`;
 const LIVE_MEDIA_SUPPORT_PROFILE = `${PROFILE_PREFIX}-media-live-mp3-v1`;
 const COMMON_SOCIAL_SUPPORT_PROFILE=`${PROFILE_PREFIX}-common-social-v1`;
 const CVM_SUPPORT_PROFILE=`${PROFILE_PREFIX}-cvm-free-foreground-v1`;
-export const REPORTED_SUPPORT_PROFILE = `${PROFILE_PREFIX}-outbox-keys-v1/${MEDIA_SUPPORT_PROFILE}/${LIVE_MEDIA_SUPPORT_PROFILE}/${PROFILE_PREFIX}-common-read-v1/${COMMON_SOCIAL_SUPPORT_PROFILE}/${CVM_SUPPORT_PROFILE}`;
-export type ReviewedSupportProfile = 'current' | 'before-live' | 'before-cvm' | 'before-social' | 'before-common' | 'legacy';
-const beforeCommonDomains = Object.freeze(SUPPORTED_CAPABILITY_DOMAINS.filter(domain => domain !== 'common' && domain !== 'cvm'));
+const LISTS_SUPPORT_PROFILE = 'public-napplet-recommendations-v1';
+export const REPORTED_SUPPORT_PROFILE = `${PROFILE_PREFIX}-outbox-keys-v1/${MEDIA_SUPPORT_PROFILE}/${LIVE_MEDIA_SUPPORT_PROFILE}/${PROFILE_PREFIX}-common-read-v1/${COMMON_SOCIAL_SUPPORT_PROFILE}/${CVM_SUPPORT_PROFILE}/${LISTS_SUPPORT_PROFILE}`;
+export type ReviewedSupportProfile = 'current' | 'before-lists' | 'before-live' | 'before-cvm' | 'before-social' | 'before-common' | 'legacy';
+const beforeListsDomains = Object.freeze(SUPPORTED_CAPABILITY_DOMAINS.filter(domain => domain !== 'lists'));
+const beforeCommonDomains = Object.freeze(beforeListsDomains.filter(domain => domain !== 'common' && domain !== 'cvm'));
 const legacyDomains = Object.freeze(['identity', 'storage', 'theme', 'relay', 'resource', 'upload',
   'link', 'intent', 'inc', 'notify', 'config', 'outbox']);
 
@@ -24,7 +26,8 @@ const notes: Readonly<Record<string, string>> = Object.freeze({
   relay: 'Bounded query, subscriptions and approved publication. Encrypted publication is unavailable.',
   resource: 'Bounded HTTPS, Blossom, one-hop Nostr and data bytes; selected audio/video playback. Hashtree, SVG and streaming are unavailable.',
   upload: 'Blossom only; selected files, metadata sanitation and approval for every upload.',
-  link: 'Approved HTTPS links use the device handler. Other schemes are unavailable.',
+  lists: 'With Relay access, add one named napplet to your public recommendations after reviewing the publication.',
+  link: 'HTTPS uses the device handler after review. Named napplet links open through verified shell review. Other references are unavailable.',
   intent: 'Reviewed dispatch to installed napplets, including NIP-5D intent delivery. Uninstalled handler discovery is unavailable.',
   inc: 'Selected session-bound messages and channels; no background delivery.',
   notify: 'Foreground shell notifications. OS push is unavailable.',
@@ -50,16 +53,18 @@ function supportProfile(requested: readonly string[], policy: ReviewedSupportPro
   if (intent && added.length) added.push('intent');
   const profile = added.length ? `${PROFILE_PREFIX}-${added.join('-')}-v1` : previous;
   const finite = requested.includes('media') ? `${profile}/${MEDIA_SUPPORT_PROFILE}` : profile;
-  const media = policy==='current'&&requested.includes('media')?`${finite}/${LIVE_MEDIA_SUPPORT_PROFILE}`:finite;
+  const media = (policy==='current'||policy==='before-lists')&&requested.includes('media')?`${finite}/${LIVE_MEDIA_SUPPORT_PROFILE}`:finite;
   const read=policy!=='before-common'&&requested.includes('common')?`${media}/${PROFILE_PREFIX}-common-read-v1`:media;
   const social=granted.includes('common')&&granted.includes('identity')&&(granted.includes('relay')||granted.includes('outbox'));
-  const selected=(['current','before-live','before-cvm'].includes(policy))&&social&&requested.includes('common')?`${read}/${COMMON_SOCIAL_SUPPORT_PROFILE}`:read;
-  return (policy==='current'||policy==='before-live')&&requested.includes('cvm')&&granted.includes('cvm')?`${selected}/${CVM_SUPPORT_PROFILE}`:selected;
+  const selected=(['current','before-lists','before-live','before-cvm'].includes(policy))&&social&&requested.includes('common')?`${read}/${COMMON_SOCIAL_SUPPORT_PROFILE}`:read;
+  const cvm = (policy==='current'||policy==='before-lists'||policy==='before-live')&&requested.includes('cvm')&&granted.includes('cvm')?`${selected}/${CVM_SUPPORT_PROFILE}`:selected;
+  return policy === 'current' && granted.includes('lists') && requested.includes('lists') ? `${cvm}/${LISTS_SUPPORT_PROFILE}` : cvm;
 }
 
 export function capabilityCompatibility(requested: readonly string[], available: readonly string[] = SUPPORTED_CAPABILITY_DOMAINS,
   policy: ReviewedSupportProfile = 'current',combinedRequested:readonly string[]=requested) {
   const offered = new Set(available);
+  if (!combinedRequested.includes('relay')) offered.delete('lists');
   const domains = Object.freeze([...requested].filter(domain => offered.has(domain)).sort());
   const unsupportedDomains = Object.freeze([...requested].filter(domain => domain !== 'shell' && !offered.has(domain)).sort());
   const profile = supportProfile(requested, policy,combinedRequested.filter(domain=>offered.has(domain)));
@@ -68,6 +73,6 @@ export function capabilityCompatibility(requested: readonly string[], available:
 }
 
 export function reviewedCapabilityCompatibility(requested: readonly string[], policy: ReviewedSupportProfile,combinedRequested:readonly string[]=requested) {
-  const available = policy === 'legacy' ? legacyDomains : policy === 'before-common' ? beforeCommonDomains : (policy==='current'||policy==='before-live')?SUPPORTED_CAPABILITY_DOMAINS:SUPPORTED_CAPABILITY_DOMAINS.filter(domain=>domain!=='cvm');
+  const available = policy === 'legacy' ? legacyDomains : policy === 'before-common' ? beforeCommonDomains : policy==='current'?SUPPORTED_CAPABILITY_DOMAINS:policy==='before-lists'||policy==='before-live'?beforeListsDomains:beforeListsDomains.filter(domain=>domain!=='cvm');
   return capabilityCompatibility(requested, available, policy,combinedRequested);
 }

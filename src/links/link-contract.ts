@@ -1,3 +1,4 @@
+export const NAPPLET_LINK_LEASE_MS = 120_000;
 export const LINK_LIMITS = Object.freeze({urlBytes: 4096, labelBytes: 256, idBytes: 128, reviewMs: 25_000});
 export type LinkRequest = Readonly<{type: 'link.open'; id: string; url: string; options?: Readonly<{label?: string}>}>;
 function object(value: unknown): Record<string, unknown> {

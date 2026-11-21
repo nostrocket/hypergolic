@@ -117,10 +117,11 @@ def main():
     (work/"cases.json").write_text(encode({"cases":rows, "request":request})+"\n")
     fragments = {
         "android-metadata": extract(android/"NappletHostView.kt", '            val result = JSONObject().put("type", "artifact.chunk")', "            reply.postMessage(result.toString())"),
+        "android-snapshot": extract(android/"NativeApprovalSigningData.kt", "internal fun PublishedArtifactRegistry.Snapshot.toWire()", "internal fun parseSnapshotMetadata"),
         "swift-config": extract(ios/"CapabilityTransport.swift", "struct CapabilityConfiguration {", "/// Lease queries are synchronous"),
     }
-    (work/"Projection.kt").write_text('package org.nostrocket.hypergolic.host\nimport org.json.JSONObject\nimport org.json.JSONArray\ninternal object NativeChunkProjection {\n'+
-        'data class Claims(val publisher:String,val appId:String,val eventId:String,val version:String,val htmlHash:String)\n'+
+    (work/"Projection.kt").write_text('package org.nostrocket.hypergolic.host\nimport org.json.JSONObject\nimport org.json.JSONArray\n'+fragments["android-snapshot"]+'\ninternal object NativeChunkProjection {\n'+
+        'data class Claims(val publisher:String,val appId:String,val eventId:String,val version:String,val htmlHash:String,val snapshot:PublishedArtifactRegistry.Snapshot?=null)\n'+
         'data class Chunk(val sequence:Int,val base64:String,val byteLength:Int,val totalBytes:Int,val done:Boolean)\n'+
         'fun project(configuration:CapabilityConfiguration?,generation:String):JSONObject {\n'+
         'val claims=Claims(configuration!!.publisher,configuration.appId,"b".repeat(64),configuration.version,"a".repeat(64))\n'+
@@ -149,7 +150,7 @@ def main():
     sources = [android/name for name in ["PublishedCapabilityBinding.java", "CapabilityLeaseRegistry.java", "CapabilityConfiguration.kt", "NativeAppDataPolicy.kt", "NativeCanonicalJSON.kt"]]
     sources += [ios/name for name in ["NativeAppDataPolicy.swift", "NativeCanonicalJSON.swift", "PublishedArtifactRegistry.swift", "PublishedArtifactTransfer.swift", "PublishedArtifactHost.swift"]]
     try:
-        run("android-java", ["javac", "-d", classes, *sources[:2]])
+        run("android-java", ["javac", "-d", classes, *sources[:2], android/"PublishedArtifactRegistry.java"])
         run("android-compile", ["java", "-cp", ":".join(map(str,compiler)), "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler", "-no-stdlib", "-no-reflect",
             "-classpath", f"{classes}:{stdlib}:{jsonjar}", "-d", classes, *sources[2:5], android/"LegacyReadOnlyContext.kt", work/"Projection.kt", HERE/"PolicyProof.kt"])
         run("android-test", ["java", "-cp", f"{classes}:{stdlib}:{jsonjar}", "org.nostrocket.hypergolic.host.PolicyProof", work/"cases.json"])

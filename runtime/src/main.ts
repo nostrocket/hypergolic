@@ -1,4 +1,4 @@
-import {createRecommendationsReceiver} from './discovery-recommendations';
+import { NAPPLET_LINK_LEASE_MS } from '../../src/links/link-contract';
 import {createLegacyImageMount} from './legacy-image-mount';
 import {injectLegacyImages} from './legacy-image-guest';
 import {injectReviewedPresentation} from './reviewed-presentation';
@@ -23,14 +23,13 @@ import './legacy-webview';
 import { injectMediaFacade } from './media-guest';
 import { guestMessageReceiver } from './guest-message-receiver';
 import { injectAndroidGuestHelpers } from './android-guest-helpers';
-import { createDiscoveryOpenReceiver, injectDiscoveryOpen } from './discovery-open';
-import { createCatalogPageReceiver } from './discovery-catalog';
 import { installCloseCheck, CLOSE_CHECK_SERVICE } from './close-check';
 import { injectSupportReport } from './support-report';
 import {createConfigAdapter} from './config-adapter';
 import {createNotifyAdapter} from './notify-adapter';
 import { createRoutingAdapter } from './routing-adapter';
 import { createGuestRouting } from './intent-delivery';
+import {createListsAdapter} from './lists-adapter';
 import { createLinkAdapter } from './link-adapter';
 import { createUploadAdapter } from './upload-adapter';
 import { bindResourceMedia, injectResourceMediaGate, isRuntimeInputActive } from './resource-media';
@@ -60,7 +59,7 @@ const fixtureName = parameters.get('fixture') ?? '';
 const fixture = source === null && Object.prototype.hasOwnProperty.call(__BUNDLED_FIXTURES__, fixtureName) ? __BUNDLED_FIXTURES__[fixtureName] : undefined;
 type RuntimeMetadata = Readonly<{
   aggregateHash: string; appId: string; title: string;
-  domains: readonly string[]; appData?:AppDataPolicy; mesh?:NativeMeshContext; legacyReadOnly?:LegacyReadOnlyContext; publishTimeoutMs?: number; published: boolean; discoveryOpen: boolean;
+  domains: readonly string[]; appData?:AppDataPolicy; mesh?:NativeMeshContext; legacyReadOnly?:LegacyReadOnlyContext; publishTimeoutMs?: number; published: boolean;
 }>;
 let stopped = false;
 let cleanup: (() => void) | undefined;
@@ -161,6 +160,7 @@ function makeHooks(native: ReturnType<typeof createNativeClient>, captureRecipie
     workerRelay: { getWorkerRelay: () => null },
     crypto: { verifyEvent: async () => false },
     intent: {isAvailable: () => supported.has('intent')},
+    lists: {isAvailable: () => supported.has('lists') && supported.has('relay')},
     link: {isAvailable: () => supported.has('link')},
     common: {isAvailable: () => supported.has('common')},
     services: { theme: theme.handler,
@@ -168,6 +168,7 @@ function makeHooks(native: ReturnType<typeof createNativeClient>, captureRecipie
       ...(supported.has('notify') ? {notify: {descriptor: {name: 'notify', version: '1.0.0'}, handleMessage: unavailable, onRegistered: registerRouting, onUnregistered: () => registerRouting(null)}} : {}),
       ...(supported.has('intent') ? {intent: {descriptor: {name: 'intent', version: '1.0.0'}, handleMessage: unavailable, onRegistered: registerRouting, onUnregistered: () => registerRouting(null)}} : {}),
       ...(supported.has('inc') ? {inc: {descriptor: {name: 'inc', version: '1.0.0'}, handleMessage: unavailable, onRegistered: registerRouting, onUnregistered: () => registerRouting(null)}} : {}),
+      ...(supported.has('lists') && supported.has('relay') ? {lists:createListsAdapter(native,captureRecipient)} : {}),
       ...(supported.has('link') ? {link: createLinkAdapter(native, captureRecipient)} : {}),
       ...(supported.has('upload') ? { upload: { descriptor: { name: 'upload', version: '1.0.0' }, handleMessage: unavailable } } : {}), ...(supported.has('identity') ? { identity } : {}),
       ...(supported.has('resource') ? { resource: { descriptor: { name: 'resource', version: '1.0.0' }, handleMessage: unavailable } } : {}),
@@ -188,7 +189,7 @@ function makeHooks(native: ReturnType<typeof createNativeClient>, captureRecipie
     } } : {}),
     capabilities: {
       ...(artifact.appData?{appData:artifact.appData}:{}),
-      disabledDomains: ['link', 'upload', 'resource', 'relay', 'identity', 'storage', 'intent', 'inc', 'keys', 'media', 'notify', 'config', 'outbox', 'common', 'cvm', 'mesh'].filter(domain => !supported.has(domain)),
+      disabledDomains: ['lists','link', 'upload', 'resource', 'relay', 'identity', 'storage', 'intent', 'inc', 'keys', 'media', 'notify', 'config', 'outbox', 'common', 'cvm', 'mesh'].filter(domain => !supported.has(domain)),
       resolveEnvironment: () => ({ domains: [...supported], services: ['theme', ...(supported.has('identity') ? ['identity'] : [])] }),
     },
   };
@@ -210,8 +211,10 @@ function createGuestFrame(title: string): HTMLIFrameElement {
 
 function approvalTimeouts(artifact: RuntimeMetadata): Readonly<Record<string, number>> {
   return Object.freeze({
+    ...(artifact.domains.includes('link') ? {'link.openNapplet': NAPPLET_LINK_LEASE_MS + 5_000} : {}),
     ...(artifact.domains.includes('relay')
       ? { 'relay.publish': artifact.publishTimeoutMs ?? 660_000 } : {}),
+    ...(artifact.domains.includes('lists') ? {'lists.add':690_000} : {}),
     ...(artifact.domains.includes('outbox') ? { 'outbox.publish': 660_000 } : {}),
     ...(artifact.domains.includes('common') ? {'common.follow':660_000,'common.unfollow':660_000,'common.react':660_000,'common.report':660_000}:{}),
   });
@@ -311,14 +314,10 @@ function mount(artifact: RuntimeMetadata) {
     live() && isRuntimeInputActive() && document.hasFocus() && document.activeElement === frame) : null;
   const closeCheck = installCloseCheck(source, live,
     (id, state) => hostWindow.HypergolicHost?.postMessage(JSON.stringify({type: 'close-check.result', sessionId, id, state})));
-  const discoveryToken = artifact.discoveryOpen ? crypto.randomUUID() : null;
-  const discoveryOpen = discoveryToken ? createDiscoveryOpenReceiver(source, native, discoveryToken, live) : null;
-  const catalogPage = discoveryToken && artifact.domains.includes('relay')
-    ? createCatalogPageReceiver(source, native, discoveryToken, live) : null;
   const deadline = window.setTimeout(() => fail('runtime-timeout'), 10_000);
 
   const receiveGuest = guestMessageReceiver(frame, source, {
-    domains: artifact.domains, routing, discoveryOpen, catalogPage, recommendations: discoveryToken && !artifact.published && artifact.domains.includes('relay') ? createRecommendationsReceiver(source,native,discoveryToken,live) : null, keys, sendMedia: hasMedia ? native.sendMedia : null,
+    domains: artifact.domains, routing, keys, sendMedia: hasMedia ? native.sendMedia : null,
     cvm:artifact.domains.includes('cvm')?createCvmGuestReceiver(source,native.cvm,live):null,
     closed: () => stopped, live,
     dispatch(event) {
@@ -357,12 +356,12 @@ function mount(artifact: RuntimeMetadata) {
     unbind();
     destroyFrame(() => native.destroy());
   };
-  return {frame, environment, policy, discoveryToken, legacyNonce};
+  return {frame, environment, policy, legacyNonce};
 }
 
 // Mount listeners receive metadata only, so they cannot retain the original HTML.
 function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
-  const {frame, environment, policy, discoveryToken, legacyNonce} = mount(artifact);
+  const {frame, environment, policy, legacyNonce} = mount(artifact);
   const [prefix, withCsp] = artifact.published
     ? publishedCspParts(rawHtml, policy) : ['', injectCsp(rawHtml, policy)] as const;
   if (legacyNonce) {
@@ -372,9 +371,9 @@ function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
     return;
   }
   const presentation = injectReviewedPresentation(injectEmojiImages(withCsp, artifact), artifact);
-  const html = discoveryToken ? injectDiscoveryOpen(presentation, discoveryToken, artifact.domains.includes('relay'), !artifact.published) : presentation;
-  const guest = injectAndroidGuestHelpers(injectResourceMediaGate(html, supportsMappletsTouchSelection(artifact)));
-  const injected = injectNappletNamespacePrelude(injectCreatorUpload(injectSupportReport(guest), artifact), {
+  const guest = injectAndroidGuestHelpers(injectResourceMediaGate(presentation, supportsMappletsTouchSelection(artifact)));
+  const withDiagnostics = !artifact.published && fixtureName === 'nap-support' ? injectSupportReport(guest) : guest;
+  const injected = injectNappletNamespacePrelude(injectCreatorUpload(withDiagnostics, artifact), {
     ...environment.capabilities,
     requestTimeoutsMs: approvalTimeouts(artifact),
   });
@@ -393,9 +392,9 @@ async function start(): Promise<void> {
     if (source === 'published') {
       if (Array.from(parameters).length !== 2 || parameters.get('fixture') !== null) { fail('artifact-integrity'); return; }
       const {html, metadata} = await readPublishedArtifact(hostWindow.HypergolicHost!, sessionId);
-      const {appId, version: aggregateHash, domains, publishedOpen, appData, mesh, legacyReadOnly, snapshot} = metadata;
+      const {appId, version: aggregateHash, domains, appData, mesh, legacyReadOnly, snapshot} = metadata;
       if (!stopped) renderGuest({aggregateHash, appId, title: snapshot?.title ?? appId, domains,...(appData?{appData:appData.policy}:{}), ...(mesh ? {mesh} : {}), ...(legacyReadOnly ? {legacyReadOnly} : {}),
-        published: true, discoveryOpen: publishedOpen === true}, html);
+        published: true}, html);
       return;
     }
     if (source !== null || !fixture) { fail('fixture-integrity'); return; }
@@ -404,8 +403,7 @@ async function start(): Promise<void> {
     if (actual !== sha256 || await digest(`${actual} /index.html\n`) !== metadata.aggregateHash) {
       fail('fixture-integrity'); return;
     }
-    if (!stopped) renderGuest({...metadata, published: false,
-      discoveryOpen: fixtureName === 'napplet-discovery' && metadata.appId === 'napplet-discovery'}, html);
+    if (!stopped) renderGuest({...metadata, published: false}, html);
   } catch { fail(source === 'published' ? 'artifact-integrity' : 'runtime-bootstrap'); }
 }
 void start();

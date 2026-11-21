@@ -67,6 +67,7 @@ object CapabilityConfigurationProof {
   }
 
   private fun snapshotConfiguration() {
+    denied(JSONObject(raw("published", listOf("link"))).put("publishedOpen", true).toString())
     val event = "b".repeat(64)
     val metadata = JSONObject().put("kind", 5129).put("eventId", event).put("title", "Verified café")
     val expectedKey = " 5129:$event"

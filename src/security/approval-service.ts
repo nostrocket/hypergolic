@@ -1,3 +1,4 @@
+import {LIST_PUBLICATION_PREFIX} from '../lists/napplet-recommendations.ts';
 import {isAuthenticationEventKind} from './authentication-event.ts';
 import type {CatalogRecommendationGuard} from '../napplets/catalog-recommendation.ts';
 import {AppDataApprovalPreparation} from '../app-data/app-data-preparation.ts';
@@ -169,7 +170,7 @@ export class ApprovalService {
       if (nextPresentationId >= Number.MAX_SAFE_INTEGER) denied();
       let recommendation: string | undefined;
       let recommendationExcludedRelays: readonly string[] | undefined;
-      if (bindRecommendation && event.event.kind === 30267 && event.event.tags.some(tag => tag[0] === 'd' && tag[1] === 'napplets')) {
+      if (bindRecommendation && taken.requestId.startsWith(LIST_PUBLICATION_PREFIX) && event.event.kind === 30267 && event.event.tags.some(tag => tag[0] === 'd' && tag[1] === 'napplets')) {
         revalidateRecommendation = bindRecommendation(event) ?? denied();
         recommendation = event.event.tags.at(-1)?.[1];
         ({event, recommendationExcludedRelays} = recommendationScope(event, revalidateRecommendation));

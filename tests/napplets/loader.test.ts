@@ -107,9 +107,7 @@ test('discovery binds the latest eligible event across formats before fetching a
   const current = modern(1_700_000_002);
   const calls: string[] = [];
   const input = options([old, current], html, undefined, calls);
-  await assert.rejects(loadPublishedArtifact(link, {...input, expectedEventId: old.id}), {code: 'PUBLISHED_REVISION_CHANGED'});
-  assert.deepEqual(calls, ['query:loader-test:wss://relay.example.org:latest']);
-  const artifact = await loadPublishedArtifact(link, {...input, expectedEventId: current.id});
+  const artifact = await loadPublishedArtifact(link, input);
   assert.equal(artifact.manifest.id, current.id);
   assert.equal(artifact.manifest.format, 'nip-5d');
   assert.equal(artifact.htmlHash, htmlHash);
@@ -131,9 +129,8 @@ test('Discover selects the newest signed revision when three healthy peers repli
   });
   const input = {source: {query: lookup.query, async readHtml() {blobReads++; return html;}},
     lookupRelays: relays, signal: new AbortController().signal, assertActive() {}};
-  assert.equal((await loadPublishedArtifact(link, {...input, expectedEventId: events.at(-1)!.id})).manifest.id, events.at(-1)!.id);
-  await assert.rejects(loadPublishedArtifact(link, {...input, expectedEventId: events[0]!.id}), {code: 'PUBLISHED_REVISION_CHANGED'});
-  assert.equal(nativeCalls, 6);
+  assert.equal((await loadPublishedArtifact(link, {...input, networkRelays: []})).manifest.id, events.at(-1)!.id);
+  assert.equal(nativeCalls, 3);
   assert.equal(blobReads, 1);
 });
 
@@ -149,12 +146,12 @@ test('an invalid replica with a matching ID cannot suppress a later valid signed
     cancelPublishedRelay() {}, revokeAllPublishedRelay() {},
   });
   const artifact = await loadPublishedArtifact(link, {source: {query: lookup.query, async readHtml() {return html;}},
-    lookupRelays: [...lookupRelays, 'wss://other.example.org'], expectedEventId: valid.id,
+    lookupRelays: [...lookupRelays, 'wss://other.example.org'], networkRelays: [],
     signal: new AbortController().signal, assertActive() {}});
   assert.equal(artifact.manifest.id, valid.id);
 });
 
-test('only exact Discover requests use the normalized union of selected relay roles', async () => {
+test('reviewed catalog opens use selected relay roles and verify the newest available revision', async () => {
   const displayed = modern(1_700_000_001);
   const latest = modern(1_700_000_002);
   const shared = 'wss://relay.example.org';
@@ -174,16 +171,11 @@ test('only exact Discover requests use the normalized union of selected relay ro
     assertActive: () => undefined };
   const discover = { ...options, networkRelays: ['wss://relay.example.org:443/', networkOnly] };
   await assert.rejects(loadPublishedArtifact(link, options), { code: 'PUBLISHED_NOT_FOUND' });
-  await assert.rejects(loadPublishedArtifact(link, discover), { code: 'PUBLISHED_LOAD_FAILED' });
-  await assert.rejects(loadPublishedArtifact(link, { ...discover, expectedEventId: displayed.id }),
-    { code: 'PUBLISHED_REVISION_CHANGED' });
-  assert.equal(blobReads, 0);
-  const artifact = await loadPublishedArtifact(link, { ...discover, expectedEventId: latest.id });
-  assert.equal(artifact.manifest.id, latest.id);
+  const portable = await loadPublishedArtifact(link, discover);
+  assert.equal(portable.manifest.id, latest.id);
   assert.equal(blobReads, 1);
   assert.deepEqual(queries, [
     { relays: [shared], discovery: undefined },
-    { relays: [shared, networkOnly], discovery: true },
     { relays: [shared, networkOnly], discovery: true },
   ]);
 });
@@ -194,7 +186,6 @@ test('Discover deadline candidates still need valid signatures and the exact new
   for (const {events, code} of [
     {events: [displayed], code: null},
     {events: [{...displayed, sig: '0'.repeat(128)}], code: 'PUBLISHED_LOAD_FAILED'},
-    {events: [displayed, latest], code: 'PUBLISHED_REVISION_CHANGED'},
     {events: [displayed, modern(displayed.created_at)], code: 'PUBLISHED_REVISION_CONFLICT'},
   ]) {
     let blobReads = 0;
@@ -211,7 +202,7 @@ test('Discover deadline candidates still need valid signatures and the exact new
     const operation = loadPublishedArtifact(link, {
       source: {query: lookup.query, async readHtml() {blobReads++; return html;}},
       lookupRelays, networkRelays: [network], signal: new AbortController().signal,
-      expectedEventId: displayed.id, assertActive() {},
+      assertActive() {},
     });
     if (code) await assert.rejects(operation, {code});
     else assert.equal((await operation).manifest.id, displayed.id);
@@ -239,7 +230,7 @@ test('Discover verifies a revision conflict across an early retry and a late ini
   await assert.rejects(loadPublishedArtifact(link, {
     source: {query: lookup.query, async readHtml() {blobReads++; return html;}},
     lookupRelays, networkRelays: [emptyRelay, retryRelay], signal: new AbortController().signal,
-    expectedEventId: displayed.id, assertActive() {},
+    assertActive() {},
   }), {code: 'PUBLISHED_REVISION_CONFLICT'});
   assert.equal(retryAttempts, 2);
   assert.equal(blobReads, 0);
@@ -256,7 +247,7 @@ test('discovery separates empty results, authentic unsupported manifests and sam
     {events: [current, conflicting], code: 'PUBLISHED_REVISION_CONFLICT'},
   ]) {
     const calls: string[] = [];
-    await assert.rejects(loadPublishedArtifact(link, {...options(events, html, undefined, calls), expectedEventId: current.id}), {code});
+    await assert.rejects(loadPublishedArtifact(link, {...options(events, html, undefined, calls), networkRelays: []}), {code});
     assert.equal(calls.length, 1);
   }
 });
@@ -266,7 +257,7 @@ test('exact opening distinguishes relay failure, download failure and signed inv
   const badHtml = new TextEncoder().encode('<body>Missing the required HTML document envelope</body>');
   const event = finalizeEvent({kind: 35129, created_at: 1_700_000_002, content: 'Invalid HTML',
     tags: [['d', 'loader-test'], ['x', sha(badHtml)], ['server', 'https://blossom.example.org/']]}, secret);
-  const input = {...options([event], badHtml), expectedEventId: event.id};
+  const input = {...options([event], badHtml), networkRelays: []};
   await assert.rejects(loadPublishedArtifact(link, {...input, source: {
     async query() {throw new Error('a configured relay did not finish');},
     async readHtml() {assert.fail('failed lookup cannot start a download');},

@@ -3,24 +3,15 @@ import { createHash } from 'node:crypto';
 import { finalizeEvent, type NostrEvent } from 'nostr-tools/pure';
 import { naddrEncode } from 'nostr-tools/nip19';
 
-const type = 'hypergolic.publishedOpen';
-const address = naddrEncode({kind: 35129, pubkey: 'a'.repeat(64), identifier: 'discovery-open-test'});
-const expectedEventId = 'b'.repeat(64);
-const target = {address, expectedEventId};
-type Request = {type: string; id: string; address: string; expectedEventId: string; action?: 'pin' | 'unpin' | 'pin-state'};
-type State = { ready: boolean; calls: Request[]; catalogCalls: object[]; catalogEvents: object[]; pinStateCalls: Request[]; pinned: string[]; holdPinReads: boolean; releasePinRead?: (status: string) => void; finish?: (status: string) => void };
-type TestWindow = Window & { discoveryOpenTest: State; HypergolicHost: object };
-type GuestWindow = Window & { hypergolic?: { publishedOpen?: {
-  version: number; pinState(address: string, expectedEventId: string): Promise<{status: string}>; pin(address: string, expectedEventId: string): Promise<{status: string}>; unpin(address: string, expectedEventId: string): Promise<{status: string}>; open(address: string, expectedEventId: string): Promise<{status: string; reason?: string}>;
-}; catalogPage?: {
-  version: number; read(reset: boolean, round: string, after: number): Promise<unknown>;
-} }; receivedOpenStatus?: string; receivedOpenResult?: {status: string; reason?: string} };
+type State = {ready: boolean; calls: object[]; finish?: (status: string) => void};
+type TestWindow = Window & {discoveryOpenTest: State; HypergolicHost: object};
+type QueryFilter = {kinds: number[]; authors?: string[]; '#d'?: string[]; until?: number; since?: number; limit?: number};
 
-async function openRuntime(page: Page, fixture: string, catalogEvents: object[] = [], feedEvents: NostrEvent[] = []) {
+async function openRuntime(page: Page, fixture: string, catalogEvents: {event: NostrEvent}[] = [], feedEvents: NostrEvent[] = []) {
   await page.addInitScript(({catalogEvents, feedEvents}) => {
     if (window !== window.top) return;
     const root = window as unknown as TestWindow;
-    const state: State = { ready: false, calls: [], catalogCalls: [], catalogEvents, pinStateCalls: [], pinned: [], holdPinReads: false };
+    const state: State = {ready: false, calls: []};
     const listeners = new Set<(event: {data: string}) => void>();
     root.discoveryOpenTest = state;
     root.HypergolicHost = {
@@ -36,33 +27,22 @@ async function openRuntime(page: Page, fixture: string, catalogEvents: object[] 
             sequence: envelope.sequence, response: JSON.stringify(response)});
           listeners.forEach(listener => listener({data}));
         };
-        if (request.type === 'routing.call' && request.message.type === 'hypergolic.publishedOpen') {
-          const message = request.message;
-          if (message.action === 'pin-state') {
-            state.pinStateCalls.push(message);
-            const reply = (status: string) => respond({type: 'routing.call.result', id: request.id, response: status});
-            if (state.holdPinReads) state.releasePinRead = reply;
-            else reply(state.pinned.includes(message.address) ? 'pinned' : 'unpinned');
-            return;
+        if (request.type === 'routing.call' && request.message.type === 'link.open') {
+          state.calls.push(request.message);
+          state.finish = status => respond({type: 'routing.call.result', id: request.id,
+            response: {type: 'link.open.result', id: request.message.id, status}});
+        }
+        if (request.type === 'relay.query' || request.type === 'outbox.query') {
+          const available = [...catalogEvents.map(row => row.event), ...feedEvents].sort((a, b) => b.created_at - a.created_at);
+          const matches = new Map<string, NostrEvent>();
+          for (const filter of request.filters as QueryFilter[]) {
+            const events = available.filter(event => filter.kinds.includes(event.kind) &&
+              (!filter.authors || filter.authors.includes(event.pubkey)) &&
+              (!filter['#d'] || event.tags.some(([key, value]) => key === 'd' && filter['#d']?.includes(value))) &&
+              event.created_at >= (filter.since ?? 0) && event.created_at <= (filter.until ?? Infinity));
+            for (const event of events.slice(0, filter.limit ?? events.length)) matches.set(event.id, event);
           }
-          state.calls.push(message);
-          state.finish = status => {
-            if (status === 'pinned' && !state.pinned.includes(message.address)) state.pinned.push(message.address);
-            if (status === 'unpinned') state.pinned = state.pinned.filter(address => address !== message.address);
-            respond({type: 'routing.call.result', id: request.id, response: status});
-          };
-        }
-        if (request.type === 'relay.catalogPage') {
-          state.catalogCalls.push(request);
-          respond({type: 'relay.catalogPage.result', id: request.id, result: {
-            page: request.after + 1, until: Math.floor(Date.now() / 1000), events: state.catalogEvents,
-            more: false, partial: false, gap: false, bounded: false,
-          }});
-        }
-        if (request.type === 'relay.query') {
-          const events = feedEvents.filter(event => request.filters.some((filter: {kinds: number[]; authors?: string[]}) =>
-            filter.kinds.includes(event.kind) && (!filter.authors || filter.authors.includes(event.pubkey))));
-          respond({type: 'relay.query.result', id: request.id, events: events.map(event => ({event}))});
+          respond({type: request.type + '.result', id: request.id, events: [...matches.values()].map(event => ({event}))});
         }
       },
     };
@@ -71,79 +51,6 @@ async function openRuntime(page: Page, fixture: string, catalogEvents: object[] 
   await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.ready)).toBe(true);
   return page.frames().find(frame => frame.parentFrame() === page.mainFrame())!;
 }
-
-test('authorized discovery exposes one exact request and only the captured native receipt', async ({page}) => {
-  const guest = await openRuntime(page, 'napplet-discovery');
-  const second = await guest.evaluate(async ({address, expectedEventId, type}) => {
-    const root = window as GuestWindow;
-    parent.postMessage({type, id: 'forged', address, expectedEventId, token: 'wrong-document'}, '*');
-    const api = root.hypergolic?.publishedOpen;
-    if (api?.version !== 1) throw new Error('Discovery open unavailable');
-    void api.open(address, expectedEventId).then(result => { root.receivedOpenStatus = result.status; });
-    return (await api.open(address, expectedEventId)).status;
-  }, {...target, type});
-  expect(second).toBe('busy');
-  const calls = () => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls);
-  await expect.poll(async () => (await calls()).length).toBe(1);
-  expect((await calls())[0]).toEqual({type, id: expect.any(String), ...target});
-  expect(await guest.evaluate(() => (window as GuestWindow).receivedOpenStatus)).toBeUndefined();
-  await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.finish?.('opened'));
-  await expect.poll(() => guest.evaluate(() => (window as GuestWindow).receivedOpenStatus)).toBe('opened');
-});
-
-test('ordinary bundled guests cannot acquire the discovery launch transport', async ({page}) => {
-  const guest = await openRuntime(page, 'nap-support');
-  expect(await guest.evaluate(({address, expectedEventId, type}) => {
-    parent.postMessage({type, id: 'forged', address, expectedEventId, token: 'fake'}, '*');
-    return Boolean((window as GuestWindow).hypergolic?.publishedOpen);
-  }, {...target, type})).toBe(false);
-  expect(await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls)).toEqual([]);
-});
-
-
-test('keeps the version-one result status and attaches only allowed load reasons', async ({page}) => {
-  const guest = await openRuntime(page, 'napplet-discovery');
-  for (const [reason, expected] of [
-    ['lookup-unavailable', {status: 'failed', reason: 'lookup-unavailable'}],
-    ['download-unavailable', {status: 'failed', reason: 'download-unavailable'}],
-    ['hash-mismatch', {status: 'failed', reason: 'hash-mismatch'}],
-    ['invalid-html', {status: 'failed', reason: 'invalid-html'}],
-    ['stage-unavailable', {status: 'failed', reason: 'stage-unavailable'}],
-    ['workspace-full', {status: 'unavailable', reason: 'workspace-full'}],
-    ['opaque native detail', {status: 'unavailable'}],
-  ] as const) {
-    const previous = await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length);
-    await guest.evaluate(({address, expectedEventId}) => {
-      const root = window as GuestWindow;
-      delete root.receivedOpenResult;
-      void root.hypergolic!.publishedOpen!.open(address, expectedEventId)
-        .then(result => {root.receivedOpenResult = result;});
-    }, target);
-    await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length)).toBe(previous + 1);
-    await page.evaluate(reason => (window as unknown as TestWindow).discoveryOpenTest.finish?.(reason), reason);
-    await expect.poll(() => guest.evaluate(() => (window as GuestWindow).receivedOpenResult)).toEqual(expected);
-  }
-});
-
-
-test('catalog paging is exact-Discover-only and carries no destinations or filter authority', async ({page}) => {
-  const guest = await openRuntime(page, 'napplet-discovery');
-  const round = 'a'.repeat(32);
-  const result = await guest.evaluate(async round => {
-    const api = (window as GuestWindow).hypergolic?.catalogPage;
-    if (api?.version !== 1) throw Error('Catalog paging unavailable');
-    parent.postMessage({type: 'relay.catalogPage', id: 'forged', reset: true, round, after: 0, token: 'wrong-document'}, '*');
-    return api.read(true, round, 0);
-  }, round);
-  expect(result).toEqual({page: 1, until: expect.any(Number), events: [], more: false,
-    partial: false, gap: false, bounded: false});
-  const calls = await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.catalogCalls);
-  expect(calls).toContainEqual({type: 'relay.catalogPage', id: expect.any(String), reset: true, round, after: 0});
-  expect(calls).not.toContainEqual(expect.objectContaining({id: 'forged'}));
-  const ordinary = await openRuntime(page, 'nap-support');
-  expect(await ordinary.evaluate(() => Boolean((window as GuestWindow).hypergolic?.catalogPage))).toBe(false);
-});
-
 
 test('packaged Discover scopes late and completed row feedback to its search', async ({page}) => {
   const artifact = 'c'.repeat(64);
@@ -159,8 +66,8 @@ test('packaged Discover scopes late and completed row feedback to its search', a
   await open.click();
   await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length)).toBe(1);
   const calls = await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls);
-  expect(calls[0]).toEqual({type, id: expect.any(String), expectedEventId: event.id,
-    address: naddrEncode({kind: 35129, pubkey: event.pubkey, identifier: 'feedback-control'})});
+  expect(calls[0]).toEqual({type: 'link.open', id: expect.any(String),
+    url: 'nostr:' + naddrEncode({kind: 35129, pubkey: event.pubkey, identifier: 'feedback-control'})});
   await search.fill('A different search');
   await expect(guest.getByText('No matches in the loaded results.')).toBeVisible();
   await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.finish?.('opened'));
@@ -172,7 +79,7 @@ test('packaged Discover scopes late and completed row feedback to its search', a
   await open.click();
   await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length)).toBe(2);
   await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.finish?.('opened'));
-  await expect(feedback).toHaveText('Opened in Hypergolic.');
+  await expect(feedback).toHaveText('Link accepted by your shell.');
   await search.fill('Another different search');
   await expect(feedback).toBeHidden();
   await expect(feedback).toBeEmpty();
@@ -180,7 +87,7 @@ test('packaged Discover scopes late and completed row feedback to its search', a
 });
 
 for (const declaration of ['R', 'O']) {
-  test(`packaged Discover trusts independent Outbox availability for ${declaration}`, async ({page}) => {
+  test(`packaged Discover displays publisher-declared Outbox access for ${declaration}`, async ({page}) => {
     const event = finalizeEvent({kind: 35129, created_at: Math.floor(Date.now() / 1000) - 10,
       content: 'Independent Outbox catalog control.', tags: [['d', 'outbox-control'],
         ['title', 'Independent Outbox'], ['x', 'c'.repeat(64)], [declaration, 'outbox']]},
@@ -197,66 +104,21 @@ for (const declaration of ['R', 'O']) {
     await guest.getByRole('button', {name: 'Open Napplet', exact: true}).click();
     await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length)).toBe(1);
     const calls = await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls);
-    expect(calls[0]).toEqual({type, id: expect.any(String), expectedEventId: event.id,
-      address: naddrEncode({kind: 35129, pubkey: event.pubkey, identifier: 'outbox-control'})});
+    expect(calls[0]).toEqual({type: 'link.open', id: expect.any(String),
+      url: 'nostr:' + naddrEncode({kind: 35129, pubkey: event.pubkey, identifier: 'outbox-control'})});
     await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.finish?.('opened'));
-    await expect(guest.locator('.detail-actions .feedback')).toHaveText('Opened in Hypergolic.');
+    await expect(guest.locator('.detail-actions .feedback')).toHaveText('Link accepted by your shell.');
   });
 }
 
-test('packaged Discover pins then unpins from listing and details without opening', async ({page}) => {
+test('packaged Discover leaves Home shortcuts to the shell and receives no proprietary interfaces', async ({page}) => {
   const event = finalizeEvent({kind: 35129, created_at: Math.floor(Date.now() / 1000) - 10,
     content: 'Pin test', tags: [['d', 'pin-control'], ['title', 'Pin control'], ['x', 'c'.repeat(64)]]}, new Uint8Array(32).fill(1));
   const guest = await openRuntime(page, 'napplet-discovery', [{event}]);
-  await guest.getByRole('button', {name: 'Pin Pin control to Home', exact: true}).click();
-  await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length)).toBe(1);
-  expect((await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls))[0]).toEqual({
-    type, id: expect.any(String), action: 'pin', expectedEventId: event.id,
-    address: naddrEncode({kind: 35129, pubkey: event.pubkey, identifier: 'pin-control'}),
-  });
-  await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.finish?.('pinned'));
-  await expect(guest.locator('#row-open-status')).toHaveText('Pinned to Home.');
   await guest.getByRole('button', {name: 'Details for Pin control', exact: true}).click();
-  await guest.getByRole('button', {name: 'Unpin Pin control from Home', exact: true}).click();
-  await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length)).toBe(2);
-  await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.finish?.('unpinned'));
-  await expect(guest.locator('.detail-actions .feedback')).toHaveText('Unpinned from Home.');
-  await expect(guest.getByRole('button', {name: 'Pin Pin control to Home', exact: true})).not.toHaveAttribute('aria-disabled', 'true');
-});
-
-
-test('pin state is bounded and foreground pin/unpin bypasses queued background reads', async ({page}) => {
-  const guest = await openRuntime(page, 'napplet-discovery');
-  await page.evaluate(() => {(window as unknown as TestWindow).discoveryOpenTest.holdPinReads = true;});
-  await guest.evaluate(({address, expectedEventId}) => {
-    const root = window as GuestWindow & {pinResults?: {status: string}[]};
-    root.pinResults = [];
-    const api = root.hypergolic!.publishedOpen!;
-    for (let index = 0; index < 100; index++) void api.pinState(address, expectedEventId).then(value => root.pinResults!.push(value));
-    void api.pin(address, expectedEventId).then(value => {root.receivedOpenStatus = value.status;});
-  }, target);
-  await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.pinStateCalls.length)).toBe(1);
-  await expect.poll(() => guest.evaluate(() => (window as GuestWindow & {pinResults: {status: string}[]}).pinResults.length)).toBe(67);
-  await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.releasePinRead?.('unpinned'));
-  await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length)).toBe(1);
-  expect((await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls))[0]).toMatchObject({...target, action:'pin'});
-  await page.evaluate(() => {
-    const state = (window as unknown as TestWindow).discoveryOpenTest;
-    state.holdPinReads = false;
-    state.finish?.('pinned');
-  });
-  await expect.poll(() => guest.evaluate(() => (window as GuestWindow).receivedOpenStatus)).toBe('pinned');
-  await expect.poll(() => guest.evaluate(() => (window as GuestWindow & {pinResults: {status: string}[]}).pinResults.length)).toBe(100);
-  expect(await guest.evaluate(({address, expectedEventId}) => (window as GuestWindow).hypergolic!.publishedOpen!.pinState(address, expectedEventId), target)).toEqual({status:'pinned'});
-  await guest.evaluate(({address, expectedEventId}) => {
-    const root = window as GuestWindow; root.receivedOpenStatus = undefined;
-    void root.hypergolic!.publishedOpen!.unpin(address, expectedEventId).then(result => {root.receivedOpenStatus = result.status;});
-  }, target);
-  await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length)).toBe(2);
-  expect((await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls))[1]).toMatchObject({...target, action:'unpin'});
-  await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.finish?.('unpinned'));
-  await expect.poll(() => guest.evaluate(() => (window as GuestWindow).receivedOpenStatus)).toBe('unpinned');
-  expect(await guest.evaluate(({address, expectedEventId}) => (window as GuestWindow).hypergolic!.publishedOpen!.pinState(address, expectedEventId), target)).toEqual({status:'unpinned'});
+  await expect(guest.getByRole('button', {name: /pin.+home/i})).toHaveCount(0);
+  expect(await guest.evaluate(() => ['hypergolic', 'hypergolicSupportReport'].filter(key => key in window))).toEqual([]);
+  expect(await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls)).toEqual([]);
 });
 
 test('an attributed community pick opens the signed listing and returns to the feed', async ({page}) => {
@@ -275,4 +137,29 @@ test('an attributed community pick opens the signed listing and returns to the f
   await guest.getByRole('button', {name:'Back to Discover', exact:true}).click();
   await expect(card).toBeVisible();
   expect(await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls)).toEqual([]);
+});
+
+test('packaged Discover opens an off-page community pick through NAP-LINK', async ({page}) => {
+  const author = new Uint8Array(32).fill(1), recommender = new Uint8Array(32).fill(2);
+  const now = Math.floor(Date.now() / 1000);
+  const publication = (identifier: string, title: string, age: number) => finalizeEvent({
+    kind: 35129, created_at: now - age, content: title + ' description.',
+    tags: [['d', identifier], ['title', title], ['x', 'c'.repeat(64)]],
+  }, author);
+  const recent = Array.from({length: 8}, (_, index) => publication('recent-' + index, 'Recent ' + index, index + 1));
+  const target = publication('older-game', 'Older game', 1000);
+  const list = finalizeEvent({kind: 30267, created_at: now - 1, content: '',
+    tags: [['d', 'napplets'], ['a', '35129:' + target.pubkey + ':older-game']]}, recommender);
+  const guest = await openRuntime(page, 'napplet-discovery', [...recent, target].map(event => ({event})), [list]);
+  await expect(guest.getByRole('button', {name: 'Details for Recent 7', exact: true})).toBeVisible();
+  await expect(guest.getByRole('button', {name: 'Details for Older game', exact: true})).toHaveCount(0);
+  const card = guest.locator('#community-recommendation');
+  await card.getByRole('button', {name: /^Details for Older game recommended by /}).click();
+  await expect(guest.locator('#detail-heading')).toHaveText('Older game');
+  await guest.getByRole('button', {name: 'Open Napplet', exact: true}).click();
+  const url = 'nostr:' + naddrEncode({kind: 35129, pubkey: target.pubkey, identifier: 'older-game'});
+  await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls))
+    .toEqual([{type: 'link.open', id: expect.any(String), url}]);
+  await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.finish?.('opened'));
+  await expect(guest.locator('.detail-actions .feedback')).toHaveText('Link accepted by your shell.');
 });

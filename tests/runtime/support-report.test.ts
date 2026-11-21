@@ -28,3 +28,10 @@ test('support and request changes require a different remembered review', () => 
   assert.notEqual(first.review, capabilityCompatibility(['theme', 'media']).review);
   assert.notEqual(first.review, capabilityCompatibility(['fs', 'theme'], ['theme', 'fs']).review);
 });
+
+test('new list writes require a Lists grant alongside Relay and preserve the old grant on saved sessions',async()=>{
+  const {publishedCapabilityCompatibility}=await import('../../src/napplets/first-open-consent.ts');
+  assert.deepEqual(publishedCapabilityCompatibility(['relay'],['lists'],'before-lists').domains,['relay']);
+  assert.deepEqual(publishedCapabilityCompatibility(['relay'],['lists']).domains,['lists','relay']);
+  assert.deepEqual(publishedCapabilityCompatibility(['lists'],[]).unsupportedDomains,['lists']);
+});

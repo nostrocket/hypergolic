@@ -21,7 +21,7 @@ import CryptoKit
     let handle = registry.stage(bytes, claims: claims)!
     let claimed = registry.claim(handle, claims: claims, viewGeneration: generation)!
     let reader = PublishedArtifactReadOwner(claimed: claimed, domains: configuration.domains,
-      publishedOpen: configuration.publishedOpen, appData: configuration.appData)
+      appData: configuration.appData)
     let raw = reader.read(sequence: 0)!
     precondition(reader.read(sequence: 1) == nil, "One-use artifact reader")
     return try json(raw)

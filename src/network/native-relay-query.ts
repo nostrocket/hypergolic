@@ -1,5 +1,4 @@
 import type { QueryBatchVerifier } from './native-event-verifier.ts';
-import type { CatalogRelayReader } from '../napplets/catalog-paging.ts';
 import type { NostrEvent } from 'nostr-tools/pure';
 import type { NativePublishedRelayPort } from '../napplets/native-published-relay.ts';
 import { parsePublishedRelayMessage } from '../napplets/published-relay-wire.ts';
@@ -8,7 +7,7 @@ import { utf8Bytes } from '../storage/codec.ts';
 import { OUTBOX_QUERY_COUNTS, parseQueryFilters, QUERY_LIMITS, RelayQueryBusyError, RelayQueryDataError, RelayQueryError, relayQueryWire, selectQueryEvents, captureQueryEvent, verifyQueryEvent, type QueryFilter } from './relay-query-contract.ts';
 
 export interface RelayQueryService {
-  readonly catalog?: CatalogRelayReader;
+  readonly destinations?: () => readonly string[];
   query(filters: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void): Promise<readonly Readonly<{ event: NostrEvent }>[]>;
   queryDetailed?(filters: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void, options?: DetailedQueryOptions): Promise<RelayQueryResult>;
 }
@@ -214,22 +213,20 @@ export function createNativeRelayQuery(port: NativeQueryPort,
     if (new Set(relays).size !== relays.length) throw new RelayQueryError('relay query unavailable');
     return relays;
   }
-  function prepare(input:readonly QueryFilter[],catalogRelay?:string,detailed?:DetailedQueryOptions) {
+  function prepare(input:readonly QueryFilter[],detailed?:DetailedQueryOptions) {
     const wireFilters = parseQueryFilters(input, counts.events, detailed?.maximumFilters, detailed?.allowSearch, counts.events);
     const {search, ...structuredFilter} = wireFilters[0]!;
     const ranked = search !== undefined;
     const filters = ranked ? [structuredFilter] : wireFilters;
     const budget = detailed?.timeoutMs ?? timeoutMs;
     if (!Number.isSafeInteger(budget) || budget < 1 || budget > timeoutMs) throw new RelayQueryError();
-    const configured = configuredRelays();
-    const relays = catalogRelay === undefined ? configured : configured.filter(relay => relay === catalogRelay);
+    const relays = configuredRelays();
     if (ranked && relays.length !== 1) throw new RelayQueryError();
-    if (relays.length === 0) throw new RelayQueryError('relay query unavailable');
     return {wireFilters,filters,ranked,budget,relays};
   }
   async function runQuery(input: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void, partialAtDeadline: boolean,
-    catalogRelay?: string, detailed?: DetailedQueryOptions): Promise<RelayQueryResult> {
-      const {wireFilters,filters,ranked,budget,relays}=prepare(input,catalogRelay,detailed);
+    detailed?: DetailedQueryOptions): Promise<RelayQueryResult> {
+      const {wireFilters,filters,ranked,budget,relays}=prepare(input,detailed);
       if (concurrent >= QUERY_LIMITS.concurrent) throw new RelayQueryBusyError();
       const active = () => { if (signal.aborted) throw new RelayQueryError('relay query cancelled'); assertActive(); };
       active();
@@ -266,7 +263,6 @@ export function createNativeRelayQuery(port: NativeQueryPort,
                   ? events => options.verifyBatch!(events,lifetime.signal,active,lifetime.remaining()) : undefined);
                 active();
                 if (lifetime.aborted()) throw new RelayQueryError();
-                if (catalogRelay !== undefined && new Set(batch.map(event => event.id)).size !== batch.length) throw new RelayQueryDataError();
               } catch (error) {
                 if (lifetime.aborted()) throw error;
                 invalidData = true;
@@ -302,13 +298,8 @@ export function createNativeRelayQuery(port: NativeQueryPort,
       }
   }
   return Object.freeze({
-    catalog: Object.freeze({
-      destinations: configuredRelays,
-      async read(relay: string, filter: QueryFilter, signal: AbortSignal, active: () => void) {
-        return (await runQuery([filter], signal, active, false, relay)).events;
-      },
-    }),
-    queryDetailed(input: readonly QueryFilter[], signal: AbortSignal, active: () => void, detailed?: DetailedQueryOptions) {return runQuery(input, signal, active, true, undefined, detailed);},
+    destinations: configuredRelays,
+    queryDetailed(input: readonly QueryFilter[], signal: AbortSignal, active: () => void, detailed?: DetailedQueryOptions) {return runQuery(input, signal, active, true, detailed);},
     async query(filters: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void) {
       return (await runQuery(filters, signal, assertActive, false)).events;
     },

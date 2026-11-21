@@ -1,9 +1,6 @@
-import { pinNapplet, isPinned, pinnedNapplets, unpinNapplet } from '../shell/pins.ts';
-import { descriptorForPublishedArtifact } from './published-host-input.ts';
-import { verifiedLaunchMetadata } from './verified-launch-metadata.ts';
-import { ReviewBusyError } from '../shell/review-slot.ts';
-import { naddrEncode } from 'nostr-tools/nip19';
-import { resolveNappletLink, type NappletCoordinate } from './resolve-link.ts';
+import { parseLinkRequest, linkDenied, NAPPLET_LINK_LEASE_MS } from './link-contract.ts';
+import { verifiedLaunchMetadata } from '../napplets/verified-launch-metadata.ts';
+import { resolveNappletLink, type NappletCoordinate } from '../napplets/resolve-link.ts';
 import type { IdentityTransition } from '../security/identity-transition.ts';
 import type { NativeCapabilityPort, CapabilityOwner } from '../runtime/capability-broker.ts';
 import { decodeNativeRegistration, decodeNativeRequest } from '../runtime/capability-protocol.ts';
@@ -12,23 +9,19 @@ import { routingRecord } from '../routing/routing-contract.ts';
 import type { RoutingNativePort } from '../routing/routing-port.ts';
 import type { RoutingReviewRequest, RoutingReviewService } from '../routing/routing-review.ts';
 import { resolveBundledSession } from '../shell/fixtures.ts';
-import { isDiscoveryEntry } from './discovery-entry.ts';
 import { conflictsWithPublishedRevision, focusNapplet, openNapplet, samePublishedPin, type NappletDescriptor } from '../shell/workspace.ts';
 import { ShellStorageError } from '../storage/ports.ts';
-import { DISCOVERY_LEASE_MS, parseDiscoveryOpen, type DiscoveryOpenOutcome } from './discovery-open-contract.ts';
-import { publishedCapabilityCompatibility } from './first-open-consent.ts';
-import { assertVerifiedArtifact } from './verified-artifact.ts';
-import { PublishedLoadError } from './loader.ts';
-import { PublishedTransferError } from './native-transfer.ts';
+import { publishedCapabilityCompatibility } from '../napplets/first-open-consent.ts';
+import { assertVerifiedArtifact } from '../napplets/verified-artifact.ts';
 
 type Ports = Readonly<{
   identity: Pick<IdentityTransition, 'getSnapshot' | 'subscribe'>;
-  runtime: () => Pick<RuntimeOwner, 'resolveDiscovered' | 'retainForPin' | 'prepareDiscovered' | 'publishedReadyGeneration' | 'discardPublished'> | null;
+  runtime: () => Pick<RuntimeOwner, 'resolveNappletLink' | 'prepareNappletLink' | 'publishedReadyGeneration' | 'discardPublished'> | null;
   capability: NativeCapabilityPort;
   native: RoutingNativePort;
   reviews: RoutingReviewService;
 }>;
-export type DiscoveryOpenBroker = ReturnType<typeof createDiscoveryOpenBroker>;
+export type NappletLinkBroker = ReturnType<typeof createNappletLinkBroker>;
 
 const cancelled = () => new ShellStorageError('REVOKED');
 const sameTarget = (left: NappletDescriptor, right: NappletDescriptor) => left.source === 'published'
@@ -36,24 +29,6 @@ const sameTarget = (left: NappletDescriptor, right: NappletDescriptor) => left.s
   : left.source === right.source && left.publisher === right.publisher && left.appId === right.appId &&
     left.eventId === right.eventId && left.version === right.version && left.title === right.title;
 const integer = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
-
-function failureOutcome(error: unknown): DiscoveryOpenOutcome {
-  if (error instanceof ReviewBusyError) return 'busy';
-  if (error instanceof PublishedTransferError) return 'stage-unavailable';
-  if (error instanceof PublishedLoadError) {
-    switch (error.code) {
-      case 'PUBLISHED_REVISION_CHANGED': return 'refresh-required';
-      case 'PUBLISHED_NOT_FOUND': return 'not-found';
-      case 'PUBLISHED_UNSUPPORTED_MANIFEST': return 'unsupported';
-      case 'PUBLISHED_REVISION_CONFLICT': return 'conflict';
-      case 'PUBLISHED_LOOKUP_UNAVAILABLE': return 'lookup-unavailable';
-      case 'PUBLISHED_DOWNLOAD_UNAVAILABLE': return 'download-unavailable';
-      case 'PUBLISHED_HASH_MISMATCH': return 'hash-mismatch';
-      case 'PUBLISHED_INVALID_HTML': return 'invalid-html';
-    }
-  }
-  return 'failed';
-}
 
 function pause(signal: AbortSignal): Promise<void> {
   return new Promise(resolve => {
@@ -66,7 +41,6 @@ function pause(signal: AbortSignal): Promise<void> {
 function capture(raw: string, owner: CapabilityOwner, source: NappletDescriptor) {
   const captured = decodeNativeRequest(raw);
   const origin = decodeNativeRegistration(owner.registration);
-  if (!isDiscoveryEntry(source)) throw cancelled();
   const sourceIdentity = source.source === 'bundled' ? resolveBundledSession(source) : {...source, fixture: 'published'};
   if (JSON.stringify(captured.registration) !== JSON.stringify(origin) || source.id !== origin.sessionId ||
       sourceIdentity.fixture !== origin.fixture || sourceIdentity.appId !== origin.appId ||
@@ -75,15 +49,9 @@ function capture(raw: string, owner: CapabilityOwner, source: NappletDescriptor)
     ['type', 'id', 'message', 'revision', 'focusRevision']);
   if (type !== 'routing.call' || typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(id) ||
       !integer(revision) || !integer(focusRevision)) throw cancelled();
-  return { origin, id, revision, focusRevision, request: parseDiscoveryOpen(message) };
-}
-
-function canonicalCoordinate(address: string): NappletCoordinate | null {
-  try {
-    const coordinate = resolveNappletLink(address);
-    const { kind, pubkey, identifier, relayHints } = coordinate;
-    return relayHints.length === 0 && naddrEncode({ kind, pubkey, identifier }) === address ? coordinate : null;
-  } catch { return null; }
+  const link = parseLinkRequest(message);
+  if (!origin.domains.includes('link') || !link.url.startsWith('nostr:naddr1')) throw cancelled();
+  return {origin, id, revision, focusRevision, link};
 }
 
 type Captured = ReturnType<typeof capture>;
@@ -92,6 +60,7 @@ type Launch = Readonly<{
   source: NappletDescriptor; workspace: Workspace; captured: Captured; coordinate: NappletCoordinate;
   runtime: NonNullable<ReturnType<Ports['runtime']>>; live: () => void;
 }>;
+type LaunchOutcome = 'opened' | 'rejected' | 'failed';
 type Attempt = {
   target: NappletDescriptor | null;
   staged: NappletDescriptor | null;
@@ -108,7 +77,7 @@ function requestScope(ports: Ports, captured: Captured, token: string, owner: Ca
         current.session.epoch !== origin.epoch || current.session.vault.selectedPubkey !== origin.user ||
         state.user !== origin.user || state.epoch !== origin.epoch || state.revision !== revision ||
         !state.available || !ports.capability.isActive(token) ||
-        !ports.native.mayDeliver(origin.generation, revision, 'published-open')) throw cancelled();
+        !ports.native.mayDeliver(origin.generation, revision, 'link')) throw cancelled();
     owner.assertActive();
   };
   return { workspace, live };
@@ -141,7 +110,7 @@ function reviewLaunch(ports: Ports, launch: Launch, target: Extract<RoutingRevie
 }
 
 async function waitForMount(ports: Ports, launch: Launch, target: NappletDescriptor, active: () => void,
-  signal: AbortSignal): Promise<DiscoveryOpenOutcome> {
+  signal: AbortSignal): Promise<LaunchOutcome> {
   const deadline = Date.now() + 28_000;
   while (Date.now() < deadline) {
     active();
@@ -153,17 +122,17 @@ async function waitForMount(ports: Ports, launch: Launch, target: NappletDescrip
 }
 
 async function openExact(ports: Ports, launch: Launch, attempt: Attempt, active: () => void,
-  signal: AbortSignal): Promise<DiscoveryOpenOutcome> {
-  const { request } = launch.captured;
+  signal: AbortSignal): Promise<LaunchOutcome> {
+  const { link } = launch.captured;
   const { runtime, workspace } = launch;
-  const artifact = await runtime.resolveDiscovered(request.address, request.expectedEventId, signal, active);
+  const networkReadGranted = launch.captured.origin.domains.includes('relay');
+  const artifact = await runtime.resolveNappletLink(link.url, signal, active, networkReadGranted);
   active();
   assertVerifiedArtifact(artifact);
   const { manifest, aggregateHash: version } = artifact;
   const appId = manifest.tags.find(tag => tag[0] === 'd')?.[1];
   const { pubkey: publisher, eventId } = manifest;
-  if (appId !== launch.coordinate.identifier || publisher !== launch.coordinate.pubkey ||
-      eventId !== request.expectedEventId) throw new Error('Unverified launch revision');
+  if (appId !== launch.coordinate.identifier || publisher !== launch.coordinate.pubkey) throw new Error('Unverified launch revision');
 
   const matches = () => workspace.getSnapshot().workspace.sessions.filter(session =>
     session.source === 'published' && session.publisher === publisher && session.appId === appId);
@@ -171,7 +140,7 @@ async function openExact(ports: Ports, launch: Launch, attempt: Attempt, active:
   const installed = matches();
   // Different saved revisions continue through the ordinary explicit update flow.
   const coordinate = {publisher, appId, eventId, version};
-  if (conflictsWithPublishedRevision(workspace.getSnapshot().workspace, coordinate)) return 'conflict';
+  if (conflictsWithPublishedRevision(workspace.getSnapshot().workspace, coordinate)) return 'failed';
   const loaded = installed.find(session => runtime.publishedReadyGeneration(session) !== null);
   const existing = loaded ?? installed[0];
   const requiredDomains = Object.freeze([...manifest.requiredDomains].sort());
@@ -179,36 +148,21 @@ async function openExact(ports: Ports, launch: Launch, attempt: Attempt, active:
   const { unsupportedDomains, unsupportedOptionalDomains } = publishedCapabilityCompatibility(requiredDomains, optionalDomains);
   const review = reviewLaunch(ports, launch, Object.freeze({ publisher, appId, eventId, version, metadata: verifiedLaunchMetadata(artifact),
     requiredDomains, optionalDomains, unsupportedDomains, unsupportedOptionalDomains }), attempt, active);
-  if (request.action === 'pin') {
-    active();
-    const shortcut = existing ?? descriptorForPublishedArtifact(artifact, ports.native.newChannelId());
-    const release = await runtime.retainForPin(artifact, signal, active);
-    try {
-      active();
-      const current = workspace.getSnapshot().workspace;
-      if (conflictsWithPublishedRevision(current, coordinate)) return 'conflict';
-      workspace.change(pinNapplet(current, shortcut));
-      await workspace.flush();
-    } finally { release(); }
-    active();
-    if (!isPinned(workspace.getSnapshot().workspace, shortcut)) return 'failed';
-    return 'pinned';
-  }
   let next: NappletDescriptor;
   if (loaded) {
     if (!await review(false)) return 'rejected';
     next = loaded;
   } else {
-    if (!existing && workspace.getSnapshot().workspace.sessions.length >= 64) return 'workspace-full';
-    next = await runtime.prepareDiscovered(artifact, signal, active, review, existing);
+    if (!existing && workspace.getSnapshot().workspace.sessions.length >= 64) return 'failed';
+    next = await runtime.prepareNappletLink(artifact, signal, active, review, existing);
     attempt.staged = next;
   }
   active();
   const current = workspace.getSnapshot().workspace;
   if (conflictsWithPublishedRevision(current, coordinate) ||
       (existing ? !current.sessions.some(session => session.id === existing.id && sameTarget(session, existing))
-        : matches().length > 0)) return 'conflict';
-  if (!existing && current.sessions.length >= 64) return 'workspace-full';
+        : matches().length > 0)) return 'failed';
+  if (!existing && current.sessions.length >= 64) return 'failed';
   if (!exact(next) || next.source !== 'published' || next.publisher !== publisher || next.appId !== appId) throw new Error('Prepared launch mismatch');
   attempt.created = !existing;
   attempt.target = next;
@@ -218,19 +172,7 @@ async function openExact(ports: Ports, launch: Launch, attempt: Attempt, active:
   return waitForMount(ports, launch, next, active, signal);
 }
 
-async function localPin(launch: Launch, active: () => void): Promise<DiscoveryOpenOutcome> {
-  const {workspace, coordinate, captured} = launch;
-  const saved = () => pinnedNapplets(workspace.getSnapshot().workspace).find(pin =>
-    pin.source === 'published' && pin.publisher === coordinate.pubkey && pin.appId === coordinate.identifier);
-  active();
-  const pin = saved();
-  if (captured.request.action === 'unpin' && pin) workspace.change(unpinNapplet(workspace.getSnapshot().workspace, pin));
-  await workspace.flush();
-  active();
-  return saved() ? 'pinned' : 'unpinned';
-}
-
-async function runLaunch(ports: Ports, launch: Launch): Promise<DiscoveryOpenOutcome> {
+async function runLaunch(ports: Ports, launch: Launch): Promise<LaunchOutcome> {
   const { source, workspace, captured, live } = launch;
   const { origin, revision, focusRevision } = captured;
   const controller = new AbortController();
@@ -248,22 +190,19 @@ async function runLaunch(ports: Ports, launch: Launch): Promise<DiscoveryOpenOut
   };
   const abort = () => { controller.abort(); ports.reviews.refresh(); };
   const check = () => { try { active(); } catch { abort(); } };
-  const deadline = setTimeout(abort, DISCOVERY_LEASE_MS - 5_000);
+  const deadline = setTimeout(abort, NAPPLET_LINK_LEASE_MS - 5_000);
   const release: (() => void)[] = [];
-  let status: DiscoveryOpenOutcome = 'failed';
+  let status: LaunchOutcome = 'failed';
   try {
     release.push(ports.identity.subscribe(check), workspace.subscribe(check));
     release.push(ports.native.subscribe(check));
     active();
-    if (captured.request.action === 'pin-state' || captured.request.action === 'unpin') return await localPin(launch, active);
-    if (captured.request.action !== 'pin') ports.reviews.assertAvailable();
+    ports.reviews.assertAvailable();
     status = await openExact(ports, launch, attempt, active, signal);
-    if (status === 'opened' || status === 'pinned') active();
+    if (status === 'opened') active();
     return status;
-  } catch (error) {
-    try { active(); } catch { status = 'cancelled'; return status; }
-    status = error instanceof ShellStorageError && error.code === 'REVOKED'
-      ? 'cancelled' : attempt.declined ? 'rejected' : failureOutcome(error);
+  } catch {
+    status = attempt.declined ? 'rejected' : 'failed';
     return status;
   } finally {
     clearTimeout(deadline);
@@ -274,10 +213,16 @@ async function runLaunch(ports: Ports, launch: Launch): Promise<DiscoveryOpenOut
 }
 
 /** One reviewed exact launch per process. The captured source remains the only reply recipient. */
-export function createDiscoveryOpenBroker(ports: Ports) {
+export function createNappletLinkBroker(ports: Ports) {
   let pending = false;
-  const launch = async (request: Launch): Promise<DiscoveryOpenOutcome> => {
-    if (pending) return 'busy';
+  let linkRequests: {generation: string; time: number}[] = [];
+  const launch = async (request: Launch): Promise<LaunchOutcome> => {
+    if (pending) return 'failed';
+    const now = performance.now();
+    linkRequests = linkRequests.filter(entry => now - entry.time < 60_000);
+    const generation = request.captured.origin.generation;
+    if (linkRequests.length >= 12 || linkRequests.filter(entry => entry.generation === generation).length >= 3) return 'failed';
+    linkRequests.push({generation, time: now});
     pending = true;
     try { return await runLaunch(ports, request); }
     finally { pending = false; }
@@ -294,11 +239,14 @@ export function createDiscoveryOpenBroker(ports: Ports) {
       if (!runtime) return;
       const scope = requestScope(ports, captured, token, owner);
       scope.live();
-      const coordinate = canonicalCoordinate(captured.request.address);
+      let coordinate: NappletCoordinate | null = null;
+      try { coordinate = resolveNappletLink(captured.link.url); }
+      catch { /* Invalid coordinates never reach the verifier. */ }
       const status = coordinate ? await launch({ captured, coordinate, runtime, source, ...scope }) : 'unavailable';
       // Account or renderer revocation suppresses delivery, including after launch.
       scope.live();
-      response = JSON.stringify({ type: 'routing.call.result', id: captured.id, response: status });
+      response = JSON.stringify({ type: 'routing.call.result', id: captured.id, response: status === 'opened' ? {type: 'link.open.result', id: captured.link.id, status: 'opened'}
+        : linkDenied(captured.link.id, !coordinate ? 'invalid-url' : status === 'rejected' ? 'user-denied' : 'blocked-by-policy') });
     } catch { /* Revoked native leases have no live recipient. */ }
     finally { if (claimed) ports.capability.finish(token, response); }
   } });

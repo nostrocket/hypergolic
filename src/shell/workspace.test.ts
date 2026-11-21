@@ -121,7 +121,7 @@ for (const archive of ['feed-lab-v1'] as const) test(`saved Feed Lab ${archive} 
 });
 
 
-test('saved Discover uses the packaged replacement with the same capabilities', async () => {
+test('saved Discover uses the reviewed portable catalog replacement', async () => {
   const {bundledDescriptor, resolveBundledSession} = await import('./fixtures.ts');
   const latest = bundledDescriptor('napplet-discovery', 1);
   for (const version of ['388c5b99b75a8f9e8ee228eca5d81b3a0d96597a41710bbb69eea315b8a347fa',
@@ -129,7 +129,7 @@ test('saved Discover uses the packaged replacement with the same capabilities', 
     const saved = {...latest, version};
     assert.notEqual(saved.version, latest.version);
     assert.deepEqual(resolveBundledSession(saved), resolveBundledSession(latest));
-    assert.deepEqual(resolveBundledSession(saved).domains, ['relay', 'resource', 'theme']);
+    assert.deepEqual(resolveBundledSession(saved).domains, ['relay', 'resource', 'theme', 'link', 'lists']);
   }
   assert.throws(() => resolveBundledSession({...latest, version: '0'.repeat(64)}));
 });
