@@ -19,6 +19,7 @@ const paths = new Map<string, string>([
   ['keys', 'M2 5h20v14H2z M6 9h1m3 0h1m3 0h1m3 0h.2 M6 12h1m3 0h1m3 0h1m3 0h.2 M8 15h8'],
   ['media', 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z M10 8l6 4-6 4z'],
   ['dm', 'M3 5h18v14H3z M3 6l9 7 9-7'],
+  ['lists', 'M8 6h13 M8 12h13 M8 18h13 M3 6h.1 M3 12h.1 M3 18h.1'],
   ['common', 'M3 8h18v12H3z M8 8V5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v3 M3 12l9 2 9-2 M12 12v3'],
 ]);
 
