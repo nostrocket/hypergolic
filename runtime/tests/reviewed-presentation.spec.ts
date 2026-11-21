@@ -519,3 +519,31 @@ test('Workspace Journal rejects a late checkpoint acknowledgement after refocus 
     .find((message: any) => message.type === 'close-check.result' && message.id === 'resume-delayed')?.state)).toBe('unknown');
   await expect(editor).toHaveValue('Draft revised during the write');
 });
+
+
+test('Workspace Journal restores keyboard focus after a late consent sheet and respects subsequent user input', async ({page}) => {
+  const guest = await open(page, 'workspace-journal');
+  const editor = guest.getByLabel('Entry body');
+  const title = guest.getByLabel('Entry title');
+  await editor.fill('unfinished field notes');
+  await editor.evaluate((control: HTMLTextAreaElement) => control.setSelectionRange(11, 11));
+  await page.evaluate(() => (window as any).__hypergolicMediaActive(false));
+  await journalControl(page, 'resume-late-sheet');
+  await page.reload();
+  await expect(editor).toHaveValue('');
+  await page.evaluate(() => (window as any).__hypergolicMediaActive(true));
+  await journalControl(page, 'restore-late-sheet');
+  await expect(editor).toBeFocused();
+  // Journal may ask for its INC topic after restore has focused the composer.
+  const allowInput = (allow: boolean) => page.evaluate(allow => (window as any).__hypergolicInputActive(allow), allow);
+  await allowInput(false);
+  await expect(editor).not.toBeFocused();
+  await allowInput(true);
+  await expect(editor).toBeFocused();
+  await page.keyboard.insertText('new ');
+  await expect(editor).toHaveValue('unfinished new field notes');
+  await title.fill('Continue here');
+  await allowInput(false);
+  await allowInput(true);
+  await expect(editor).not.toBeFocused();
+});

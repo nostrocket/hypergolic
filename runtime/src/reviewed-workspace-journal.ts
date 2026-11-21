@@ -11,15 +11,25 @@ function journalEditor() {
     !document.querySelector('.note-bar, .confirm, .error');
   let lastField = 1, edits = 0;
   let composing = false;
-  let pendingFocus: (() => void) | undefined;
+  let inputAllowed = false;
+  let restoredField: Control | undefined;
+  function focusRestoredField() {
+    const field = restoredField;
+    if (!inputAllowed || !field?.isConnected || (document.activeElement === field && document.hasFocus())) return;
+    const {selectionStart, selectionEnd, selectionDirection} = field;
+    field.focus({preventScroll: true});
+    if (selectionStart !== null && selectionEnd !== null) field.setSelectionRange(selectionStart, selectionEnd, selectionDirection ?? 'none');
+  }
+  window.addEventListener('focus', event => { if (event.target === window) focusRestoredField(); });
   window.addEventListener('focusin', event => {
+    if (event.target instanceof HTMLElement && event.target !== restoredField) restoredField = undefined;
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
       lastField = fields().findIndex(field => field === event.target);
   }, true);
   window.addEventListener('compositionstart', () => { composing = true; edits++; }, true);
   window.addEventListener('compositionend', () => { composing = false; edits++; }, true);
   for (const type of ['input', 'pointerdown', 'keydown']) {
-    window.addEventListener(type, event => { if (event.isTrusted) { edits++; pendingFocus = undefined; } }, true);
+    window.addEventListener(type, event => { if (event.isTrusted) { edits++; restoredField = undefined; } }, true);
   }
   function capture(): Draft | null {
     if (!isNewEntry() || composing) return null;
@@ -37,19 +47,19 @@ function journalEditor() {
     });
     lastField = draft.cursor.field;
     const active = controls[lastField]!;
-    const focus = () => {
-      active.focus({preventScroll: true});
-      active.setSelectionRange(draft.cursor.start, draft.cursor.end, draft.cursor.direction);
-      controls[1]!.scrollTop = draft.scroll;
-    };
-    focus();
-    if (document.activeElement !== active) pendingFocus = focus;
+    active.setSelectionRange(draft.cursor.start, draft.cursor.end, draft.cursor.direction);
+    controls[1]!.scrollTop = draft.scroll;
+    // Startup consent can occlude the editor even after focus first succeeds.
+    // Keep only the field, never a stale cursor, until the user's next input.
+    restoredField = active;
+    focusRestoredField();
     const actual = capture();
     return !!actual && actual.values.length === draft.values.length && actual.values.every((value, index) => value === draft.values[index]) &&
       actual.cursor.start === draft.cursor.start && actual.cursor.end === draft.cursor.end;
   }
-  return {editor, capture, apply, revision: () => edits, focusWhenActive() {
-    const focus = pendingFocus; pendingFocus = undefined; focus?.();
+  return {editor, capture, apply, revision: () => edits, setInputAllowed(allowed: boolean) {
+    inputAllowed = allowed;
+    if (allowed) focusRestoredField();
   }};
 }
 
@@ -128,7 +138,7 @@ function installJournalCheckpoint(createEditor: typeof journalEditor, trackWrite
   window.addEventListener('message', async event => {
     if (!event.isTrusted || event.source !== parent || !event.data) return;
     const {type, id} = event.data;
-    if (type === 'hypergolic.private.media-active' && event.data.inputBlocked === false) form.focusWhenActive();
+    if (type === 'hypergolic.private.media-active') form.setInputAllowed(event.data.inputBlocked === false);
     if ((type !== 'hypergolic.checkpoint' && type !== 'hypergolic.restoreCheckpoint') ||
         Object.keys(event.data).length !== 2 || typeof id !== 'string' || !/^resume-[A-Za-z0-9_-]{1,72}$/.test(id)) return;
     let state = 'unknown';
