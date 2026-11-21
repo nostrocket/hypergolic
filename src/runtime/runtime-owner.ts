@@ -39,7 +39,7 @@ export interface RuntimeNativePort extends NativeCapabilityPort { newInstanceId(
 export interface RuntimeOwner {
   publishedCapabilities(session: NappletDescriptor): PublishedCapabilities | null;
   retainForPin(artifact: VerifiedNappletArtifact, signal: AbortSignal, active: () => void): Promise<() => void>;
-  resolveDiscovered(link: string, expectedEventId: string | undefined, signal: AbortSignal, active: () => void): Promise<VerifiedNappletArtifact>;
+  resolveDiscovered(link: string, expectedEventId: string | undefined, signal: AbortSignal, active: () => void, networkReadGranted?: boolean): Promise<VerifiedNappletArtifact>;
   prepareDiscovered(artifact: VerifiedNappletArtifact, signal: AbortSignal, assertActive: () => void,
     reviewLaunch: (changesAccess: boolean, legacyReadOnlyAvailable?: boolean) => Promise<boolean | 'legacy-read-only-v1'>, existing?: NappletDescriptor): Promise<NappletDescriptor>;
   publishedReadyGeneration(session: NappletDescriptor): string | null;
@@ -215,9 +215,9 @@ export function createRuntimeOwner(database: ShellDatabase,
       if (!coordinator) throw new ShellStorageError('REVOKED');
       return coordinator.retainForPin(artifact, signal, active);
     },
-    resolveDiscovered(link: string, expectedEventId: string | undefined, signal: AbortSignal, active: () => void) {
+    resolveDiscovered(link: string, expectedEventId: string | undefined, signal: AbortSignal, active: () => void, networkReadGranted?: boolean) {
       if (!coordinator) throw new ShellStorageError('REVOKED');
-      return coordinator.resolveExact(link, expectedEventId, signal, active);
+      return coordinator.resolveExact(link, expectedEventId, signal, active, networkReadGranted);
     },
     async prepareDiscovered(artifact: VerifiedNappletArtifact, signal: AbortSignal, assertActive: () => void,
       reviewLaunch: (changesAccess: boolean, legacyReadOnlyAvailable?: boolean) => Promise<boolean | 'legacy-read-only-v1'>, existing?: NappletDescriptor) {

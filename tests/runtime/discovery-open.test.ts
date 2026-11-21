@@ -71,7 +71,7 @@ function setup(initial = openNapplet(emptyWorkspace(), source), reviews = new Ro
   let available = true;
   let mounted = false;
   let focused = false;
-  const lookups: { address: string; expectedEventId: string | undefined }[] = [];
+  const lookups: { address: string; expectedEventId: string | undefined; networkReadGranted?: boolean }[] = [];
   let staged = 0;
   let stageError: PublishedTransferError | null = null;
   let paused: Promise<void> | null = null;
@@ -103,8 +103,8 @@ function setup(initial = openNapplet(emptyWorkspace(), source), reviews = new Ro
     },
     runtime: () => suppliedRuntime ?? ({
       async retainForPin() { return () => {}; },
-      async resolveDiscovered(link, expected, _signal, active) {
-        lookups.push({ address: link, expectedEventId: expected });
+      async resolveDiscovered(link, expected, _signal, active, networkReadGranted) {
+        lookups.push({ address: link, expectedEventId: expected, ...(expected === undefined ? {networkReadGranted} : {}) });
         if (paused) await paused;
         if (lookupError) throw lookupError;
         active();
@@ -503,10 +503,10 @@ test('a failed pin persistence operation never reports a successful pin receipt'
   assert.deepEqual((await database.bindWorkspace(owner).port.load())?.snapshot.pins?.map(pin => pin.appId), ['napplet-discovery']);
 });
 
-test('an ordinary published catalog can request a verified coordinate through its link grant', async () => {
+for (const domains of [['link'], ['link', 'relay']]) test('published catalog named open with ' + domains.join(' + '), async () => {
   const catalog = { ...target, id: '44444444-4444-4444-8444-444444444444', appId: 'other-catalog' };
   const caller = { ...registration, fixture: 'published' as const, publisher: catalog.publisher,
-    appId: catalog.appId, version: catalog.version, sessionId: catalog.id, instanceId: catalog.id, domains: ['link'] };
+    appId: catalog.appId, version: catalog.version, sessionId: catalog.id, instanceId: catalog.id, domains };
   const env = setup(openNapplet(emptyWorkspace(), catalog), undefined, undefined, caller);
   const message = {type: 'link.open', id: 'link1', url: 'nostr:' + address, options: {label: 'Untrusted title'}};
   const pending = env.run('portable', {message, source: catalog});
@@ -516,7 +516,7 @@ test('an ordinary published catalog can request a verified coordinate through it
   assert.equal(review.request.source.id, catalog.id);
   assert.equal(review.request.target.metadata.title, 'Open test title');
   assert.equal(review.request.target.eventId, signed.id);
-  assert.deepEqual(env.lookups, [{address: message.url, expectedEventId: undefined}]);
+  assert.deepEqual(env.lookups, [{address: message.url, expectedEventId: undefined, networkReadGranted: domains.includes('relay')}]);
   env.decide(review.id, true);
   await until(() => env.state().focusedId === target.id);
   env.ready(); env.focusTarget();

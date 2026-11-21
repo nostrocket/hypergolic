@@ -163,7 +163,8 @@ async function openExact(ports: Ports, launch: Launch, attempt: Attempt, active:
   signal: AbortSignal): Promise<DiscoveryOpenOutcome> {
   const { request } = launch.captured;
   const { runtime, workspace } = launch;
-  const artifact = await runtime.resolveDiscovered(request.address, request.expectedEventId, signal, active);
+  const networkReadGranted = launch.captured.origin.domains.includes('relay');
+  const artifact = await runtime.resolveDiscovered(request.address, request.expectedEventId, signal, active, networkReadGranted);
   active();
   assertVerifiedArtifact(artifact);
   const { manifest, aggregateHash: version } = artifact;

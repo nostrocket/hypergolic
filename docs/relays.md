@@ -35,7 +35,7 @@ current Network list when a request is admitted; it no longer holds the startup
 defaults for the process lifetime.
 
 Lookup selections feed Settings opens, saved-revision reopens and update checks.
-[Reviewed opens from Discover](published-open.md) query the union of the selected
+[Reviewed catalog opens with Relay access](published-open.md), including those from Discover, query the union of the selected
 Lookup and Network relays so a publication visible on a Network relay can be
 resolved there. [Bounded historical queries](relay-query.md) snapshot the current Network list and
 use native WSS. [Public identity data](public-identity-data.md) uses that query

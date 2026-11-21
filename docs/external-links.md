@@ -20,7 +20,7 @@ accepted OS handoff for HTTPS.
 
 Any foreground caller with the link grant can request `link.open("nostr:" + naddr)`.
 Hypergolic resolves the supported kind-35129 coordinate on the account's
-configured Lookup relays. Relay hints cannot add destinations. The selected
+configured Lookup relays. When the caller also has Relay access, the shell includes the owner’s configured Network relays so it can resolve a listing seen there. Relay hints cannot add destinations. The selected
 revision may have changed since a catalog displayed it. The shell checks the
 signed manifest and artifact bytes and presents its own review with the verified
 target, publisher, revision and requested access. Approval is required even for

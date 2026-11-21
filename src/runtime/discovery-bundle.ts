@@ -2,8 +2,8 @@
 export const DISCOVERY_BUNDLE = Object.freeze({
   "title": "Discover",
   "appId": "napplet-discovery",
-  "sha256": "ba4e38befb0e5dcf06d898f6fc9edc589349f289369f100922d13413669eaccf",
-  "aggregateHash": "d090578d980c6b5eae07bc6ff1d17484eafdf478266caeddbd24c3958d163e2b",
+  "sha256": "a9b9694f77fbaed556c8efdc10bf3f47b594acbf8ea6b37cb02b8991510a1bf1",
+  "aggregateHash": "27b942464ddf6fbb2479922acc06e33bc0926edfff36dd8f2d55336380836fda",
   "domains": Object.freeze([
     "relay",
     "resource",

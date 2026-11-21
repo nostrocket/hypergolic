@@ -154,7 +154,7 @@ test('an invalid replica with a matching ID cannot suppress a later valid signed
   assert.equal(artifact.manifest.id, valid.id);
 });
 
-test('only exact Discover requests use the normalized union of selected relay roles', async () => {
+test('reviewed catalog opens use selected relay roles and verify the newest available revision', async () => {
   const displayed = modern(1_700_000_001);
   const latest = modern(1_700_000_002);
   const shared = 'wss://relay.example.org';
@@ -174,15 +174,17 @@ test('only exact Discover requests use the normalized union of selected relay ro
     assertActive: () => undefined };
   const discover = { ...options, networkRelays: ['wss://relay.example.org:443/', networkOnly] };
   await assert.rejects(loadPublishedArtifact(link, options), { code: 'PUBLISHED_NOT_FOUND' });
-  await assert.rejects(loadPublishedArtifact(link, discover), { code: 'PUBLISHED_LOAD_FAILED' });
+  const portable = await loadPublishedArtifact(link, discover);
+  assert.equal(portable.manifest.id, latest.id);
   await assert.rejects(loadPublishedArtifact(link, { ...discover, expectedEventId: displayed.id }),
     { code: 'PUBLISHED_REVISION_CHANGED' });
-  assert.equal(blobReads, 0);
+  assert.equal(blobReads, 1);
   const artifact = await loadPublishedArtifact(link, { ...discover, expectedEventId: latest.id });
   assert.equal(artifact.manifest.id, latest.id);
-  assert.equal(blobReads, 1);
+  assert.equal(blobReads, 2);
   assert.deepEqual(queries, [
     { relays: [shared], discovery: undefined },
+    { relays: [shared, networkOnly], discovery: true },
     { relays: [shared, networkOnly], discovery: true },
     { relays: [shared, networkOnly], discovery: true },
   ]);

@@ -21,7 +21,7 @@ export interface PublishedLoadOptions {
   readonly pinnedEventId?: string;
   /** A Discover result must still match the latest eligible event on the trusted query. */
   readonly expectedEventId?: string;
-  /** Owner-selected Network destinations are admitted only for an exact Discover request. */
+  /** Owner-selected Network destinations for reviewed catalog opens with Network read authority. */
   readonly networkRelays?: readonly string[];
   /** Session/identity/epoch ownership is checked on each side of every await. */
   readonly assertActive: () => void;
@@ -58,10 +58,10 @@ function active(options: PublishedLoadOptions): void {
 /** Prepare a verified candidate. This function never opens a WebView or grants publisher trust. */
 export async function loadPublishedArtifact(link: unknown, options: PublishedLoadOptions): Promise<VerifiedNappletArtifact> {
   const coordinate = resolvePublishedReference(link);
-  const discovery = options.expectedEventId !== undefined;
+  const discovery = options.expectedEventId !== undefined || options.networkRelays !== undefined;
   if ((options.pinnedEventId !== undefined && !HEX64.test(options.pinnedEventId)) ||
-      (discovery && (options.pinnedEventId !== undefined || !HEX64.test(options.expectedEventId!))) ||
-      (!discovery && options.networkRelays !== undefined) ||
+      (options.expectedEventId !== undefined && !HEX64.test(options.expectedEventId)) ||
+      (discovery && options.pinnedEventId !== undefined) ||
       (coordinate.kind === 5129 && (discovery || (options.pinnedEventId !== undefined && options.pinnedEventId !== coordinate.eventId)))) throw new PublishedLoadError();
   const relays = Object.freeze([...new Set([
     ...checkedRole(options.lookupRelays), ...checkedRole(options.networkRelays ?? []),

@@ -631,6 +631,8 @@ test('exact discovery review binds staging, then transfers lifetime to the mount
   const sourceActive = () => { if (!focused) throw new Error('Caller unfocused'); };
   const signal = new AbortController();
   const artifact = await owner.resolveDiscovered(LINK, EMBEDDED_TEST_EVENT.id, signal.signal, sourceActive);
+  const fromPortableCatalog = await owner.resolveDiscovered(LINK, undefined, signal.signal, sourceActive, true);
+  assert.equal(fromPortableCatalog.manifest.id, artifact.manifest.id);
   const releasePin = await owner.retainForPin(artifact, signal.signal, sourceActive);
   const pinRow = sqlite.raw(PUBLISHED_ARTIFACT_CACHE_DATABASE).prepare('SELECT event_id FROM verified_published_artifacts').get();
   assert.equal(pinRow?.event_id, EMBEDDED_TEST_EVENT.id);

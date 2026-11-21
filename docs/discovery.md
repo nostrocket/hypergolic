@@ -1,6 +1,6 @@
 # Discover
 
-Discover is the packaged napplet catalog. Open it from the workspace overview or **Settings → Discover napplets**. Opening Discover again focuses its existing workspace card. The guest reads signed publications from the selected Network relays. Hypergolic resolves an Open request through the selected Lookup relays and presents native review for the verified revision. [Published opening contract](published-open.md)
+Discover is the packaged napplet catalog. Open it from the workspace overview or **Settings → Discover napplets**. Opening Discover again focuses its existing workspace card. The guest reads signed publications from the selected Network relays. Hypergolic resolves an Open request through the selected Lookup and Network relays and presents native review for the verified revision. [Published opening contract](published-open.md)
 
 The feed opens with search and recent napplets. Each row shows the app, publisher and publication age. A community recommendation can appear when a public recommendation list references a loaded app. Select the recommendation to read the same details available from the recent feed. Recent napplets keep their publication order regardless of endorsements.
 

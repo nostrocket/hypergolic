@@ -330,7 +330,7 @@ main:has(#listing:not([hidden])) { padding: .75rem clamp(.85rem, 4vw, 1.5rem) 1.
 #listing .scope { font-size: .75rem; }
 #listing .notice { border: 0; padding: .2rem 0 .5rem; margin: 0; background: transparent; font-size: .76rem; line-height: 1.4; }
 #listing .row { padding: .8rem 0; border-color: var(--well-line); }
-#listing .row-cell { display: grid; grid-template-columns: minmax(0, 1fr) 52px; gap: .4rem; }
+#listing .row-cell { display: grid; grid-template-columns: minmax(0, 1fr) 4rem; gap: .4rem; }
 #listing .row-info { grid-template-columns: 48px minmax(0, 1fr); gap: .65rem; min-width: 0; padding: 0; }
 #listing .row-info:last-child { grid-column: 1 / -1; }
 #listing .app-icon { width: 48px; height: 48px; border-radius: .8rem; border-color: var(--well-line); }
@@ -339,8 +339,29 @@ main:has(#listing:not([hidden])) { padding: .75rem clamp(.85rem, 4vw, 1.5rem) 1.
 .row-publisher { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-age { flex: 0 0 auto; font: .64rem/1.4 var(--mono); }
 #listing .row-description { margin-top: .18rem; font-size: .8rem; line-height: 1.35; -webkit-line-clamp: 1; }
-#listing .row-open { min-width: 44px; min-height: 44px; padding: 0; font-size: .78rem; }
-#listing .row-open { border-radius: 999px; }
+#listing .row-open {
+  align-self: center;
+  justify-self: stretch;
+  position: relative;
+  isolation: isolate;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--orange);
+  font-size: .85rem;
+}
+#listing .row-open::before {
+  content: '';
+  position: absolute;
+  inset: 6px 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--well);
+}
+#listing .row-open[data-opening] .open-label { display: none; }
+#listing .row-open[data-opening] .open-spinner { width: 16px; height: 16px; border-width: 2px; }
 #listing .coverage { font-size: .65rem; line-height: 1.5; }
 #listing .feed-actions { justify-content: space-between; margin-top: .6rem; }
 #listing .feed-actions .secondary { min-width: 8rem; font-size: .86rem; }
