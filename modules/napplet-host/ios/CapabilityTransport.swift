@@ -74,7 +74,7 @@ struct CapabilityConfiguration {
     let expected: Set<String>
     switch fixture {
     case "ux-lab", "close-lab": expected = ["theme"]
-    case "napplet-discovery": expected = ["relay", "resource", "theme", "link"]
+    case "napplet-discovery": expected = ["relay", "resource", "theme", "link", "lists"]
     case "state-lab", "state-lab-peer": expected = ["identity", "storage", "theme"]
     case "approval-lab", "approval-lab-v1", "approval-lab-v2", "approval-lab-v3": expected = ["identity", "relay", "theme"]
     case "upload-lab", "upload-queue-lab": expected = ["upload", "theme"]

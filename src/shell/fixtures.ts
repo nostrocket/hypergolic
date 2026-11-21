@@ -29,7 +29,7 @@ const previousDiscoveryVersions = [
 function compatiblePackagedVersion(variant: BundledVariant, version: string): boolean {
   if (variant === 'nap-support') return version === previousSupportVersion;
   return variant === 'napplet-discovery' && previousDiscoveryVersions.some(previous => previous === version) &&
-    BUNDLED_FIXTURES['napplet-discovery'].domains.join(',') === 'relay,resource,theme,link';
+    BUNDLED_FIXTURES['napplet-discovery'].domains.join(',') === 'relay,resource,theme,link,lists';
 }
 export function bundledDescriptor(variant: BundledVariant, number: number, instance = String(number)): NappletDescriptor {
   const fixture = variant === 'state-lab-other-publisher' ? 'state-lab' : variant;

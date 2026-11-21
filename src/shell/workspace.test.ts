@@ -129,7 +129,7 @@ test('saved Discover uses the reviewed portable catalog replacement', async () =
     const saved = {...latest, version};
     assert.notEqual(saved.version, latest.version);
     assert.deepEqual(resolveBundledSession(saved), resolveBundledSession(latest));
-    assert.deepEqual(resolveBundledSession(saved).domains, ['relay', 'resource', 'theme', 'link']);
+    assert.deepEqual(resolveBundledSession(saved).domains, ['relay', 'resource', 'theme', 'link', 'lists']);
   }
   assert.throws(() => resolveBundledSession({...latest, version: '0'.repeat(64)}));
 });

@@ -126,7 +126,7 @@ for (const version of [
   assert.deepEqual((await binding.port.load())?.snapshot, snapshotWorkspace(original));
   assert.equal(isDiscoveryEntry(previous), true);
   assert.deepEqual(resolveBundledSession(previous), resolveBundledSession(current));
-  assert.deepEqual(resolveBundledSession(previous).domains, ['relay', 'resource', 'theme', 'link']);
+  assert.deepEqual(resolveBundledSession(previous).domains, ['relay', 'resource', 'theme', 'link', 'lists']);
 
   for (const patch of [{version:'a'.repeat(64)}, {publisher:'bundled-unsigned-peer'}, {appId:'state-lab'},
     {source:'published' as const}, {eventId:'b'.repeat(64)}, {title:'Other'}]) {

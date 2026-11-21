@@ -8,6 +8,7 @@ export const DISCOVERY_BUNDLE = Object.freeze({
     "relay",
     "resource",
     "theme",
-    "link"
+    "link",
+    "lists"
   ])
 });

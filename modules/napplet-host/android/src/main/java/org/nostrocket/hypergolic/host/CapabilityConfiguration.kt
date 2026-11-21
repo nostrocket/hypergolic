@@ -47,7 +47,7 @@ internal class CapabilityConfiguration(
     fixture = string("fixture")
     val expected = when (fixture) {
       "ux-lab", "close-lab" -> setOf("theme")
-      "napplet-discovery" -> setOf("relay", "resource", "theme", "link")
+      "napplet-discovery" -> setOf("relay", "resource", "theme", "link", "lists")
       "state-lab", "state-lab-peer" -> setOf("identity", "storage", "theme")
       "approval-lab", "approval-lab-v1", "approval-lab-v2", "approval-lab-v3" -> setOf("identity", "relay", "theme")
       "upload-lab", "upload-queue-lab" -> setOf("upload", "theme")
