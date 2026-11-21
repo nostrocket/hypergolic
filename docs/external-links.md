@@ -1,9 +1,13 @@
 # External links
 
 Hypergolic supports reviewed HTTPS links and in-shell links to named napplet publications.
-The selected [NAP-LINK proposal 53](https://github.com/napplet/naps/blob/e25143355f6d416bfce73b12ec814f1c795ec16a/naps/NAP-LINK.md)
-is open and unmerged, checked 3 October 2026. Draft bytes SHA-256:
+The HTTPS projection follows the selected [NAP-LINK revision](https://github.com/napplet/naps/blob/e25143355f6d416bfce73b12ec814f1c795ec16a/naps/NAP-LINK.md)
+reviewed 3 October 2026. Draft bytes SHA-256:
 `e65cb78b0d30aff82c370a3b21840282649dec16ed984d99dc10e1b800d9ba1d`.
+
+For named napplet links the host implements the optional Nostr scheme and passes
+through a denial reason as described in the [updated NAP-LINK draft](https://github.com/napplet/naps/blob/100e5c939ae6b1ea82cc58587c6da45a1cf8a760/naps/NAP-LINK.md).
+The existing HTTPS projection returns its original status-only result.
 
 ## Selected contract
 
