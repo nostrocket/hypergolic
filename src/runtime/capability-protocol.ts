@@ -8,7 +8,7 @@ import { parseRelayQuery, type RelayQueryRequest } from '../network/relay-query-
 import { LIMITS, type Scope } from '../storage/ports.ts';
 
 export const CAPABILITY_LIMITS = Object.freeze({ messageBytes: 2 * 1024 * 1024, sessionRequests: 1024 });
-export const SUPPORTED_CAPABILITY_DOMAINS = Object.freeze(['identity', 'storage', 'theme', 'relay', 'resource', 'upload', 'link', 'intent', 'inc', 'notify', 'config', 'outbox', 'keys', 'media', 'common', 'cvm']);
+export const SUPPORTED_CAPABILITY_DOMAINS = Object.freeze(['identity', 'storage', 'theme', 'relay', 'resource', 'upload', 'link', 'intent', 'inc', 'notify', 'config', 'outbox', 'keys', 'media', 'common', 'cvm', 'lists']);
 // Published and bundled admission use the same reviewed domain set; operations still enforce grants.
 const NATIVE_CAPABILITY_DOMAINS = SUPPORTED_CAPABILITY_DOMAINS;
 export const IDENTITY_OPERATIONS = ['identity.getPublicKey', 'identity.getRelays', 'identity.getProfile',
@@ -58,7 +58,8 @@ export function decodeNativeRegistration(value: unknown): NativeRegistration {
   const appId=text(data.appId,1024), snapshot=captureSnapshotIdentity(data.snapshot,appId);
   if (snapshot && (data.fixture !== 'published' || Object.hasOwn(data,'appData') || Object.hasOwn(data,'legacyReadOnly'))) return invalid();
   if (!Array.isArray(data.domains) || data.domains.length > NATIVE_CAPABILITY_DOMAINS.length ||
-      data.domains.some(domain => !NATIVE_CAPABILITY_DOMAINS.includes(domain)) || new Set(data.domains).size !== data.domains.length) return invalid();
+      data.domains.some(domain => !NATIVE_CAPABILITY_DOMAINS.includes(domain)) || new Set(data.domains).size !== data.domains.length ||
+      data.domains.includes('lists') && !data.domains.includes('relay')) return invalid();
   if(Object.prototype.hasOwnProperty.call(data,'commonProfile')&&(data.commonProfile!=='social-v1'||data.fixture!=='published'||!data.domains.includes('common')||!data.domains.includes('identity')||!data.domains.some(d=>d==='relay'||d==='outbox')))return invalid();
   if(Object.prototype.hasOwnProperty.call(data,'cvmProfile')&&(data.cvmProfile!=='free-foreground-v1'||data.fixture!=='published'||!data.domains.includes('cvm')))return invalid();
   const appData=Object.prototype.hasOwnProperty.call(data,'appData')?captureAppDataContext(data.appData,{publisher:publicKey(data.publisher),appId:text(data.appId,1024),fixture:identifier(data.fixture),domains:data.domains as string[]}):null;

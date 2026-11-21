@@ -80,7 +80,8 @@ function capabilityReceiver(database: ShellDatabase, native: RuntimeNativePort,
   let generation: string | null = null;
   let broker: ReturnType<typeof createCapabilityBroker> | null = null;
   const canSign = approvals?.canSign;
-  const recommendations = discovery && configuration.fixture === 'napplet-discovery' && configuration.domains.includes('relay') && queries && canSign
+  const bundledRecommendations = !!discovery && configuration.fixture === 'napplet-discovery';
+  const recommendations = (bundledRecommendations || configuration.domains.includes('lists')) && configuration.domains.includes('relay') && queries && canSign
     ? createCatalogRecommendations(configuration.user, queries, () => canSign(configuration.user)) : undefined;
   let streams:ReturnType<typeof createRelaySubscriptionBroker>|null=null;
   let legacyStreams:ReturnType<typeof createLegacySubscriptionBroker>|null=null;
@@ -121,7 +122,7 @@ function capabilityReceiver(database: ShellDatabase, native: RuntimeNativePort,
           if (configuration.domains.includes('upload')) uploads?.enqueue(event.token, {...configuration, generation});
         } else if (event.lane === 'approval') {
           if (!configuration.domains.includes('relay') && !configuration.domains.includes('outbox')) return;
-          approvals?.service.enqueue(event.token, approvals.destinations(), { ...configuration, generation }, recommendations?.bind);
+          approvals?.service.enqueue(event.token, approvals.destinations(), { ...configuration, generation }, recommendations?.bind, !bundledRecommendations);
         } else if(event.lane==='outbox-subscription')outboxSubscriptions?.dispatch(event.token);
         else if(event.lane==='subscription')streams?.dispatch(event.token);
         else if (event.lane === undefined) void broker!.dispatch(event.token);

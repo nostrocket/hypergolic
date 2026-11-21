@@ -1,3 +1,4 @@
+import {listHeader} from '../../src/lists/napplet-recommendations';
 import { outboxReadFailure } from '../../src/outbox/query-contract';
 import { resourceFailure } from '../../src/resources/resource-contract';
 import { queryFailure, storageFailure } from '../../src/runtime/capability-protocol';
@@ -14,7 +15,7 @@ import { parseRelaySubscribe, parseRelayClose } from '../../src/network/relay-su
 const privilegedRequests = new Set([...COMMON_OPERATIONS,'identity.getPublicKey', 'identity.getRelays', 'identity.getProfile',
   'identity.getFollows', 'identity.getMutes', 'identity.getBlocked', 'identity.getList',
   'identity.getZaps', 'identity.getBadges', 'storage.get', 'storage.set', 'storage.remove', 'storage.keys', 'relay.query', 'outbox.query', 'outbox.getEvent', 'outbox.resolveRelays', 'outbox.publish', 'resource.info', 'resource.bytes', 'resource.bytesMany', 'resource.cancel']);
-const additionalCorrelatedRequests = new Set(['relay.publish', 'theme.get', 'link.open', 'upload.info',
+const additionalCorrelatedRequests = new Set(['lists.supported','lists.add','lists.remove','relay.publish', 'theme.get', 'link.open', 'upload.info',
   'upload.upload', 'upload.status', 'intent.invoke', 'intent.available', 'intent.handlers', 'inc.channel.open',
   'inc.channel.list', 'config.get', 'config.registerSchema', 'keys.registerAction', 'notify.send',
   'notify.permission.request', 'media.session.create', 'cvm.discover', 'cvm.request', 'cvm.close']);
@@ -37,6 +38,7 @@ export function quotaReply(value: unknown, domains: readonly string[]): object |
     resourceFailure(header, 'quota-exceeded') ?? storageFailure(header, error) ?? queryFailure(header, error);
   if (denial) return denial;
   if (type === 'relay.publish' || type === 'outbox.publish') return {type: type + '.result', id, ok: false, error};
+  if (type.startsWith('lists.')) return {type:type+'.result',id,ok:false,error};
   if (type.startsWith('cvm.') || type === 'media.session.create') return {type: type + '.result', id, error};
   // The injected SDK accepts this error envelope even for operations with custom success fields.
   return {type: type + '.error', id, error};
@@ -49,6 +51,7 @@ export function validEnvelope(value: unknown): boolean {
   if (typeof message.type === 'string' && message.type.startsWith('config.')) {try {parseConfigMessage(value); return true;} catch {return false;}}
   if (typeof message.type === 'string' && message.type.startsWith('notify.')) {try {parseNotifyMessage(value); return true;} catch {return false;}}
   if (typeof message.type === 'string' && (message.type.startsWith('intent.') || message.type.startsWith('inc.'))) { try { parseRoutingMessage(value); return true; } catch { return false; } }
+  if (listHeader(value)) { try { return new TextEncoder().encode(JSON.stringify(value)).length <= 4096; } catch {return false;} }
   if (message.type === 'link.open') return linkRequestId(value) !== null;
   if (typeof message.type === 'string' && message.type.startsWith('upload.')) {
     try { parseUploadRequest(value); return true; } catch { return false; }

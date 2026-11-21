@@ -32,6 +32,7 @@ import {createConfigAdapter} from './config-adapter';
 import {createNotifyAdapter} from './notify-adapter';
 import { createRoutingAdapter } from './routing-adapter';
 import { createGuestRouting } from './intent-delivery';
+import {createListsAdapter} from './lists-adapter';
 import { createLinkAdapter } from './link-adapter';
 import { createUploadAdapter } from './upload-adapter';
 import { bindResourceMedia, injectResourceMediaGate, isRuntimeInputActive } from './resource-media';
@@ -162,6 +163,7 @@ function makeHooks(native: ReturnType<typeof createNativeClient>, captureRecipie
     workerRelay: { getWorkerRelay: () => null },
     crypto: { verifyEvent: async () => false },
     intent: {isAvailable: () => supported.has('intent')},
+    lists: {isAvailable: () => supported.has('lists') && supported.has('relay')},
     link: {isAvailable: () => supported.has('link')},
     common: {isAvailable: () => supported.has('common')},
     services: { theme: theme.handler,
@@ -169,6 +171,7 @@ function makeHooks(native: ReturnType<typeof createNativeClient>, captureRecipie
       ...(supported.has('notify') ? {notify: {descriptor: {name: 'notify', version: '1.0.0'}, handleMessage: unavailable, onRegistered: registerRouting, onUnregistered: () => registerRouting(null)}} : {}),
       ...(supported.has('intent') ? {intent: {descriptor: {name: 'intent', version: '1.0.0'}, handleMessage: unavailable, onRegistered: registerRouting, onUnregistered: () => registerRouting(null)}} : {}),
       ...(supported.has('inc') ? {inc: {descriptor: {name: 'inc', version: '1.0.0'}, handleMessage: unavailable, onRegistered: registerRouting, onUnregistered: () => registerRouting(null)}} : {}),
+      ...(supported.has('lists') && supported.has('relay') ? {lists:createListsAdapter(native,captureRecipient)} : {}),
       ...(supported.has('link') ? {link: createLinkAdapter(native, captureRecipient)} : {}),
       ...(supported.has('upload') ? { upload: { descriptor: { name: 'upload', version: '1.0.0' }, handleMessage: unavailable } } : {}), ...(supported.has('identity') ? { identity } : {}),
       ...(supported.has('resource') ? { resource: { descriptor: { name: 'resource', version: '1.0.0' }, handleMessage: unavailable } } : {}),
@@ -189,7 +192,7 @@ function makeHooks(native: ReturnType<typeof createNativeClient>, captureRecipie
     } } : {}),
     capabilities: {
       ...(artifact.appData?{appData:artifact.appData}:{}),
-      disabledDomains: ['link', 'upload', 'resource', 'relay', 'identity', 'storage', 'intent', 'inc', 'keys', 'media', 'notify', 'config', 'outbox', 'common', 'cvm', 'mesh'].filter(domain => !supported.has(domain)),
+      disabledDomains: ['lists','link', 'upload', 'resource', 'relay', 'identity', 'storage', 'intent', 'inc', 'keys', 'media', 'notify', 'config', 'outbox', 'common', 'cvm', 'mesh'].filter(domain => !supported.has(domain)),
       resolveEnvironment: () => ({ domains: [...supported], services: ['theme', ...(supported.has('identity') ? ['identity'] : [])] }),
     },
   };
@@ -214,6 +217,7 @@ function approvalTimeouts(artifact: RuntimeMetadata): Readonly<Record<string, nu
     ...(artifact.domains.includes('link') ? {'link.openNapplet': DISCOVERY_LEASE_MS + 5_000} : {}),
     ...(artifact.domains.includes('relay')
       ? { 'relay.publish': artifact.publishTimeoutMs ?? 660_000 } : {}),
+    ...(artifact.domains.includes('lists') ? {'lists.add':690_000} : {}),
     ...(artifact.domains.includes('outbox') ? { 'outbox.publish': 660_000 } : {}),
     ...(artifact.domains.includes('common') ? {'common.follow':660_000,'common.unfollow':660_000,'common.react':660_000,'common.report':660_000}:{}),
   });

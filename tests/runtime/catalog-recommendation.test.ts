@@ -302,3 +302,31 @@ test('unsafe partial data, unusable signed sources and nonpartitions never offer
     assert.ok(['incomplete','unavailable'].includes(String(result.status)),mode);
   }
 });
+
+test('standard add preserves a signed list, checks its revision again and skips existing public items',async()=>{
+  const basis=signed([['d','napplets'],['a',previous],['title','Saved title']],'preserved encrypted content');
+  const f=fixture([basis]);
+  assert.deepEqual(await f.service.prepareAddition(previous,false,f.controller.signal,f.active),{status:'already-recommended'});
+  const result=await f.service.prepareAddition(coordinate,false,f.controller.signal,f.active) as {event:UnsignedEventTemplate,account:string,relays:string[]};
+  assert.equal(result.account,account);
+  assert.deepEqual(result.event.tags,[...basis.tags,['a',coordinate]]);
+  assert.equal(result.event.content,basis.content);
+  const guard=f.service.bind(captureEventSnapshot(result.event,account,result.relays))!;
+  f.state.events=[signed([['d','napplets'],['title','New title']])];
+  await assert.rejects(guard(f.controller.signal,f.active));
+});
+
+test('list add needs explicit creation and never prepares when the current public list cannot be read',async()=>{
+  const f=fixture();
+  assert.deepEqual(await f.service.prepareAddition(coordinate,false,f.controller.signal,f.active),{status:'missing'});
+  f.state.incomplete=true;
+  assert.deepEqual(await f.service.prepareAddition(coordinate,true,f.controller.signal,f.active),{status:'incomplete'});
+});
+
+test('scoped recommendation keeps excluded relays attached to the native review',async()=>{
+  const f=reachableFixture();
+  const result=await f.service.prepareAddition(coordinate,true,f.controller.signal,f.active) as {event:UnsignedEventTemplate,relays:string[]};
+  const guard=f.service.bind(captureEventSnapshot(result.event,account,f.state.relays));
+  assert.deepEqual(guard?.excludedRelays,['wss://offline.example.org/']);
+  assert.deepEqual(guard?.destinations,result.relays);
+});

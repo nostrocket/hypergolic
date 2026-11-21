@@ -417,6 +417,17 @@ diff --git a/dist/index.js b/dist/index.js
 +        { rejectOnError: false, timeoutMs: typeof url === "string" && url.startsWith("nostr:naddr1") ? requestTimeoutsMs["link.openNapplet"] : undefined }
        )
      };
+@@ -2384,8 +2547,8 @@
+   function makeLists() {
+-    const req = (type, payload) => request({ type, ...payload }, `${type}.result`, resultOrError, { rejectOnError: false });
++    const req = (type, payload) => request({ type, ...payload }, `${type}.result`, withoutEnvelope, { rejectOnError: false });
+     return {
+-      supported: () => req("lists.supported", {}),
++      supported: () => req("lists.supported", {}).then((msg) => fieldOrThrow(msg, "lists", "List support unavailable")),
+       add: (list, items, options) => req("lists.add", { list, items, ...options ? { options } : {} }),
+       remove: (list, items, options) => req("lists.remove", { list, items, ...options ? { options } : {} })
+     };
+   }
 @@ -2396,7 +2559,12 @@
        encodeNip19: (input) => req("common.encodeNip19", { input }),
        decodeNip19: (value) => req("common.decodeNip19", { value }),

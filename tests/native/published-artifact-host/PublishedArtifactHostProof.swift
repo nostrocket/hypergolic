@@ -83,7 +83,9 @@ import Foundation
         publisher: parsed.claims.publisher, appId: parsed.claims.identifier,
         version: parsed.claims.aggregateHash), "reject mismatched published \(name)")
     }
-    for domains in [["identity", "identity"], ["unknown"], ["identity", "storage", "theme", "relay", "extra"]] {
+    publishedConfig["domains"] = ["relay", "lists"]
+    try check((try? CapabilityConfiguration(try json(publishedConfig), generation: generation)) != nil, "lists with relay grant")
+    for domains in [["lists"], ["identity", "identity"], ["unknown"], ["identity", "storage", "theme", "relay", "extra"]] {
       publishedConfig["domains"] = domains
       configuredFields["configuration"] = try json(publishedConfig)
       let parsed = PublishedArtifactHostInput(try json(configuredFields))!

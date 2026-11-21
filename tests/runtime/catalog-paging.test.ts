@@ -191,7 +191,7 @@ test('recommendation reads require an eligible Discover binding and exact regist
     user: hex(1), publisher: hex(2), appId: 'napplet-discovery', version: hex(3), instanceId: 'discover-1',
     fixture: 'napplet-discovery', domains: ['relay']};
   const input = {type: 'relay.catalogRecommendation', id: 'read-one'};
-  const recommendations = {async dispatch() {return {status: 'read-only'};}, bind() {return null;}};
+  const recommendations = {async prepareAddition(){throw Error('Unexpected list addition');}, async dispatch() {return {status: 'read-only'};}, bind() {return null;}};
   for (const [configured, owner, sender, expected] of [
     [false, registered, registered, null],
     [true, {...registered, domains: []}, {...registered, domains: []}, null],
@@ -212,7 +212,7 @@ test('a recommendation waits for active catalog reads instead of failing while D
     user:hex(1),publisher:hex(2),appId:'napplet-discovery',version:hex(3),instanceId:'discover-1',fixture:'napplet-discovery',domains:['relay']};
   f.service = {...f.service, query:async()=>{await held.promise;return [];}};
   let recommendationsRead = 0;
-  const recommendations = {async dispatch(){recommendationsRead++;return {status:'read-only'};},bind(){return null;}};
+  const recommendations = {async prepareAddition(){throw Error('Unexpected list addition');}, async dispatch(){recommendationsRead++;return {status:'read-only'};},bind(){return null;}};
   const broker = createCapabilityBroker(database,native,{registration:registered,assertActive(){}},
     f.service,undefined,undefined,undefined,undefined,undefined,true,recommendations);
   const reads = [1,2].map(index => broker.dispatch(native.add(registered,{type:'relay.query',id:'held-'+index,filters:[{}]})));
@@ -225,4 +225,21 @@ test('a recommendation waits for active catalog reads instead of failing while D
   await Promise.all([...reads,pending]);
   assert.equal(recommendationsRead,1);
   assert.deepEqual(native.results.get(token),{type:'relay.catalogRecommendation.result',id:'recommendation',result:{status:'read-only'}});
+});
+
+test('standard list preparation accepts an ordinary published caller with both grants and authenticates its captured owner',async t=>{
+  const {database}=await setup(t), native=new NativeLeases(), f=fixture();
+  const caller:NativeRegistration={sessionId:'independent',generation:'generation',epoch:1,user:hex(1),publisher:hex(2),appId:'ordinary-catalog',
+    version:hex(3),instanceId:'instance',fixture:'published',domains:['lists','relay']};
+  const coordinate='35129:'+hex(2)+':example';
+  const input={type:'lists.prepareRecommendation',id:'list-1',coordinate,create:true};
+  const calls:unknown[]=[];
+  const service={async prepareAddition(target:string,create:boolean){calls.push([target,create]);return {status:'missing'};},async dispatch(){throw Error('Unexpected legacy read');},bind(){return null;}};
+  for(const [grants,epoch,works] of [[['lists','relay'],1,true],[['relay'],1,false],[[],1,false],[['lists','relay'],2,false]] as const){
+    const registration={...caller,domains:grants};
+    const broker=createCapabilityBroker(database,native,{registration,assertActive(){}},f.service,undefined,undefined,undefined,undefined,undefined,false,service);
+    const token=native.add({...registration,epoch},input);await broker.dispatch(token);
+    assert.deepEqual(native.results.get(token),works?{type:'lists.prepareRecommendation.result',id:'list-1',result:{status:'missing'}}:null);
+  }
+  assert.deepEqual(calls,[[coordinate,true]]);
 });

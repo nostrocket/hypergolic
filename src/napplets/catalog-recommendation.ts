@@ -124,7 +124,13 @@ class CatalogRecommendations {
   constructor(user: string, queries: RelayQueryService, canSign: () => Promise<boolean>) {
     this.account = publicKey(user); this.reader = createRecommendationReader(this.account, queries); this.canSign = canSign;
   }
-  async dispatch(input: unknown, signal: AbortSignal, active: () => void): Promise<object> {
+  dispatch(input: unknown, signal: AbortSignal, active: () => void): Promise<object> {
+    return this.prepare(input, signal, active);
+  }
+  prepareAddition(coordinate: string, create: boolean, signal: AbortSignal, active: () => void): Promise<object> {
+    return this.prepare({type:TYPE,id:'list-prepare',account:this.account,coordinate,revision:null}, signal, active, create);
+  }
+  private async prepare(input: unknown, signal: AbortSignal, active: () => void, create?: boolean): Promise<object> {
     const {account, reader, consumed, canSign} = this;
     const {lifecycle, network, latest, destinations} = reader;
     lifecycle(signal, active);
@@ -141,11 +147,18 @@ class CatalogRecommendations {
       if (!await canSign()) {lifecycle(signal, active); return Object.freeze({status: 'read-only'});}
       this.reader.lifecycle(signal, active);
       expected = network();
-      const reachable = this.takeReachable(row, offered, expected);
-      const current = await latest(signal, active, expected, reachable), revision = current?.id ?? null;
+      let reachable = this.takeReachable(row, offered, expected);
+      const current = await latest(signal, active, expected, reachable).catch(error => {
+        if (create === undefined || !(error instanceof RecommendationError) || !error.reachable) throw error;
+        // The native publication review discloses this exact partition before signing.
+        reachable = error.reachable;
+        return reachable.current;
+      });
+      const revision = current?.id ?? null;
       if (row.coordinate === undefined) return Object.freeze({status: 'ready', account, revision,
         recommended: recommendedCoordinates(current)});
-      if (row.revision !== revision) return Object.freeze({status: 'stale'});
+      if (create === false && !current) return Object.freeze({status:'missing'});
+      if (create === undefined && row.revision !== revision) return Object.freeze({status: 'stale'});
       if (current?.tags.some(tag => tag[0] === 'a' && tag[1] === row.coordinate)) return Object.freeze({status: 'already-recommended'});
       if (consumed.size >= 64 || this.checkedRevision === revision || this.ticket >= Number.MAX_SAFE_INTEGER) return Object.freeze({status: 'unavailable'});
       const now = Math.floor(Date.now() / 1000);
@@ -158,7 +171,7 @@ class CatalogRecommendations {
       if (!fitsPublication(snapshot) || consumed.has(snapshot.hash)) return Object.freeze({status: 'unavailable'});
       lifecycle(signal, active, expected);
       this.prepared = Object.freeze({snapshot, revision, network: expected, ticket: ++this.ticket, ...(reachable ? {reachable} : {})});
-      return Object.freeze({status: 'prepared', event: snapshot.event, relays: reachable?.destinations ?? snapshot.destinations});
+      return Object.freeze({status: 'prepared', ...(create === undefined ? {} : {account}), event: snapshot.event, relays: reachable?.destinations ?? snapshot.destinations});
     } catch (error) {
       this.reader.lifecycle(signal, active);
       const offer = offering && expected && error instanceof RecommendationError && error.reachable
@@ -237,5 +250,5 @@ class CatalogRecommendations {
  * This cannot detect a relay hiding newer data or writes after the final recheck. */
 export function createCatalogRecommendations(user: string, queries: RelayQueryService, canSign: () => Promise<boolean>) {
   const service = new CatalogRecommendations(user, queries, canSign);
-  return Object.freeze({dispatch: service.dispatch.bind(service), bind: service.bind.bind(service)});
+  return Object.freeze({dispatch: service.dispatch.bind(service), prepareAddition: service.prepareAddition.bind(service), bind: service.bind.bind(service)});
 }

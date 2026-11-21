@@ -57,7 +57,7 @@ export function captureRecommendationRead(value:unknown) {
     !row.recommended.every(item=>typeof item==='string'&&item.length<=512))throw Error('Invalid list');
   return {status:'ready',account:row.account,revision:row.revision,recommended:[...row.recommended]};
 }
-function prepared(value:unknown,coordinate:string) {
+export function preparedRecommendation(value:unknown,coordinate:string) {
   const row=record(value),event=record(row.event);
   if(row.status!=='prepared'||Object.keys(row).length!==3||Object.keys(event).length!==4||event.kind!==30267||
     !Number.isSafeInteger(event.created_at)||Number(event.created_at)<0||typeof event.content!=='string'||
@@ -119,7 +119,7 @@ export function createRecommendationsReceiver(source:Window,native:ReturnType<ty
       const reply=record(result);
       if(reply.status==='incomplete'){send(captureRecommendationRead(reply));return;}
       if(terminal.has(String(reply.status))&&Object.keys(reply).length===1){send(reply);return;}
-      const plan=prepared(result,request.coordinate);
+      const plan=preparedRecommendation(result,request.coordinate);
       if(!live())return;
       const receipt=record(await native.request({type:'relay.publish',id:'recommendation-publish-'+crypto.randomUUID(),event:plan.event} as NappletMessage,undefined,660_000));
       if(!live())return;

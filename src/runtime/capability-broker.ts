@@ -3,6 +3,7 @@ import {CapabilityReadAdmission, CapabilityReadBusy} from './capability-read-adm
 import {readCommon} from '../common/common-service.ts';
 import {commonFailure,type CommonRequest} from '../common/common-contract.ts';
 import { CATALOG_PAGE, parseCatalogPageRequest } from '../napplets/catalog-page-contract.ts';
+import {LIST_PREPARE} from '../lists/napplet-recommendations.ts';
 import type { createCatalogRecommendations } from '../napplets/catalog-recommendation.ts';
 import { createCatalogPaging } from '../napplets/catalog-paging.ts';
 import type { OutboxReadService } from '../outbox/read-service.ts';
@@ -178,8 +179,18 @@ export function createCapabilityBroker(database: ShellDatabase, native: NativeCa
           response = await resource?.dispatch(payload, {nativeToken: token, assertActive: () => assertActive(token)}) ?? null;
           return;
         }
+        if (type === LIST_PREPARE && registration.domains.includes('lists') && registration.domains.includes('relay') && recommendations) {
+          const row = payload as Record<string,unknown>;
+          if (Object.keys(row).length !== 4 || typeof row.id !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(row.id) ||
+              typeof row.coordinate !== 'string' || row.coordinate.length > 512 || typeof row.create !== 'boolean' || seen.claim(row.id, type)) return;
+          const {coordinate,create} = row;
+          const result = await pending.schedule(() => assertActive(token),signal =>
+            recommendations.prepareAddition(coordinate, create, signal, () => assertActive(token)));
+          response = JSON.stringify({type:LIST_PREPARE + '.result',id:row.id,result});
+          return;
+        }
         if (type === CATALOG_PAGE || type === 'relay.catalogRecommendation') {
-          const result = catalog && await readCatalog(payload, catalog, recommendations, seen, pending, () => assertActive(token));
+          const result = catalog && await readCatalog(payload, catalog, registration.fixture === 'napplet-discovery' ? recommendations : undefined, seen, pending, () => assertActive(token));
           if (result) response = JSON.stringify(result);
           return;
         }
