@@ -8,6 +8,8 @@ import android.net.Uri
 import android.net.http.SslError
 import android.os.Build
 import android.os.Message
+import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowInsets
 import android.view.inputmethod.InputMethodManager
@@ -44,6 +46,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
   @Volatile private var active = false
   private var gameControlsEnabled = false
   private var inputBlocked = false
+  private var restoreEditorFocus = false
   private var expectedUrl: String? = null
   private var closeCheckId: String? = null
   private var closeCheckDeadline = 0L
@@ -268,6 +271,16 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     webView.setOnFocusChangeListener { _, _ -> refreshImeViewport() }
   }
 
+  override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+    if (event.actionMasked == MotionEvent.ACTION_DOWN) restoreEditorFocus = false
+    return super.dispatchTouchEvent(event)
+  }
+
+  override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+    if (event.action == KeyEvent.ACTION_DOWN) restoreEditorFocus = false
+    return super.dispatchKeyEvent(event)
+  }
+
   override fun onApplyWindowInsets(insets: WindowInsets): WindowInsets {
     val margin = dockedImeMargin(insets)
     setImeViewportMargin(margin)
@@ -289,6 +302,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
   override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
     super.onWindowFocusChanged(hasWindowFocus)
     refreshImeViewport()
+    if (hasWindowFocus && restoreEditorFocus) webView.post { updateInputActivity() }
   }
 
   override fun onAttachedToWindow() {
@@ -359,6 +373,11 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
       id.startsWith("resume-") && (active || !RoutingTransport.finishCheckpoint(generation, id)) -> "unknown"
       else -> state
     }
+    // Only a successful response to this view's shell-issued restore command may reclaim input.
+    if (id.startsWith("restore-") && guarded == "clean" && published != null) {
+      restoreEditorFocus = true
+      updateInputActivity()
+    }
     onHostEvent(mapOf("type" to "close-check", "sessionId" to (sessionId ?: ""), "generation" to generation, "id" to id, "state" to guarded))
   }
 
@@ -381,6 +400,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
   private fun updateInputActivity() {
     if (!disposed && loaded) {
       val allowed = active && !inputBlocked && mediaForeground
+      if (allowed && restoreEditorFocus && ready && webView.hasWindowFocus() && !webView.hasFocus()) webView.requestFocus()
       webView.evaluateJavascript("window.__hypergolicInputActive?.($allowed, $gameControlsEnabled)", null)
     }
   }
@@ -388,6 +408,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
   fun setActive(active: Boolean) {
     if (disposed || this.active == active) return
     this.active = active
+    if (!active) restoreEditorFocus = false
     refreshImeViewport()
     if (!active) SelectedFilePicker.revoke(generation)
     ApprovalTransport.focus(generation, active)
@@ -730,6 +751,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
   fun destroySession() {
     if (disposed) return
     disposed = true
+    restoreEditorFocus = false
     finiteVideo.retire(); liveRadio.dispose()
     closeCheckId = null
     pendingNativeReplies.clear()
