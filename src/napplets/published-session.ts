@@ -12,7 +12,6 @@ import { descriptorForPublishedArtifact, publishedHostInput } from './published-
 import { stageAdmittedPublishedArtifact } from './admitted-transfer.ts';
 import { registerTransferSession, PublishedTransferError, type NativePublishedTransferPort } from './native-transfer.ts';
 import { assertVerifiedArtifact, type VerifiedNappletArtifact } from './verified-artifact.ts';
-import {verifiedPublicationIdentity} from './verified-publication-identity.ts';
 import {matchesPublishedAppKey,snapshotEventId} from './published-identity.ts';
 
 export class PublishedSessionError extends Error {
