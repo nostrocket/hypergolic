@@ -290,9 +290,9 @@ export function createPublishedSessionCoordinator(dependencies: PublishedSession
         return release;
       } catch (error) { release(); throw error; }
     },
-    resolveExact: (link: string, expectedEventId: string, signal: AbortSignal, assertActive: () => void) =>
+    resolveExact: (link: string, expectedEventId: string | undefined, signal: AbortSignal, assertActive: () => void) =>
       loadPublishedArtifact(link, { source: ports.source, lookupRelays: ports.lookupRelays(),
-        networkRelays: ports.networkRelays?.() ?? [], signal, assertActive, expectedEventId }),
+        ...(expectedEventId === undefined ? {} : {networkRelays: ports.networkRelays?.() ?? [], expectedEventId}), signal, assertActive }),
     prepareExact: (candidate: VerifiedNappletArtifact, exactOpen: ExactOpenPreparation, signal: AbortSignal) =>
       preparePublishedSession(ports, { candidate, exactOpen }, signal, async () => false),
     reopenPinned: async (descriptor: NappletDescriptor, signal: AbortSignal, review: ConsentReview) =>

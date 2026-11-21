@@ -37,9 +37,9 @@ internal object RoutingTransport {
   }
   @Synchronized fun register(generation: String, config: CapabilityConfiguration): Boolean {
     val trackPublished = config.fixture == "published"
-    if (!trackPublished && !config.publishedOpen && config.grantedDomains.none { it == "intent" || it == "inc" || it == "notify" || it == "config" }) return true
+    if (!trackPublished && !config.publishedOpen && config.grantedDomains.none { it == "intent" || it == "inc" || it == "notify" || it == "config" || it == "link" }) return true
     if (!endpoints.register(generation, config.user, config.epoch, config.grantedDomains.contains("intent"), config.grantedDomains.contains("inc"),
-      config.grantedDomains.contains("notify"), config.grantedDomains.contains("config"), config.publishedOpen, trackPublished)) return false
+      config.grantedDomains.contains("notify"), config.grantedDomains.contains("config"), config.publishedOpen, trackPublished, config.grantedDomains.contains("link"))) return false
     rows[generation] = Row(config); return true
   }
   @Synchronized fun ready(generation: String) { endpoints.ready(generation) }
@@ -66,22 +66,25 @@ internal object RoutingTransport {
     val message = wrapper?.opt("message") as? JSONObject
     val type = message?.opt("type") as? String
     val discovery = type == PUBLISHED_OPEN
+    val link = type == "link.open" && (message?.opt("url") as? String)?.startsWith("nostr:naddr1") == true
+    val launch = discovery || link
     val domain = if (discovery) "published-open" else if (type == "notify.__register") "notify" else if (type == "routing.__register") row?.config?.grantedDomains?.firstOrNull { it == "intent" || it == "inc" || it == "notify" || it == "config" } else type?.substringBefore('.')
     val revision = endpoints.revision()
-    val focusRevision = if (discovery) reviewRevision(generation, revision) else -1
+    val focusRevision = if (launch) reviewRevision(generation, revision) else -1
     val valid = row != null && wrapper != null && wrapper.keys().asSequence().toSet() == setOf("type", "id", "message") &&
       wrapper.opt("type") == "routing.call" && id != null && id.matches(Regex("[A-Za-z0-9_-]{1,128}")) && domain != null && (discovery || domain != "published-open") && mayDeliver(generation, revision, domain) &&
+      (domain != "link" || (link && focusRevision >= 0 && mayReview(generation, revision))) &&
       (!discovery || (focusRevision >= 0 && mayReview(generation, revision) && (message!!.keys().asSequence().toSet() == setOf("type", "id", "address", "expectedEventId") || (message.opt("action") in setOf("pin", "unpin", "pin-state") && message.keys().asSequence().toSet() == setOf("type", "id", "address", "expectedEventId", "action"))))) &&
       ((type != "routing.__register" && type != "notify.__register") || message!!.keys().asSequence().toSet() == setOf("type"))
     if (!valid) { CapabilityTransport.leases.consumeSequence(generation, sequence); reply(null); return null }
     row!!.push = push
     wrapper!!.put("revision", revision)
-    if (discovery) wrapper.put("focusRevision", focusRevision)
+    if (launch) wrapper.put("focusRevision", focusRevision)
     val snapshot = row.config.request(wrapper.toString())
     val respond: (String?) -> Unit = { response ->
       synchronized(this) { reply(if (mayDeliver(generation, revision, domain!!)) response else null) }
     }
-    return (if (discovery) CapabilityTransport.admitPublishedOpen(generation, sequence, snapshot, respond)
+    return (if (launch) CapabilityTransport.admitPublishedOpen(generation, sequence, snapshot, respond)
       else CapabilityTransport.admit(generation, sequence, snapshot, respond)).also { if (it == null) reply(null) }
   }
   private fun resumeIntents() {

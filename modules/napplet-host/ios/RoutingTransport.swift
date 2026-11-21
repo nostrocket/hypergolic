@@ -62,10 +62,10 @@ final class RoutingTransportRegistry: @unchecked Sendable {
   func register(_ generation: String, config: CapabilityConfiguration) -> Bool { lock.withLock {
     let trackPublished = config.fixture == "published"
     guard trackPublished || config.publishedOpen || config.domains.contains("intent") || config.domains.contains("inc") ||
-      config.domains.contains("notify") || config.domains.contains("config") else { return true }
+      config.domains.contains("notify") || config.domains.contains("config") || config.domains.contains("link") else { return true }
     guard endpoints.register(generation, user: config.user, epoch: config.epoch, intent: config.domains.contains("intent"),
       inc: config.domains.contains("inc"), notify: config.domains.contains("notify"), config: config.domains.contains("config"),
-      publishedOpen: config.publishedOpen, trackPublished: trackPublished) else { return false }
+      publishedOpen: config.publishedOpen, trackPublished: trackPublished, link: config.domains.contains("link")) else { return false }
     rows[generation] = Row(config: config); return true
   } }
   func ready(_ generation: String) { lock.withLock { endpoints.ready(generation) } }
@@ -95,6 +95,7 @@ final class RoutingTransportRegistry: @unchecked Sendable {
       let id = wrapper["id"] as? String, id.range(of: "^[A-Za-z0-9_-]{1,128}$", options: .regularExpression) != nil,
       let message = wrapper["message"] as? [String: Any], let type = message["type"] as? String,
       let domain = type == Self.publishedOpen ? "published-open" : type == "notify.__register" ? "notify" : type == "routing.__register" ? row.config.domains.sorted().first(where: {$0 == "intent" || $0 == "inc"}) : type.split(separator: ".").first.map(String.init),
+      domain != "link" || (type == "link.open" && (message["url"] as? String)?.hasPrefix("nostr:naddr1") == true && mayReview(generation, revision: revision)),
       domain != "published-open" || type == Self.publishedOpen,
       mayDeliver(generation, revision: revision, domain: domain),
       type != Self.publishedOpen || (mayReview(generation, revision: revision) && (Set(message.keys) == ["type", "id", "address", "expectedEventId"] || (["pin", "unpin", "pin-state"].contains(message["action"] as? String ?? "") && Set(message.keys) == ["type", "id", "address", "expectedEventId", "action"]))),
@@ -102,9 +103,10 @@ final class RoutingTransportRegistry: @unchecked Sendable {
       _ = CapabilityTransport.leases.consumeSequence(generation, sequence: sequence); reply(nil); return nil
     }
     rows[generation]?.push = push; wrapper["revision"] = revision
-    if type == Self.publishedOpen { wrapper["focusRevision"] = reviewRevision(generation, revision: revision) }
+    let launch = type == Self.publishedOpen || type == "link.open"
+    if launch { wrapper["focusRevision"] = reviewRevision(generation, revision: revision) }
     guard let bytes = try? JSONSerialization.data(withJSONObject: wrapper), let snapshot = try? row.config.request(String(decoding: bytes, as: UTF8.self)),
-      let token = CapabilityTransport.admit(generation, sequence: sequence, snapshot: snapshot, publishedOpen: type == Self.publishedOpen, reply: { [weak self] response in
+      let token = CapabilityTransport.admit(generation, sequence: sequence, snapshot: snapshot, publishedOpen: launch, reply: { [weak self] response in
         reply(self?.mayDeliver(generation, revision: revision, domain: domain) == true ? response : nil)
       }) else { reply(nil); return nil }
     return token

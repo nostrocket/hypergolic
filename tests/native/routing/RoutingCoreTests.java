@@ -52,6 +52,12 @@ public final class RoutingCoreTests {
     expect(!discovery.mayReview("catalog")); expect(discovery.mayDeliver("catalog", "published-open"));
     discovery.ready("target"); discovery.focus("target", true);
     expect(discovery.mayReview("target")); expect(!discovery.mayDeliver("target", "published-open"));
+    expect(!discovery.mayDeliver("target", "link"));
+    expect(discovery.register("third-party", a, 0, false, false, false, false, false, true, true));
+    discovery.ready("third-party"); expect(discovery.mayDeliver("third-party", "link"));
+    expect(!discovery.mayDeliver("third-party", "published-open")); expect(!discovery.mayReview("third-party"));
+    discovery.focus("third-party", true); expect(discovery.mayReview("third-party"));
+    discovery.revoke("third-party"); expect(!discovery.mayDeliver("third-party", "link"));
     discovery.revoke("catalog"); expect(!discovery.mayDeliver("catalog", "published-open"));
     AtomicLong clock = new AtomicLong(1_000);
     CapabilityLeaseRegistry leases = new CapabilityLeaseRegistry(clock::get);

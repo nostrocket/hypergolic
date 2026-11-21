@@ -1,3 +1,4 @@
+import { parseLinkRequest, linkDenied } from '../links/link-contract.ts';
 import { pinNapplet, isPinned, pinnedNapplets, unpinNapplet } from '../shell/pins.ts';
 import { descriptorForPublishedArtifact } from './published-host-input.ts';
 import { verifiedLaunchMetadata } from './verified-launch-metadata.ts';
@@ -66,7 +67,6 @@ function pause(signal: AbortSignal): Promise<void> {
 function capture(raw: string, owner: CapabilityOwner, source: NappletDescriptor) {
   const captured = decodeNativeRequest(raw);
   const origin = decodeNativeRegistration(owner.registration);
-  if (!isDiscoveryEntry(source)) throw cancelled();
   const sourceIdentity = source.source === 'bundled' ? resolveBundledSession(source) : {...source, fixture: 'published'};
   if (JSON.stringify(captured.registration) !== JSON.stringify(origin) || source.id !== origin.sessionId ||
       sourceIdentity.fixture !== origin.fixture || sourceIdentity.appId !== origin.appId ||
@@ -75,7 +75,14 @@ function capture(raw: string, owner: CapabilityOwner, source: NappletDescriptor)
     ['type', 'id', 'message', 'revision', 'focusRevision']);
   if (type !== 'routing.call' || typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(id) ||
       !integer(revision) || !integer(focusRevision)) throw cancelled();
-  return { origin, id, revision, focusRevision, request: parseDiscoveryOpen(message) };
+  if (message && typeof message === 'object' && 'type' in message && message.type === 'link.open') {
+    const link = parseLinkRequest(message);
+    if (!origin.domains.includes('link') || !link.url.startsWith('nostr:naddr1')) throw cancelled();
+    return { origin, id, revision, focusRevision, linkId: link.id,
+      request: { address: link.url, expectedEventId: undefined, action: undefined } };
+  }
+  if (!isDiscoveryEntry(source)) throw cancelled();
+  return { origin, id, revision, focusRevision, linkId: undefined, request: parseDiscoveryOpen(message) };
 }
 
 function canonicalCoordinate(address: string): NappletCoordinate | null {
@@ -108,7 +115,7 @@ function requestScope(ports: Ports, captured: Captured, token: string, owner: Ca
         current.session.epoch !== origin.epoch || current.session.vault.selectedPubkey !== origin.user ||
         state.user !== origin.user || state.epoch !== origin.epoch || state.revision !== revision ||
         !state.available || !ports.capability.isActive(token) ||
-        !ports.native.mayDeliver(origin.generation, revision, 'published-open')) throw cancelled();
+        !ports.native.mayDeliver(origin.generation, revision, captured.linkId === undefined ? 'published-open' : 'link')) throw cancelled();
     owner.assertActive();
   };
   return { workspace, live };
@@ -163,7 +170,7 @@ async function openExact(ports: Ports, launch: Launch, attempt: Attempt, active:
   const appId = manifest.tags.find(tag => tag[0] === 'd')?.[1];
   const { pubkey: publisher, eventId } = manifest;
   if (appId !== launch.coordinate.identifier || publisher !== launch.coordinate.pubkey ||
-      eventId !== request.expectedEventId) throw new Error('Unverified launch revision');
+      (request.expectedEventId !== undefined && eventId !== request.expectedEventId)) throw new Error('Unverified launch revision');
 
   const matches = () => workspace.getSnapshot().workspace.sessions.filter(session =>
     session.source === 'published' && session.publisher === publisher && session.appId === appId);
@@ -276,8 +283,16 @@ async function runLaunch(ports: Ports, launch: Launch): Promise<DiscoveryOpenOut
 /** One reviewed exact launch per process. The captured source remains the only reply recipient. */
 export function createDiscoveryOpenBroker(ports: Ports) {
   let pending = false;
+  let linkRequests: {generation: string; time: number}[] = [];
   const launch = async (request: Launch): Promise<DiscoveryOpenOutcome> => {
     if (pending) return 'busy';
+    if (request.captured.linkId !== undefined) {
+      const now = performance.now();
+      linkRequests = linkRequests.filter(entry => now - entry.time < 60_000);
+      const generation = request.captured.origin.generation;
+      if (linkRequests.length >= 12 || linkRequests.filter(entry => entry.generation === generation).length >= 3) return 'busy';
+      linkRequests.push({generation, time: now});
+    }
     pending = true;
     try { return await runLaunch(ports, request); }
     finally { pending = false; }
@@ -294,11 +309,18 @@ export function createDiscoveryOpenBroker(ports: Ports) {
       if (!runtime) return;
       const scope = requestScope(ports, captured, token, owner);
       scope.live();
-      const coordinate = canonicalCoordinate(captured.request.address);
+      let coordinate: NappletCoordinate | null = null;
+      if (captured.linkId === undefined) coordinate = canonicalCoordinate(captured.request.address);
+      else {
+        try { coordinate = resolveNappletLink(captured.request.address); }
+        catch { /* Unsupported and invalid coordinates never reach the verifier. */ }
+      }
       const status = coordinate ? await launch({ captured, coordinate, runtime, source, ...scope }) : 'unavailable';
       // Account or renderer revocation suppresses delivery, including after launch.
       scope.live();
-      response = JSON.stringify({ type: 'routing.call.result', id: captured.id, response: status });
+      response = JSON.stringify({ type: 'routing.call.result', id: captured.id, response: captured.linkId === undefined ? status
+        : status === 'opened' ? {type: 'link.open.result', id: captured.linkId, status: 'opened'}
+        : linkDenied(captured.linkId, !coordinate ? 'invalid-url' : status === 'rejected' ? 'user-denied' : 'blocked-by-policy') });
     } catch { /* Revoked native leases have no live recipient. */ }
     finally { if (claimed) ports.capability.finish(token, response); }
   } });

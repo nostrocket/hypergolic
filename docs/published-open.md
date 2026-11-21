@@ -1,4 +1,8 @@
-# Opening published napplets from Discover
+# Opening published napplets from a catalog
+
+Any caller with a link grant can hand a named publication to the shell with NAP-LINK. The [link contract](external-links.md) covers user review, lookup and return values. A catalog can link to a coordinate without an expected event ID. The shell resolves and reviews the actual signed revision before opening it.
+
+## Earlier exact-revision extension
 
 The packaged Discover napplet can ask Hypergolic to open a verified named publication in
 the current workspace. The host injects `window.hypergolic.publishedOpen` into the

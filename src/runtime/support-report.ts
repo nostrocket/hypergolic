@@ -24,7 +24,7 @@ const notes: Readonly<Record<string, string>> = Object.freeze({
   relay: 'Bounded query, subscriptions and approved publication. Encrypted publication is unavailable.',
   resource: 'Bounded HTTPS, Blossom, one-hop Nostr and data bytes; selected audio/video playback. Hashtree, SVG and streaming are unavailable.',
   upload: 'Blossom only; selected files, metadata sanitation and approval for every upload.',
-  link: 'Approved HTTPS links use the device handler. Other schemes are unavailable.',
+  link: 'HTTPS uses the device handler after review. Named napplet links open through verified shell review. Other references are unavailable.',
   intent: 'Reviewed dispatch to installed napplets, including NIP-5D intent delivery. Uninstalled handler discovery is unavailable.',
   inc: 'Selected session-bound messages and channels; no background delivery.',
   notify: 'Foreground shell notifications. OS push is unavailable.',

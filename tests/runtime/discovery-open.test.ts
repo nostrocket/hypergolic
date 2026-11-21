@@ -21,6 +21,7 @@ import { openWorkspaceController, type WorkspaceController } from '../../src/sto
 import { pinNapplet, pinnedNapplets } from '../../src/shell/pins.ts';
 import { createRuntimeOwner, type RuntimeOwner } from '../../src/runtime/runtime-owner.ts';
 import { NativeLeases } from './native-leases.ts';
+import type { NativeRegistration } from '../../src/runtime/capability-protocol.ts';
 import { setup as diskSetup } from '../storage/harness.ts';
 import type { IdentityTransition } from '../../src/security/identity-transition.ts';
 
@@ -62,7 +63,7 @@ function subscriptions() {
   };
 }
 
-function setup(initial = openNapplet(emptyWorkspace(), source), reviews = new RoutingReviewService(), persisted?: WorkspaceController) {
+function setup(initial = openNapplet(emptyWorkspace(), source), reviews = new RoutingReviewService(), persisted?: WorkspaceController, caller: NativeRegistration = registration) {
   let workspace = initial;
   let suppliedRuntime: Pick<RuntimeOwner, 'resolveDiscovered' | 'retainForPin' | 'prepareDiscovered' | 'publishedReadyGeneration' | 'discardPublished'> | null = null;
   let revision = 2;
@@ -70,7 +71,7 @@ function setup(initial = openNapplet(emptyWorkspace(), source), reviews = new Ro
   let available = true;
   let mounted = false;
   let focused = false;
-  const lookups: { address: string; expectedEventId: string }[] = [];
+  const lookups: { address: string; expectedEventId: string | undefined }[] = [];
   let staged = 0;
   let stageError: PublishedTransferError | null = null;
   let paused: Promise<void> | null = null;
@@ -85,7 +86,7 @@ function setup(initial = openNapplet(emptyWorkspace(), source), reviews = new Ro
   const transition = { phase: 'ready', session: { workspace: controller, epoch: 1, vault: { selectedPubkey: user } } } as TransitionSnapshot;
   const native: RoutingNativePort = {
     state: () => ({ user, epoch: 1, revision, available, ownerAvailable: true, foreground: available }),
-    mayDeliver: (generation, candidate, domain) => available && generation === registration.generation && candidate === revision && domain === 'published-open',
+    mayDeliver: (generation, candidate, domain) => available && generation === registration.generation && candidate === revision && (domain === 'published-open' || (domain === 'link' && caller.domains.includes('link'))),
     mayReview: generation => generation === targetGeneration && mounted && focused && available,
     reviewRevision: generation => generation === registration.generation ? focusRevision : null,
     send: () => false, newChannelId: () => '33333333-3333-4333-8333-333333333333', subscribe: lifecycle.subscribe,
@@ -121,12 +122,12 @@ function setup(initial = openNapplet(emptyWorkspace(), source), reviews = new Ro
       discardPublished: id => { discarded.push(id); },
     }),
   });
-  const run = (token: string, options: { message?: typeof request & {action?: 'pin' | 'unpin' | 'pin-state'}; origin?: typeof registration; source?: typeof source } = {}) => {
+  const run = (token: string, options: { message?: unknown; origin?: typeof registration; source?: typeof source } = {}) => {
     held.set(token, JSON.stringify({
-      registration: options.origin ?? registration,
+      registration: options.origin ?? caller,
       request: JSON.stringify({ type: 'routing.call', id: token, message: options.message ?? request, revision: 2, focusRevision: 7 }),
     }));
-    return broker.dispatch(token, { registration, assertActive() {} }, options.source ?? source);
+    return broker.dispatch(token, { registration: caller, assertActive() {} }, options.source ?? source);
   };
   const review = async () => {
     await until(() => reviews.getSnapshot() !== null);
@@ -500,4 +501,27 @@ test('a failed pin persistence operation never reports a successful pin receipt'
   assert.notEqual(env.responses.get('pin'), 'pinned');
   assert.equal(controller.getSnapshot().error, 'STORAGE_FAILURE');
   assert.deepEqual((await database.bindWorkspace(owner).port.load())?.snapshot.pins?.map(pin => pin.appId), ['napplet-discovery']);
+});
+
+test('an ordinary published catalog can request a verified coordinate through its link grant', async () => {
+  const catalog = { ...target, id: '44444444-4444-4444-8444-444444444444', appId: 'other-catalog' };
+  const caller = { ...registration, fixture: 'published' as const, publisher: catalog.publisher,
+    appId: catalog.appId, version: catalog.version, sessionId: catalog.id, instanceId: catalog.id, domains: ['link'] };
+  const env = setup(openNapplet(emptyWorkspace(), catalog), undefined, undefined, caller);
+  const message = {type: 'link.open', id: 'link1', url: 'nostr:' + address, options: {label: 'Untrusted title'}};
+  const pending = env.run('portable', {message, source: catalog});
+  const review = await env.review();
+  assert.equal(review.request.kind, 'published-open');
+  if (review.request.kind !== 'published-open') throw Error('Missing publication review');
+  assert.equal(review.request.source.id, catalog.id);
+  assert.equal(review.request.target.metadata.title, 'Open test title');
+  assert.equal(review.request.target.eventId, signed.id);
+  assert.deepEqual(env.lookups, [{address: message.url, expectedEventId: undefined}]);
+  env.decide(review.id, true);
+  await until(() => env.state().focusedId === target.id);
+  env.ready(); env.focusTarget();
+  await pending;
+  assert.deepEqual(env.responses.get('portable'), {type: 'link.open.result', id: 'link1', status: 'opened'});
+  await env.run('private-pin', {source: catalog, message: {...request, action: 'pin'}});
+  assert.equal(env.responses.get('private-pin'), null);
 });

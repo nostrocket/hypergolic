@@ -9,7 +9,9 @@ async function open(page: import('@playwright/test').Page, mode: string, legacy 
       postMessage(raw: string) {
         const envelope = JSON.parse(raw); if (envelope.type !== 'capability') return;
         const request = JSON.parse(envelope.message); calls.push(request);
-        const response = {type: 'link.open.result', id: mode === 'wrong-id' ? 'wrong' : request.id, status: mode === 'opened' ? 'opened' : 'denied', ...(mode === 'opened' ? {} : {error: 'user-denied'})};
+        const link = request.message ?? request;
+        const receipt = {type: 'link.open.result', id: mode === 'wrong-id' ? 'wrong' : link.id, status: mode === 'opened' ? 'opened' : 'denied', ...(mode === 'opened' ? {} : {error: 'user-denied'})};
+        const response = request.type === 'routing.call' ? {type: 'routing.call.result', id: request.id, response: receipt} : receipt;
         const data = JSON.stringify({type: 'capability.result', sessionId: envelope.sessionId, sequence: envelope.sequence, response: mode === 'revoked' ? null : JSON.stringify(response)});
         for (const listener of listeners) listener({data});
       }};
@@ -44,4 +46,14 @@ test('genuine SDK link starts with an older WebView static API', async ({page}) 
   const frame = await open(page, 'opened', true);
   await frame.locator('#open-link').click();
   await expect(frame.locator('#link-result')).toHaveText(JSON.stringify({status: 'opened'}));
+});
+
+test('SDK napplet link delegates to in-shell review with its request ID intact', async ({page}) => {
+  const frame = await open(page, 'opened');
+  await frame.locator('#link-url').fill('nostr:naddr1example');
+  await frame.locator('#open-link').click();
+  await expect(frame.locator('#link-result')).toHaveText(JSON.stringify({status: 'opened'}));
+  const calls = await page.evaluate(() => (window as any).linkCalls);
+  expect(calls).toHaveLength(1);
+  expect(calls[0]).toMatchObject({type: 'routing.call', message: {type: 'link.open', url: 'nostr:naddr1example'}});
 });

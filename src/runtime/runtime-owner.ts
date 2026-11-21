@@ -39,7 +39,7 @@ export interface RuntimeNativePort extends NativeCapabilityPort { newInstanceId(
 export interface RuntimeOwner {
   publishedCapabilities(session: NappletDescriptor): PublishedCapabilities | null;
   retainForPin(artifact: VerifiedNappletArtifact, signal: AbortSignal, active: () => void): Promise<() => void>;
-  resolveDiscovered(link: string, expectedEventId: string, signal: AbortSignal, active: () => void): Promise<VerifiedNappletArtifact>;
+  resolveDiscovered(link: string, expectedEventId: string | undefined, signal: AbortSignal, active: () => void): Promise<VerifiedNappletArtifact>;
   prepareDiscovered(artifact: VerifiedNappletArtifact, signal: AbortSignal, assertActive: () => void,
     reviewLaunch: (changesAccess: boolean, legacyReadOnlyAvailable?: boolean) => Promise<boolean | 'legacy-read-only-v1'>, existing?: NappletDescriptor): Promise<NappletDescriptor>;
   publishedReadyGeneration(session: NappletDescriptor): string | null;
@@ -101,7 +101,7 @@ function capabilityReceiver(database: ShellDatabase, native: RuntimeNativePort,
           if(configuration.legacyReadOnly && configuration.domains.length === 0 && native.subscriptions && subscriptions) legacyStreams=createLegacySubscriptionBroker(native.subscriptions,native,subscriptions,owner);
           if(configuration.domains.includes('relay')&&native.subscriptions&&subscriptions)streams=createRelaySubscriptionBroker(native.subscriptions,subscriptions,owner);
           if(configuration.domains.includes('outbox')&&native.subscriptions&&outboxStreams)outboxSubscriptions=createOutboxSubscriptionBroker(native.subscriptions,outboxStreams,owner);
-          broker = createCapabilityBroker(database, native, owner, queries, request=>streams?.close(request), resources, identityData, outbox,request=>outboxSubscriptions?.close(request), discovery !== undefined, recommendations);
+          broker = createCapabilityBroker(database, native, owner, queries, request=>streams?.close(request), resources, identityData, outbox,request=>outboxSubscriptions?.close(request), discovery !== undefined && isDiscoveryEntry(discovery.source), recommendations);
         }
         if (event.generation !== generation) return;
         if(event.lane==='legacy-image')void legacyImages?.dispatch(event.token);
@@ -157,7 +157,7 @@ export function createRuntimeOwner(database: ShellDatabase,
     const {hostInput, assertActive: assertPreparedActive, revoke: revokePrepared} = ready;
     const host = JSON.parse(hostInput) as { configuration: string };
     const configuration = JSON.parse(host.configuration) as Omit<NativeRegistration, 'generation'>;
-    const entry = discovery && isDiscoveryEntry(selected) ? { broker: discovery, source: selected } : undefined;
+    const entry = discovery ? { broker: discovery, source: selected } : undefined;
     const assertActive = () => {
       if (revoked || updating.has(selected.id)) throw new ShellStorageError('REVOKED');
       assertPreparedActive();
@@ -165,7 +165,7 @@ export function createRuntimeOwner(database: ShellDatabase,
     };
     const receiver = capabilityReceiver(database, native, approvals, selected.id, configuration, assertActive, queries, subscriptions, resources, uploads, identityData, routing?.broker, notify, config, outbox, outboxStreams, entry, cvm);
     const binding: PublishedRuntimeBinding = Object.freeze({
-      publishedArtifact: entry ? JSON.stringify({...host, configuration: JSON.stringify({...configuration, publishedOpen: true})}) : hostInput,
+      publishedArtifact: entry && isDiscoveryEntry(selected) ? JSON.stringify({...host, configuration: JSON.stringify({...configuration, publishedOpen: true})}) : hostInput,
       requestedDomains: Object.freeze({ requiredDomains: ready.artifact.manifest.requiredDomains,
         optionalDomains: ready.artifact.manifest.optionalDomains }),
       ready(generation: string) {
@@ -214,7 +214,7 @@ export function createRuntimeOwner(database: ShellDatabase,
       if (!coordinator) throw new ShellStorageError('REVOKED');
       return coordinator.retainForPin(artifact, signal, active);
     },
-    resolveDiscovered(link: string, expectedEventId: string, signal: AbortSignal, active: () => void) {
+    resolveDiscovered(link: string, expectedEventId: string | undefined, signal: AbortSignal, active: () => void) {
       if (!coordinator) throw new ShellStorageError('REVOKED');
       return coordinator.resolveExact(link, expectedEventId, signal, active);
     },
@@ -350,7 +350,7 @@ export function createRuntimeOwner(database: ShellDatabase,
           current.version !== descriptor.version || current.source !== descriptor.source || current.title !== descriptor.title) throw new ShellStorageError('REVOKED');
     };
     assertActive();
-    const receiver = capabilityReceiver(database, native, approvals, descriptor.id, configuration, assertActive, queries, subscriptions, resources, uploads, identityData, routing?.broker, notify, config, outbox, outboxStreams, discovery && isDiscoveryEntry(descriptor) ? { broker: discovery, source: descriptor } : undefined);
+    const receiver = capabilityReceiver(database, native, approvals, descriptor.id, configuration, assertActive, queries, subscriptions, resources, uploads, identityData, routing?.broker, notify, config, outbox, outboxStreams, discovery ? { broker: discovery, source: descriptor } : undefined);
     return Object.freeze({ configuration: JSON.stringify(configuration),
       revoke(): void { revoked = true; receiver.revoke(); closeCapabilityReviews(descriptor.id); },
       receive: receiver.receive,

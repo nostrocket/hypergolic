@@ -628,7 +628,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
       val token = RoutingTransport.receive(generation, sequence, message, push, reply) ?: return
       val type = request.optJSONObject("message")?.optString("type")
       val lane = when {
-        type == RoutingTransport.PUBLISHED_OPEN -> "published-open"
+        type == RoutingTransport.PUBLISHED_OPEN || type == "link.open" -> "published-open"
         type?.startsWith("notify.") == true -> "presentation"
         type?.startsWith("config.") == true -> "configuration"
         else -> "routing"

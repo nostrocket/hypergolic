@@ -1,6 +1,6 @@
 # External links
 
-The selected native HTTPS-opening profile implements CAP-07.
+Hypergolic supports reviewed HTTPS links and in-shell links to named napplet publications.
 The selected [NAP-LINK proposal 53](https://github.com/napplet/naps/blob/e25143355f6d416bfce73b12ec814f1c795ec16a/naps/NAP-LINK.md)
 is open and unmerged, checked 3 October 2026. Draft bytes SHA-256:
 `e65cb78b0d30aff82c370a3b21840282649dec16ed984d99dc10e1b800d9ba1d`.
@@ -12,8 +12,18 @@ native-captured napplet/publisher and complete actual destination. The device’
 normal handler may open a browser or associated installed app. The guest label
 cannot choose the destination, review buttons or policy. No remembered link
 allowance, guest opener, shell fetch or returned bytes is granted. `opened` means
-accepted OS handoff, not successful page loading. HTTP, mailto, tel, nostr and
-custom schemes remain gaps without a promised delivery phase.
+accepted OS handoff for HTTPS.
+
+Any foreground caller with the link grant can request `link.open("nostr:" + naddr)`.
+Hypergolic resolves the supported kind-35129 coordinate on the account's
+configured Lookup relays. Relay hints cannot add destinations. The selected
+revision may have changed since a catalog displayed it. The shell checks the
+signed manifest and artifact bytes and presents its own review with the verified
+target, publisher, revision and requested access. Approval is required even for
+an already-running target. A conflicting saved revision uses the ordinary update
+flow. The caller gets a correlated NAP-LINK result. `opened` follows successful
+workspace navigation. Denials do not reveal whether the target is installed.
+Other Nostr references, HTTP, mailto and tel are unsupported.
 
 The conservative URI profile accepts absolute ASCII HTTPS URLs up to 4096 bytes,
 DNS/punycode hosts, canonical dotted IPv4, bracketed IPv6, ports 1–65535 and
@@ -24,9 +34,9 @@ destination. A reviewed HTTPS localhost/private address does not grant guest
 local-network fetching. No DNS or fetch preflight occurs.
 
 The wire envelope is bounded to 16 KiB, IDs to 1–128 bytes and an optional label to
-256 bytes without controls. One review/dispatch is permitted globally, with three
+256 bytes without controls. For HTTPS, one review/dispatch is permitted globally, with three
 admitted reviews per generation and twelve globally per minute, at most 64
-registered generations and a 25-second review expiry. There is no automatic retry.
+registered generations and a 25-second review expiry. Napplet handoffs have one shared pending launch, a two-minute native lease and the same per-minute source and global request limits. There is no automatic retry.
 
 ## Ownership and revocation
 

@@ -730,7 +730,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
       let type = (request["message"] as? [String: Any])?["type"] as? String
       let lane: String
       switch type {
-      case RoutingTransportRegistry.publishedOpen: lane = "published-open"
+      case RoutingTransportRegistry.publishedOpen, "link.open": lane = "published-open"
       case let type? where type.hasPrefix("notify."): lane = "presentation"
       case let type? where type.hasPrefix("config."): lane = "configuration"
       default: lane = "routing"
