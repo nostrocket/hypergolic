@@ -151,7 +151,7 @@ export class ApprovalService {
     this.publish();
   }
   enqueue(token: string, destinationsFromTrustedConfig: unknown, expectedOrigin?: ApprovalOrigin,
-    bindRecommendation?: (event: EventSnapshot) => CatalogRecommendationGuard | null, onlyListRequests = false): boolean {
+    bindRecommendation?: (event: EventSnapshot) => CatalogRecommendationGuard | null): boolean {
     this.refresh();
     let taken: NativeTakenApproval | null;
     try { taken = this.native.take(token); } catch { return false; }
@@ -170,7 +170,7 @@ export class ApprovalService {
       if (nextPresentationId >= Number.MAX_SAFE_INTEGER) denied();
       let recommendation: string | undefined;
       let recommendationExcludedRelays: readonly string[] | undefined;
-      if (bindRecommendation && (!onlyListRequests || taken.requestId.startsWith(LIST_PUBLICATION_PREFIX)) && event.event.kind === 30267 && event.event.tags.some(tag => tag[0] === 'd' && tag[1] === 'napplets')) {
+      if (bindRecommendation && taken.requestId.startsWith(LIST_PUBLICATION_PREFIX) && event.event.kind === 30267 && event.event.tags.some(tag => tag[0] === 'd' && tag[1] === 'napplets')) {
         revalidateRecommendation = bindRecommendation(event) ?? denied();
         recommendation = event.event.tags.at(-1)?.[1];
         ({event, recommendationExcludedRelays} = recommendationScope(event, revalidateRecommendation));

@@ -15,7 +15,7 @@ const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 export type PublishedMetadata = Readonly<{
   publisher: string; appId: string; eventId: string; version: string; htmlHash: string;
   snapshot?: SnapshotIdentity;
-  domains: readonly string[]; publishedOpen?: true; appData?: AppDataContext; mesh?: NativeMeshContext; legacyReadOnly?: LegacyReadOnlyContext;
+  domains: readonly string[]; appData?: AppDataContext; mesh?: NativeMeshContext; legacyReadOnly?: LegacyReadOnlyContext;
 }>;
 export type PublishedDocument = Readonly<{ metadata: PublishedMetadata; html: string }>;
 
@@ -32,23 +32,23 @@ function decodeBase64(value: unknown): Uint8Array {
 }
 const ARTIFACT_DOMAINS = new Set<string>(SUPPORTED_CAPABILITY_DOMAINS);
 function metadata(value: Record<string, unknown>, generation: string): PublishedMetadata {
-  const { publisher, appId, eventId, version, htmlHash, domains, publishedOpen } = value;
+  const { publisher, appId, eventId, version, htmlHash, domains } = value;
   const mesh = value.mesh === undefined ? undefined : captureNativeMeshContext(value.mesh, generation);
   if (typeof publisher !== 'string' || !HEX64.test(publisher) ||
       typeof eventId !== 'string' || !HEX64.test(eventId) ||
       typeof version !== 'string' || !HEX64.test(version) ||
       typeof htmlHash !== 'string' || !HEX64.test(htmlHash) ||
       typeof appId !== 'string' || !appId || new TextEncoder().encode(appId).length > 255 || /[\u0000-\u001f\u007f]/.test(appId) ||
-      (publishedOpen !== undefined && publishedOpen !== true) || !Array.isArray(domains) || domains.length > ARTIFACT_DOMAINS.size + (mesh ? 1 : 0) ||
+      !Array.isArray(domains) || domains.length > ARTIFACT_DOMAINS.size + (mesh ? 1 : 0) ||
       domains.some(domain => typeof domain !== 'string' || !(ARTIFACT_DOMAINS.has(domain) || domain === 'mesh' && mesh !== undefined)) ||
       domains.some((domain, index) => index > 0 && domains[index - 1] >= domain)) throw new Error('Invalid artifact metadata');
   const snapshot = captureSnapshotIdentity(value.snapshot,appId);
-  if (snapshot ? snapshot.eventId !== eventId || publishedOpen !== undefined || value.legacyReadOnly !== undefined || value.appData !== undefined
+  if (snapshot ? snapshot.eventId !== eventId || value.legacyReadOnly !== undefined || value.appData !== undefined
     : appId !== appId.trim()) throw new Error('Invalid artifact source metadata');
   if (mesh && !domains.includes('mesh')) throw new Error('Mesh context without actual grant');
   const legacyReadOnly=value.legacyReadOnly === undefined ? undefined : captureLegacyReadOnly(value.legacyReadOnly, {publisher,appId,eventId,version,htmlHash}, domains as string[]);
   const appData=value.appData===undefined?null:captureAppDataContext(value.appData,{publisher,appId,fixture:'published',domains});
-  return Object.freeze({ ...(snapshot?{snapshot}:{}),...(legacyReadOnly ? {legacyReadOnly} : {}), ...(mesh ? {mesh} : {}), ...(appData?{appData}:{}),publisher, appId, eventId, version, htmlHash, domains: Object.freeze([...domains]), ...(publishedOpen === true ? { publishedOpen } : {}) });
+  return Object.freeze({ ...(snapshot?{snapshot}:{}),...(legacyReadOnly ? {legacyReadOnly} : {}), ...(mesh ? {mesh} : {}), ...(appData?{appData}:{}),publisher, appId, eventId, version, htmlHash, domains: Object.freeze([...domains]) });
 }
 async function sha256(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
   const hash = await crypto.subtle.digest('SHA-256', bytes);
@@ -98,7 +98,7 @@ export async function readPublishedArtifact(native: NativeHost, generation: stri
       const remainingTime = 15_000 - (performance.now() - started);
       if (remainingTime <= 0) throw new Error('Artifact read timed out');
       const value = await receiveChunk(native, generation, sequence, Math.min(2500, remainingTime));
-      if (Object.keys(value).length !== (13 + (value.snapshot === undefined ? 0 : 1) + (value.publishedOpen === true ? 1 : 0) + (value.appData === undefined ? 0 : 1) + (value.mesh === undefined ? 0 : 1) + (value.legacyReadOnly === undefined ? 0 : 1)) || typeof value.totalBytes !== 'number' || !Number.isSafeInteger(value.totalBytes) ||
+      if (Object.keys(value).length !== (13 + (value.snapshot === undefined ? 0 : 1) + (value.appData === undefined ? 0 : 1) + (value.mesh === undefined ? 0 : 1) + (value.legacyReadOnly === undefined ? 0 : 1)) || typeof value.totalBytes !== 'number' || !Number.isSafeInteger(value.totalBytes) ||
           value.totalBytes < 1 || value.totalBytes > MAX_HTML_BYTES ||
           typeof value.byteLength !== 'number' || typeof value.done !== 'boolean') throw new Error('Invalid artifact reply');
       const nextClaims = metadata(value, generation);

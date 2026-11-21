@@ -276,24 +276,10 @@ export function createPublishedSessionCoordinator(dependencies: PublishedSession
   return Object.freeze({
     openLink: async (link: string, signal: AbortSignal, review: ConsentReview) =>
       (await preparePublishedSession(ports, { link }, signal, review)) ?? fail(),
-    async retainForPin(artifact: VerifiedNappletArtifact, signal: AbortSignal, active: () => void) {
-      assertVerifiedArtifact(artifact);
-      const authority = ports.identity.sessionAuthority();
-      const {appId} = verifiedPublicationIdentity(artifact.manifest);
-      const check = () => { authority.assertActive(); active(); if (signal.aborted) fail(); };
-      check();
-      const release = ports.hold(artifact.manifest.eventId);
-      try {
-        const cache = await cacheFor(ports, authority, {user: authority.user, publisher: artifact.manifest.pubkey, appId, assertActive: check});
-        try { await cache.put(artifact, {signal}); } finally { await cache.close(); }
-        check();
-        return release;
-      } catch (error) { release(); throw error; }
-    },
-    resolveExact: (link: string, expectedEventId: string | undefined, signal: AbortSignal, assertActive: () => void, networkReadGranted = false) =>
+    resolveExact: (link: string, signal: AbortSignal, assertActive: () => void, networkReadGranted = false) =>
       loadPublishedArtifact(link, { source: ports.source, lookupRelays: ports.lookupRelays(),
-        ...(expectedEventId !== undefined || networkReadGranted ? {networkRelays: ports.networkRelays?.() ?? []} : {}),
-        expectedEventId, signal, assertActive }),
+        ...(networkReadGranted ? {networkRelays: ports.networkRelays?.() ?? []} : {}),
+        signal, assertActive }),
     prepareExact: (candidate: VerifiedNappletArtifact, exactOpen: ExactOpenPreparation, signal: AbortSignal) =>
       preparePublishedSession(ports, { candidate, exactOpen }, signal, async () => false),
     reopenPinned: async (descriptor: NappletDescriptor, signal: AbortSignal, review: ConsentReview) =>

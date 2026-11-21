@@ -19,7 +19,7 @@ function setup(effects: Partial<ApprovalEffects> = {}, owner = {assertActive() {
   const prepared: EventSnapshot[] = [], replies: (string | null)[] = [];
   let live = true, approved = false, taken = false, cancellations = 0;
   const module: ApprovalModule = {
-    takeApproval: () => { if (taken) return null; taken = true; return JSON.stringify({registration, request: JSON.stringify({type: 'relay.publish', id: 'recommend', event: template})}); },
+    takeApproval: () => { if (taken) return null; taken = true; return JSON.stringify({registration, request: JSON.stringify({type: 'relay.publish', id: 'lists-publish-recommend', event: template})}); },
     prepareApprovalSigning: (_token, raw) => { prepared.push(JSON.parse(raw)); return live; },
     isApprovalLive: () => live, mayReviewApproval: () => live && !approved,
     approveApproval: () => { if (!live || approved) return false; approved = true; return true; },

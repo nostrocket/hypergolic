@@ -47,12 +47,12 @@ private final class TestClock: @unchecked Sendable {
     reviews.setForeground(false); expect(reviews.reviewRevision("settings") == -1); reviews.setForeground(true); expect(!reviews.matchesRevision(deliveryRevision))
     reviews.revoke("settings"); expect(reviews.reviewRevision("settings") == -1)
     let discovery = RoutingEndpointRegistry(); expect(discovery.synchronizeOwner(a, epoch: 0, available: true))
-    expect(discovery.register("catalog", user: a, epoch: 0, intent: false, inc: false, publishedOpen: true))
+    expect(discovery.register("catalog", user: a, epoch: 0, intent: false, inc: false, link: true))
     expect(discovery.register("target", user: a, epoch: 0, intent: false, inc: false, trackPublished: true))
     discovery.focus("catalog", true); expect(!discovery.mayReview("catalog")); discovery.ready("catalog")
-    expect(discovery.mayReview("catalog")); expect(discovery.mayDeliver("catalog", domain: "published-open"))
+    expect(discovery.mayReview("catalog")); expect(discovery.mayDeliver("catalog", domain: "link"))
     expect(!discovery.mayDeliver("catalog", domain: "intent")); discovery.focus("catalog", false)
-    expect(!discovery.mayReview("catalog")); expect(discovery.mayDeliver("catalog", domain: "published-open"))
+    expect(!discovery.mayReview("catalog")); expect(discovery.mayDeliver("catalog", domain: "link"))
     discovery.ready("target"); discovery.focus("target", true)
     expect(discovery.mayReview("target")); expect(!discovery.mayDeliver("target", domain: "published-open"))
     expect(!discovery.mayDeliver("target", domain: "link"))
@@ -61,17 +61,17 @@ private final class TestClock: @unchecked Sendable {
     expect(!discovery.mayDeliver("third-party", domain: "published-open")); expect(!discovery.mayReview("third-party"))
     discovery.focus("third-party", true); expect(discovery.mayReview("third-party"))
     discovery.revoke("third-party"); expect(!discovery.mayDeliver("third-party", domain: "link"))
-    discovery.revoke("catalog"); expect(!discovery.mayDeliver("catalog", domain: "published-open"))
+    discovery.revoke("catalog"); expect(!discovery.mayDeliver("catalog", domain: "link"))
     let clock = TestClock(), leases = CapabilityLeaseRegistry(now: { clock.read() })
     expect(leases.register("catalog"))
     let ordinary = leases.admit("catalog", sequence: 1, snapshot: "{}")!
-    let open = leases.admit("catalog", sequence: 2, snapshot: "{}", publishedOpen: true)!
+    let open = leases.admit("catalog", sequence: 2, snapshot: "{}", nappletLink: true)!
     expect(leases.take(ordinary) != nil); expect(leases.take(open) != nil); expect(leases.take(open) == nil)
     clock.advance(25)
     expect(!leases.isActive(ordinary)); expect(leases.isActive(open))
     expect(leases.setForeground(false).contains(open)); _ = leases.setForeground(true)
     expect(!leases.isActive(open)); expect(!leases.finish(open))
-    let next = leases.admit("catalog", sequence: 3, snapshot: "{}", publishedOpen: true)!
+    let next = leases.admit("catalog", sequence: 3, snapshot: "{}", nappletLink: true)!
     expect(leases.take(next) != nil); clock.advance(120); expect(!leases.isActive(next))
     var credits = RoutingPushCredits()
     expect(credits.reserve(1, envelope: "first")); expect(credits.reserve(2, envelope: "second"))

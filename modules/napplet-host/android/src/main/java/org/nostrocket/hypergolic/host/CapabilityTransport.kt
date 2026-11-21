@@ -15,7 +15,7 @@ internal object CapabilityTransport {
   fun admit(generation: String, sequence: Long, snapshot: String, reply: (String?) -> Unit): String? =
     admit(generation, sequence, snapshot, false, reply)
 
-  fun admitPublishedOpen(generation: String, sequence: Long, snapshot: String, reply: (String?) -> Unit): String? =
+  fun admitNappletLink(generation: String, sequence: Long, snapshot: String, reply: (String?) -> Unit): String? =
     admit(generation, sequence, snapshot, true, reply)
 
   fun enqueue(generation: String, sequence: Long, snapshot: String, reply: (String?) -> Unit, dispatch: (String) -> Unit) {
@@ -34,11 +34,11 @@ internal object CapabilityTransport {
     }
   }
 
-  private fun admit(generation: String, sequence: Long, snapshot: String, publishedOpen: Boolean, reply: (String?) -> Unit): String? {
+  private fun admit(generation: String, sequence: Long, snapshot: String, nappletLink: Boolean, reply: (String?) -> Unit): String? {
     check(Looper.myLooper() == Looper.getMainLooper())
-    val token = (if (publishedOpen) leases.admitPublishedOpen(generation, sequence, snapshot) else leases.admit(generation, sequence, snapshot)) ?: return null
+    val token = (if (nappletLink) leases.admitNappletLink(generation, sequence, snapshot) else leases.admit(generation, sequence, snapshot)) ?: return null
     val access = runCatching { IdentityListAccess.capture(snapshot) }.getOrElse { leases.finish(token); drain(); return null }
-    remember(token, Pending(generation, access, reply), if (publishedOpen) 120_000 else 25_000)
+    remember(token, Pending(generation, access, reply), if (nappletLink) 120_000 else 25_000)
     return token
   }
   private fun remember(token: String, request: Pending, lifetimeMs: Long) {

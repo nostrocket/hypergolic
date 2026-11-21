@@ -251,7 +251,7 @@ test('the published head keeps trusted bootstraps and CSP ahead of publisher con
   await openPublished(page, 'commented-head');
   const guest = await publishedGuest(page);
   await expect.poll(() => guest.evaluate(() => (window as any).prefixProbe)).toEqual({
-    sdk: true, support: true, outcome: 'blocked',
+    sdk: true, support: false, outcome: 'blocked',
   });
   expect(await guest.evaluate(() => document.head.firstElementChild?.getAttribute('content'))).toContain("connect-src 'none'");
   expect(requests).toEqual([]);

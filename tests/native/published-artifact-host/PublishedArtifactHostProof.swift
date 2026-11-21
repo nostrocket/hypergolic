@@ -83,6 +83,10 @@ import Foundation
         publisher: parsed.claims.publisher, appId: parsed.claims.identifier,
         version: parsed.claims.aggregateHash), "reject mismatched published \(name)")
     }
+    var retiredPrivilege = publishedConfig
+    retiredPrivilege["publishedOpen"] = true
+    try check((try? CapabilityConfiguration(try json(retiredPrivilege), generation: generation)) == nil,
+      "published configuration rejects the retired catalog grant")
     publishedConfig["domains"] = ["relay", "lists"]
     try check((try? CapabilityConfiguration(try json(publishedConfig), generation: generation)) != nil, "lists with relay grant")
     for domains in [["lists"], ["identity", "identity"], ["unknown"], ["identity", "storage", "theme", "relay", "extra"]] {

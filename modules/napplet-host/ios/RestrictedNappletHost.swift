@@ -279,7 +279,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     }
     configuration = publishedConfiguration
     configurationSource = input.configuration
-    publishedReader = PublishedArtifactReadOwner(claimed: claimed, domains: publishedConfiguration?.domains ?? ["theme"], publishedOpen: publishedConfiguration?.publishedOpen == true, appData: publishedConfiguration?.appData, legacyReadOnly: publishedConfiguration?.legacyReadOnly?.metadata)
+    publishedReader = PublishedArtifactReadOwner(claimed: claimed, domains: publishedConfiguration?.domains ?? ["theme"], appData: publishedConfiguration?.appData, legacyReadOnly: publishedConfiguration?.legacyReadOnly?.metadata)
     publishedSource = raw
     // Loaded verified read views survive suspension. Native stream/approval/transfer
     // owners independently stop network work and sensitive authority on inactivity.
@@ -730,7 +730,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
       let type = (request["message"] as? [String: Any])?["type"] as? String
       let lane: String
       switch type {
-      case RoutingTransportRegistry.publishedOpen, "link.open": lane = "published-open"
+      case "link.open": lane = "napplet-link"
       case let type? where type.hasPrefix("notify."): lane = "presentation"
       case let type? where type.hasPrefix("config."): lane = "configuration"
       default: lane = "routing"

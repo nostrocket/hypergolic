@@ -65,7 +65,7 @@ public final class CapabilityLeaseRegistry {
   public synchronized String admit(String generation, long sequence, String snapshot) {
     return admit(generation, sequence, snapshot, LIFETIME_MS);
   }
-  synchronized String admitPublishedOpen(String generation, long sequence, String snapshot) {
+  synchronized String admitNappletLink(String generation, long sequence, String snapshot) {
     return admit(generation, sequence, snapshot, 120_000L);
   }
   private String admit(String generation, long sequence, String snapshot, long lifetimeMs) {

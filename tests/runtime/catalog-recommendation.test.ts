@@ -10,13 +10,12 @@ const other = getPublicKey(new Uint8Array(32).fill(42));
 const coordinate = `35129:${other}:battleship`, previous = `35129:${other}:other`;
 const signed = (tags: string[][] = [['d', 'napplets']], content = '', created_at = Math.floor(Date.now()/1000) - 10, signer = secret) =>
   JSON.parse(JSON.stringify(finalizeEvent({kind:30267, content, created_at, tags}, signer))) as NostrEvent;
-const read = {type:'relay.catalogRecommendation', id:'read'};
 function fixture(events: NostrEvent[] = []) {
   const state = {events, relays:['wss://relay.example.org'], incomplete:false, signing:true, active:true, calls:0,
     failedRelays: undefined as undefined | readonly string[], reachableRelays: undefined as undefined | readonly string[],
     beforeQuery: null as null | (()=>Promise<void>), beforeSign: null as null | (()=>Promise<void>)};
   const queries: RelayQueryService = {
-    catalog: {destinations:()=>state.relays, async read(){throw Error('Unexpected unscoped read');}},
+    destinations:()=>state.relays,
     async query(){throw Error('Unexpected incomplete query');},
     async queryDetailed(filters, signal, active, options): Promise<RelayQueryResult> {
       state.calls++;
@@ -32,33 +31,23 @@ function fixture(events: NostrEvent[] = []) {
   const service = createCatalogRecommendations(account,queries,async()=>{if(state.beforeSign)await state.beforeSign();return state.signing;});
   const controller = new AbortController();
   const active = ()=>{if(!state.active)throw Error('Identity or generation revoked');};
-  const dispatch = (input:unknown=read)=>service.dispatch(input,controller.signal,active) as Promise<Record<string,unknown>>;
-  const prepare = (revision:string|null=state.events[0]?.id??null,target=coordinate, selected=account)=>dispatch({...read,id:'prepare',account:selected,revision,coordinate:target});
+  const prepare = (target = coordinate, create = true) =>
+    service.prepareAddition(target, create, controller.signal, active) as Promise<Record<string, unknown>>;
   const bind = (result:Record<string,unknown>)=>service.bind(captureEventSnapshot(result.event,account,result.relays));
-  return {state,queries,service,controller,active,dispatch,prepare,bind};
+  return {state,queries,service,controller,active,prepare,bind};
 }
 function reachableFixture(events: NostrEvent[] = []) {
   const f=fixture(events);
   f.state.relays=['wss://reachable.example.org','wss://offline.example.org'];
   f.state.incomplete=true;f.state.reachableRelays=[f.state.relays[0]!];f.state.failedRelays=[f.state.relays[1]!];
-  const offer=async()=>{
-    const result=await f.dispatch();
-    assert.equal(result.status,'incomplete');
-    const offered=result.offer as {account:string;revision:string|null;token:string};
-    assert.equal(offered.account,account);assert.match(offered.token,/^[0-9a-f]{32}$/);
-    return offered;
-  };
-  const prepare=async(offered:Awaited<ReturnType<typeof offer>>)=>f.dispatch({...read,account,revision:offered.revision,coordinate,reachableToken:offered.token});
   const bind=(plan:Record<string,unknown>)=>f.service.bind(captureEventSnapshot(plan.event,account,f.state.relays));
-  return {...f,offer,prepareReachable:prepare,bindFull:bind};
+  return {...f,bindFull:bind};
 }
 
-test('complete own-list read selects newest signed event with lower-id tie and deduplicates coordinates',async()=>{
-  const old=signed([['d','napplets'],['a',previous]],'old',100);
-  const a=signed([['d','napplets'],['a',coordinate],['a',coordinate],['a','unsupported']], 'one',200);
-  const b=signed([['d','napplets'],['a',previous]], 'two',200);
-  const expected=a.id<b.id?a:b, f=fixture([old,b,a]);
-  assert.deepEqual(await f.dispatch(),{status:'ready',account,revision:expected.id,recommended:expected===a?[coordinate]:[previous]});
+test('preparation uses the newest signed list and breaks timestamp ties by event id',async()=>{
+  const old=signed(undefined,'old',100), a=signed(undefined,'one',200), b=signed(undefined,'two',200);
+  const result=await fixture([old,b,a]).prepare();
+  assert.equal((result.event as UnsignedEventTemplate).content,(a.id<b.id?a:b).content);
 });
 
 test('empty complete network creates exact scoped list and exposes normalized configured destinations',async()=>{
@@ -79,27 +68,24 @@ test('preparation preserves opaque content, unrelated tags and all prior recomme
 });
 
 test('read-only, unavailable routes and incomplete network never produce replacement templates',async()=>{
-  const f=fixture();f.state.signing=false;assert.deepEqual(await f.dispatch(),{status:'read-only'});assert.equal(f.state.calls,0);
+  const f=fixture();f.state.signing=false;assert.deepEqual(await f.prepare(),{status:'read-only'});assert.equal(f.state.calls,0);
   f.state.signing=true;f.state.relays=[];assert.deepEqual(await f.prepare(),{status:'unavailable'});
   f.state.relays=['wss://relay.example.org'];f.state.incomplete=true;assert.deepEqual(await f.prepare(),{status:'incomplete'});
   f.state.incomplete=false;f.state.relays=['wss://relay.example.org','wss://RELAY.example.org/'];assert.deepEqual(await f.prepare(),{status:'unavailable'});
 });
 
 test('absent detailed coverage fails closed instead of falling back to query',async()=>{
-  const f=fixture();delete f.queries.queryDetailed;assert.deepEqual(await f.dispatch(),{status:'unavailable'});
+  const f=fixture();delete f.queries.queryDetailed;assert.deepEqual(await f.prepare(),{status:'unavailable'});
 });
 test('an incomplete list exposes failed configured relays without producing a replacement',async()=>{
   const f=fixture();
   f.queries.queryDetailed=async()=>({events:[],incomplete:true,failedRelays:['wss://relay.example.org/']});
-  assert.deepEqual(await f.dispatch(),{status:'incomplete',failedRelays:['wss://relay.example.org/']});
   assert.deepEqual(await f.prepare(),{status:'incomplete',failedRelays:['wss://relay.example.org/']});
   assert.equal(f.service.bind(captureEventSnapshot({kind:30267,created_at:1,content:'',tags:[['d','napplets']]},account,['wss://relay.example.org'])),null);
 });
 
-test('account mismatch, stale revision and duplicate recommendation are terminal without preparation',async()=>{
+test('duplicate recommendation is terminal without preparation',async()=>{
   const current=signed([['d','napplets'],['a',coordinate]]),f=fixture([current]);
-  assert.deepEqual(await f.prepare(current.id,coordinate,other),{status:'account-changed'});
-  assert.deepEqual(await f.prepare(null),{status:'stale'});
   assert.deepEqual(await f.prepare(),{status:'already-recommended'});
 });
 
@@ -157,24 +143,21 @@ test('revoked identity, cancellation and signer loss cannot pass bound preflight
   }
 });
 
-test('overlapping dispatch is denied and a fresh preparation supersedes a lost host response',async()=>{
+test('overlapping preparation is denied and a fresh preparation supersedes a lost host response',async()=>{
   const f=fixture();let release!:()=>void;
   f.state.beforeQuery=()=>new Promise<void>(resolve=>{release=resolve;});
   const first=f.prepare();await new Promise(resolve=>setImmediate(resolve));
   assert.deepEqual(await f.prepare(),{status:'unavailable'});release();
   const result=await first;assert.equal(result.status,'prepared');f.state.beforeQuery=null;
-  const replacement=await f.prepare(null,previous);assert.equal(replacement.status,'prepared');
+  const replacement=await f.prepare(previous);assert.equal(replacement.status,'prepared');
   assert.equal(f.bind(result),null);assert.equal(typeof f.bind(replacement),'function');
 });
 
-test('request decoding rejects extra fields, getters and invalid coordinates without querying',async()=>{
+test('invalid coordinates cannot trigger a list query',async()=>{
   const f=fixture();
-  for(const input of [{...read,extra:true},{...read,coordinate:'35129:bad:app',account,revision:null},Object.defineProperty({...read},'coordinate',{get(){throw Error('Getter ran');},enumerable:true})]){
-    assert.deepEqual(await f.dispatch(input),{status:'unavailable'});
-  }
+  assert.deepEqual(await f.prepare('35129:bad:app'),{status:'unavailable'});
   assert.equal(f.state.calls,0);
 });
-
 
 test('a failed bound attempt cannot be revived after signer availability returns',async()=>{
   const f=fixture(),result=await f.prepare(),hook=f.bind(result)!;
@@ -189,7 +172,7 @@ test('an in-flight bound check cannot be duplicated or race a second write from 
   const checking=hook(f.controller.signal,f.active);
   await assert.rejects(hook(f.controller.signal,f.active),/consumed/);
   release();await checking;f.state.beforeSign=null;
-  assert.deepEqual(await f.prepare(null,previous),{status:'unavailable'});
+  assert.deepEqual(await f.prepare(previous),{status:'unavailable'});
 });
 
 
@@ -201,7 +184,6 @@ test('known-unsent decline and signer failure permit explicit retry on the same 
       f.state.signing=false;await assert.rejects(hook(f.controller.signal,f.active));f.state.signing=true;
     }
     hook.release(true);
-    assert.deepEqual(await f.dispatch(),{status:'ready',account,revision:null,recommended:[]});
     const retry=await f.prepare();assert.equal(retry.status,'prepared');
     await assert.rejects(hook(f.controller.signal,f.active),/consumed/);
     const fresh=f.bind(retry)!;await fresh(f.controller.signal,f.active);
@@ -213,27 +195,26 @@ test('sent or uncertain publication keeps the old-base lock until remote revisio
   await hook(f.controller.signal,f.active);hook.release();
   assert.deepEqual(await f.prepare(),{status:'unavailable'});
   const current=signed([['d','napplets'],['a',coordinate]]);f.state.events=[current];
-  const retry=await f.prepare(current.id,previous);assert.equal(retry.status,'prepared');
+  const retry=await f.prepare(previous);assert.equal(retry.status,'prepared');
 });
 
 test('a malformed response after preparation does not trap a fresh explicit retry',async()=>{
   const f=fixture();await f.prepare();f.state.incomplete=true;
   assert.deepEqual(await f.prepare(),{status:'incomplete'});
-  f.state.incomplete=false;const retry=await f.prepare(null,previous);assert.equal(retry.status,'prepared');
+  f.state.incomplete=false;const retry=await f.prepare(previous);assert.equal(retry.status,'prepared');
 });
 
 test('stale bound attempt can be released and retried against a fresh scoped read',async()=>{
   const f=fixture(),result=await f.prepare(),hook=f.bind(result)!;
   const current=signed([['d','napplets'],['a',previous]]);f.state.events=[current];
   await assert.rejects(hook(f.controller.signal,f.active),/stale/);hook.release(true);
-  const readResult=await f.dispatch();assert.equal(readResult.revision,current.id);
-  assert.equal((await f.prepare(current.id)).status,'prepared');
+  assert.equal((await f.prepare()).status,'prepared');
 });
 
-test('a host-issued reachable offer preserves the verified list and binds only the exact destination subset',async()=>{
+test('partial preparation preserves the verified list and binds only the exact destination subset',async()=>{
   const current=signed([['d','napplets'],['a',previous],['x','opaque']],'opaque original content');
-  const f=reachableFixture([current]), offered=await f.offer(), plan=await f.prepareReachable(offered);
-  assert.equal(offered.revision,current.id);assert.equal(plan.status,'prepared');
+  const f=reachableFixture([current]), plan=await f.prepare();
+  assert.equal(plan.status,'prepared');
   assert.deepEqual(plan.relays,['wss://reachable.example.org/']);
   assert.deepEqual((plan.event as UnsignedEventTemplate).tags,[...current.tags,['a',coordinate]]);
   assert.equal((plan.event as UnsignedEventTemplate).content,current.content);
@@ -244,41 +225,15 @@ test('a host-issued reachable offer preserves the verified list and binds only t
   await guard(f.controller.signal,f.active);await guard(f.controller.signal,f.active);
 });
 
-test('a complete empty EOSE subset can offer a new list, but ordinary incomplete preparation cannot use it',async()=>{
-  const f=reachableFixture(), offered=await f.offer();
-  assert.equal(offered.revision,null);
-  assert.equal((await f.prepare()).status,'incomplete');
-  assert.deepEqual(await f.prepareReachable(offered),{status:'stale'});
-  const plan=await f.prepareReachable(await f.offer());assert.equal(plan.status,'prepared');
-  assert.deepEqual((plan.event as UnsignedEventTemplate).tags,[['d','napplets'],['a',coordinate]]);
-});
-
-test('reachable tokens are single-use and scoped to this service instance and latest offer',async()=>{
-  const f=reachableFixture(), offered=await f.offer();
-  assert.deepEqual(await reachableFixture().prepareReachable(offered),{status:'stale'});
-  const fresh=await f.offer();
-  assert.deepEqual(await f.prepareReachable(offered),{status:'stale'});
-  assert.deepEqual(await f.prepareReachable(fresh),{status:'stale'});
-  const token=await f.offer();assert.equal((await f.prepareReachable(token)).status,'prepared');
-  assert.deepEqual(await f.prepareReachable(token),{status:'stale'});
-});
-
-test('reachable offers expire and reject changed settings, revisions, recovered peers or a different subset',async t=>{
-  for(const mode of ['expired','network','revision','recovered','subset']){
-    const f=reachableFixture(), offered=await f.offer();
-    if(mode==='expired'){t.mock.timers.enable({apis:['Date'],now:Date.now()+60_001});}
-    if(mode==='network')f.state.relays.push('wss://added.example.org');
-    if(mode==='revision')f.state.events=[signed()];
-    if(mode==='recovered')f.state.incomplete=false;
-    if(mode==='subset'){f.state.reachableRelays=[f.state.relays[1]!];f.state.failedRelays=[f.state.relays[0]!];}
-    assert.deepEqual(await f.prepareReachable(offered),{status:'stale'},mode);
-    t.mock.timers.reset();
-  }
+test('a complete empty EOSE subset requires explicit creation of a missing list',async()=>{
+  const f=reachableFixture();
+  assert.equal((await f.prepare(coordinate,false)).status,'missing');
+  assert.equal((await f.prepare()).status,'prepared');
 });
 
 test('reachable guard rechecks the full network and exact subset before signing and sending',async()=>{
   for(const stage of [0,1])for(const mode of ['network','revision','recovered','subset','invalid']){
-    const f=reachableFixture(), plan=await f.prepareReachable(await f.offer()),guard=f.bindFull(plan)!;
+    const f=reachableFixture(), plan=await f.prepare(),guard=f.bindFull(plan)!;
     if(stage===1)await guard(f.controller.signal,f.active);
     if(mode==='network')f.state.relays.push('wss://added.example.org');
     if(mode==='revision')f.state.events=[signed()];
@@ -298,7 +253,7 @@ test('unsafe partial data, unusable signed sources and nonpartitions never offer
     if(mode==='overlap')f.state.failedRelays=f.state.reachableRelays;
     if(mode==='forged'){const event=signed();event.content='forged';f.state.events=[event];}
     if(mode==='future')f.state.events=[signed(undefined,'',Math.floor(Date.now()/1000)+600)];
-    const result=await f.dispatch();assert.equal(result.offer,undefined,mode);
+    const result=await f.prepare();
     assert.ok(['incomplete','unavailable'].includes(String(result.status)),mode);
   }
 });

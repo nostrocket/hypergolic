@@ -630,22 +630,16 @@ test('exact discovery review binds staging, then transfers lifetime to the mount
   let focused = true;
   const sourceActive = () => { if (!focused) throw new Error('Caller unfocused'); };
   const signal = new AbortController();
-  const artifact = await owner.resolveDiscovered(LINK, EMBEDDED_TEST_EVENT.id, signal.signal, sourceActive);
-  const fromPortableCatalog = await owner.resolveDiscovered(LINK, undefined, signal.signal, sourceActive, true);
-  assert.equal(fromPortableCatalog.manifest.id, artifact.manifest.id);
-  const releasePin = await owner.retainForPin(artifact, signal.signal, sourceActive);
-  const pinRow = sqlite.raw(PUBLISHED_ARTIFACT_CACHE_DATABASE).prepare('SELECT event_id FROM verified_published_artifacts').get();
-  assert.equal(pinRow?.event_id, EMBEDDED_TEST_EVENT.id);
-  assert.equal(calls.length, 0);
-  releasePin();
+  const artifact = await owner.resolveNappletLink(LINK, signal.signal, sourceActive, true);
+  assert.equal(artifact.manifest.id, EMBEDDED_TEST_EVENT.id);
   const busy = new ReviewBusyError();
-  await assert.rejects(owner.prepareDiscovered(artifact, signal.signal, sourceActive, async changesAccess => {
+  await assert.rejects(owner.prepareNappletLink(artifact, signal.signal, sourceActive, async changesAccess => {
     assert.equal(changesAccess, true);
     throw busy;
   }), error => error === busy);
   assert.equal(calls.length, 0);
 
-  await assert.rejects(owner.prepareDiscovered(artifact, signal.signal, sourceActive, async changesAccess => {
+  await assert.rejects(owner.prepareNappletLink(artifact, signal.signal, sourceActive, async changesAccess => {
     assert.equal(changesAccess, true);
     focused = false;
     return true;
@@ -653,7 +647,7 @@ test('exact discovery review binds staging, then transfers lifetime to the mount
   assert.equal(calls.length, 0);
 
   focused = true;
-  const descriptor = await owner.prepareDiscovered(artifact, signal.signal, sourceActive, async changesAccess => {
+  const descriptor = await owner.prepareNappletLink(artifact, signal.signal, sourceActive, async changesAccess => {
     assert.equal(changesAccess, true);
     return true;
   });
@@ -672,18 +666,18 @@ test('exact discovery review binds staging, then transfers lifetime to the mount
   assert.equal(owner.publishedReadyGeneration(descriptor), null);
 
   focused = true;
-  await assert.rejects(owner.prepareDiscovered(artifact, new AbortController().signal, sourceActive, async changesAccess => {
+  await assert.rejects(owner.prepareNappletLink(artifact, new AbortController().signal, sourceActive, async changesAccess => {
     assert.equal(changesAccess, false);
     throw busy;
   }, descriptor), error => error === busy);
   assert.equal(calls.filter(call => call.startsWith('register:')).length, 1);
 
-  await assert.rejects(owner.prepareDiscovered(artifact, new AbortController().signal, sourceActive, async changesAccess => {
+  await assert.rejects(owner.prepareNappletLink(artifact, new AbortController().signal, sourceActive, async changesAccess => {
     assert.equal(changesAccess, false);
     return false;
   }, descriptor));
   register = false;
-  await assert.rejects(owner.prepareDiscovered(artifact, new AbortController().signal, sourceActive, async () => true, descriptor),
+  await assert.rejects(owner.prepareNappletLink(artifact, new AbortController().signal, sourceActive, async () => true, descriptor),
     {code: 'PUBLISHED_TRANSFER_FAILED'});
   assert.equal(calls.filter(call => call.startsWith('register:')).length, 1);
 });

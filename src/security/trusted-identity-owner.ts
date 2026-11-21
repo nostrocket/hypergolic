@@ -5,7 +5,7 @@ import {withCvmRelayDefaults} from '../cvm/cvm-relay-defaults';
 import {CvmService} from '../cvm/cvm-service';
 import {loadCvmNativePort} from '../cvm/cvm-native-loader';
 import { ReviewSlot } from '../shell/review-slot';
-import { createDiscoveryOpenBroker } from '../napplets/discovery-open-broker';
+import { createNappletLinkBroker } from '../links/napplet-link-broker';
 import {createNativeFixturePublisher} from '../fixture-release/native-publisher';
 import type {FixturePublisher} from '../fixture-release/publisher';
 import {loadNativeOutboxSubscriptions} from '../outbox/native-subscription-port';
@@ -142,7 +142,7 @@ async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android
     if(relaySettings)relaySettings=withCvmRelayDefaults(relaySettings,cvmNative.configure);else cvmNative.configure([]);
     cvm=new CvmService(cvmNative.port);
     const reviews = new RoutingReviewService(slot);
-    const discovery = createDiscoveryOpenBroker({ identity: transition, runtime: () => runtime, capability, native: routingNative, reviews });
+    const nappletLinks = createNappletLinkBroker({ identity: transition, runtime: () => runtime, capability, native: routingNative, reviews });
     notifyBroker = new NotifyBroker(capability, routingNative, notifyPermissions);
     configBroker = new ConfigBroker(capability, routingNative, await openNativeConfigStore(), slot);
     routingBroker = new RoutingBroker(capability, routingNative, routingCatalog, reviews, createRoutingTargets(transition, () => runtime, reviews, routingNative));
@@ -162,7 +162,7 @@ async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android
         networkRelays: () => relaySettings?.getSettings().networkRelays ?? [] },
       queries,
       loadNativeRelaySubscriptions(() => relaySettings?.getSettings().networkRelays ?? []),
-      loadNativeResourceHost(() => resourceSettings?.servers() ?? [], queries), uploads, identityData, routing, notifyBroker, configBroker, outbox, loadNativeOutboxSubscriptions(outbox), discovery,cvm);
+      loadNativeResourceHost(() => resourceSettings?.servers() ?? [], queries), uploads, identityData, routing, notifyBroker, configBroker, outbox, loadNativeOutboxSubscriptions(outbox), nappletLinks,cvm);
     const fixturePublisher = developerToolsEnabled ? createNativeFixturePublisher(vault,transition) : undefined;
     return { cvm, profileAvatar, launchReviewMedia, fixturePublisher, notificationSettings: createNotificationSettings(transition, routingNative, notifyBroker), config: configBroker, notify: notifyBroker, routing, listAccess, transition, approvals, relaySettings, resourceSettings, uploadSettings, uploads, reviewSlot, runtime };
   } catch {

@@ -2,10 +2,8 @@ import { RequestHistory } from './request-history.ts';
 import {CapabilityReadAdmission, CapabilityReadBusy} from './capability-read-admission.ts';
 import {readCommon} from '../common/common-service.ts';
 import {commonFailure,type CommonRequest} from '../common/common-contract.ts';
-import { CATALOG_PAGE, parseCatalogPageRequest } from '../napplets/catalog-page-contract.ts';
 import {LIST_PREPARE} from '../lists/napplet-recommendations.ts';
 import type { createCatalogRecommendations } from '../napplets/catalog-recommendation.ts';
-import { createCatalogPaging } from '../napplets/catalog-paging.ts';
 import type { OutboxReadService } from '../outbox/read-service.ts';
 import { outboxReadFailure, OutboxQueryError, type OutboxReadRequest } from '../outbox/query-contract.ts';
 import type { IdentityDataPort } from '../identity/identity-service.ts';
@@ -58,21 +56,10 @@ async function operateStorage(database: ShellDatabase, registration: NativeRegis
   catch (error) { return storageFailure(request, storageError(error))!; }
   finally { binding.revoke(); }
 }
-async function readQuery(request: Extract<CapabilityRequest, {type: 'relay.query'}>, queries: RelayQueryService | undefined, pending: CapabilityReadAdmission, active: () => void, discovery: boolean): Promise<CapabilityReply> {
+async function readQuery(request: Extract<CapabilityRequest, {type: 'relay.query'}>, queries: RelayQueryService | undefined, pending: CapabilityReadAdmission, active: () => void): Promise<CapabilityReply> {
   if (!queries) return queryFailure(request, 'relay query unavailable or busy')!;
   try {
-    const events = await pending.schedule(active, async signal => {
-      const {filters} = request;
-      const feedMetadata = discovery && filters.every(({kinds, authors, '#d': identifiers}) =>
-        Array.isArray(kinds) && kinds.length === 1 && (kinds[0] === 0 && Array.isArray(authors) ||
-          kinds[0] === 30267 && Array.isArray(identifiers) && identifiers.length === 1 && identifiers[0] === 'napplets'));
-      if (!feedMetadata || !queries.queryDetailed) return queries.query(filters, signal, active);
-      // Public feed samples can use verified replies from reachable Network peers.
-      // A slow peer must not consume the whole read before other peers get a turn.
-      const sample = await queries.queryDetailed(filters, signal, active, {completeRelays: true});
-      if (sample.incomplete && !sample.events.length) throw new Error('Incomplete feed metadata read');
-      return sample.events;
-    });
+    const events = await pending.schedule(active, signal => queries.query(request.filters, signal, active));
     return {type: 'relay.query.result', id: request.id, events};
   }
   catch (error) { return queryFailure(request, error instanceof CapabilityReadBusy ? 'relay query unavailable or busy' : 'relay query failed')!; }
@@ -108,23 +95,6 @@ async function readIdentity(request: IdentityRequest, service: IdentityDataPort 
   try {return await (deferred ? pending.schedule(active, read) : pending.run(active, read));}
   catch (error) {return identityFailure(request, error instanceof CapabilityReadBusy ? 'identity data busy' : 'identity data unavailable');}
 }
-async function readCatalog(value: unknown, paging: ReturnType<typeof createCatalogPaging>,
-  recommendations: ReturnType<typeof createCatalogRecommendations> | undefined,
-  seen: RequestHistory, pending: CapabilityReadAdmission, active: () => void): Promise<CapabilityReply | null> {
-  if (!value || typeof value !== 'object' || !('id' in value) || !('type' in value)) return null;
-  const {id, type} = value;
-  if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) return null;
-  const page = type === CATALOG_PAGE ? parseCatalogPageRequest(value) : null;
-  if (!page && !recommendations) return null;
-  const reply = {type: type + '.result', id};
-  const failure = page ? {...reply, error: 'Catalog paging unavailable'} : {...reply, result: {status: 'unavailable'}};
-  if (page && pending.size >= 2 || seen.claim(id, String(type))) return failure;
-  try {
-    const work = (signal: AbortSignal) => page ? paging(page, signal, active) : recommendations!.dispatch(value, signal, active);
-    const result = await (page ? pending.run(active, work) : pending.schedule(active, work));
-    return {...reply, result};
-  } catch {return failure;}
-}
 function invalidRequestReply(payload: unknown, domains: readonly string[]): CapabilityReply | null {
   const common = domains.includes('common') ? commonFailure(payload) : null;
   const relay = domains.includes('relay') ? queryFailure(payload, 'invalid relay query') : null;
@@ -141,11 +111,10 @@ function finishCapability(native: NativeCapabilityPort, token: string, response:
 }
 
 /** One broker per registered native view. It is never passed into the WebView. */
-export function createCapabilityBroker(database: ShellDatabase, native: NativeCapabilityPort, owner: CapabilityOwner, queries?: RelayQueryService, closeRelay?: (request:unknown)=>void, resources?: ResourceHost, identityData?: IdentityDataPort, outbox?: OutboxReadService, closeOutbox?: (request:unknown)=>void, discovery = false, recommendations?: ReturnType<typeof createCatalogRecommendations>) {
+export function createCapabilityBroker(database: ShellDatabase, native: NativeCapabilityPort, owner: CapabilityOwner, queries?: RelayQueryService, closeRelay?: (request:unknown)=>void, resources?: ResourceHost, identityData?: IdentityDataPort, outbox?: OutboxReadService, closeOutbox?: (request:unknown)=>void, recommendations?: ReturnType<typeof createCatalogRecommendations>) {
   const registration = decodeNativeRegistration(owner.registration);
   const expected = JSON.stringify(registration);
   const resource = resources ? createResourceBroker(resources, owner) : null;
-  const catalog = discovery && registration.domains.includes('relay') && queries?.catalog ? createCatalogPaging(queries.catalog) : null;
   const seen = new RequestHistory(CAPABILITY_LIMITS.sessionRequests);
   let disposed = false;
   const pending = new CapabilityReadAdmission();
@@ -189,11 +158,6 @@ export function createCapabilityBroker(database: ShellDatabase, native: NativeCa
           response = JSON.stringify({type:LIST_PREPARE + '.result',id:row.id,result});
           return;
         }
-        if (type === CATALOG_PAGE || type === 'relay.catalogRecommendation') {
-          const result = catalog && await readCatalog(payload, catalog, registration.fixture === 'napplet-discovery' ? recommendations : undefined, seen, pending, () => assertActive(token));
-          if (result) response = JSON.stringify(result);
-          return;
-        }
         let request: CapabilityRequest;
         try { request = parseCapabilityRequest(payload); }
         catch {
@@ -217,7 +181,7 @@ export function createCapabilityBroker(database: ShellDatabase, native: NativeCa
             : await work(new AbortController().signal);}
           catch {assertActive(token);result = commonFailure(request,'relay-timeout')!;}
         } else if (request.type === 'outbox.query' || request.type === 'outbox.getEvent' || request.type === 'outbox.resolveRelays') result = await readOutboxQuery(request, outbox, registration, pending, () => assertActive(token), token);
-        else if (request.type === 'relay.query') result = await readQuery(request, queries, pending, () => assertActive(token), discovery && registration.fixture === 'napplet-discovery');
+        else if (request.type === 'relay.query') result = await readQuery(request, queries, pending, () => assertActive(token));
         else if (domain === 'identity') result = await readIdentity(request as IdentityRequest, identityData, registration, pending, () => assertActive(token));
         else result = await operateStorage(database, registration, request, () => assertActive(token));
         assertActive(token);

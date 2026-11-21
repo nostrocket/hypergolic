@@ -6,7 +6,7 @@ The feed opens with search and recent napplets. Each row shows the app, publishe
 
 Discover samples up to 32 signed kind-30267 lists with the identifier `napplets` through the existing Relay read capability. It matches their exact named-app references to verified catalog entries and shows up to eight app and recommender pairs. Each pick identifies the person who signed the list, using a verified profile name when available or a shortened public key. The sample can use verified results from reachable Network relays while another relay is offline. Reading these public endorsements requires neither a follow list nor a signing identity. If there are no matches, the recent directory is available on its own.
 
-The selected Open button shows **Opening…** until Hypergolic returns a result. Discover pauses other Open actions during that request and shows the outcome beside the selected action. A successful NAP-LINK result means that the shell accepted the handoff.
+The selected listing’s Open button shows a spinner until Hypergolic returns a result. Discover pauses other Open actions during that request and shows the outcome beside the selected action. A successful NAP-LINK result means that the shell accepted the handoff.
 
 ## Build and import
 

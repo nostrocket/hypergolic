@@ -10,7 +10,6 @@ internal class CapabilityConfiguration(
   val sessionId: String
   val fixture: String
   val allowsUpload: Boolean
-  val publishedOpen: Boolean
   val user: String
   val epoch: Long
   val allowsRelay: Boolean
@@ -27,14 +26,12 @@ internal class CapabilityConfiguration(
     require(raw.toByteArray(Charsets.UTF_8).size <= 8192)
     val value = JSONObject(raw)
     val names = setOf("sessionId", "epoch", "user", "publisher", "appId", "version", "instanceId", "fixture", "domains")
-    val open = value.has("publishedOpen")
     val common = value.has("commonProfile")
     val cvm = value.has("cvmProfile")
     val media=value.has("mediaProfile")
     val data=value.has("appData")
     val legacy=value.has("legacyReadOnly")
-    require(value.keys().asSequence().toSet() == names + (if(legacy)setOf("legacyReadOnly") else emptySet()) + (if(open)setOf("publishedOpen") else emptySet()) + (if(common)setOf("commonProfile") else emptySet()) + (if(cvm)setOf("cvmProfile") else emptySet()) + (if(media)setOf("mediaProfile") else emptySet()) + (if(data)setOf("appData") else emptySet()) + (if(expectedSnapshot != null)setOf("snapshot") else emptySet()))
-    require(!open || value.remove("publishedOpen") == true)
+    require(value.keys().asSequence().toSet() == names + (if(legacy)setOf("legacyReadOnly") else emptySet()) + (if(common)setOf("commonProfile") else emptySet()) + (if(cvm)setOf("cvmProfile") else emptySet()) + (if(media)setOf("mediaProfile") else emptySet()) + (if(data)setOf("appData") else emptySet()) + (if(expectedSnapshot != null)setOf("snapshot") else emptySet()))
     fun string(name: String): String = (value.get(name) as? String) ?: error("Invalid configuration")
     for (name in listOf("sessionId", "instanceId", "fixture")) require(string(name).matches(Regex("[A-Za-z0-9_-]{1,80}")))
     for (name in listOf("user", "publisher", "version")) require(string(name).matches(Regex("[0-9a-f]{64}")))
@@ -78,14 +75,12 @@ internal class CapabilityConfiguration(
     appId = string("appId")
     require(appId.startsWith(" 5129:") == (expectedSnapshot != null))
     if (expectedSnapshot != null) {
-      require(allowPublished && fixture == "published" && !open && !data && !legacy)
+      require(allowPublished && fixture == "published" && !data && !legacy)
       val supplied = value.getJSONObject("snapshot")
       val keys = expectedSnapshot.keys().asSequence().toSet()
       require(supplied.keys().asSequence().toSet() == keys && keys.all { supplied.get(it) == expectedSnapshot.get(it) })
       value.put("snapshot", expectedSnapshot)
     }
-    require(!open || (allowPublished && fixture == "published"))
-    publishedOpen = (fixture == "napplet-discovery" && appId == "napplet-discovery") || open
     version = string("version")
     legacyReadOnly = if(legacy) LegacyReadOnlyContext(value.getJSONObject("legacyReadOnly"), publisher, appId, version, fixture, grantedDomains) else null
     appData = if(data) NativeAppDataPolicy.capture(value.get("appData"),publisher,appId,fixture,grantedDomains) else null

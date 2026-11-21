@@ -104,7 +104,7 @@ the existing per-account row. Version 1 snapshots remain readable and receive
 Discover as their initial shortcut. An explicitly empty version 2 pins array is
 preserved, so unpinning Discover survives restart. The SQLite schema is unchanged.
 
-Pin from an open napplet's menu or Discover. Each publication has one shortcut,
+Pin from an open napplet's workspace menu. Each publication has one shortcut,
 keyed by source, publisher and app identifier (snapshot identifiers remain exact).
 Shortcuts retain the selected signed revision. Opening focuses an existing session
 for that publication or reopens the saved descriptor through ordinary artifact

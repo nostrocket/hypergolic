@@ -294,12 +294,12 @@ for (const state of [null, undefined, 'unrecognized-native-state']) {
   });
 }
 
-test('Discover recommendations bind the reviewed list and recheck before signing and sending', async () => {
+test('Lists recommendations bind the reviewed list and recheck before signing and sending', async () => {
   const coordinate = '35129:' + '1'.repeat(64) + ':battleship';
   const template = {...event(30267), tags: [['d', 'napplets'], ['a', coordinate]]};
   for (const stopAt of [0, 1, 2]) {
     const native = new Native(), owned = origin('discover');
-    native.issue('recommend', owned, 'recommend', template);
+    native.issue('recommend', owned, 'lists-publish-recommend', template);
     let checks = 0, signed = 0, sent = 0, retry: boolean | undefined;
     const service = make(native, {
       sign: async snapshot => { signed++; return sign(snapshot); },
@@ -319,7 +319,7 @@ test('Discover recommendations bind the reviewed list and recheck before signing
     assert.equal(retry, Boolean(stopAt));
   }
   const native = new Native(), owner = origin('discover');
-  native.issue('unprepared', owner, 'request', template);
+  native.issue('unprepared', owner, 'lists-publish-request', template);
   assert.equal(make(native).enqueue('unprepared', [relay], owner, () => null), false);
 });
 
