@@ -112,7 +112,9 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
       let id = value["id"], id.range(of: "^[A-Za-z0-9_-]{1,80}$", options: .regularExpression) != nil,
       let view = webView, let expectedURL, view.url == expectedURL else { return }
     closeCheckId = id
-    closeCheckDeadline = ProcessInfo.processInfo.systemUptime + 0.5
+    if id.hasPrefix("resume-"), active || !RoutingTransport.shared.armCheckpoint(generation, id: id) { return }
+    let timeout = id.hasPrefix("restore-") ? 16.0 : id.hasPrefix("resume-") ? 2.0 : 0.5
+    closeCheckDeadline = ProcessInfo.processInfo.systemUptime + timeout
     let script = "if(location.href===" + jsString(expectedURL.absoluteString) + "){window.postMessage({type:'hypergolic.close-check.request',id:" + jsString(id) + "},'*')}"
     view.evaluateJavaScript(script, completionHandler: nil)
   }
@@ -142,7 +144,11 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     closeCheckId = nil
     let now = ProcessInfo.processInfo.systemUptime
     pendingNativeReplies = pendingNativeReplies.filter { $0.value > now }
-    let guarded = state == "clean" && (!pendingNativeReplies.isEmpty || closeUnsafeUntil > now) ? "dirty" : state
+    var guarded = state
+    if state == "clean", !id.hasPrefix("restore-") {
+      if !pendingNativeReplies.isEmpty || closeUnsafeUntil > now { guarded = "dirty" }
+      else if id.hasPrefix("resume-"), active || !RoutingTransport.shared.finishCheckpoint(generation, id: id) { guarded = "unknown" }
+    }
     onEvent?(["type": "close-check", "sessionId": sessionId ?? "", "generation": generation, "id": id, "state": guarded])
   }
 
@@ -490,6 +496,9 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
         if publishedSource != nil { fail("artifact-read-rejected") }
         reply(nil, "Diagnostic rejected"); return
       }
+    if value["type"] as? String != "close-check.result", !RoutingTransport.shared.allowGuestWork(generation) {
+      reply(nil, "Session suspended"); return
+    }
     if publishedSource != nil && value["type"] as? String == "artifact.read" {
       receiveArtifactRead(value, textLength: text.utf8.count, reply: reply)
       return

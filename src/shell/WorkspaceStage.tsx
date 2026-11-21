@@ -1,7 +1,8 @@
 import { homeVisible } from './pins';
-import { loadedWorkspaceViews, MAX_LOADED_VIEWS, workspaceSessionActivity } from './workspace-activity';
+import type { WorkspaceViews } from './workspace-views';
+import { MAX_LOADED_VIEWS, workspaceSessionActivity } from './workspace-activity';
 import type { CloseCheckRequest } from './close-check';
-import { forwardRef, memo, useCallback, useMemo, useState, type ReactNode } from 'react';
+import { forwardRef, memo, useCallback, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { StyleSheet, Text, View, useWindowDimensions, type NativeSyntheticEvent } from 'react-native';
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 import { NappletHost, type HostEvent } from '../runtime/NappletHost';
@@ -67,6 +68,7 @@ const LiveSession = memo(function LiveSession({ loaded, hidden, gameControls, gu
 });
 
 interface StageProps {
+  views: WorkspaceViews;
   home?: ReactNode;
   fullscreen: boolean;
   onZoomTarget: ZoomResetRegistration;
@@ -91,15 +93,13 @@ interface StageProps {
   onHandleEnd: (side: HandleSide, result: 'overview' | 'switch' | 'cancel') => void;
 }
 
-export const WorkspaceStage = forwardRef<OverviewHandle, StageProps>(function WorkspaceStage({ home, fullscreen, onZoomTarget, workspace, closeCheck, progress, position, scrollY, swipeY, swipeId, busy, blocked, hostActivityBlocked = blocked, interactive, pending, onHostEvent, onFocus, onClose, onOpen, onDragEnd, onHandleStart, onHandleEnd }, ref) {
+export const WorkspaceStage = forwardRef<OverviewHandle, StageProps>(function WorkspaceStage({ views, home, fullscreen, onZoomTarget, workspace, closeCheck, progress, position, scrollY, swipeY, swipeId, busy, blocked, hostActivityBlocked = blocked, interactive, pending, onHostEvent, onFocus, onClose, onOpen, onDragEnd, onHandleStart, onHandleEnd }, ref) {
   const { styles } = useShellStyles(createStyles);
   const [size, setSize] = useState<Size>({ width: 0, height: 0 });
   const [measured, setMeasured] = useState<Record<string, CardMeasurement>>({});
   const { fontScale } = useWindowDimensions();
   const geometry = useMemo(() => overviewGeometry(size, workspace.sessions.length, fontScale), [fontScale, size, workspace.sessions.length]);
-  const [retainedViews, setRetainedViews] = useState<ReadonlySet<string>>(() => new Set());
-  const loadedViews = loadedWorkspaceViews(retainedViews, workspace);
-  if (loadedViews !== retainedViews) setRetainedViews(loadedViews);
+  const loadedViews = useSyncExternalStore(views.subscribe, views.getSnapshot);
   const disabled = busy || blocked;
   return <View style={[styles.stage, !fullscreen && styles.stageMargin]} testID="shell-stage" onLayout={({ nativeEvent }) => {
     const { width, height } = nativeEvent.layout;
@@ -111,7 +111,7 @@ export const WorkspaceStage = forwardRef<OverviewHandle, StageProps>(function Wo
       {workspace.sessions.map((session, index) => <LiveSession loaded={loadedViews.has(session.id)} gameControls={usesGameControls(workspace, session)} hidden={homeVisible(workspace)} key={session.id} gutter={fullscreen ? 0 : HANDLE_GUTTER} onZoomTarget={onZoomTarget} session={session} closeCheck={closeCheck?.sessionId === session.id ? JSON.stringify({id: closeCheck.id, generation: closeCheck.generation}) : ''} index={index} size={size} rect={resolveCardRect(geometry.cards[index], measured[session.id])}
         progress={progress} position={position} scrollY={scrollY} swipeY={swipeY} swipeId={swipeId} {...workspaceSessionActivity({focused: workspace.focusedId === session.id, overview: workspace.overview, busy, interactive, blocked, checkingClose: closeCheck !== null, hostActivityBlocked})}
         raised={workspace.focusedId === session.id} onHostEvent={onHostEvent} />)}
-      {!homeVisible(workspace) && <Overview ref={ref} sessions={workspace.sessions} geometry={geometry} size={size} visible={workspace.overview && !homeVisible(workspace)} busy={disabled} focusedId={workspace.focusedId}
+      {!homeVisible(workspace) && <Overview ref={ref} loaded={loadedViews} sessions={workspace.sessions} geometry={geometry} size={size} visible={workspace.overview && !homeVisible(workspace)} busy={disabled} focusedId={workspace.focusedId}
         progress={progress} scrollY={scrollY} swipeId={swipeId} swipeY={swipeY} pending={pending} onFocus={onFocus} onClose={onClose} onOpen={onOpen}
         onDragEnd={onDragEnd}
         onMeasure={(id, measurement) => setMeasured(previous => {

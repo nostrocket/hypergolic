@@ -9,7 +9,7 @@ import { routingRecord } from '../routing/routing-contract.ts';
 import type { RoutingNativePort } from '../routing/routing-port.ts';
 import type { RoutingReviewRequest, RoutingReviewService } from '../routing/routing-review.ts';
 import { resolveBundledSession } from '../shell/fixtures.ts';
-import { conflictsWithPublishedRevision, focusNapplet, openNapplet, samePublishedPin, type NappletDescriptor } from '../shell/workspace.ts';
+import { conflictsWithPublishedRevision, focusNapplet, openNapplet, showOverview, samePublishedPin, type NappletDescriptor } from '../shell/workspace.ts';
 import { ShellStorageError } from '../storage/ports.ts';
 import { publishedCapabilityCompatibility } from '../napplets/first-open-consent.ts';
 import { assertVerifiedArtifact } from '../napplets/verified-artifact.ts';
@@ -20,6 +20,7 @@ type Ports = Readonly<{
   capability: NativeCapabilityPort;
   native: RoutingNativePort;
   reviews: RoutingReviewService;
+  reportCapacity(reason: 'cards' | 'views', openOverview: () => void): void;
 }>;
 export type NappletLinkBroker = ReturnType<typeof createNappletLinkBroker>;
 
@@ -97,6 +98,19 @@ function restoreWorkspace(ports: Ports, launch: Launch, attempt: Attempt) {
   workspace.change(selected ? focusNapplet(pruned, source.id) : pruned);
 }
 
+function reportCapacity(ports: Ports, launch: Launch, reason: 'cards' | 'views') {
+  const {workspace, captured, source} = launch;
+  ports.reportCapacity(reason, () => {
+    const current = ports.identity.getSnapshot();
+    const state = workspace.getSnapshot();
+    if (current.phase !== 'ready' || current.session.workspace !== workspace ||
+        current.session.epoch !== captured.origin.epoch || current.session.vault.selectedPubkey !== captured.origin.user ||
+        state.error !== null || state.workspace.overview || state.workspace.focusedId !== source.id ||
+        ports.native.reviewRevision(captured.origin.generation, captured.revision) !== captured.focusRevision) return;
+    workspace.change(showOverview(state.workspace));
+  });
+}
+
 function reviewLaunch(ports: Ports, launch: Launch, target: Extract<RoutingReviewRequest, {kind: 'published-open'}>['target'],
   attempt: Attempt, active: () => void) {
   return async (changesAccess: boolean, legacyReadOnlyAvailable = false) => {
@@ -125,6 +139,20 @@ async function openExact(ports: Ports, launch: Launch, attempt: Attempt, active:
   signal: AbortSignal): Promise<LaunchOutcome> {
   const { link } = launch.captured;
   const { runtime, workspace } = launch;
+  const matches = () => workspace.getSnapshot().workspace.sessions.filter(session =>
+    session.source === 'published' && session.publisher === launch.coordinate.pubkey &&
+    session.appId === launch.coordinate.identifier);
+  function requireRoom(candidates: readonly NappletDescriptor[]) {
+    if (candidates.length === 0 && workspace.getSnapshot().workspace.sessions.length >= 64) {
+      reportCapacity(ports, launch, 'cards');
+      throw cancelled();
+    }
+    if (!workspace.canLoadView(candidates.map(session => session.id))) {
+      reportCapacity(ports, launch, 'views');
+      throw cancelled();
+    }
+  }
+  requireRoom(matches());
   const networkReadGranted = launch.captured.origin.domains.includes('relay');
   const artifact = await runtime.resolveNappletLink(link.url, signal, active, networkReadGranted);
   active();
@@ -134,8 +162,6 @@ async function openExact(ports: Ports, launch: Launch, attempt: Attempt, active:
   const { pubkey: publisher, eventId } = manifest;
   if (appId !== launch.coordinate.identifier || publisher !== launch.coordinate.pubkey) throw new Error('Unverified launch revision');
 
-  const matches = () => workspace.getSnapshot().workspace.sessions.filter(session =>
-    session.source === 'published' && session.publisher === publisher && session.appId === appId);
   const exact = (session: NappletDescriptor) => session.eventId === eventId && session.version === version;
   const installed = matches();
   // Different saved revisions continue through the ordinary explicit update flow.
@@ -143,6 +169,8 @@ async function openExact(ports: Ports, launch: Launch, attempt: Attempt, active:
   if (conflictsWithPublishedRevision(workspace.getSnapshot().workspace, coordinate)) return 'failed';
   const loaded = installed.find(session => runtime.publishedReadyGeneration(session) !== null);
   const existing = loaded ?? installed[0];
+  const candidates = existing ? [existing] : [];
+  requireRoom(candidates);
   const requiredDomains = Object.freeze([...manifest.requiredDomains].sort());
   const optionalDomains = Object.freeze([...manifest.optionalDomains].sort());
   const { unsupportedDomains, unsupportedOptionalDomains } = publishedCapabilityCompatibility(requiredDomains, optionalDomains);
@@ -153,8 +181,11 @@ async function openExact(ports: Ports, launch: Launch, attempt: Attempt, active:
     if (!await review(false)) return 'rejected';
     next = loaded;
   } else {
-    if (!existing && workspace.getSnapshot().workspace.sessions.length >= 64) return 'failed';
-    next = await runtime.prepareNappletLink(artifact, signal, active, review, existing);
+    next = await runtime.prepareNappletLink(artifact, signal, active, async (changesAccess, legacyAvailable) => {
+      const decision = await review(changesAccess, legacyAvailable);
+      if (decision) requireRoom(candidates);
+      return decision;
+    }, existing);
     attempt.staged = next;
   }
   active();
@@ -162,8 +193,12 @@ async function openExact(ports: Ports, launch: Launch, attempt: Attempt, active:
   if (conflictsWithPublishedRevision(current, coordinate) ||
       (existing ? !current.sessions.some(session => session.id === existing.id && sameTarget(session, existing))
         : matches().length > 0)) return 'failed';
-  if (!existing && current.sessions.length >= 64) return 'failed';
   if (!exact(next) || next.source !== 'published' || next.publisher !== publisher || next.appId !== appId) throw new Error('Prepared launch mismatch');
+  requireRoom(candidates);
+  if (!workspace.admitView(next.id)) {
+    reportCapacity(ports, launch, 'views');
+    return 'failed';
+  }
   attempt.created = !existing;
   attempt.target = next;
   const opened = openNapplet(current, next);

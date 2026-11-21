@@ -391,6 +391,7 @@ export function createNativeClient(native: NativeHost, generation: string, optio
   native.addEventListener?.('message', android);
   window.addEventListener('message', ios);
   return Object.freeze({
+    idleForCheckpoint: () => !disposed && pending.size === 0 && streams.size === 0 && uploads.size === 0,
     ...createLegacyReads(streams, () => !disposed, startStream, stopStream),
     cvm:cvm.request,
     subscribe: admission.subscribe,

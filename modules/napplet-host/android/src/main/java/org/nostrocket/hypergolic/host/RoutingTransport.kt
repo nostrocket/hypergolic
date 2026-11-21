@@ -9,6 +9,7 @@ internal object RoutingTransport {
   private val endpoints = RoutingEndpointRegistry()
   private val main = Handler(Looper.getMainLooper())
   private data class Row(val config: CapabilityConfiguration, var push: ((String) -> Unit)? = null,
+    var checkpoint: String? = null, var suspended: Boolean = false,
     var delivery: Long = 0, val credits: RoutingPushCredits = RoutingPushCredits())
   private val rows = mutableMapOf<String, Row>()
   private var sink: ((String) -> Unit)? = null
@@ -20,6 +21,7 @@ internal object RoutingTransport {
     val replaced = user != endpoints.user() || epoch != endpoints.epoch()
     if (!endpoints.synchronizeOwner(user, epoch, available)) return false
     if (before != endpoints.revision()) {
+      rows.values.forEach { it.checkpoint = null }
       if (replaced || !available) {
         val generations = rows.keys.toSet()
         main.post { NativeFiniteVideo.revokeGenerations(generations); NativeLiveRadio.revokeGenerations(generations) }
@@ -32,7 +34,10 @@ internal object RoutingTransport {
   }
   @Synchronized fun foreground(value: Boolean) {
     val before = endpoints.revision(); endpoints.foreground(value)
-    if (before != endpoints.revision()) { resumeIntents(); sink?.invoke(state()) }
+    if (before != endpoints.revision()) {
+      rows.values.forEach { it.checkpoint = null }
+      resumeIntents(); sink?.invoke(state())
+    }
   }
   @Synchronized fun register(generation: String, config: CapabilityConfiguration): Boolean {
     val trackPublished = config.fixture == "published"
@@ -42,7 +47,34 @@ internal object RoutingTransport {
     rows[generation] = Row(config); return true
   }
   @Synchronized fun ready(generation: String) { endpoints.ready(generation) }
-  @Synchronized fun focus(generation: String, value: Boolean) { if (endpoints.focus(generation, value)) sink?.invoke(state()) }
+  @Synchronized fun focus(generation: String, value: Boolean) { if (endpoints.focus(generation, value)) {
+    rows[generation]?.checkpoint = null
+    sink?.invoke(state())
+  } }
+  // The same lock admits incoming deliveries and the final one-shot suspension.
+  @Synchronized fun armCheckpoint(generation: String, id: String): Boolean {
+    val row = rows[generation] ?: return false
+    if (row.suspended || !row.credits.isIdle || !endpoints.available()) return false
+    row.checkpoint = "pending:$id"
+    return true
+  }
+  @Synchronized fun finishCheckpoint(generation: String, id: String): Boolean {
+    val row = rows[generation] ?: return false
+    if (row.checkpoint != "pending:$id") return false
+    row.checkpoint = id
+    return true
+  }
+  @Synchronized fun allowGuestWork(generation: String): Boolean {
+    val row = rows[generation] ?: return true
+    if (row.checkpoint?.startsWith("resume-") == true) row.checkpoint = null
+    return !row.suspended
+  }
+  @Synchronized fun checkpointAvailable(generation: String, id: String, consume: Boolean): Boolean {
+    val row = rows[generation] ?: return false
+    if (!id.startsWith("resume-") || row.checkpoint != id || row.suspended || !endpoints.available()) return false
+    if (consume) {row.suspended = true; row.checkpoint = null}
+    return true
+  }
   @Synchronized fun revoke(generation: String) { endpoints.revoke(generation); rows.remove(generation) }
   @Synchronized fun mediaRevision(generation: String): String? {
     val config = rows[generation]?.config ?: return null
@@ -102,11 +134,12 @@ internal object RoutingTransport {
     val type = message.opt("type") as? String ?: return false
     val domain = type.substringBefore('.')
     if (type !in setOf("intent.changed", "intent.deliver", "inc.event", "inc.channel.opened", "inc.channel.event", "inc.channel.closed", "notify.action", "notify.clicked", "notify.dismissed", "notify.controls", "config.values", "config.schemaError") ||
-      !mayDeliver(generation, revision, domain) || row.push == null || row.delivery >= 9_007_199_254_740_991L) return false
+      row.suspended || !mayDeliver(generation, revision, domain) || row.push == null || row.delivery >= 9_007_199_254_740_991L) return false
     val delivery = row.delivery + 1
     val retained = type == "intent.deliver"
     val envelope = JSONObject().put("type", "routing.event").put("sessionId", generation).put("delivery", delivery).put("response", raw).toString()
     if (!row.credits.reserve(delivery, if (retained) envelope else null)) return false
+    row.checkpoint = null
     row.delivery = delivery
     if (retained) {
       scheduleIntent(generation, row, delivery)

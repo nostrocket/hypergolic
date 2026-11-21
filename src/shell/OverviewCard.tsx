@@ -11,6 +11,7 @@ import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 import { cardDragFromTouch, releasedCardTouch, isCardTapRelease, type CardTouchOrigin, type CardTouchPoint } from './cardTouch';
 
 interface Props {
+  loaded: boolean;
   session: NappletDescriptor;
   rect: Rect;
   captionHeight: number;
@@ -27,7 +28,7 @@ interface Props {
   setRef: (id: string, view: ViewInstance | null) => void;
 }
 
-export function OverviewCard({ session, rect, captionHeight, busy, selected, pending, swipeId, swipeY, scrollGesture, onFocus, onClose, onDragEnd, onMeasure, setRef }: Props) {
+export function OverviewCard({ session, loaded, rect, captionHeight, busy, selected, pending, swipeId, swipeY, scrollGesture, onFocus, onClose, onDragEnd, onMeasure, setRef }: Props) {
   const { styles } = useShellStyles(createStyles);
   const { id, title } = session;
   const tapOrigin = useSharedValue<CardTouchPoint | null>(null);
@@ -114,7 +115,7 @@ export function OverviewCard({ session, rect, captionHeight, busy, selected, pen
     <Animated.View
       style={[styles.card, { width: rect.width, height: rect.height + captionHeight }, movement]}>
       <GestureDetector gesture={tap}><View accessible focusable accessibilityState={{ disabled: busy }} onLayout={({ nativeEvent }) => onMeasure(id, { expected: rect, actual: { ...rect, width: nativeEvent.layout.width, height: nativeEvent.layout.height } })} ref={view => setRef(id, view)} testID={`overview-card-${id}`} accessibilityRole="button" accessibilityLabel={`Open ${title}`}
-        accessibilityHint="Opens this napplet. Swipe quickly upward to close it."
+        accessibilityHint={loaded ? "This napplet is loaded. Swipe quickly upward to close it." : "Loads this napplet. Swipe quickly upward to close it."}
         accessibilityActions={[{ name: 'activate', label: `Open ${title}` }, { name: 'close', label: `Close ${title}` }]}
         onAccessibilityTap={() => { if (!busy) onFocus(id); }}
         onAccessibilityAction={({ nativeEvent }) => {

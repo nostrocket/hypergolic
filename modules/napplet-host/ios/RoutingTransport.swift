@@ -6,6 +6,8 @@ final class RoutingTransportRegistry: @unchecked Sendable {
   private struct Row {
     let config: CapabilityConfiguration
     var push: Push?
+    var checkpoint: String?
+    var suspended = false
     var delivery: UInt64 = 0
     var credits = RoutingPushCredits()
   }
@@ -24,6 +26,7 @@ final class RoutingTransportRegistry: @unchecked Sendable {
     let before = endpoints.state()
     guard endpoints.synchronizeOwner(user, epoch: epoch, available: available) else { return false }
     if before.revision != endpoints.state().revision {
+      for generation in Array(rows.keys) { rows[generation]?.checkpoint = nil }
       if before.user != user || before.epoch != epoch || !available {
         let generations = Set(rows.keys)
         Task { @MainActor in NativeFiniteVideo.revokeGenerations(generations);NativeLiveRadio.revokeGenerations(generations) }
@@ -37,7 +40,10 @@ final class RoutingTransportRegistry: @unchecked Sendable {
   } }
   func foreground(_ value: Bool) { lock.withLock {
     let before = endpoints.state().revision; endpoints.setForeground(value)
-    if before != endpoints.state().revision { resumeIntents(); sink?(state()) }
+    if before != endpoints.state().revision {
+      for generation in Array(rows.keys) { rows[generation]?.checkpoint = nil }
+      resumeIntents(); sink?(state())
+    }
   } }
   private func resumeIntents() {
     let available = endpoints.state().available
@@ -68,7 +74,28 @@ final class RoutingTransportRegistry: @unchecked Sendable {
     rows[generation] = Row(config: config); return true
   } }
   func ready(_ generation: String) { lock.withLock { endpoints.ready(generation) } }
-  func focus(_ generation: String, _ value: Bool) { lock.withLock { if endpoints.focus(generation, value) { sink?(state()) } } }
+  func focus(_ generation: String, _ value: Bool) { lock.withLock { if endpoints.focus(generation, value) { rows[generation]?.checkpoint = nil; sink?(state()) } } }
+  // The same lock admits incoming deliveries and the final one-shot suspension.
+  func armCheckpoint(_ generation: String, id: String) -> Bool { lock.withLock {
+    guard let row = rows[generation], !row.suspended, row.credits.isIdle, endpoints.state().available else { return false }
+    rows[generation]?.checkpoint = "pending:" + id
+    return true
+  } }
+  func finishCheckpoint(_ generation: String, id: String) -> Bool { lock.withLock {
+    guard rows[generation]?.checkpoint == "pending:" + id else { return false }
+    rows[generation]?.checkpoint = id
+    return true
+  } }
+  func allowGuestWork(_ generation: String) -> Bool { lock.withLock {
+    guard let row = rows[generation] else { return true }
+    if row.checkpoint?.hasPrefix("resume-") == true { rows[generation]?.checkpoint = nil }
+    return !row.suspended
+  } }
+  func checkpointAvailable(_ generation: String, id: String, consume: Bool) -> Bool { lock.withLock {
+    guard id.hasPrefix("resume-"), let row = rows[generation], row.checkpoint == id, !row.suspended, endpoints.state().available else { return false }
+    if consume { rows[generation]?.suspended = true; rows[generation]?.checkpoint = nil }
+    return true
+  } }
   func revoke(_ generation: String) { lock.withLock { endpoints.revoke(generation); _ = rows.removeValue(forKey: generation) } }
   func mediaRevision(_ generation: String) -> String? { lock.withLock {
     let revision = endpoints.state().revision
@@ -112,12 +139,13 @@ final class RoutingTransportRegistry: @unchecked Sendable {
     guard var row = rows[generation], let message = try? UploadWire.object(raw, limit: 36 * 1024, maximumDepth: 40),
       let type = message["type"] as? String, ["intent.changed", "intent.deliver", "inc.event", "inc.channel.opened", "inc.channel.event", "inc.channel.closed", "notify.action", "notify.clicked", "notify.dismissed", "notify.controls", "config.values", "config.schemaError"].contains(type),
       let domain = type.split(separator: ".").first.map(String.init), mayDeliver(generation, revision: revision, domain: domain),
-      row.push != nil, row.delivery < 9_007_199_254_740_991 else { return false }
+      !row.suspended, row.push != nil, row.delivery < 9_007_199_254_740_991 else { return false }
     let delivery = row.delivery + 1, retained = type == "intent.deliver"
     let value: [String: Any] = ["type": "routing.event", "sessionId": generation, "delivery": delivery, "response": raw]
     guard let bytes = try? JSONSerialization.data(withJSONObject: value) else { return false }
     let envelope = String(decoding: bytes, as: UTF8.self)
     guard row.credits.reserve(delivery, envelope: retained ? envelope : nil) else { return false }
+    row.checkpoint = nil
     row.delivery = delivery
     rows[generation] = row
     if retained {

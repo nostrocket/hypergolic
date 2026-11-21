@@ -58,8 +58,8 @@ incoming signer service to other applications.
 SQLite stores ordinary application data, access grants, configuration and
 workspace state with their documented scopes. It is not an encrypted user-data
 vault. Workspace state includes opening order, selected napplet and an explicitly
-empty workspace. Switching normally retains live state; unsaved drafts are not
-guaranteed to survive process termination.
+empty workspace. Switching normally retains live state. The shell can reclaim a background WebView
+after a supported guest saves its place. The [workspace policy](workspace-storage.md#reclaiming-background-views) describes draft restoration and its lifetime.
 
 Published loading, relay operations, resources and uploads use native transport
 owners with selected HTTPS/WSS destination, size and lifetime policies. Lookup,

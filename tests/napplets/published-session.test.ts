@@ -377,6 +377,10 @@ test('reopening an old display title refreshes it only after exact pin verificat
   assert.deepEqual(workspace.sessions, [descriptor]);
   binding.ready('verified-generation');
   assert.equal(owner.publishedReadyGeneration(saved), 'verified-generation');
+  assert.equal(binding.checkpoint, null);
+  assert.equal(owner.canSuspend(saved), false);
+  assert.equal(owner.trySuspend(saved), false);
+  assert.equal(owner.publishedReadyGeneration(saved), 'verified-generation');
   assert.throws(() => owner.publishedReadyGeneration(wrong), {code:'REVOKED'});
   binding.revoke();
 });

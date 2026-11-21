@@ -1,3 +1,4 @@
+import { WorkspaceViews } from '../../src/shell/workspace-views.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {naddrEncode} from 'nostr-tools/nip19';
@@ -129,7 +130,8 @@ test('discovered installed unmounted pins persist their newly prepared descripto
   const artifact = await loadEmbeddedTestArtifact();
   const saved = descriptorForPublishedArtifact(artifact, id), next = {...saved, title: 'Reviewed prepared title'};
   let workspace = openNapplet(openNapplet(emptyWorkspace(), saved), source), mounted = false, held = true;
-  const controller: WorkspaceController = {getSnapshot: () => ({workspace, saving: false, error: null}),
+  const controller: WorkspaceController = {views: new WorkspaceViews(workspace), getSnapshot: () => ({workspace, saving: false, error: null}),
+    canLoadView: () => true, admitView: () => true,
     subscribe: () => () => {}, change: value => {workspace = value;}, acceptUpdate: async () => { throw Error('Unexpected update'); }, flush: async () => {}, freeze() {}, resume() {}, revoke() {}};
   const transition = {phase: 'ready', session: {workspace: controller, epoch: 1, vault: {selectedPubkey: user}}} as TransitionSnapshot;
   const reviews = new RoutingReviewService();
@@ -137,6 +139,7 @@ test('discovered installed unmounted pins persist their newly prepared descripto
   const wire = JSON.stringify({registration: origin, request: JSON.stringify({type: 'routing.call', id: 'open-request', message, revision: 2, focusRevision: 7})});
   let response: string | null = null;
   const broker = createNappletLinkBroker({identity: {getSnapshot: () => transition, subscribe: () => () => {}}, reviews,
+    reportCapacity: () => assert.fail('Unexpected capacity refusal'),
     native: {state: () => ({user, epoch: 1, revision: 2, available: true, ownerAvailable: true, foreground: true}),
       mayDeliver: () => true, mayReview: () => true, reviewRevision: () => 7, send: () => false,
       newChannelId: () => 'channel', subscribe: () => () => {}},

@@ -1,3 +1,5 @@
+import type { WorkspaceViews } from './workspace-views';
+import { useWorkspaceViews } from './useWorkspaceViews';
 import { Home } from './Home';
 import { homeVisible, isPinned } from './pins';
 import { useHomeNavigation } from './useHomeNavigation';
@@ -54,6 +56,7 @@ export interface SettingsActions {
     reviewConsent: (request: NappletConsentReview) => Promise<boolean>) => Promise<boolean>;
 }
 export interface ShellProps {
+  views?: WorkspaceViews;
   blocked?: boolean;
   /** Trusted review occlusion blocks input without changing the committed focused source. */
   hostActivityBlocked?: boolean;
@@ -81,12 +84,13 @@ function useReducedMotion(): boolean {
   return reduced;
 }
 
-export function Shell({ blocked = false, hostActivityBlocked = blocked, initialWorkspace, workspace: controlledWorkspace, getWorkspace, onWorkspaceChange, identity, pendingApprovals, canCloseWithoutWarning, onBeforeClose, onHostEvent, footer, settingsComponent: SettingsContent }: ShellProps) {
+export function Shell({ views: managedViews, blocked = false, hostActivityBlocked = blocked, initialWorkspace, workspace: controlledWorkspace, getWorkspace, onWorkspaceChange, identity, pendingApprovals, canCloseWithoutWarning, onBeforeClose, onHostEvent, footer, settingsComponent: SettingsContent }: ShellProps) {
   const { styles } = useShellStyles(createStyles);
   const runtime = useContext(RuntimeContext);
   const owner = useContext(OwnerContext);
   const [localWorkspace, setLocalWorkspace] = useState(() => initialWorkspace ?? initialWorkspaceForBuild());
   const workspace = controlledWorkspace ?? localWorkspace;
+  const views = useWorkspaceViews(workspace, managedViews, runtime, pendingApprovals, canCloseWithoutWarning);
   const fullscreen = useWorkspaceFullscreen(workspace);
   const current = useRef(workspace);
   useLayoutEffect(() => { current.current = workspace; }, [workspace]);
@@ -220,7 +224,7 @@ export function Shell({ blocked = false, hostActivityBlocked = blocked, initialW
       <View accessibilityElementsHidden={obscured} importantForAccessibility={obscured ? 'no-hide-descendants' : 'auto'} style={styles.content}>
         <WorkspaceHeader home={homeVisible(workspace)} fullscreen={fullscreen} overview={workspace.overview} focused={focused} identity={identity} disabled={navigationBlocked || handleDragging}
           menuAnchor={menuAnchor} onSettings={openSettings} onHome={openHome} onOverview={openOverview} onMenu={openMenu} />
-        <WorkspaceStage home={<Home workspace={workspace} disabled={stageBlocked} onOpen={openPin}
+        <WorkspaceStage views={views} home={<Home workspace={workspace} disabled={stageBlocked} onOpen={openPin}
           onUnpin={unpin} onOverview={openOverview} onDiscover={openDiscovery} />} fullscreen={fullscreen} onZoomTarget={registerZoomTarget} closeCheck={closeCheck} workspace={workspace} progress={progress} position={position} scrollY={scrollY} swipeY={swipeY} swipeId={swipeId} busy={busy} blocked={stageBlocked} hostActivityBlocked={isHostActivityBlocked(hostActivityBlocked, obscured)} interactive={!handleDragging}
           pending={pendingApprovals ?? noPending} ref={overview} onHostEvent={receiveHostEvent} onFocus={focusSession} onClose={requestClose} onOpen={openDiscovery}
           onDragEnd={(id, close) => { runAnimation(swipeY, 0, () => { swipeId.set(null); if (close) requestClose(id); }, 140); }}

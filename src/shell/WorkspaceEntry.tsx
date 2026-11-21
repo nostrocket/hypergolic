@@ -18,8 +18,8 @@ export function WorkspaceEntry({ identity, controller, blocked, settingsComponen
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   const getWorkspace = () => controller.getSnapshot().workspace;
   return <View style={styles.screen} collapsable={false} testID={state.saving ? 'workspace-saving' : 'workspace-saved'}>
-    {approvals ? <ApprovalWorkspace service={approvals} uploads={uploads} cvm={cvm} reviewSlot={reviewSlot} epoch={epoch} identity={identity} footer={footer} blocked={blocked} settingsComponent={settingsComponent} workspace={state.workspace} getWorkspace={getWorkspace} onWorkspaceChange={controller.change} />
-      : <Shell identity={identity} footer={footer} blocked={blocked} settingsComponent={settingsComponent} workspace={state.workspace} getWorkspace={getWorkspace} onWorkspaceChange={controller.change} />}
+    {approvals ? <ApprovalWorkspace views={controller.views} service={approvals} uploads={uploads} cvm={cvm} reviewSlot={reviewSlot} epoch={epoch} identity={identity} footer={footer} blocked={blocked} settingsComponent={settingsComponent} workspace={state.workspace} getWorkspace={getWorkspace} onWorkspaceChange={controller.change} />
+      : <Shell views={controller.views} identity={identity} footer={footer} blocked={blocked} settingsComponent={settingsComponent} workspace={state.workspace} getWorkspace={getWorkspace} onWorkspaceChange={controller.change} />}
     <Modal visible={state.error !== null} animationType="none" onRequestClose={() => undefined}>
       <SafeAreaProvider><SafeAreaView style={styles.problem}>
         <Text accessibilityRole="header" style={styles.heading}>Workspace changes could not be saved</Text>

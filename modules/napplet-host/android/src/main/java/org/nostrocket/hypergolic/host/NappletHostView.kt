@@ -187,6 +187,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
             return@addWebMessageListener
           }
           if (data.optString("sessionId") != generation) return@addWebMessageListener
+          if (data.optString("type") != "close-check.result" && !RoutingTransport.allowGuestWork(generation)) return@addWebMessageListener
           if (data.optString("type") == "routing-ack") {
             if (data.keys().asSequence().toSet() != setOf("type", "sessionId", "sequence", "delivery")) return@addWebMessageListener
             if (!ready || consumeTransportSequence(data) == null) return@addWebMessageListener
@@ -332,7 +333,12 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     val id = value.opt("id") as? String ?: return
     if (!id.matches(Regex("[A-Za-z0-9_-]{1,80}"))) return
     closeCheckId = id
-    closeCheckDeadline = android.os.SystemClock.elapsedRealtime() + 500
+    if (id.startsWith("resume-") && (active || !RoutingTransport.armCheckpoint(generation, id))) return
+    closeCheckDeadline = android.os.SystemClock.elapsedRealtime() + when {
+      id.startsWith("resume-") -> 2000
+      id.startsWith("restore-") -> 16000
+      else -> 500
+    }
     webView.evaluateJavascript("if(location.href===${JSONObject.quote(expectedUrl)}){window.postMessage({type:'hypergolic.close-check.request',id:${JSONObject.quote(id)}},'*')}", null)
   }
 
@@ -345,7 +351,14 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
     val id = closeCheckId!!
     closeCheckId = null
     pendingNativeReplies.entries.removeAll { it.value <= now }
-    val guarded = if (state == "clean" && (pendingNativeReplies.isNotEmpty() || closeUnsafeUntil > now)) "dirty" else state
+    val pendingWork = pendingNativeReplies.isNotEmpty() || closeUnsafeUntil > now
+    val guarded = when {
+      state != "clean" -> state
+      id.startsWith("restore-") -> state
+      pendingWork -> "dirty"
+      id.startsWith("resume-") && (active || !RoutingTransport.finishCheckpoint(generation, id)) -> "unknown"
+      else -> state
+    }
     onHostEvent(mapOf("type" to "close-check", "sessionId" to (sessionId ?: ""), "generation" to generation, "id" to id, "state" to guarded))
   }
 

@@ -283,6 +283,9 @@ class NappletHostModule : Module() {
     Function("cancelApproval") { token: String -> ApprovalTransport.cancel(token) }
     Function("finishApproval") { token: String, response: String? -> ApprovalTransport.finish(token, response) }
     Function("resumeApprovals") { ApprovalTransport.resume() }
+    Function("checkpointAvailable") { generation: String, id: String, consume: Boolean ->
+      RoutingTransport.checkpointAvailable(generation, id, consume)
+    }
     Function("newInstanceId") { NativeTransportTickets.issue() }
     Function("synchronizeLinkOwner") { user: String, epoch: Double, available: Boolean ->
       require(user.matches(Regex("[0-9a-f]{64}")) && epoch.isFinite() && epoch >= 0 && epoch <= 9_007_199_254_740_991.0 && epoch % 1.0 == 0.0)
