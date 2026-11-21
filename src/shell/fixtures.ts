@@ -8,6 +8,7 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{1
 // Retained bundled descriptors may load only the explicitly reviewed packaged replacement.
 const previousSupportVersion = 'd580bdedb19857d66a4b5f2928016c3f756960f42e56f7d98f8fb98df90f1653';
 const previousDiscoveryVersions = [
+  '27b942464ddf6fbb2479922acc06e33bc0926edfff36dd8f2d55336380836fda',
   'd090578d980c6b5eae07bc6ff1d17484eafdf478266caeddbd24c3958d163e2b',
   '013ae4e8a8ca58bf29f684f3acdde671cb95985cc28f8122c5f8bb776dcae5e8',
   '1b9f4d2e499b93fd40ee93e726514461913ba1f7518e06d19b5b6dba2a7f3ff7',

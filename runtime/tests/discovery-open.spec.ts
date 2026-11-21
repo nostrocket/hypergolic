@@ -5,6 +5,7 @@ import { naddrEncode } from 'nostr-tools/nip19';
 
 type State = {ready: boolean; calls: object[]; finish?: (status: string) => void};
 type TestWindow = Window & {discoveryOpenTest: State; HypergolicHost: object};
+type QueryFilter = {kinds: number[]; authors?: string[]; '#d'?: string[]; until?: number; since?: number; limit?: number};
 
 async function openRuntime(page: Page, fixture: string, catalogEvents: {event: NostrEvent}[] = [], feedEvents: NostrEvent[] = []) {
   await page.addInitScript(({catalogEvents, feedEvents}) => {
@@ -32,9 +33,16 @@ async function openRuntime(page: Page, fixture: string, catalogEvents: {event: N
             response: {type: 'link.open.result', id: request.message.id, status}});
         }
         if (request.type === 'relay.query' || request.type === 'outbox.query') {
-          const events = [...catalogEvents.map(row => row.event), ...feedEvents].filter(event => request.filters.some((filter: {kinds: number[]; authors?: string[]}) =>
-            filter.kinds.includes(event.kind) && (!filter.authors || filter.authors.includes(event.pubkey))));
-          respond({type: request.type + '.result', id: request.id, events: events.map(event => ({event}))});
+          const available = [...catalogEvents.map(row => row.event), ...feedEvents].sort((a, b) => b.created_at - a.created_at);
+          const matches = new Map<string, NostrEvent>();
+          for (const filter of request.filters as QueryFilter[]) {
+            const events = available.filter(event => filter.kinds.includes(event.kind) &&
+              (!filter.authors || filter.authors.includes(event.pubkey)) &&
+              (!filter['#d'] || event.tags.some(([key, value]) => key === 'd' && filter['#d']?.includes(value))) &&
+              event.created_at >= (filter.since ?? 0) && event.created_at <= (filter.until ?? Infinity));
+            for (const event of events.slice(0, filter.limit ?? events.length)) matches.set(event.id, event);
+          }
+          respond({type: request.type + '.result', id: request.id, events: [...matches.values()].map(event => ({event}))});
         }
       },
     };
@@ -129,4 +137,29 @@ test('an attributed community pick opens the signed listing and returns to the f
   await guest.getByRole('button', {name:'Back to Discover', exact:true}).click();
   await expect(card).toBeVisible();
   expect(await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls)).toEqual([]);
+});
+
+test('packaged Discover opens an off-page community pick through NAP-LINK', async ({page}) => {
+  const author = new Uint8Array(32).fill(1), recommender = new Uint8Array(32).fill(2);
+  const now = Math.floor(Date.now() / 1000);
+  const publication = (identifier: string, title: string, age: number) => finalizeEvent({
+    kind: 35129, created_at: now - age, content: title + ' description.',
+    tags: [['d', identifier], ['title', title], ['x', 'c'.repeat(64)]],
+  }, author);
+  const recent = Array.from({length: 8}, (_, index) => publication('recent-' + index, 'Recent ' + index, index + 1));
+  const target = publication('older-game', 'Older game', 1000);
+  const list = finalizeEvent({kind: 30267, created_at: now - 1, content: '',
+    tags: [['d', 'napplets'], ['a', '35129:' + target.pubkey + ':older-game']]}, recommender);
+  const guest = await openRuntime(page, 'napplet-discovery', [...recent, target].map(event => ({event})), [list]);
+  await expect(guest.getByRole('button', {name: 'Details for Recent 7', exact: true})).toBeVisible();
+  await expect(guest.getByRole('button', {name: 'Details for Older game', exact: true})).toHaveCount(0);
+  const card = guest.locator('#community-recommendation');
+  await card.getByRole('button', {name: /^Details for Older game recommended by /}).click();
+  await expect(guest.locator('#detail-heading')).toHaveText('Older game');
+  await guest.getByRole('button', {name: 'Open Napplet', exact: true}).click();
+  const url = 'nostr:' + naddrEncode({kind: 35129, pubkey: target.pubkey, identifier: 'older-game'});
+  await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls))
+    .toEqual([{type: 'link.open', id: expect.any(String), url}]);
+  await page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.finish?.('opened'));
+  await expect(guest.locator('.detail-actions .feedback')).toHaveText('Link accepted by your shell.');
 });
