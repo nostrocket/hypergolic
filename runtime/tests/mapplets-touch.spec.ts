@@ -75,6 +75,10 @@ async function openMap(page:Page, variant: 'exact' | 'new-version' | 'new-event'
   },{html:bytes.toString('base64'),pin,generation,assets,release,htmlHash,version,variant});
   await page.goto(`/assets/runtime/index.html?sessionId=${generation}&source=published`);
   const frame=page.frameLocator('#napplet');
+  if (variant !== 'exact') {
+    await expect(frame.locator('meta[http-equiv="Content-Security-Policy" i]').first()).toHaveAttribute('content', /worker-src 'none'/);
+    return frame;
+  }
   await expect(frame.locator('#loadingPanel')).toBeHidden();
   await expect(frame.getByRole('button',{name:'Select a rectangular map area'})).toBeVisible();
   await expect(frame.locator('#errorPanel')).toBeHidden();
@@ -165,9 +169,8 @@ test('exact Mapplets keeps ordinary touch pan, pinch and armed mouse selection',
   await expect(map.edit).toBeVisible();await expectNoIntent(page);
 });
 
-for (const variant of ['new-version', 'new-event'] as const) test(`Mapplets ${variant} retains the original input behavior`,async({page})=>{
-  const frame=await openMap(page,variant),map=await selection(frame,page);
-  await map.arm();await map.drag();
-  await expect(map.edit).toBeHidden();await expect(map.canvas).toHaveClass(/is-selecting/);
+for (const variant of ['new-version', 'new-event'] as const) test(`Mapplets ${variant} receives neither the worker nor the touch override`,async({page})=>{
+  const frame=await openMap(page,variant);
+  await expect(frame.locator('style').filter({hasText:'html body #map .maplibregl-canvas.is-selecting'})).toHaveCount(0);
   await expectNoIntent(page);
 });
