@@ -13,12 +13,14 @@ export function loadNativePublishedArtifactSource(): PublishedArtifactSource {
   }>('HypergolicNappletHost');
   return createNativePublishedArtifactSource({
     async readVerifiedBody(url, hash, maxBytes, signal) {
-      const id = nativePort.newInstanceId(), token = nativePort.createPublishedBodyToken();
-      const cancel = () => nativePort.cancelPublishedHttps(id);
+      const token = await nativePort.createPublishedBodyToken();
+      let id: string | undefined;
+      const cancel = () => { if (id) nativePort.cancelPublishedHttps(id); };
       signal.addEventListener('abort', cancel, {once: true});
       let transferred = false;
       try {
         if (signal.aborted) throw new Error('Publication request cancelled');
+        id = nativePort.newInstanceId();
         const size = await nativePort.fetchPublishedArtifactHttps(id, url);
         if (signal.aborted) throw new Error('Publication request cancelled');
         if (size < 1 || size > maxBytes) throw new Error('Publication size exceeded');

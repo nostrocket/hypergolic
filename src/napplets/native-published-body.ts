@@ -3,7 +3,7 @@ import { MAX_HTML_BYTES } from './artifact-limits.ts';
 /** App-only file owner. Guest content never receives these operations or tokens. */
 export interface NativePublishedBodyPort {
   publishedBodyDatabase(token: string, user: string, length: number): Promise<string>;
-  createPublishedBodyToken(): string;
+  createPublishedBodyToken(): string | Promise<string>;
   verifyCachedPublishedBody(token: string, hash: string): Promise<number>;
   releasePublishedBody(token: string): void;
   stagePublishedBody(token: string, claims: string): Promise<string | null>;

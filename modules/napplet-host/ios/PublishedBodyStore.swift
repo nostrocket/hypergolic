@@ -12,12 +12,15 @@ final class PublishedBodyStore: @unchecked Sendable {
   private final class Entry {
     let file: URL
     var length = 0
-    var user: String?
+    let user: String
     var verified = false
-    init(_ file: URL) { self.file = file }
+    init(_ file: URL, user: String) { self.file = file; self.user = user }
   }
   private let lock = NSLock()
-  private var directory: URL?
+  private let directory: URL
+  private var directoryReady: Bool
+  private var account: String?
+  private var epoch: UInt64?
   private var entries: [String: Entry] = [:]
   private var foreground = true
   #if canImport(UIKit)
@@ -25,7 +28,9 @@ final class PublishedBodyStore: @unchecked Sendable {
   #endif
 
   init(directory: URL? = nil) {
-    self.directory = directory
+    self.directory = directory ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+      .appendingPathComponent("hypergolic-published-body-v1", isDirectory: true)
+    directoryReady = directory != nil
     #if canImport(UIKit)
     let center = NotificationCenter.default
     for name in [UIApplication.willResignActiveNotification, UIApplication.didEnterBackgroundNotification] {
@@ -42,16 +47,27 @@ final class PublishedBodyStore: @unchecked Sendable {
     clear()
   }
 
-  func clear() {
+  private func clearLocked() {
+    for entry in entries.values where entry.length > 0 { try? FileManager.default.removeItem(at: entry.file) }
+    entries.removeAll()
+  }
+
+  func clear() { lock.withLock { clearLocked() } }
+
+  func synchronize(_ user: String, epoch nextEpoch: UInt64, available: Bool) {
     lock.withLock {
-      for entry in entries.values { try? FileManager.default.removeItem(at: entry.file) }
-      entries.removeAll()
+      let next = available ? user : nil
+      if nextEpoch != epoch || next != account {
+        clearLocked()
+        PublishedArtifactTransfer.shared.revokeAll()
+      }
+      epoch = nextEpoch
+      account = next
     }
   }
 
   func setForeground(_ value: Bool) {
-    lock.withLock { foreground = value }
-    if !value { clear() }
+    lock.withLock { foreground = value; if !value { clearLocked() } }
   }
 
   func release(_ token: String) {
@@ -60,17 +76,9 @@ final class PublishedBodyStore: @unchecked Sendable {
 
   func issue() throws -> String {
     try lock.withLock {
-      guard foreground, entries.count < 64 else { throw Failure.unavailable }
-      if directory == nil {
-        let fm = FileManager.default
-        let root = try fm.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-          .appendingPathComponent("hypergolic-published-body-v1", isDirectory: true)
-        try fm.createDirectory(at: root, withIntermediateDirectories: true)
-        for file in try fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) { try? fm.removeItem(at: file) }
-        directory = root
-      }
+      guard foreground, let account, entries.count < 64 else { throw Failure.unavailable }
       let token = UUID().uuidString.lowercased()
-      entries[token] = Entry(directory!.appendingPathComponent(token + ".db"))
+      entries[token] = Entry(directory.appendingPathComponent(token + ".db"), user: account)
       return token
     }
   }
@@ -80,6 +88,12 @@ final class PublishedBodyStore: @unchecked Sendable {
     guard let entry = entries[token], foreground, (1...20*1024*1024).contains(length) else { throw Failure.unavailable }
     if entry.length == 0 {
       guard entries.values.reduce(length, { $0 + $1.length }) <= 96*1024*1024 else { throw Failure.unavailable }
+      if !directoryReady {
+        let fm = FileManager.default
+        try fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        for file in try fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) { try? fm.removeItem(at: file) }
+        directoryReady = true
+      }
       try BodyDatabase.open(entry.file, SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE) { db in
         let schema = "CREATE TABLE payload (id INTEGER PRIMARY KEY CHECK(id=1), body BLOB NOT NULL CHECK(typeof(body)='blob' AND length(body)=\(length)))"
         guard sqlite3_exec(db, schema, nil, nil, nil) == SQLITE_OK else { throw Failure.unavailable }
@@ -92,11 +106,8 @@ final class PublishedBodyStore: @unchecked Sendable {
 
   func database(_ token: String, user: String, length: Int) throws -> String {
     try lock.withLock {
-      let entry = try reserve(token, length)
-      guard user.utf8.count == 64, user.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }),
-            entry.user == nil || entry.user == user else { throw Failure.unavailable }
-      entry.user = user
-      return entry.file.path
+      guard account == user, entries[token]?.user == user else { throw Failure.unavailable }
+      return try reserve(token, length).file.path
     }
   }
 
@@ -127,7 +138,7 @@ final class PublishedBodyStore: @unchecked Sendable {
 
   func verifyCached(_ token: String, hash: String) throws -> Int {
     let entry = try lock.withLock {
-      guard let entry = entries[token], entry.user != nil, entry.length > 0 else { throw Failure.unavailable }
+      guard let entry = entries[token], entry.user == account, entry.length > 0 else { throw Failure.unavailable }
       return entry
     }
     let result = verify(try BodyDatabase.read(entry.file, length: entry.length), hash)

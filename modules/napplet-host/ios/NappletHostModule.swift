@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import ExpoModulesCore
 
 public final class NappletHostModule: Module {
@@ -47,6 +48,7 @@ public final class NappletHostModule: Module {
         LinkTransport.synchronizeOwner(user, epoch: UInt64(epoch), available: available) else {
         throw NSError(domain: "HypergolicLinkOwner", code: 1)
       }
+      PublishedBodyStore.shared.synchronize(user, epoch: UInt64(epoch), available: available)
     }
     Function("relayLifecycle") { RelaySubscriptionTransport.shared.lifecycle() }
     Function("startRelayStream") { (id: String, token: String, url: String, request: String, subId: String) -> Bool in
@@ -115,7 +117,12 @@ public final class NappletHostModule: Module {
     AsyncFunction("fetchPublishedArtifactHttps") { (operationId: String, url: String) async throws -> Int in
       try await publishedHTTPS.fetchArtifact(operationId: operationId, url: url)
     }
-    Function("createPublishedBodyToken") { () throws -> String in try PublishedBodyStore.shared.issue() }
+    AsyncFunction("createPublishedBodyToken") { () throws -> String in
+      try MainActor.assumeIsolated {
+        guard UIApplication.shared.applicationState == .active else { throw PublishedBodyStore.Failure.unavailable }
+        return try PublishedBodyStore.shared.issue()
+      }
+    }.runOnQueue(.main)
     AsyncFunction("publishedBodyDatabase") { (token: String, user: String, length: Int) throws -> String in
       try PublishedBodyStore.shared.database(token, user: user, length: length)
     }.runOnQueue(publishedBodyQueue)

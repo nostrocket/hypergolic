@@ -157,7 +157,7 @@ export async function openPublishedArtifactCache(
           assertOpen();
           if (manifest.pubkey !== publisher || manifest.id !== eventId || manifest.eventId !== eventId) return null;
           if (bodies) {
-            const token = bodies.createPublishedBodyToken();
+            const token = await bodies.createPublishedBodyToken();
             let retained = false;
             try {
               const file = await bodies.publishedBodyDatabase(token, user, row.html_bytes);

@@ -14,38 +14,54 @@ internal object PublishedBodyStore {
   private const val maximumBody = 20 * 1024 * 1024
   private const val maximumReserved = 96 * 1024 * 1024
   private val hashPattern = Regex("[a-f0-9]{64}")
-  private data class Entry(val file: File, var length: Int = 0, var user: String? = null, var verified: Boolean = false)
+  private data class Entry(val file: File, val user: String, var length: Int = 0, var verified: Boolean = false)
   private val entries = mutableMapOf<String, Entry>()
   private var directory: File? = null
   private var foreground = false
+  private var account: String? = null
+  private var epoch = -1L
+  private var directoryReady = false
   private external fun validEnvelope(bytes: ByteArray): Boolean
 
   @Synchronized fun configure(cache: File) {
-    if (directory != null) return
+    if (directory == null) directory = File(cache, "published-body-v1")
+  }
+
+  @Synchronized fun synchronize(user: String, generation: Long, available: Boolean) {
+    val next = if (available) user else null
+    if (generation != epoch || next != account) {
+      clear()
+      PublishedArtifactTransfer.INSTANCE.revokeAllPublishedArtifacts()
+    }
+    epoch = generation
+    account = next
+  }
+
+  private fun prepareDirectory() {
+    if (directoryReady) return
+    val root = checkNotNull(directory)
     System.loadLibrary("hypergolic_body")
-    val root = File(cache, "published-body-v1")
     check(root.mkdirs() || root.isDirectory)
     root.listFiles()?.forEach { if (it.isFile) it.delete() }
-    directory = root
+    directoryReady = true
   }
 
   @Synchronized fun foreground(value: Boolean) { foreground = value; if (!value) clear() }
   @Synchronized fun clear() { entries.keys.toList().forEach(::release) }
-  @Synchronized fun release(token: String) { entries.remove(token)?.let { SQLiteDatabase.deleteDatabase(it.file) } }
+  @Synchronized fun release(token: String) { entries.remove(token)?.let { if (it.length > 0) SQLiteDatabase.deleteDatabase(it.file) } }
 
   @Synchronized fun issue(): String {
     check(foreground && entries.size < 64)
     val token = UUID.randomUUID().toString()
-    entries[token] = Entry(File(checkNotNull(directory), "$token.db"))
+    entries[token] = Entry(File(checkNotNull(directory), "$token.db"), checkNotNull(account))
     return token
   }
 
   // Each token has one SQLite file. Its single write completes and closes before the next owner opens it.
   @Synchronized fun database(token: String, user: String, length: Int): String {
     require(hashPattern.matches(user))
+    check(account == user && entries[token]?.user == user)
     val entry = reserve(token, length)
-    check(entry.user == null || entry.user == user)
-    entry.user = user
     return entry.file.absolutePath
   }
 
@@ -53,6 +69,7 @@ internal object PublishedBodyStore {
     val entry = checkNotNull(entries[token])
     check(foreground && length in 1..maximumBody)
     if (entry.length == 0) {
+      prepareDirectory()
       check(entries.values.sumOf { it.length } + length <= maximumReserved)
       SQLiteDatabase.openOrCreateDatabase(entry.file, null).use { db ->
         db.rawQuery("PRAGMA journal_mode=DELETE", null).use { check(it.moveToFirst()) }
@@ -101,7 +118,7 @@ internal object PublishedBodyStore {
   }
 
   fun verifyCached(token: String, hash: String): Int {
-    val entry = synchronized(this) { checkNotNull(entries[token]).also { check(it.user != null && it.length > 0) } }
+    val entry = synchronized(this) { checkNotNull(entries[token]).also { check(it.user == account && it.length > 0) } }
     val data = bytes(entry)
     try {
       val result = verify(data, hash)

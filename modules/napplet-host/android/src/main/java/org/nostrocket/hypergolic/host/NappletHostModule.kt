@@ -207,7 +207,10 @@ class NappletHostModule : Module() {
         PublishedHttpsRequestOwner.INSTANCE.fetchArtifact(operationId, url) { job?.isActive == true }
       }
     }
-    Function("createPublishedBodyToken") { PublishedBodyStore.issue() }
+    Function("createPublishedBodyToken") {
+      PublishedBodyStore.configure(requireNotNull(appContext.runtime.reactContext).cacheDir)
+      PublishedBodyStore.issue()
+    }
     AsyncFunction("publishedBodyDatabase") Coroutine { token: String, user: String, length: Int ->
       withContext(publishedBodyIO) { PublishedBodyStore.database(token, user, length) }
     }
@@ -313,6 +316,7 @@ class NappletHostModule : Module() {
     Function("synchronizeLinkOwner") { user: String, epoch: Double, available: Boolean ->
       require(user.matches(Regex("[0-9a-f]{64}")) && epoch.isFinite() && epoch >= 0 && epoch <= 9_007_199_254_740_991.0 && epoch % 1.0 == 0.0)
       check(LinkTransport.synchronizeOwner(user, epoch.toLong(), available)) { "Stale link owner" }
+      PublishedBodyStore.synchronize(user, epoch.toLong(), available)
     }
     Function("relayLifecycle") { RelaySubscriptionTransport.lifecycle() }
     Function("startRelayStream") { id: String, token: String, url: String, request: String, subId: String ->
