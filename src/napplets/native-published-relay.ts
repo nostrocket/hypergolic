@@ -74,6 +74,25 @@ function encodedCandidate(event: unknown): string {
   } catch { return fail(); }
 }
 
+/** Bound an unresponsive peer independently of the entire lookup, including queued peers. */
+function queryPeer(port: NativePublishedRelayPort, outstanding: Map<string, () => void>, id: string,
+  relay: string, request: ReturnType<typeof buildPublishedRelayRequest>, timeoutMs: number): Promise<string[]> {
+  return new Promise<string[]>((resolve, reject) => {
+    const cleanup = () => { clearTimeout(timer); return outstanding.delete(id); };
+    const cancel = () => {
+      if (!cleanup()) return;
+      try { port.cancelPublishedRelay(id); } catch { /* The native deadline remains a backstop. */ }
+      reject(new NativePublishedRelayError());
+    };
+    const timer = setTimeout(cancel, timeoutMs);
+    outstanding.set(id, cancel);
+    try {
+      port.queryPublishedRelay(id, relay, request.wire, request.subscriptionId).then(
+        frames => { if (cleanup()) resolve(frames); }, error => { if (cleanup()) reject(error); });
+    } catch (error) { cleanup(); reject(error); }
+  });
+}
+
 function queryDiscoverRelays(relays: readonly string[], queryRelay: (relay: string) => Promise<boolean>,
   live: () => boolean, hasCandidates: () => boolean): Promise<boolean> {
   let next = 0, inFlight = 0, firstPending = relays.length, matched = false;
@@ -135,7 +154,9 @@ export function createNativePublishedRelayLookup(
       if (signal.aborted) return Promise.reject(new NativePublishedRelayError());
 
       return new Promise((resolve, reject) => {
-        const outstanding = new Set<string>();
+        const outstanding = new Map<string, () => void>();
+        const rounds = Math.ceil(relays.length / MAX_NATIVE_RELAY_OPERATIONS);
+        const peerTimeout = Math.min(2_000, Math.floor(DEFAULT_RELAY_TIMEOUT_MS / (rounds + 1)), timeoutMs);
         const attempted = new Set<string>();
         const usedIds = new Set<string>();
         const events: unknown[] = [];
@@ -146,10 +167,7 @@ export function createNativePublishedRelayLookup(
         let closed = false;
         let timer: ReturnType<typeof setTimeout>;
         const cancelOutstanding = (): void => {
-          for (const id of outstanding) {
-            outstanding.delete(id);
-            try { port.cancelPublishedRelay(id); } catch { /* Native expiry remains the backstop. */ }
-          }
+          for (const cancel of outstanding.values()) cancel();
         };
         const cleanup = (): void => {
           clearTimeout(timer);
@@ -176,12 +194,10 @@ export function createNativePublishedRelayLookup(
           try { id = port.newInstanceId(); } catch { return false; }
           if (closed || typeof id !== 'string' || !UUID.test(id) || usedIds.has(id)) return false;
           usedIds.add(id);
-          outstanding.add(id);
           attempted.add(relay);
           let frames: string[];
-          try { frames = await port.queryPublishedRelay(id, relay, request.wire, request.subscriptionId); }
-          catch { outstanding.delete(id); return false; }
-          outstanding.delete(id);
+          try { frames = await queryPeer(port, outstanding, id, relay, request, peerTimeout); }
+          catch { return false; }
           if (closed) return false;
           let relayEvents: unknown[];
           try { relayEvents = candidateEvents(frames, request.subscriptionId); }
@@ -203,6 +219,7 @@ export function createNativePublishedRelayLookup(
             candidatePayloads.add(payload);
             totalBytes += eventByteLength;
             events.push(event);
+            if (pinnedEventId !== null || coordinate.kind === 5129) { finish(true); return true; }
           }
           return true;
         };

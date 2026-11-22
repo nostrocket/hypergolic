@@ -1,10 +1,12 @@
+import type { NativePublishedBody } from './native-published-body.ts';
+import { readSignedMirrors } from './signed-mirrors.ts';
 import { RelayGroup } from 'applesauce-relay';
 import type { GroupRequestOptions, RelayPool } from 'applesauce-relay';
 import type { Filter } from 'applesauce-core/helpers/filter';
 import { MAX_RELAYS_PER_ROLE, normalizeRelayUrl } from '../network/relay-settings.ts';
 import type { NappletLookupCoordinate, PublishedArtifactSource } from './loader.ts';
 import type { NativePublishedRelayLookup } from './native-published-relay.ts';
-import { MAX_HTML_BYTES, MAX_MANIFEST_BYTES, NappletHashMismatchError } from './verified-artifact.ts';
+import { authenticateManifestEvent, MAX_HTML_BYTES, MAX_MANIFEST_BYTES, NappletHashMismatchError } from './verified-artifact.ts';
 import {publishedRelayFilter} from './published-relay-request.ts';
 
 export const MAX_MANIFESTS_PER_QUERY = 32;
@@ -48,6 +50,7 @@ export type NativePublishedSourceOptions = Readonly<{
   relayLookup: NativePublishedRelayLookup;
   /** Required: platform transport enforces public-IP pinning for Blossom HTTPS. */
   fetchPublicHttps: PublishedHttpsFetch;
+  readVerifiedBody?: (url: string, expectedHash: string, maxBytes: number, signal: AbortSignal) => Promise<NativePublishedBody>;
   blossomTimeoutMs?: number;
 }>;
 
@@ -162,16 +165,7 @@ function publicHttpsBase(value: string): URL {
   return url;
 }
 
-function makeAbortScope(parent: AbortSignal, timeoutMs: number): { signal: AbortSignal; close: () => void } {
-  const controller = new AbortController();
-  const abortFromParent = (): void => controller.abort(parent.reason);
-  if (parent.aborted) abortFromParent();
-  else parent.addEventListener('abort', abortFromParent, { once: true });
-  const timer = setTimeout(() => controller.abort(new Error('transport timeout')), timeoutMs);
-  return { signal: controller.signal, close: () => { clearTimeout(timer); parent.removeEventListener('abort', abortFromParent); } };
-}
-
-async function readBoundedBody(response: Response, maxBytes: number, signal: AbortSignal): Promise<Uint8Array> {
+async function readBoundedBody(response: Response, maxBytes: number, signal: AbortSignal, progress: () => void): Promise<Uint8Array> {
   const lengthHeader = response.headers.get('content-length');
   if (lengthHeader !== null) {
     if (!/^\d+$/.test(lengthHeader)) return fail();
@@ -192,6 +186,7 @@ async function readBoundedBody(response: Response, maxBytes: number, signal: Abo
       if (signal.aborted) return fail();
       const result = await reader.read();
       if (result.done) break;
+      if (result.value.byteLength) progress();
       total += result.value.byteLength;
       if (total > maxBytes) { await reader.cancel(); return fail(); }
       chunks.push(new Uint8Array(result.value));
@@ -252,50 +247,51 @@ function queryManifests(poolFactory: BoundedRelayPoolFactory, relayTimeoutMs: nu
             totalBytes += bounded.byteLength;
             if (totalBytes > MAX_PUBLISHED_QUERY_BYTES) { finish(new PublishedSourceError()); return; }
             events.push(bounded.event);
+            const exactId = coordinate.kind === 5129 ? coordinate.eventId : pinnedEventId;
+            if (exactId) {
+              const reference = coordinate.kind === 5129 ? coordinate : { ...coordinate, relayHints: [] };
+              try {
+                if (authenticateManifestEvent(reference, bounded.event).id === exactId) finish();
+              } catch { /* Continue waiting for the exact authenticated event. */ }
+            }
           } catch { finish(new PublishedSourceError()); }
         },
         error() { finish(new PublishedSourceError()); },
         complete() { finish(); },
       });
+      if (settled) subscription?.unsubscribe();
     } catch { finish(new PublishedSourceError()); }
   });
 }
 
+function signedMirrorUrls(expectedHash: string, serverHints: readonly string[], maxBytes: number): string[] {
+  if (!HEX64.test(expectedHash) || !Array.isArray(serverHints) || !Number.isSafeInteger(maxBytes) ||
+      maxBytes < 1 || maxBytes > MAX_HTML_BYTES) return fail();
+  const urls = new Set<string>();
+  for (const hint of serverHints.slice(0, MAX_BLOSSOM_SERVERS)) {
+    try {
+      if (typeof hint === 'string') urls.add(new URL(`/${expectedHash}`, publicHttpsBase(hint)).href);
+    } catch { /* An invalid signed hint cannot select another destination. */ }
+  }
+  return [...urls];
+}
+
 async function readBlossom(expectedHash: string, serverHints: readonly string[], maxBytes: number,
   timeoutMs: number, signal: AbortSignal, fetchPublicHttps: PublishedHttpsFetch): Promise<Uint8Array> {
-  if (!HEX64.test(expectedHash) || !Array.isArray(serverHints) || serverHints.length === 0 ||
-      !Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > MAX_HTML_BYTES || signal.aborted) return fail();
-  const failures: unknown[] = [];
-  // Signed publications may advertise more mirrors than one read should contact.
-  for (const hint of serverHints.slice(0, MAX_BLOSSOM_SERVERS)) {
-    if (signal.aborted) return fail();
-    let base: URL;
-    try {
-      if (typeof hint !== 'string') throw new PublishedSourceError();
-      base = publicHttpsBase(hint);
-    } catch (error) { failures.push(error); continue; }
-    const target = new URL(`/${expectedHash}`, base);
-    const scope = makeAbortScope(signal, timeoutMs);
-    try {
-      const response = await fetchPublicHttps(target.href, {
-        method: 'GET', redirect: 'manual', credentials: 'omit', cache: 'no-store', signal: scope.signal,
-      });
-      if (signal.aborted || scope.signal.aborted || response.status !== 200 || response.redirected || response.type === 'opaqueredirect' ||
-          (response.url !== '' && new URL(response.url).origin !== target.origin)) {
-        try { await response.body?.cancel(); } catch { /* rejected response */ }
-        throw new PublishedSourceError();
-      }
-      const bytes = await readBoundedBody(response, maxBytes, scope.signal);
-      if (await sha256(bytes) !== expectedHash) throw new NappletHashMismatchError();
-      return bytes;
-    } catch (error) {
-      if (signal.aborted) return fail();
-      failures.push(error);
-    } finally { scope.close(); }
-  }
-  const mismatch = failures.find(error => error instanceof NappletHashMismatchError);
-  if (mismatch) throw mismatch;
-  throw new PublishedSourceError(failures.at(-1));
+  return readSignedMirrors(signedMirrorUrls(expectedHash, serverHints, maxBytes), timeoutMs, signal, async (url, attempt, progress) => {
+    const response = await fetchPublicHttps(url, {
+      method: 'GET', redirect: 'manual', credentials: 'omit', cache: 'no-store', signal: attempt,
+    });
+    if (attempt.aborted || response.status !== 200 || response.redirected || response.type === 'opaqueredirect' ||
+        (response.url !== '' && new URL(response.url).origin !== new URL(url).origin)) {
+      try { await response.body?.cancel(); } catch { /* rejected response */ }
+      return fail();
+    }
+    progress();
+    const bytes = await readBoundedBody(response, maxBytes, attempt, progress);
+    if (await sha256(bytes) !== expectedHash) throw new NappletHashMismatchError();
+    return bytes;
+  });
 }
 
 async function sha256(bytes: Uint8Array): Promise<string> {
@@ -328,7 +324,11 @@ export function createPublishedArtifactSource(options: PublishedSourceOptions): 
 export function createNativePublishedArtifactSource(options: NativePublishedSourceOptions): PublishedArtifactSource {
   const blossomTimeoutMs = boundedTimeout(options.blossomTimeoutMs, DEFAULT_NATIVE_BLOSSOM_TIMEOUT_MS, MAX_BLOSSOM_TIMEOUT_MS);
   if (typeof options.fetchPublicHttps !== 'function' || typeof options.relayLookup?.query !== 'function') return fail();
+  const readNative = options.readVerifiedBody;
   return Object.freeze({
+    ...(readNative ? {readVerifiedBody: async (hash: string, hints: readonly string[], limit: number, signal: AbortSignal) =>
+      readSignedMirrors(signedMirrorUrls(hash, hints, limit), blossomTimeoutMs, signal,
+        (url, attempt) => readNative(url, hash, limit, attempt), body => body.dispose())} : {}),
     query: (coordinate: NappletLookupCoordinate, relays: readonly string[], pinnedEventId: string | null, signal: AbortSignal, discovery?: true) =>
       options.relayLookup.query(coordinate, relays, pinnedEventId, signal, discovery),
     readHtml: (expectedHash: string, serverHints: readonly string[], maxBytes: number, signal: AbortSignal) =>

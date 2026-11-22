@@ -1,7 +1,8 @@
+import type { NativePublishedBody } from './native-published-body.ts';
 import { MAX_HTML_BYTES } from './artifact-limits.ts';
 import { resolvePublishedReference, type NappletCoordinate, type NappletSnapshot } from './resolve-link.ts';
 import { MAX_RELAYS_PER_ROLE, normalizeRelayUrl } from '../network/relay-settings.ts';
-import { NappletHashMismatchError, NappletHtmlEnvelopeError, UnsupportedNappletManifestError, verifyArtifact, verifyManifest,
+import { NappletHashMismatchError, NappletHtmlEnvelopeError, UnsupportedNappletManifestError, releasePublishedArtifact, verifyPublishedBody, verifyManifest,
   type VerifiedNappletArtifact, type VerifiedNappletManifest } from './verified-artifact.ts';
 
 /** The source receives only the verified coordinate, never untrusted encoded relay hints. */
@@ -12,6 +13,9 @@ export interface PublishedArtifactSource {
     signal: AbortSignal, discovery?: true): Promise<readonly unknown[]>;
   readHtml(expectedHash: string, serverHints: readonly string[], maxBytes: number,
     signal: AbortSignal): Promise<Uint8Array>;
+  /** File-backed verification is available on the trusted native transport. */
+  readVerifiedBody?(expectedHash: string, serverHints: readonly string[], maxBytes: number,
+    signal: AbortSignal): Promise<NativePublishedBody>;
 }
 export interface PublishedLoadOptions {
   readonly source: PublishedArtifactSource;
@@ -47,14 +51,16 @@ function checkedRole(input: readonly string[]): string[] {
   return relays;
 }
 
-function active(options: PublishedLoadOptions): void {
+type LoadAuthority = Pick<PublishedLoadOptions, 'source' | 'signal' | 'assertActive'>;
+
+function active(options: LoadAuthority): void {
   if (options.signal.aborted) throw new PublishedLoadError();
   try { options.assertActive(); } catch { throw new PublishedLoadError(); }
   if (options.signal.aborted) throw new PublishedLoadError();
 }
 
-/** Prepare a verified candidate. This function never opens a WebView or grants publisher trust. */
-export async function loadPublishedArtifact(link: unknown, options: PublishedLoadOptions): Promise<VerifiedNappletArtifact> {
+/** Resolve freshness and conflicting revisions before accessing any HTML. */
+export async function resolvePublishedManifest(link: unknown, options: PublishedLoadOptions): Promise<VerifiedNappletManifest> {
   const coordinate = resolvePublishedReference(link);
   const discovery = options.networkRelays !== undefined;
   if ((options.pinnedEventId !== undefined && !HEX64.test(options.pinnedEventId)) ||
@@ -95,21 +101,39 @@ export async function loadPublishedArtifact(link: unknown, options: PublishedLoa
   if (options.pinnedEventId === undefined && verified.some(candidate => candidate.created_at === chosen.created_at && candidate.id !== chosen.id)) {
     throw new PublishedLoadError('PUBLISHED_REVISION_CONFLICT');
   }
-  let bytes: Uint8Array;
-  try { bytes = await options.source.readHtml(chosen.expectedHtmlHash, chosen.serverHints, MAX_NAPPLET_HTML_BYTES, options.signal); }
+  return chosen;
+}
+
+export async function downloadPublishedArtifact(chosen: VerifiedNappletManifest, options: LoadAuthority): Promise<VerifiedNappletArtifact> {
+  active(options);
+  let body: Uint8Array | NativePublishedBody;
+  try {
+    const args = [chosen.expectedHtmlHash, chosen.serverHints, MAX_NAPPLET_HTML_BYTES, options.signal] as const;
+    body = options.source.readVerifiedBody ? await options.source.readVerifiedBody(...args) : await options.source.readHtml(...args);
+  }
   catch (error) {
     active(options);
+    if (error instanceof NappletHtmlEnvelopeError) throw new PublishedLoadError('PUBLISHED_INVALID_HTML');
     throw new PublishedLoadError(error instanceof NappletHashMismatchError ? 'PUBLISHED_HASH_MISMATCH' : 'PUBLISHED_DOWNLOAD_UNAVAILABLE');
   }
-  active(options);
-  let artifact: VerifiedNappletArtifact;
-  try { artifact = await verifyArtifact(chosen, bytes); }
+  let artifact: VerifiedNappletArtifact | undefined;
+  try {
+    active(options);
+    artifact = await verifyPublishedBody(chosen, body);
+    active(options);
+    return artifact;
+  }
   catch (error) {
+    if (artifact) releasePublishedArtifact(artifact);
+    else if (!(body instanceof Uint8Array)) body.dispose();
     active(options);
     if (error instanceof NappletHashMismatchError) throw new PublishedLoadError('PUBLISHED_HASH_MISMATCH');
     if (error instanceof NappletHtmlEnvelopeError) throw new PublishedLoadError('PUBLISHED_INVALID_HTML');
     throw error;
   }
-  active(options);
-  return artifact;
+}
+
+/** Prepare a verified candidate without grants or WebView side effects. */
+export async function loadPublishedArtifact(link: unknown, options: PublishedLoadOptions): Promise<VerifiedNappletArtifact> {
+  return downloadPublishedArtifact(await resolvePublishedManifest(link, options), options);
 }
