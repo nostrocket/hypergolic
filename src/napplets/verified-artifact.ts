@@ -244,7 +244,7 @@ function explicitSelfClosing(tagText: string): boolean {
 
 /** Accepts a conservative, explicitly balanced HTML document envelope. */
 function validateHtmlEnvelope(html: string): void {
-  const {doctypeEnd} = publishedHtmlHead(html);
+  const {doctypeEnd, implied} = publishedHtmlHead(html);
   const stack: {name: string; children: Namespace}[] = [];
   const closeTag = /<\/([a-z][a-z0-9:-]*)\s*>/iy;
   const openTag = /<([a-z][a-z0-9:-]*)(?=[\s/>])/iy;
@@ -253,10 +253,10 @@ function validateHtmlEnvelope(html: string): void {
   while (cursor < html.length) {
     const open = html.indexOf('<', cursor);
     if (open < 0) {
-      if (stack.length || html.slice(cursor).trim()) return fail();
+      if (stack.length || (!implied && html.slice(cursor).trim())) return fail();
       break;
     }
-    if (stack.length === 0 && html.slice(cursor, open).trim()) return fail();
+    if (!implied && stack.length === 0 && html.slice(cursor, open).trim()) return fail();
     if (html.startsWith('<!--', open)) {
       const end = html.indexOf('-->', open + 4);
       if (end < 0) return fail();
@@ -293,6 +293,7 @@ function validateHtmlEnvelope(html: string): void {
     const isVoid = !inSvg && VOID_ELEMENTS.has(name);
     const selfClosing = explicitSelfClosing(tagText);
     if (selfClosing && !isVoid && !(inSvg && SVG_GRAPHICS.has(name) && tagText.endsWith('/>'))) return fail();
+    if (implied && (name === 'html' || name === 'head' || name === 'body')) return fail();
     if (name === 'html') { htmlCount++; if (htmlCount !== 1 || stack.length !== 0) return fail(); }
     if (name === 'head') { headCount++; if (headCount !== 1 || parent?.name !== 'html' || bodySeen) return fail(); }
     if (name === 'body') { bodyCount++; bodySeen = true; if (bodyCount !== 1 || parent?.name !== 'html' || headCount !== 1) return fail(); }
@@ -304,7 +305,7 @@ function validateHtmlEnvelope(html: string): void {
       cursor = match.index;
     }
   }
-  if (htmlCount !== 1 || headCount !== 1 || bodyCount !== 1 || stack.length !== 0) return fail();
+  if (stack.length !== 0 || (!implied && (htmlCount !== 1 || headCount !== 1 || bodyCount !== 1))) return fail();
 }
 
 const bodyOwners = new WeakMap<VerifiedNappletArtifact, NativePublishedBody>();

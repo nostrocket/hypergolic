@@ -6,6 +6,7 @@ export const rules = [
   ['keys-registration', 'NAP-KEYS', 'wire-protocol', 'Acknowledge a registered keyboard action'],
   ['media-destroy', 'NAP-MEDIA', 'wire-protocol', 'Preserve the target session when requesting playback teardown'],
   ['modern-manifest', 'NIP-5D', 'identity', 'Open a signed single-hash manifest'],
+  ['implied-html-wrappers', 'NIP-5D', 'manifest', 'Verify signed HTML with an implied root, head and body'],
   ['artifact-integrity', 'NIP-5D', 'identity', 'Reject changed artifact bytes'],
   ['legacy-manifest', 'NIP-5D', 'manifest', 'Require the x tag on a legacy-shaped named manifest', 104],
   ['launch-icon-format', 'NIP-5D', 'icon', 'Use generic launch artwork for an unsupported GIF icon'],

@@ -101,6 +101,7 @@ export const observations = {
     return result?.type === 'media.session.destroy' && result.sessionId === sessionId;
   },
   'modern-manifest': async () => (await verifyArtifact(await manifest([['x', hash]], 'A fixture'), html)).htmlHash === hash,
+  'implied-html-wrappers': () => runComponent('napplets/loading', 'an implied root, head and body preserve the signed HTML and its digest'),
   'artifact-integrity': () => rejectsVerification(async () => verifyArtifact(await manifest([['x', hash]], 'A fixture'), new Uint8Array([0]))),
   'legacy-manifest': () => rejectsVerification(() => manifest([['path', '/index.html', hash]], 'A fixture')),
   'launch-icon-format': async () => {

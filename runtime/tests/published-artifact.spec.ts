@@ -12,7 +12,7 @@ const identity = {
   publisher: '1'.repeat(64), appId: 'published-test', eventId: '2'.repeat(64), version, htmlHash,
 };
 
-type Mode = 'modern' | 'invalid-format' | 'unicode-full-chunk' | 'normal' | 'keys-domain' | 'bad-hash' | 'wrong-byte-length' | 'replayed-sequence' | 'unknown-domain' | 'relay-domain' | 'attributed-head' | 'commented-head' | 'unsafe-head-comment' | 'upload-domain' | 'all-domains' | 'outbox-domain' | 'outbox-only' | 'published-approval' | 'intent-only' | 'soy-policy' | 'soy-policy-change'
+type Mode = 'modern' | 'invalid-format' | 'unicode-full-chunk' | 'normal' | 'keys-domain' | 'bad-hash' | 'wrong-byte-length' | 'replayed-sequence' | 'unknown-domain' | 'relay-domain' | 'implied-wrappers' | 'attributed-head' | 'commented-head' | 'unsafe-head-comment' | 'upload-domain' | 'all-domains' | 'outbox-domain' | 'outbox-only' | 'published-approval' | 'intent-only' | 'soy-policy' | 'soy-policy-change'
   | 'snapshot' | 'snapshot-mismatch' | 'snapshot-title-change' | 'snapshot-discovery';
 
 function artifactFor(mode: Mode): Buffer {
@@ -25,6 +25,12 @@ function artifactFor(mode: Mode): Buffer {
     <keys-declarative-editor id="keys-declarative" style="display:block">
       <template shadowrootmode="closed"><input aria-label="Declarative editor"></template>
     </keys-declarative-editor></body>`));
+  if (mode === 'implied-wrappers') return Buffer.from(`<!doctype html><!-- Field guide --><title>Field guide</title>
+    <script>window.firstScript = {
+      api: Boolean(window.napplet?.shell),
+      policy: document.head.firstElementChild?.getAttribute('http-equiv'),
+      title: document.title
+    };</script><p id="welcome">Ready</p>`);
   if (mode === 'attributed-head') return Buffer.from(source.replace('<head>', '<HEAD data-fixture="attribute">'));
   if (mode === 'commented-head') {
     const commented = source.replace('<!doctype html>', '<!doctype html>\n<!-- <head><meta http-equiv="Content-Security-Policy" content="default-src *"> -->');
@@ -86,7 +92,7 @@ async function openPublished(page: Page, mode: Mode = 'normal', extraQuery = '')
         type: 'artifact.chunk', sessionId: generation,
         sequence: mode === 'replayed-sequence' ? sequence + 1 : sequence,
         ...part, byteLength: mode === 'wrong-byte-length' ? part.byteLength + 1 : part.byteLength,
-        ...claims, ...snapshot, ...(mode === 'modern' || mode === 'snapshot' ? {manifestFormat:'nip-5d'} :
+        ...claims, ...snapshot, ...(mode === 'modern' || mode === 'implied-wrappers' || mode === 'snapshot' ? {manifestFormat:'nip-5d'} :
           mode === 'invalid-format' ? {manifestFormat:'unknown'} : {}), ...((mode==='soy-policy'||mode==='soy-policy-change')?{appData:{sourceKind:35129,policy:{profile:'soy.app-data/1',scope:mode==='soy-policy-change'&&sequence>0?'f'.repeat(64):'b7890c0793a7fa9c2570c56500f403724b1a4c0e453a9194ec7200132c634f8b',maxContentBytes:3072,relays:['wss://relay.damus.io'],defaultRelays:['wss://relay.damus.io']}}}:{}),
         domains: mode==='soy-policy'||mode==='soy-policy-change'?['identity','outbox','theme']:mode === 'intent-only' ? ['intent'] : mode === 'published-approval' ? ['identity', 'relay', 'theme'] : mode === 'unknown-domain' ? ['future-domain'] : mode === 'outbox-domain' ? ['outbox', 'relay', 'theme'] : mode === 'outbox-only' ? ['outbox', 'theme'] : mode === 'relay-domain' ? ['relay', 'theme'] : mode === 'upload-domain' ? ['upload'] : mode === 'keys-domain' ? ['keys', 'theme'] : mode === 'all-domains' ? ['config', 'identity', 'inc', 'intent', 'link', 'notify', 'outbox', 'relay', 'resource', 'storage', 'theme', 'upload'] : ['theme'],
       };
@@ -261,6 +267,15 @@ for (const mode of ['bad-hash', 'wrong-byte-length', 'replayed-sequence', 'unkno
     await expect(page.locator('iframe')).toHaveCount(0);
   });
 }
+
+test('the first publisher script in a document with implied wrappers sees the namespace and leading policy', async ({page}) => {
+  await openPublished(page, 'implied-wrappers');
+  const welcome = page.frameLocator('#napplet').locator('body > #welcome');
+  await expect(welcome).toHaveText('Ready');
+  expect(await welcome.evaluate(() => (window as any).firstScript)).toEqual({
+    api: true, policy: 'Content-Security-Policy', title: 'Field guide',
+  });
+});
 
 test('trusted media prelude preserves the leading CSP in a valid attributed uppercase published head',async({page})=>{
   await openPublished(page,'attributed-head');

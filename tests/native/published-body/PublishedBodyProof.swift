@@ -23,6 +23,15 @@ enum PublishedBodyProof {
       let valid = data.withUnsafeBytes { hg_published_html_valid($0.bindMemory(to: UInt8.self).baseAddress, data.count) != 0 }
       try check(valid == allowed, fragment)
     }
+    for (document, allowed) in [
+      ("<!doctype html><!-- intro --><title>Field guide</title><p>Ready</p>", true),
+      ("<!doctype html><title>Field guide</title><main><p>Incomplete</p>", false),
+      ("<!doctype html><title>Field guide</title><html><head></head><body></body></html>", false)
+    ] {
+      let data = Data(document.utf8)
+      let valid = data.withUnsafeBytes { hg_published_html_valid($0.bindMemory(to: UInt8.self).baseAddress, data.count) != 0 }
+      try check(valid == allowed, "implied document wrappers")
+    }
     let deep = Data((prefix + String(repeating: "<a>", count: 100_000) + String(repeating: "</A>", count: 100_000) + suffix).utf8)
     try check(deep.withUnsafeBytes { hg_published_html_valid($0.bindMemory(to: UInt8.self).baseAddress, deep.count) != 0 }, "deep balanced nesting")
     let html = Data(("<!doctype html><html><head></head><body>" + String(repeating: "j", count: 19_200_000) + "</body></html>").utf8)

@@ -132,14 +132,14 @@ bool selfClosing(Text s, size_t nameEnd) {
   for (size_t n = 1; n <= 3 && n <= slash; ++n) if (space(s, slash - n) == n) return true;
   return false;
 }
-bool balanced(Text s, size_t cursor) {
+bool balanced(Text s, size_t cursor, bool implied) {
   std::vector<Tag> stack;
   bool html = false, head = false, body = false;
   while (cursor < s.size()) {
     // Every open element still needs at least four bytes for its closing tag.
     if (stack.size() > (s.size() - cursor) / 4) return false;
     const size_t start = s.find('<', cursor);
-    if (stack.empty() && skipSpace(s, cursor) != (start == missing ? s.size() : start)) return false;
+    if (!implied && stack.empty() && skipSpace(s, cursor) != (start == missing ? s.size() : start)) return false;
     if (start == missing) break;
     if (s.substr(start, 4) == "<!--") {
       const auto end = s.find("-->", start + 4);
@@ -179,6 +179,7 @@ bool balanced(Text s, size_t cursor) {
     const bool self = selfClosing(tag, nameEnd - start);
     if (self && !empty && !(svg && member(name, graphics) && s[i - 1] == '/')) return false;
     const bool parentHtml = !stack.empty() && stack.back().matches(s, "html");
+    if (implied && member(name, "html head body")) return false;
     if (same(name, "html")) { if (html || !stack.empty()) return false; html = true; }
     if (same(name, "head")) { if (head || !parentHtml || body) return false; head = true; }
     if (same(name, "body")) { if (body || !parentHtml || !head) return false; body = true; }
@@ -194,7 +195,7 @@ bool balanced(Text s, size_t cursor) {
       }
     }
   }
-  return stack.empty() && html && head && body;
+  return stack.empty() && (implied || (html && head && body));
 }
 }
 extern "C" int hg_published_html_valid(const uint8_t *bytes, size_t length) {
@@ -210,6 +211,8 @@ extern "C" int hg_published_html_valid(const uint8_t *bytes, size_t length) {
     asciiSpaces(text, i);
     if (!word(text, i, ">")) return 0;
     const size_t afterDoctype = i;
-    return headTag(text, i, "html") && headTag(text, i, "head") && balanced(text, afterDoctype);
+    if (!headTrivia(text, i) || i == text.size()) return false;
+    const bool implied = !headTag(text, i, "html");
+    return (implied || headTag(text, i, "head")) && balanced(text, afterDoctype, implied);
   } catch (...) { return 0; }
 }

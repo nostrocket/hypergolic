@@ -26,11 +26,15 @@ function tagEnd(html: string, tag: RegExp, start: number): number {
   return tag.lastIndex;
 }
 
-/** Locate an explicit head after a doctype, root start tag and inert comments. */
-export function publishedHtmlHead(html: string): Readonly<{doctypeEnd: number; headEnd: number}> {
+/** Locate the insertion point before the first publisher token in an implied head, or after an explicit head tag. */
+export function publishedHtmlHead(html: string): Readonly<{doctypeEnd: number; headEnd: number; implied: boolean}> {
   const match = doctype.exec(html);
   if (!match) return unsafe();
   const doctypeEnd = match[0].length;
-  const headEnd = tagEnd(html, headStart, tagEnd(html, htmlStart, doctypeEnd));
-  return {doctypeEnd, headEnd};
+  const first = afterTrivia(html, doctypeEnd);
+  if (first === html.length) return unsafe();
+  htmlStart.lastIndex = first;
+  if (!htmlStart.test(html)) return {doctypeEnd, headEnd: first, implied: true};
+  const headEnd = tagEnd(html, headStart, htmlStart.lastIndex);
+  return {doctypeEnd, headEnd, implied: false};
 }

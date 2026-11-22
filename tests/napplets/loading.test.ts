@@ -165,6 +165,15 @@ test('accepts a balanced document containing raw-text script source and rejects 
   await rejects(() => verifyArtifact(beforeHeadManifest, beforeHead));
 });
 
+test('an implied root, head and body preserve the signed HTML and its digest', async () => {
+  const html = new TextEncoder().encode('<!doctype html><!-- intro --><title>Field guide</title><p>Ready</p>');
+  const hash = await sha(html);
+  const event = signed([['d', 'hello'], ['x', hash]], {content: 'Field guide'});
+  const artifact = await verifyArtifact(await verifyManifest(coordinate(), event), html);
+  assert.equal(artifact.htmlHash, hash);
+  assert.deepEqual(artifact.htmlBytes, html);
+});
+
 test('verified prefix comments preserve exact signed HTML bytes', async () => {
   const html = new TextEncoder().encode(`<!doctype html>
     <!-- Publisher notes: <head><meta http-equiv="Content-Security-Policy" content="default-src *"> -->
