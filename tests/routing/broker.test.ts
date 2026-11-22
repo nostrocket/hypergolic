@@ -19,7 +19,7 @@ test('approved dispatch sends exact payload only after actual target subscriptio
   assert.equal((review.request.request.payload as {literal: string}).literal, '+');
   assert.equal(h.sent.length, 0); h.reviews.decide(review.id, {allow: true}); await result.promise;
   assert.equal(result.reply().result.ok, true); assert.equal(result.reply().result.windowId, h.target.sessionId);
-  assert.equal(h.sent.length, 1); assert.equal(h.sent[0]!.generation, h.target.generation); assert.equal(h.sent[0]!.message.type, 'inc.event'); assert.equal(h.sent[0]!.message.sender, 'caller'); assert.equal((h.sent[0]!.message.payload as {literal: string}).literal, '+');
+  assert.equal(h.sent.length, 1); assert.equal(h.sent[0]!.generation, h.target.generation); assert.equal(h.sent[0]!.message.type, 'inc.event'); assert.equal(h.sent[0]!.message.sender, h.peerId(h.source)); assert.equal((h.sent[0]!.message.payload as {literal: string}).literal, '+');
 });
 test('saved defaults select the exact publisher and still require review on every dispatch', async t => {
   const h = await setup(t); await h.register(h.target); await h.subscribeTarget(); await h.catalog.remember({user, assertActive() {}}, h.b);

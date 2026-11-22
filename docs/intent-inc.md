@@ -1,6 +1,6 @@
 # Intent and inter-napplet communication
 
-Verified named and snapshot NIP-5D handlers use [NAP-INTENT at 43cb3a4](https://github.com/napplet/naps/blob/43cb3a4e855570ec4b90b9cc05f0c721e5ad0aab/naps/NAP-INTENT.md) with the existing Kehto window-message binding. Legacy handlers retain their [a040914 Intent](https://github.com/napplet/naps/blob/a040914b4bbd3a5cd8a14b0f316a723c968ebfb2/naps/NAP-INTENT.md) and [INC](https://github.com/napplet/naps/blob/a040914b4bbd3a5cd8a14b0f316a723c968ebfb2/naps/NAP-INC.md) behavior. The modern browser API is checked against the [SDK at efd5aa1](https://github.com/napplet/web/blob/efd5aa103359f1b150dfbb8870fa23e90fbc5540/packages/nap/src/intent/shim.ts).
+Verified named and snapshot NIP-5D handlers use [NAP-INTENT at 43cb3a4](https://github.com/napplet/naps/blob/43cb3a4e855570ec4b90b9cc05f0c721e5ad0aab/naps/NAP-INTENT.md) with the existing Kehto window-message binding. Legacy handlers retain their [a040914 Intent](https://github.com/napplet/naps/blob/a040914b4bbd3a5cd8a14b0f316a723c968ebfb2/naps/NAP-INTENT.md) delivery over an INC topic. The modern browser API is checked against the [SDK at efd5aa1](https://github.com/napplet/web/blob/efd5aa103359f1b150dfbb8870fa23e90fbc5540/packages/nap/src/intent/shim.ts).
 
 ## Handler selection and review
 
@@ -59,6 +59,8 @@ Importing installs nothing, creates no capability grant and sends no public
 write. Normal dispatch review and recipient permission checks still apply.
 
 ## Topics and channels
+
+Every running view gets its own opaque peer ID. Read the sender ID from a topic event to open a channel back to that view. Restarting or replacing a view gives it a new ID. A catalog name or publisher address cannot open a channel. [NAP-INC endpoint identity](https://github.com/napplet/naps/blob/377bf939c6c906817084b43dd21d424de646dbc2/naps/NAP-INC.md#L74-L87)
 
 Each loaded view separately approves each exact topic. Emission targets only approved same-identity subscribers, with no sender echo. Foreground switching retains delivery. Background pauses topics and preserves the existing loaded session's approval, with no payload backlog. Close, update and identity transitions revoke the old generation and its topic authority.
 

@@ -10,7 +10,7 @@ import { RoutingChannels } from './routing-channels.ts';
 import { RoutingReviewService } from './routing-review.ts';
 import {routingAppLabel,snapshotEventId} from '../napplets/published-identity.ts';
 export type RoutingTargetPort = Readonly<{ activate(handler: CatalogHandler, request: IntentRequest, signal: AbortSignal, assertActive: () => void, origin: NativeRegistration, revision: number): Promise<string | null> }>;
-type Endpoint = { registration: NativeRegistration; assertActive(): void; seen: RequestHistory; topics: Set<string> };
+type Endpoint = { peerId: string; registration: NativeRegistration; assertActive(): void; seen: RequestHistory; topics: Set<string> };
 const revoked = (): never => { throw new ShellStorageError('REVOKED'); };
 const sameHandler = (a: Readonly<{ publisher: string; appId: string; eventId: string }>, b: Readonly<{ publisher: string; appId: string; eventId: string }>) => a.publisher === b.publisher && a.appId === b.appId && a.eventId === b.eventId;
 const actions = (handler: CatalogHandler, role: string): readonly string[] => {
@@ -130,7 +130,7 @@ export class RoutingBroker {
     const sender = source.fixture === 'published' ? publishedIntentId(source.publisher, source.appId) : `bundled:${source.appId}`;
     const message = modern
       ? {type: 'intent.deliver', delivery: {sender, archetype: request.archetype, action: request.action, convention, ...payload}}
-      : {type: 'inc.event', topic: convention, sender: routingAppLabel(source.appId), ...payload};
+      : {type: 'inc.event', topic: convention, sender: endpoint.peerId, ...payload};
     return this.native.send(target.registration.generation, revision, message);
   }
   private async invoke(endpoint: Endpoint, revision: number, request: IntentRequest, active: () => void, signal: AbortSignal): Promise<Readonly<Record<string, unknown>>> {
@@ -185,12 +185,12 @@ export class RoutingBroker {
     this.channels.flush(revision);
     if (message.type === 'inc.emit') {
       for (const target of this.endpoints.values()) if (target !== endpoint && target.topics.has(message.topic!)) {
-        try {active(); this.active(target, revision, 'inc'); this.native.send(target.registration.generation, revision, {type: 'inc.event', topic: message.topic, sender: routingAppLabel(endpoint.registration.appId), ...(Object.prototype.hasOwnProperty.call(message, 'payload') ? {payload: message.payload} : {})});} catch { /* Revoked recipients have no destination; topics have no backlog or receipt. */ }
+        try {active(); this.active(target, revision, 'inc'); this.native.send(target.registration.generation, revision, {type: 'inc.event', topic: message.topic, sender: endpoint.peerId, ...(Object.prototype.hasOwnProperty.call(message, 'payload') ? {payload: message.payload} : {})});} catch { /* Revoked recipients have no destination; topics have no backlog or receipt. */ }
       }
       return null;
     }
     if (message.type === 'inc.channel.open') {
-      const peers = [...this.endpoints.values()].filter(peer => peer !== endpoint && routingAppLabel(peer.registration.appId) === message.target && peer.registration.user === endpoint.registration.user && peer.registration.epoch === endpoint.registration.epoch && peer.registration.domains.includes('inc') && this.native.mayDeliver(peer.registration.generation, revision, 'inc'));
+      const peers = [...this.endpoints.values()].filter(peer => peer !== endpoint && peer.peerId === message.target && peer.registration.user === endpoint.registration.user && peer.registration.epoch === endpoint.registration.epoch && peer.registration.domains.includes('inc') && this.native.mayDeliver(peer.registration.generation, revision, 'inc'));
       const failure = {type: 'inc.channel.open.result', id: message.id, error: 'peer unavailable'};
       if (peers.length !== 1) return failure;
       const peer = peers[0]!; this.active(peer, revision, 'inc');
@@ -233,7 +233,7 @@ export class RoutingBroker {
       let endpoint = this.endpoints.get(generation);
       if (!endpoint) {
         if (this.endpoints.size >= ROUTING_LIMITS.endpoints) return;
-        endpoint = { registration: expected, assertActive: owner.assertActive, seen: new RequestHistory(CAPABILITY_LIMITS.sessionRequests), topics: new Set() };
+        endpoint = { peerId: 'peer-' + this.native.newChannelId(), registration: expected, assertActive: owner.assertActive, seen: new RequestHistory(CAPABILITY_LIMITS.sessionRequests), topics: new Set() };
         this.endpoints.set(generation, endpoint);
       } else if (JSON.stringify(endpoint.registration) !== JSON.stringify(expected)) return;
       const selected = endpoint, capturedRevision = revision as number;

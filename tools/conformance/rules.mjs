@@ -9,7 +9,7 @@ export const rules = [
   ['artifact-integrity', 'NIP-5D', 'identity', 'Reject changed artifact bytes'],
   ['legacy-manifest', 'NIP-5D', 'manifest', 'Require the x tag on a legacy-shaped named manifest', 104],
   ['launch-icon-format', 'NIP-5D', 'icon', 'Use generic launch artwork for an unsupported GIF icon', 110],
-  ['inc-peer', 'NAP-INC', 'schemas', 'Distinguish two running instances of the same named application', 99],
+  ['inc-peer', 'NAP-INC', 'schemas', 'Distinguish two running instances of the same named application'],
   ['relay-continuity', 'NAP-RELAY', 'shell-behavior', 'Continue a public feed past an unsupported encrypted event', 100],
   ['config-default', 'NAP-CONFIG', 'core-subset', 'Follow a changed default until the user saves a value', 101],
   ['config-user-choice', 'NAP-CONFIG', 'core-subset', 'Retain an explicitly saved setting across default changes'],
