@@ -128,6 +128,7 @@ import Foundation
     try check((try? CapabilityConfiguration(try json(publishedConfig), generation: generation)) == nil, "duplicate Outbox grant rejected")
     publishedConfig["domains"] = ["identity", "relay"]
     configuredFields["configuration"] = try json(publishedConfig)
+    configuredFields["manifestFormat"] = "nip-5d"
     let configured = PublishedArtifactHostInput(try json(configuredFields))!
     let configuredRegistry = PublishedArtifactRegistry()
     try check(configuredRegistry.registerSession(session), "register configured owner session")
@@ -140,8 +141,9 @@ import Foundation
       version: configured.claims.aggregateHash), "mismatch checked before one-use claim")
     let configuredClaim = configuredRegistry.claim(configuredHandle, claims: configured.claims, viewGeneration: generation)
     try check(configuredClaim != nil, "invalid config did not consume staged artifact")
-    let configuredReader = PublishedArtifactReadOwner(claimed: configuredClaim!, domains: boundConfiguration.domains)
+    let configuredReader = PublishedArtifactReadOwner(claimed: configuredClaim!, domains: boundConfiguration.domains, manifestFormat: configured.manifestFormat)
     let configuredChunk = try frame(configuredReader.read(sequence: 0)!).0
+    try check(configuredChunk["manifestFormat"] as? String == "nip-5d", "verified modern format reaches runtime")
     try check(configuredChunk["domains"] as? [String] == ["identity", "relay"], "configured domains delivered to runtime")
     let input = PublishedArtifactHostInput(try json(fields))
     try check(input?.claims == claims && input?.handle == handle, "exact bounded prop")

@@ -60,7 +60,7 @@ const source = parameters.get('source');
 const fixtureName = parameters.get('fixture') ?? '';
 const fixture = source === null && Object.prototype.hasOwnProperty.call(__BUNDLED_FIXTURES__, fixtureName) ? __BUNDLED_FIXTURES__[fixtureName] : undefined;
 type RuntimeMetadata = Readonly<{
-  aggregateHash: string; appId: string; title: string;
+  aggregateHash: string; identityHash?: string; appId: string; title: string;
   journalCheckpoint?: boolean; domains: readonly string[]; appData?:AppDataPolicy; mesh?:NativeMeshContext; legacyReadOnly?:LegacyReadOnlyContext; publishTimeoutMs?: number; published: boolean;
 }>;
 let stopped = false;
@@ -215,7 +215,7 @@ function approvalTimeouts(artifact: RuntimeMetadata): Readonly<Record<string, nu
 
 function createGuestEndpoint(artifact: RuntimeMetadata, hooks: ShellAdapter) {
   const bridge = createShellBridge(hooks);
-  const identity = Object.freeze({ dTag: artifact.appId, aggregateHash: artifact.aggregateHash });
+  const identity = Object.freeze({ dTag: artifact.appId, aggregateHash: artifact.identityHash ?? artifact.aggregateHash });
   const resolved = resolveShellEnvironment(hooks, identity);
   // Mesh uses the private native lane, outside the SDK's fixed domain catalogue.
   const nativeMesh = artifact.published && artifact.domains.includes('mesh') && isNativeMeshContext(artifact.mesh, sessionId);
@@ -388,9 +388,9 @@ async function start(): Promise<void> {
     ensureSecureRandomUuid();
     if (source === 'published') {
       if (Array.from(parameters).length !== 2 || parameters.get('fixture') !== null) { fail('artifact-integrity'); return; }
-      const {html, metadata} = await readPublishedArtifact(hostWindow.HypergolicHost!, sessionId);
+      const {html, metadata, identityHash} = await readPublishedArtifact(hostWindow.HypergolicHost!, sessionId);
       const {appId, version: aggregateHash, domains, appData, mesh, legacyReadOnly, snapshot} = metadata;
-      if (!stopped) renderGuest({aggregateHash, appId, title: snapshot?.title ?? appId, domains,...(appData?{appData:appData.policy}:{}), ...(mesh ? {mesh} : {}), ...(legacyReadOnly ? {legacyReadOnly} : {}),
+      if (!stopped) renderGuest({aggregateHash, identityHash, appId, title: snapshot?.title ?? appId, domains,...(appData?{appData:appData.policy}:{}), ...(mesh ? {mesh} : {}), ...(legacyReadOnly ? {legacyReadOnly} : {}),
         journalCheckpoint: domains.includes('storage') && supportsWorkspaceJournalCheckpoint(metadata), published: true}, html);
       return;
     }

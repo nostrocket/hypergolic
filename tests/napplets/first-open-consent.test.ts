@@ -8,6 +8,7 @@ import { assertVerifiedNappletAdmission, FirstOpenConsentError, requestFirstOpen
 import { stageAdmittedPublishedArtifact } from '../../src/napplets/admitted-transfer.ts';
 import { descriptorForPublishedArtifact, publishedHostInput } from '../../src/napplets/published-host-input.ts';
 import type { NativePublishedTransferPort } from '../../src/napplets/native-transfer.ts';
+import {openShellDatabase} from '../../src/storage/database.ts';
 import { registration, setup } from '../storage/harness.ts';
 
 const SECRET = new Uint8Array(32); SECRET[31] = 11;
@@ -232,6 +233,29 @@ test('an Outbox-only manifest does not acquire an undeclared relay grant', async
   assert.deepEqual(admission.domains, ['outbox']); assert.deepEqual((await storage.readAccessGrant())?.domains, ['outbox']);
 });
 
+test('an existing named pin reopens its saved data and grant under its original account and version', async t => {
+  const {database, sqlite} = await setup(t);
+  const modern = await artifact(['storage'], []);
+  const id = '58274370-ec8f-4058-a4cc-b63e7e75ca4b';
+  const historicalVersion = await sha(new TextEncoder().encode(modern.htmlHash + ' /index.html\n'));
+  const pin = {id, title:'hello', source:'published' as const, publisher, appId:'hello', version:historicalVersion, eventId:modern.manifest.id};
+  const owner = registration({user, publisher, appId:pin.appId, version:historicalVersion, instanceId:id});
+  const signal = new AbortController().signal;
+  await requestFirstOpenConsent(modern, owner, database.bindApp(owner).port, signal, owner.assertActive, async () => true);
+  await database.bindStorage(owner).port.set('saved', 'prior release', 'instance');
+  await database.close();
+  const reopened = await openShellDatabase(sqlite, 'ios');
+  try {
+    const admission = await requestFirstOpenConsent(modern, owner, reopened.bindApp(owner).port, signal, owner.assertActive,
+      async () => assert.fail('exact saved grant should reopen'));
+    const input = JSON.parse(publishedHostInput(modern, admission, pin, {user,epoch:1,assertActive:owner.assertActive}, 'stage'));
+    const registration = JSON.parse(input.configuration);
+    assert.equal(input.htmlHash, modern.manifest.expectedHtmlHash);
+    assert.equal(registration.version, historicalVersion);
+    assert.equal(await reopened.bindStorage({...registration, assertActive:owner.assertActive}).port.get('saved', 'instance'), 'prior release');
+  } finally { await reopened.close(); }
+});
+
 test('modern review separates optional access and binds only approved supported domains to the native host', async t => {
   const {database} = await setup(t); const {owner, storage} = control(database);
   const signal = new AbortController().signal;
@@ -250,6 +274,10 @@ test('modern review separates optional access and binds only approved supported 
   const admission = await requestFirstOpenConsent(modern, owner, storage, signal, owner.assertActive, async () => true);
   const descriptor = descriptorForPublishedArtifact(modern, '58274370-ec8f-4058-a4cc-b63e7e75ca4b');
   const wire = JSON.parse(publishedHostInput(modern, admission, descriptor, {user, epoch: 0, assertActive: owner.assertActive}, 'stage'));
+  assert.equal(wire.manifestFormat, 'nip-5d');
+  assert.equal(wire.htmlHash, modern.manifest.tags.find(tag => tag[0] === 'x')?.[1]);
+  assert.equal(wire.version, descriptor.version);
+  assert.notEqual(wire.version, wire.htmlHash);
   assert.deepEqual(JSON.parse(wire.configuration).domains, ['storage', 'theme']);
   assert.deepEqual((await storage.readAccessGrant())?.domains, ['storage', 'theme']);
   await requestFirstOpenConsent(modern, owner, storage, signal, owner.assertActive, async () => assert.fail('same grant must reopen'));

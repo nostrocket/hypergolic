@@ -64,5 +64,6 @@ export function publishedHostInput(artifactInput: unknown, admissionInput: unkno
   try { authority.assertActive(); } catch { return fail(); }
   admission.assertActive();
   return JSON.stringify({ sessionId: descriptor.id, publisher: verified.publisher, appId: verified.appId,
-    eventId: verified.eventId, version: verified.version, htmlHash: verified.htmlHash, ...snapshot,handle, configuration });
+    eventId: verified.eventId, version: verified.version, htmlHash: verified.htmlHash,
+    ...(artifact.manifest.format === 'nip-5d' ? {manifestFormat:artifact.manifest.format} : {}), ...snapshot,handle, configuration });
 }
