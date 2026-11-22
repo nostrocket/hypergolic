@@ -1,0 +1,10 @@
+{"step":0,"outputs":[{"t":"iframeCreated","w":1,"identity":{"d":"my-napplet","hash":"00000000000000000000000000000000000000000000000000000000000fbb62","publisher":"0000000000000000000000000000000000000000000000000000000000000abc","kind":"named","eventId":"0000000000000000000000000000000000000000000000000000000000000011"},"exposed":["shell","intent","inc","theme","identity","relay","storage","keys","media","notify","resource","config","upload","value","outbox","cvm","link","pow","display"]}]}
+{"step":1,"outputs":[]}
+{"step":2,"outputs":[{"t":"bound","w":1,"port":7,"identity":{"d":"my-napplet","hash":"00000000000000000000000000000000000000000000000000000000000fbb62","publisher":"0000000000000000000000000000000000000000000000000000000000000abc","kind":"named","eventId":"0000000000000000000000000000000000000000000000000000000000000011"}}]}
+{"step":3,"outputs":[{"t":"send","port":7,"msg":{"type":"config.schemaError","error":"no configuration schema is registered","code":"no-schema"}}]}
+{"step":4,"outputs":[{"t":"send","port":7,"msg":{"type":"config.registerSchema.result","id":"r2","ok":false,"code":"pattern-not-allowed","error":"JSON Schema `pattern` keyword is not permitted in the Core Subset"}},{"t":"send","port":7,"msg":{"type":"config.schemaError","error":"JSON Schema `pattern` keyword is not permitted in the Core Subset","code":"pattern-not-allowed"}}]}
+{"step":5,"outputs":[{"t":"send","port":7,"msg":{"type":"config.registerSchema.result","id":"e1","ok":false,"code":"invalid-schema","error":"schema root must be of type `object`"}},{"t":"send","port":7,"msg":{"type":"config.schemaError","error":"schema root must be of type `object`","code":"invalid-schema"}}]}
+{"step":6,"outputs":[{"t":"send","port":7,"msg":{"type":"config.registerSchema.result","id":"r1","ok":true}}]}
+{"step":7,"outputs":[{"t":"send","port":7,"msg":{"type":"config.values","id":"g1","values":{"theme":"dark"}}}]}
+{"step":8,"outputs":[{"t":"send","port":7,"msg":{"type":"config.values","values":{"theme":"dark"}}}]}
+{"step":9,"outputs":[{"t":"send","port":7,"msg":{"type":"config.values","values":{"theme":"light"}}}]}
