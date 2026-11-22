@@ -13,7 +13,7 @@ export const rules = [
   ['relay-continuity', 'NAP-RELAY', 'shell-behavior', 'Continue a public feed past an unsupported encrypted event'],
   ['config-default', 'NAP-CONFIG', 'core-subset', 'Follow a changed default until the user saves a value', 101],
   ['config-user-choice', 'NAP-CONFIG', 'core-subset', 'Retain an explicitly saved setting across default changes'],
-  ['identity-connected', 'NAP-IDENTITY', 'shell-behavior', 'Keep a transient owner failure distinct from sign-out', 102],
+  ['identity-connected', 'NAP-IDENTITY', 'shell-behavior', 'Keep a transient owner failure distinct from sign-out'],
   ['intent-action', 'NAP-INTENT', 'wire-protocol', 'Require an explicit action in a normalized invocation', 103],
   ['theme-reply', 'NAP-THEME', 'error-handling', 'Return the correlated Theme result on quota refusal'],
   ['cleartext-publication', 'NIP-5D', 'security-considerations', 'Refuse encrypted Relay and Outbox requests before review'],

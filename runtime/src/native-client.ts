@@ -33,7 +33,7 @@ type StreamState={legacy?:true;domain:'relay'|'outbox';subId:string; filters:rea
 type StreamRequest = ReturnType<typeof parseRelaySubscribe> | ReturnType<typeof parseOutboxSubscribe>;
 type WaitingStream = Readonly<{request:StreamRequest;deliver:StreamState['deliver'];expiresAt:number;timer:number}>;
 type StreamEnvelope={sequence:number;delivery:number;response:unknown};
-type NativeClientOptions = Readonly<{ requestTimeoutsMs?: Readonly<Record<string, number>>; onRouting?: (message: NappletMessage, acknowledge: () => void) => void; onMedia?: (message: MediaEvent) => void; onCvm?: (message:unknown)=>void; mesh?: NativeMeshContext }>;
+type NativeClientOptions = Readonly<{ requestTimeoutsMs?: Readonly<Record<string, number>>; onIdentity?: (pubkey: string) => void; onRouting?: (message: NappletMessage, acknowledge: () => void) => void; onMedia?: (message: MediaEvent) => void; onCvm?: (message:unknown)=>void; mesh?: NativeMeshContext }>;
 function receiveStream(envelope:StreamEnvelope,streams:Map<number,StreamState>,stopStream:(counter:number,notify:boolean)=>void,acknowledge:(envelope:StreamEnvelope)=>void, released:()=>void):void {
   const stream=streams.get(envelope.sequence);if(!stream)return;
   try {
@@ -118,12 +118,19 @@ function releaseUpload(uploads: Map<number, UploadState>, sequence: number): voi
 }
 
 interface NativeReceiveState {generation: string; pending: Map<number, PendingRequest>; streams: Map<number, StreamState>; uploads: Map<number, UploadState>;
-  stopStream(counter: number, notify: boolean): void; acknowledge(envelope: StreamEnvelope): void; released():void; requestReleased():void; routing(raw: unknown): boolean; media: NativeClientOptions['onMedia']}
+  stopStream(counter: number, notify: boolean): void; acknowledge(envelope: StreamEnvelope): void; released():void; requestReleased():void; routing(raw: unknown): boolean; media: NativeClientOptions['onMedia']; identity: NativeClientOptions['onIdentity']}
 function receiveNative(raw: unknown, state: NativeReceiveState): void {
   const {generation, pending, streams, uploads, stopStream, acknowledge, released} = state;
     if (typeof raw !== 'string' || new TextEncoder().encode(raw).length > maxBytes) return;
     try {
       const envelope = JSON.parse(raw);
+      if (envelope?.type === 'identity.snapshot') {
+        if (envelope.sessionId === generation && Object.keys(envelope).length === 3 &&
+            typeof envelope.pubkey === 'string' && (envelope.pubkey === '' || /^[0-9a-f]{64}$/.test(envelope.pubkey))) {
+          state.identity?.(envelope.pubkey);
+        }
+        return;
+      }
       if (envelope?.type === 'media.event') {
         const message = raw.length <= 4096 && envelope.sessionId === generation && Object.keys(envelope).length === 3 && mediaEvent(envelope.message);
         if (message) state.media?.(message);
@@ -381,7 +388,7 @@ export function createNativeClient(native: NativeHost, generation: string, optio
     if (sequence >= Number.MAX_SAFE_INTEGER) throw new Error('Native sequence exhausted');
     native.postMessage(JSON.stringify({type: 'routing-ack', sessionId: generation, sequence: ++sequence, delivery}));
   });
-  const receiving: NativeReceiveState = {generation, pending, streams, uploads, stopStream, acknowledge, released:admission.released, requestReleased: resources.released, routing, media:options.onMedia};
+  const receiving: NativeReceiveState = {generation, pending, streams, uploads, stopStream, acknowledge, released:admission.released, requestReleased: resources.released, routing, media:options.onMedia, identity:options.onIdentity};
   const receive = (raw: unknown): void => {if (!disposed) receiveNative(raw, receiving);};
   const android = (event: { data: unknown }): void => receive(event.data);
   const ios = (event: MessageEvent): void => {

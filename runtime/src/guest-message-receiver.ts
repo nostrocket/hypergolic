@@ -10,6 +10,7 @@ type GuestMessageRoutes = Readonly<{
   keys: ReturnType<typeof createKeysSession> | null;
   sendMedia: ReturnType<typeof createNativeClient>['sendMedia'] | null;
   cvm?:((value:unknown)=>void)|null;
+  account?(): string | undefined;
   closed(): boolean;
   live(): boolean;
   dispatch(event: MessageEvent): void;
@@ -24,7 +25,7 @@ export function guestMessageReceiver(frame: HTMLIFrameElement, source: Window, r
     const cleanup = type === 'relay.close' || type === 'outbox.close' || type === 'resource.cancel';
     if (++operations > 64 && (!cleanup || event.ports.length)) {
       for (const port of event.ports) port.close();
-      const reply = routes.live() && !event.ports.length && quotaReply(event.data, routes.domains);
+      const reply = routes.live() && !event.ports.length && quotaReply(event.data, routes.domains, 'quota-exceeded', routes.account?.());
       if (reply) source.postMessage(reply, '*');
       return;
     }

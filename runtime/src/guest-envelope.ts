@@ -22,7 +22,7 @@ const additionalCorrelatedRequests = new Set(['lists.supported','lists.add','lis
   'notify.permission.request', 'media.session.create', ...CVM_OPERATIONS]);
 
 /** Project only small correlation headers. Over-limit payloads never reach capability adapters. */
-export function quotaReply(value: unknown, domains: readonly string[], error: 'quota-exceeded' | 'invalid-request' = 'quota-exceeded'): object | null {
+export function quotaReply(value: unknown, domains: readonly string[], error: 'quota-exceeded' | 'invalid-request' = 'quota-exceeded', account?: string): object | null {
   if (!value || typeof value !== 'object') return null;
   const {type, id, subId} = value as Record<string, unknown>;
   if (typeof type !== 'string' || type.length > 64 || !domains.includes(type.split('.')[0]!) ||
@@ -39,7 +39,8 @@ export function quotaReply(value: unknown, domains: readonly string[], error: 'q
     resourceFailure(header, error) ?? storageFailure(header, error) ?? queryFailure(header, error);
   if (denial) return denial;
   const identity = IDENTITY_OPERATIONS.find(operation => operation === type);
-  if (identity && identity !== 'identity.getPublicKey') return identityFailure({type:identity, id}, error);
+  if (identity === 'identity.getPublicKey') return account === undefined ? null : {type:type+'.result', id, pubkey:account};
+  if (identity) return identityFailure({type:identity, id}, error);
   if (type === 'relay.publishEncrypted') return {type:type+'.result', id, ok:false, error:'publish denied'};
   if (type === 'relay.publish' || type === 'outbox.publish') return {type: type + '.result', id, ok: false, error};
   if (type.startsWith('lists.')) return {type:type+'.result',id,ok:false,error};

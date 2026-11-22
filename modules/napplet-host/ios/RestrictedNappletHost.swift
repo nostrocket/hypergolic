@@ -727,7 +727,12 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
       ready = true
       RoutingTransport.shared.ready(generation)
       deadline?.cancel()
-      reply(nil, nil)
+      if let configuration, configuration.domains.contains("identity"),
+        let bytes = try? JSONSerialization.data(withJSONObject: ["type":"identity.snapshot", "sessionId":generation, "pubkey":configuration.user]) {
+        reply(String(decoding: bytes, as: UTF8.self), nil)
+      } else {
+        reply(nil, nil)
+      }
       emit("ready")
     case "error" where value.count == 3:
       guard let code = value["code"] as? String,

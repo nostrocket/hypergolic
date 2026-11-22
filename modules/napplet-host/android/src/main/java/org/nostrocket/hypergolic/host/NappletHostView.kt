@@ -259,7 +259,15 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
           if (text.toByteArray(Charsets.UTF_8).size > 2048) return@addWebMessageListener
           when (data.optString("type")) {
             "close-check.result" -> receiveCloseCheck(data)
-            "ready" -> if (data.length() == 2 && !ready) { ready = true; RoutingTransport.ready(generation); emit("ready") }
+            "ready" -> if (data.length() == 2 && !ready) {
+              ready = true
+              RoutingTransport.ready(generation)
+              configuration?.takeIf { "identity" in it.grantedDomains }?.let { config ->
+                reply.postMessage(JSONObject().put("type", "identity.snapshot").put("sessionId", generation)
+                  .put("pubkey", config.user).toString())
+              }
+              emit("ready")
+            }
             "error" -> if (data.length() == 3 && data.optString("code").matches(Regex("[a-z-]{1,80}"))) fail(data.getString("code"))
           }
         } catch (_: Exception) {
