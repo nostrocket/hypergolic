@@ -20,11 +20,11 @@ export const rules = [
   ['theme-reply', 'NAP-THEME', 'error-handling', 'Return the correlated Theme result on quota refusal'],
   ['cleartext-publication', 'NIP-5D', 'security-considerations', 'Refuse encrypted Relay and Outbox requests before review'],
   ...['chromium', 'webkit'].flatMap(engine => [
-    [engine + '-first-domain-call', 'NAP-SHELL', 'shell-behavior', engine + ' answers a granted Theme request before Shell readiness', 108],
+    [engine + '-first-domain-call', 'NAP-SHELL', 'shell-behavior', engine + ' answers a granted Theme request before Shell readiness'],
     [engine + '-early-discovery', 'NAP-SHELL', 'schemas', engine + ' reports exposed domains before receiving the Shell environment'],
     [engine + '-environment', 'NAP-SHELL', 'api-surface', engine + ' exposes the granted Theme service through its shell environment'],
     [engine + '-sandbox', 'NIP-5D', 'transport', engine + ' uses the scripts-only iframe sandbox'],
     [engine + '-srcdoc', 'NIP-5D', 'identity', engine + ' mounts the fixture with srcdoc'],
-    [engine + '-hello', 'NIP-5D', 'transport', engine + ' transfers one port and carries startup NAP traffic off the window', 98],
+    [engine + '-hello', 'NIP-5D', 'transport', engine + ' transfers one port and carries startup NAP traffic off the window'],
   ]),
 ].map(([id, spec, section, title, issue]) => ({id, spec, section, title, issue}));

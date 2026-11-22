@@ -270,7 +270,7 @@ function nativeGuestServices(artifact: RuntimeMetadata, live: () => boolean, sen
 function mount(artifact: RuntimeMetadata) {
   let legacyGuard: ReturnType<typeof createLegacyDocumentGuard> | undefined;
   const live = () => !stopped && frame.contentWindow === source && (artifact.legacyReadOnly !== undefined ? legacyGuard?.isActive() === true : startup.isReady() && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) !== undefined);
-  const privatePort = artifact.manifestFormat === 'nip-5d' && !artifact.legacyReadOnly;
+  const privatePort = !artifact.published || (artifact.manifestFormat === 'nip-5d' && !artifact.legacyReadOnly);
   const routing = createGuestRouting(artifact.domains, sessionId, live,
     () => { void native.routing({type: 'routing.__register'}).catch(() => {}); }, () => fail('runtime-bootstrap'),
     privatePort ? message => guestPort?.send(message) : undefined);

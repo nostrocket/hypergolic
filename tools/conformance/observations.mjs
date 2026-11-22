@@ -75,16 +75,14 @@ function streamContinuity() {
   } finally { session.revoke(); }
 }
 
-async function themeQuotaReply() {
+async function checkEnvelope(observe) {
   // Use the host's own bundler to resolve the same TypeScript entry point as the shipped runtime.
   const runtime = new URL('../../runtime/', import.meta.url);
   const vite = await import(createRequire(new URL('package.json', runtime)).resolve('vite'));
   const server = await vite.createServer({root:fileURLToPath(runtime), configFile:false, logLevel:'error',
     server:{middlewareMode:true, hmr:false, watch:null}, optimizeDeps:{noDiscovery:true}});
   try {
-    const {quotaReply} = await server.ssrLoadModule('/src/guest-envelope.ts');
-    const reply = quotaReply({type:'theme.get', id:d}, ['theme']);
-    return reply?.type === 'theme.get.result' && reply.id === d && typeof reply.error === 'string';
+    return observe(await server.ssrLoadModule('/src/guest-envelope.ts'));
   } finally { await server.close(); }
 }
 
@@ -114,7 +112,12 @@ export const observations = {
   'relay-continuity': streamContinuity,
   'config-default': async () => await configuration(false) === 'light',
   'config-user-choice': async () => await configuration(true) === 'dark',
-  'identity-connected': observeIdentity,
+  'identity-connected': async () => await observeIdentity() && await checkEnvelope(({rejectEnvelope}) => {
+    const pubkey = '1'.repeat(64), replies = [];
+    rejectEnvelope({data:{type:'identity.getPublicKey',id:d,extra:true}},
+      {postMessage:reply => replies.push(reply)}, ['identity'], pubkey);
+    return replies.length === 1 && replies[0].pubkey === pubkey && replies[0].id === d && !Object.hasOwn(replies[0],'error');
+  }),
   'intent-action': () => {
     const request = {archetype:'feed', convention:'napplet:feed/open'};
     const wire = fields => ({type:'intent.invoke', id:d, request:fields});
@@ -123,5 +126,8 @@ export const observations = {
     catch (error) { if (error instanceof RoutingRequestError) return true; throw error; }
     return false;
   },
-  'theme-reply': themeQuotaReply,
+  'theme-reply': () => checkEnvelope(({quotaReply}) => {
+    const reply = quotaReply({type:'theme.get', id:d}, ['theme']);
+    return reply?.type === 'theme.get.result' && reply.id === d && typeof reply.error === 'string';
+  }),
 };

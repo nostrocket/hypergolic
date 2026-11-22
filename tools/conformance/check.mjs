@@ -11,16 +11,17 @@ import {runComponent} from './component-cases.mjs';
 const {values} = parseArgs({options:{strict:{type:'boolean'}, json:{type:'string'}, markdown:{type:'string'}}});
 const checks = {...observations, 'cleartext-publication':() => runComponent('security/approval', 'Relay and Outbox refuse encrypted guest content before review')};
 for (const engine of ['chromium', 'webkit']) {
-  let snapshot;
+  let snapshot, earlySnapshot;
   const observe = () => snapshot ??= observeHost(engine);
-  checks[engine + '-first-domain-call'] = () => observeFirstThemeRequest(engine);
-  checks[engine + '-early-discovery'] = async () => (await observe()).beforeShellInit;
+  const beforeReady = () => earlySnapshot ??= observeFirstThemeRequest(engine);
+  checks[engine + '-first-domain-call'] = async () => (await beforeReady()).first;
+  checks[engine + '-early-discovery'] = async () => (await beforeReady()).beforeShellInit;
   checks[engine + '-environment'] = async () => (await observe()).exposesTheme;
   checks[engine + '-sandbox'] = async () => (await observe()).sandbox === 'allow-scripts';
   checks[engine + '-srcdoc'] = async () => (await observe()).srcdoc;
   checks[engine + '-hello'] = async () => {
-    const messages = (await observe()).messages;
-    return messages.length === 1 && messages[0].type === 'napplet.hello' && messages[0].ports === 1;
+    const {messages, portThemeReply} = await observe();
+    return portThemeReply && messages.length === 1 && messages[0].type === 'napplet.hello' && messages[0].ports === 1;
   };
 }
 const results = await assess(rules, checks, specs);

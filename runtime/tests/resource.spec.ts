@@ -1,3 +1,4 @@
+import {tracePort} from './port-trace';
 import { test, expect } from '@playwright/test';
 const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=';
 // Native-port double: genuine packaged SDK, Kehto, private adapter and DOM, without native DNS/TLS proof.
@@ -135,23 +136,16 @@ test('game audio suspends on blur and resumes on the next focused gesture',async
 });
 
 test('canonical single and bulk success envelopes carry MIME matching the reconstructed Blob', async ({page}) => {
+  await tracePort(page,['resource.bytes.result','resource.bytesMany.result']);
   await open(page);
   const guest = page.frames().find(value => value.parentFrame() === page.mainFrame())!;
-  const received = await guest.evaluate(async () => {
-    const messages: {type:string,mime:unknown,blobType:unknown}[] = [];
-    const capture = (event:MessageEvent) => {
-      const value = event.data;
-      if (value?.type === 'resource.bytes.result') messages.push({type:value.type,mime:value.mime,blobType:value.blob?.type});
-      if (value?.type === 'resource.bytesMany.result') for (const item of value.items) messages.push({type:value.type,mime:item.mime,blobType:item.blob?.type});
-    };
-    window.addEventListener('message',capture);
-    try {
-      const resource = (window as any).napplet.resource;
-      await resource.bytes('https://example.com/one.png');
-      await resource.bytesMany(['https://example.com/two.png','https://example.com/three.png']);
-      return messages;
-    } finally { window.removeEventListener('message',capture); }
+  await guest.evaluate(async () => {
+    const resource = (window as any).napplet.resource;
+    await resource.bytes('https://example.com/one.png');
+    await resource.bytesMany(['https://example.com/two.png','https://example.com/three.png']);
   });
+  const received = await page.evaluate(() => (window as any).portTrace.replies.flatMap((value:any) =>
+    (value.items ?? [value]).map((item:any) => ({type:value.type,mime:item.mime,blobType:item.blob?.type}))));
   expect(received).toEqual([
     {type:'resource.bytes.result',mime:'image/png',blobType:'image/png'},
     {type:'resource.bytesMany.result',mime:'image/png',blobType:'image/png'},

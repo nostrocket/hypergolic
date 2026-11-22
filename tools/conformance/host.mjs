@@ -28,22 +28,24 @@ async function withHost(engine, observe) {
 export function observeHost(engine) {
   return withHost(engine, async (page, url) => {
     await page.addInitScript(() => {
-      if (window !== window.top) {
-        window.addEventListener('message', event => {
-          if (event.source === parent && event.data?.type === 'shell.init' && window.beforeShellInit === undefined) {
-            const api = window.napplet;
-            window.beforeShellInit = Boolean(api?.theme) && api.shell.supports('theme') &&
-              !api.shell.supports('relay') && !api.shell.supports('unknown') && api.shell.services.length === 0;
-          }
-        });
-        return;
-      }
-      const messages = [];
+      if (window !== window.top) return;
+      const messages = [], requests = new Set();
       window.conformanceMessages = messages;
+      window.portThemeReply = false;
       window.HypergolicHost = {postMessage() {}};
       window.addEventListener('message', event => {
         if (event.source === document.querySelector('#napplet')?.contentWindow) {
           messages.push({type: event.data?.type, ports: event.ports.length});
+          if (event.data?.type !== 'napplet.hello' || event.ports.length !== 1) return;
+          const port = event.ports[0];
+          port.addEventListener('message', request => {
+            if (request.data?.type === 'theme.get') requests.add(request.data.id);
+          });
+          const send = port.postMessage.bind(port);
+          port.postMessage = value => {
+            if (value?.type === 'theme.get.result' && value.theme?.colors && requests.has(value.id)) window.portThemeReply = true;
+            send(value);
+          };
         }
       });
     });
@@ -54,54 +56,41 @@ export function observeHost(engine) {
     await browsers.expect(iframe.contentFrame().getByTestId('theme-status')).toHaveText('Host colors');
     const exposesTheme = await iframe.contentFrame().getByTestId('lab').evaluate(() =>
       window.napplet?.shell?.supports('theme') === true && window.napplet?.shell?.supports('relay') === false);
-    const beforeShellInit = await iframe.contentFrame().getByTestId('lab').evaluate(() => window.beforeShellInit === true);
-    return await page.evaluate(({exposesTheme, beforeShellInit}) => ({
-      exposesTheme, beforeShellInit,
+    return await page.evaluate(exposesTheme => ({
+      exposesTheme,
       sandbox: document.querySelector('#napplet').getAttribute('sandbox'),
       srcdoc: document.querySelector('#napplet').hasAttribute('srcdoc'),
-      messages: window.conformanceMessages,
-    }), {exposesTheme, beforeShellInit});
+      messages: window.conformanceMessages, portThemeReply: window.portThemeReply,
+    }), exposesTheme);
   });
 }
 
-// Exercise a granted Theme request on the current window transport with readiness delayed.
+// Hold the optional environment exchange while the guest uses its public API.
 export function observeFirstThemeRequest(engine) {
   return withHost(engine, async (page, url) => {
     await page.addInitScript(() => {
       if (window !== window.top) return;
       window.HypergolicHost = {postMessage() {}};
       window.addEventListener('message', event => {
-        if (event.source !== document.querySelector('#napplet')?.contentWindow || event.data?.type !== 'shell.ready') return;
-        if (!window.heldReadiness) {
-          event.stopImmediatePropagation();
-          window.heldReadiness = true;
-        }
+        if (event.source !== document.querySelector('#napplet')?.contentWindow) return;
+        if (event.data?.type !== 'napplet.hello' || event.ports.length !== 1) return;
+        event.ports[0].addEventListener('message', request => {
+          if (request.data?.type === 'shell.ready') {
+            request.stopImmediatePropagation();
+            window.heldReadiness = true;
+          }
+        });
       });
     });
     await page.goto(url + 'ux-lab');
-    await page.waitForFunction(() => window.heldReadiness === true);
+    await page.waitForFunction(() => window.heldReadiness === true, undefined, {timeout:5000});
     return page.frameLocator('#napplet').locator('body').evaluate(async () => {
-      const readTheme = (id, timeout) => new Promise(resolve => {
-        const finish = value => {
-          window.removeEventListener('message', receive);
-          clearTimeout(timer);
-          resolve(value);
-        };
-        const receive = event => {
-          if (event.source === parent && event.data?.type === 'theme.get.result' && event.data.id === id) {
-            finish(Boolean(event.data.theme?.colors));
-          }
-        };
-        const timer = setTimeout(() => finish(false), timeout);
-        window.addEventListener('message', receive);
-        parent.postMessage({type:'theme.get', id}, '*');
-      });
-      const first = await readTheme('before-readiness', 2000);
-      if (window.napplet.shell.services.length) throw new Error('Readiness control was released early');
-      parent.postMessage({type:'shell.ready'}, '*');
-      if (!await readTheme('after-readiness', 5000)) throw new Error('Theme control received no colors');
-      return first;
-    });
+      const api = window.napplet;
+      const beforeShellInit = Boolean(api.theme) && api.shell.supports('theme') &&
+        !api.shell.supports('relay') && !api.shell.supports('unknown') && api.shell.services.length === 0;
+      const theme = await api.theme.get();
+      return {beforeShellInit, first: Boolean(theme?.colors) && api.shell.services.length === 0};
+    }, undefined, {timeout:5000});
   });
 }
 
@@ -138,16 +127,6 @@ export function observeIdentity() {
     if (account !== '1'.repeat(64)) throw new Error('Connected account control failed');
     await page.evaluate(() => { window.identityAvailable = false; });
     if (await read() !== account) return false;
-    const raw = await identity.evaluate(() => new Promise(resolve => {
-      const listener = event => {
-        if (event.source !== parent || event.data?.id !== 'extra-fields') return;
-        window.removeEventListener('message', listener);
-        resolve(event.data);
-      };
-      window.addEventListener('message', listener);
-      parent.postMessage({type:'identity.getPublicKey', id:'extra-fields', user:'forged'}, '*');
-    }), undefined, {timeout:5000});
-    if (raw.pubkey !== account || Object.hasOwn(raw, 'error')) return false;
     await identity.evaluate(() => {
       window.accountChanges = [];
       window.napplet.identity.onChanged(key => window.accountChanges.push(key));
