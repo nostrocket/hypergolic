@@ -44,7 +44,7 @@ import {
 import type { ThemeService } from '@kehto/services';
 import { createShellTheme } from './shell-theme';
 import type { HostOperationContext, NappletMessage, ServiceRuntimeContext } from '@kehto/runtime';
-import { identityFailure, parseCapabilityRequest } from '../../src/runtime/capability-protocol';
+import { createIdentityAdapter, createSessionAccount } from './identity-adapter';
 import { createNativeClient, type NativeHost } from './native-client';
 import { publishedCspParts, readPublishedArtifact } from './published-artifact';
 import { ensureSecureRandomUuid } from './secure-random-compat';
@@ -135,25 +135,7 @@ function makeHooks(native: ReturnType<typeof createNativeClient>, captureRecipie
       });
     },
   };
-  const identity = { descriptor: { name: 'identity', version: '1.0.0' },
-    handleMessage(_windowId: string, message: NappletMessage, send: (message: NappletMessage) => void): void {
-      const live = captureRecipient();
-      if (message.type === 'identity.getPublicKey') {
-        if (!('id' in message) || typeof message.id !== 'string' || !message.id.length ||
-            message.id.length > 128 || new TextEncoder().encode(message.id).length > 128) return;
-        const id = message.id;
-        void readAccount(id).then(pubkey => {
-          if (live() && pubkey !== undefined) send({type:'identity.getPublicKey.result', id, pubkey} as NappletMessage);
-        });
-        return;
-      }
-      void native.request(message).then(response => { if (live()) send(response); }).catch(() => {
-        if (!live()) return;
-        try { const request = parseCapabilityRequest(message);
-          if (request.type !== 'identity.getPublicKey') send(identityFailure(request, 'identity request denied') as NappletMessage);
-        } catch { /* Unknown operation. */ }
-      });
-    } };
+  const identity = createIdentityAdapter(native, captureRecipient, readAccount);
   return {
     relayPool: {
       getRelayPool: () => null, trackSubscription: unavailable,
@@ -298,32 +280,17 @@ function mount(artifact: RuntimeMetadata) {
   const live = () => !stopped && frame.contentWindow === source && (artifact.legacyReadOnly !== undefined ? legacyGuard?.isActive() === true : ready && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) !== undefined);
   const routing = createGuestRouting(artifact.domains, sessionId, live,
     () => { void native.routing({type: 'routing.__register'}).catch(() => {}); }, () => fail('runtime-bootstrap'));
-  let account: string | undefined;
-  let accountRead: Promise<string | undefined> | undefined;
+  const account = createSessionAccount(message => native.request(message), live,
+    pubkey => source.postMessage({type:'identity.changed', pubkey}, '*'));
   const native = createNativeClient(hostWindow.HypergolicHost!, sessionId,
-    {onIdentity(pubkey) {
-      if (!artifact.domains.includes('identity') || !live()) return;
-      const previous = account;
-      account = pubkey;
-      if (previous !== undefined && previous !== pubkey) source.postMessage({type:'identity.changed', pubkey}, '*');
-    }, requestTimeoutsMs: approvalTimeouts(artifact), ...(artifact.published && artifact.mesh ? {mesh: artifact.mesh} : {}), onRouting: routing.deliver, onMedia: message => {
+    {...(artifact.domains.includes('identity') ? {onIdentity:account.update} : {}), requestTimeoutsMs: approvalTimeouts(artifact), ...(artifact.published && artifact.mesh ? {mesh: artifact.mesh} : {}), onRouting: routing.deliver, onMedia: message => {
       if (hasMedia && live()) source.postMessage(message, '*');
     },onCvm:message=>{if(artifact.domains.includes('cvm')&&live())source.postMessage(message,'*');}});
-  function readAccount(id: string): Promise<string | undefined> {
-    if (account !== undefined) return Promise.resolve(account);
-    const request = {type:'identity.getPublicKey', id};
-    accountRead ??= native.request(request).then(response => {
-      if (live() && 'pubkey' in response && typeof response.pubkey === 'string' &&
-          (response.pubkey === '' || /^[0-9a-f]{64}$/.test(response.pubkey))) account ??= response.pubkey;
-      return account;
-    }).catch(() => account).finally(() => { accountRead = undefined; });
-    return accountRead;
-  }
   const shellTheme = createShellTheme(theme => bridge.publishTheme(theme));
   const hooks = makeHooks(native, () => {
     const entry = bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId);
     return () => !stopped && entry !== undefined && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) === entry;
-  }, artifact, readAccount, shellTheme.theme, routing.setContext);
+  }, artifact, account.read, shellTheme.theme, routing.setContext);
   const { bridge, frame, source, media, environment, policy, destroyFrame } = createGuestEndpoint(artifact, hooks);
   const hasMedia = artifact.published && artifact.domains.includes('media');
   let ready = false;
@@ -346,7 +313,7 @@ function mount(artifact: RuntimeMetadata) {
   const deadline = window.setTimeout(() => fail('runtime-timeout'), 10_000);
 
   const receiveGuest = guestMessageReceiver(frame, source, {
-    domains: artifact.domains, routing, keys, account: () => account, sendMedia: hasMedia ? native.sendMedia : null,
+    domains: artifact.domains, routing, keys, account: account.current, sendMedia: hasMedia ? native.sendMedia : null,
     cvm:artifact.domains.includes('cvm')?createCvmGuestReceiver(source,native.cvm,live):null,
     closed: () => stopped, live,
     dispatch(event) {
