@@ -32,4 +32,4 @@ const bytes = Buffer.from(artifact);
 if (bytes.length > 2 * 1024 * 1024) throw new Error('Catalog exceeds the 2 MiB artifact limit.');
 await mkdir(new URL('dist/', base), { recursive: true });
 await writeFile(new URL('dist/index.html', base), bytes);
-console.log(`dist/index.html  ${bytes.length} bytes  SHA256 ${createHash('sha256').update(bytes).digest('hex')}`);
+process.stdout.write(`dist/index.html  ${bytes.length} bytes  SHA256 ${createHash('sha256').update(bytes).digest('hex')}\n`);

@@ -13,7 +13,7 @@ The selected listing’s Open button shows a spinner until Hypergolic returns a 
 The portable guest is authored in the separate `napplets` repository. This
 checkout includes its build source, tests and scoped lockfile in
 [`napplets/discovery`](../napplets/discovery). The source corresponds to
-`apps/discovery` at authoring commit `bcfc4f58a29f8d357fd01aab95d14d54af54853d`.
+`apps/discovery` at authoring commit `013896df9352ce78bd93bdea359666005a443bc3`.
 Use Node.js 24.20.0 and pnpm 10.34.5 to reproduce the shipped HTML.
 
 ```sh

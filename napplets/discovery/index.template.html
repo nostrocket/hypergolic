@@ -12,6 +12,47 @@
   <main id="catalog">
     <p role="status">Connecting to the shell…</p>
   </main>
+  <template id="directory-template">
+  <section id="listing">
+    <header class="directory-heading">
+      <button type="button" id="search-back" class="back" hidden>Discover</button>
+      <p id="eyebrow" class="sr-only">Napplet directory</p>
+      <h1 id="heading" tabindex="-1">Discover</h1>
+    </header>
+    <div id="browse-controls" class="browse-controls">
+      <form id="search-form" class="search" role="search">
+        <label for="query" class="sr-only">Search Napplets</label>
+        <span id="search-icon"></span>
+        <input type="search" id="query" placeholder="Search Napplets" maxlength="200" enterkeyhint="search">
+        <button type="button" id="clear" class="clear" aria-label="Clear search" hidden></button>
+      </form>
+    </div>
+    <div class="browse-filters">
+        <div id="categories" class="categories" role="group" aria-label="Categories"></div>
+    </div>
+    <section id="community-recommendation" class="community-card" aria-label="Community recommendations" hidden></section>
+    <section class="feed" aria-labelledby="feed-heading">
+      <div class="feed-heading-row">
+        <h2 id="feed-heading" tabindex="-1">Recently published</h2>
+        <p id="scope" class="scope" hidden></p>
+      </div>
+      <p id="result-status" class="sr-only" role="status"></p>
+      <div id="row-open-announcement" role="status" aria-atomic="true">
+        <div id="row-open-status" class="feedback" hidden></div>
+      </div>
+      <p id="notice" class="notice" role="status"></p>
+      <ol id="results" class="results" role="list"></ol>
+      <div id="empty" class="empty" hidden></div>
+      <div class="feed-actions">
+        <button type="button" id="more" class="secondary" hidden>Load more</button>
+        <button type="button" id="refresh" class="quiet" hidden>Refresh</button>
+      </div>
+      <footer class="coverage" id="coverage" hidden></footer>
+    </section>
+  </section>
+  <section id="detail" hidden></section>
+  <p id="opening-status" class="sr-only" role="status" aria-atomic="true"></p>
+  </template>
   <script>/* JS */</script>
 </body>
 </html>

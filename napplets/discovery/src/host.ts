@@ -86,7 +86,7 @@ export async function openPublication(publication: Publication): Promise<string>
 function setTheme(theme: Theme): boolean {
   const background = theme?.colors?.background;
   if (typeof background !== 'string' || !/^#(?:[a-f\d]{3}|[a-f\d]{6})$/i.test(background)) return false;
-  const hex = background.length === 4 ? [...background.slice(1)].map(char => char + char).join('') : background.slice(1);
+  const hex = background.length === 4 ? background.slice(1).replace(/./g, '$&$&') : background.slice(1);
   const red = parseInt(hex.slice(0, 2), 16);
   const green = parseInt(hex.slice(2, 4), 16);
   const blue = parseInt(hex.slice(4, 6), 16);

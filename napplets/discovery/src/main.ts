@@ -1,61 +1,16 @@
 import './compat.ts';
 import {CommunityFeed} from './community-feed.ts';
-import {accessCopy} from './access-copy.ts';
-import { publicationTimestamp } from './publication-date.ts';
-import { matchesSearch, parseProfile, verifySignedEvent, type CatalogEntry, type Category, type Profile, type Publication } from './catalog.ts';
-import { accessGlyph, artwork, button, find, glyph, node, screenshot } from './dom.ts';
+import { matchesSearch, parseProfile, verifySignedEvent, type CatalogEntry, type Category, type Profile } from './catalog.ts';
+import { button, find, glyph, node } from './dom.ts';
 import { canRead, canOpen, connectTheme, openPublication, query, queryCatalog, previewCatalog, ready } from './host.ts';
 import { ViewMedia } from './media.ts';
 import { CatalogPager, RevisionHistory } from './pager.ts';
-import { recommendControl } from './recommendations.ts';
+import {publicationAge, publicationRow, updateRowPublishers} from './publication-row.ts';
+import {renderPublicationDetail, updatePublisher} from './publication-detail.ts';
 
-function accessList(names: string[]): string {
-  if (names.length < 2) return names.join('');
-  return names.slice(0, -1).join(', ') + ' and ' + names.at(-1);
-}
-
-const catalog = find('catalog');
-// This template is static. Signed strings and relay results are rendered through text nodes only.
-catalog.innerHTML = `
-  <section id="listing">
-    <header class="directory-heading">
-      <button type="button" id="search-back" class="back" hidden>Discover</button>
-      <p id="eyebrow" class="sr-only">Napplet directory</p>
-      <h1 id="heading" tabindex="-1">Discover</h1>
-    </header>
-    <div id="browse-controls" class="browse-controls">
-      <form id="search-form" class="search" role="search">
-        <label for="query" class="sr-only">Search Napplets</label>
-        <span id="search-icon"></span>
-        <input type="search" id="query" placeholder="Search Napplets" maxlength="200" enterkeyhint="search">
-        <button type="button" id="clear" class="clear" aria-label="Clear search" hidden></button>
-      </form>
-    </div>
-    <div class="browse-filters">
-        <div id="categories" class="categories" role="group" aria-label="Categories"></div>
-    </div>
-    <section id="community-recommendation" class="community-card" aria-label="Community recommendations" hidden></section>
-    <section class="feed" aria-labelledby="feed-heading">
-      <div class="feed-heading-row">
-        <h2 id="feed-heading" tabindex="-1">Recently published</h2>
-        <p id="scope" class="scope" hidden></p>
-      </div>
-      <p id="result-status" class="sr-only" role="status"></p>
-      <div id="row-open-announcement" role="status" aria-atomic="true">
-        <div id="row-open-status" class="feedback" hidden></div>
-      </div>
-      <p id="notice" class="notice" role="status"></p>
-      <ol id="results" class="results" role="list"></ol>
-      <div id="empty" class="empty" hidden></div>
-      <div class="feed-actions">
-        <button type="button" id="more" class="secondary" hidden>Load more</button>
-        <button type="button" id="refresh" class="quiet" hidden>Refresh</button>
-      </div>
-      <footer class="coverage" id="coverage" hidden></footer>
-    </section>
-  </section>
-  <section id="detail" hidden></section>
-  <p id="opening-status" class="sr-only" role="status" aria-atomic="true"></p>`;
+const template = find<HTMLTemplateElement>('directory-template');
+find('catalog').replaceChildren(template.content);
+template.remove();
 
 const listing = find('listing'), detail = find('detail'), heading = find('heading');
 const search = find<HTMLInputElement>('query'), back = find<HTMLButtonElement>('search-back');
@@ -177,62 +132,6 @@ find('search-form').addEventListener('submit', event => {
 more.addEventListener('click', () => { clearRowFeedback(); void load(false); });
 refresh.addEventListener('click', () => { clearRowFeedback(); void load(true); });
 
-function publisherLabel(app: Publication): string {
-  return profiles.get(app.publisher)?.name || `${app.npub.slice(0, 12)}…${app.npub.slice(-4)}`;
-}
-
-function updateRowPublishers(): void {
-  const byPublisher = new Map(visibleEntries.map(({publication}) => [publication.publisher, publication]));
-  for (const label of results.querySelectorAll<HTMLElement>('[data-publisher]')) {
-    const app = byPublisher.get(label.dataset.publisher!);
-    if (!app) continue;
-    const text = 'by ' + publisherLabel(app);
-    if (label.textContent !== text) label.textContent = text;
-  }
-}
-
-function publicationAge(timestamp: number): string {
-  const seconds = Math.max(0, Math.floor(Date.now() / 1000) - timestamp);
-  if (seconds < 60) return 'just now';
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-  const days = Math.floor(seconds / 86400);
-  if (days < 30) return `${days}d ago`;
-  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
-  return `${Math.floor(days / 365)}y ago`;
-}
-
-function listRow(entry: CatalogEntry): HTMLLIElement {
-  const app = entry.publication;
-  const row = node('li', 'row');
-  const cell = node('div', 'row-cell');
-  const info = button('', 'row-info', event => showDetail(entry, event.currentTarget as HTMLElement));
-  info.setAttribute('aria-label', `Details for ${app.title}`);
-  info.dataset.row = app.address;
-  const summary = node('span', 'row-summary');
-  summary.append(node('strong', 'row-title', app.title));
-  const metadata = node('span', 'row-metadata');
-  const publisher = node('span', 'row-publisher', 'by ' + publisherLabel(app));
-  publisher.dataset.publisher = app.publisher;
-  publisher.title = app.npub;
-  const date = publicationTimestamp(app.signed.event.created_at);
-  const age = node('time', 'row-age', publicationAge(app.signed.event.created_at));
-  if (date) {age.dateTime = date.iso; age.setAttribute('aria-label', 'Updated ' + date.label);}
-  metadata.append(publisher, age);
-  summary.append(metadata);
-  if (app.description) summary.append(node('span', 'row-description', app.description));
-  else summary.append(node('span', 'row-description', 'No description provided'));
-  info.append(artwork(app, listMedia), summary);
-  cell.append(info);
-  if (canOpen() && !entry.conflict && !stale) {
-    const open = openButton(entry, 'row', rowOpenStatus);
-    open.dataset.open = app.address;
-    cell.append(open);
-  }
-  row.append(cell);
-  return row;
-}
-
 function renderList(): void {
   const active = document.activeElement as HTMLElement | null;
   const prior = active?.dataset.row ?? active?.dataset.open;
@@ -249,7 +148,8 @@ function renderList(): void {
     (selectedCategory === 'All' || publication.categories.includes(selectedCategory)) &&
     matchesSearch(publication, needle, profiles.get(publication.publisher)));
   listMedia.clearTargets();
-  results.replaceChildren(...visibleEntries.map(entry => listRow(entry)));
+  results.replaceChildren(...visibleEntries.map(entry => publicationRow(entry, listMedia, profiles, showDetail,
+    canOpen() && !entry.conflict && !stale ? openButton(entry, 'row', rowOpenStatus) : undefined)));
   placeRowFeedback();
   if (prior && !listing.hidden) {
     const controls = results.querySelectorAll<HTMLButtonElement>(wasOpen ? '[data-open]' : '[data-row]');
@@ -363,8 +263,8 @@ async function enrich(): Promise<void> {
       }
     }
     if (changed) {
-      updatePublisher();
-      updateRowPublishers();
+      if (selected) updatePublisher(selected.publication, profiles.get(selected.publication.publisher));
+      updateRowPublishers(results, visibleEntries, profiles);
       if (homeFilters && search.value.trim()) renderList();
     }
   } catch {
@@ -373,47 +273,6 @@ async function enrich(): Promise<void> {
     profilePending = false;
     if (!loading) queueMicrotask(() => void enrich());
   }
-}
-
-function detailSection(title: string): HTMLElement {
-  const section = node('section', 'detail-section');
-  section.append(node('h2', '', title));
-  return section;
-}
-
-function capabilities(section: HTMLElement, label: string, names: string[]): void {
-  if (!names.length) return;
-  section.append(node('h3', 'cap-group', label));
-  const list = node('ul', 'capabilities');
-  list.setAttribute('role', 'list');
-  for (const name of names) {
-    const {name:title,description} = accessCopy(name);
-    const row = node('li', 'cap-row');
-    row.dataset.requirement = label.toLowerCase();
-    const icon = node('span', 'cap-icon');
-    icon.append(accessGlyph(name));
-    const copy = node('div');
-    copy.append(node('strong', '', title), node('p', 'muted', description));
-    row.append(icon, copy);
-    list.append(row);
-  }
-  section.append(list);
-}
-
-function reference(label: string, value: string): HTMLElement {
-  const field = node('div', 'reference');
-  field.append(node('span', 'muted', label), node('code', '', value));
-  return field;
-}
-
-function updatePublisher(): void {
-  if (!selected) return;
-  const profile = profiles.get(selected.publication.publisher);
-  const publisher = find('publisher-name');
-  publisher.textContent = profile?.name || `${selected.publication.npub.slice(0, 16)}…${selected.publication.npub.slice(-8)}`;
-  const about = find('publisher-about');
-  about.textContent = profile?.about || (profile?.name ? '' : 'No verified publisher profile is available.');
-  about.hidden = !about.textContent;
 }
 
 function showDetail(entry: CatalogEntry, returnFocus: HTMLElement): void {
@@ -453,89 +312,9 @@ function closeDetail(): void {
 function renderDetail(): void {
   if (!selected) return;
   const entry = selected;
-  const app = entry.publication;
-  const header = node('header');
-  const goBack = button(homeFilters ? 'Search results' : 'Discover', 'back', closeDetail);
-  goBack.prepend(glyph('back'));
-  goBack.setAttribute('aria-label', homeFilters ? 'Back to search results' : 'Back to Discover');
-  const title = node('h1', 'app-name', app.title);
-  title.id = 'detail-heading';
-  title.tabIndex = -1;
-  header.append(goBack);
-
-  const identity = node('div', 'identity');
-  const names = node('div');
-  names.append(title);
-  identity.append(artwork(app, detailMedia, true), names);
-
-  const actions = node('div', 'detail-actions');
-  const announcement = node('div');
-  announcement.setAttribute('role', 'status');
-  announcement.setAttribute('aria-atomic', 'true');
-  const feedback = node('div', 'feedback');
-  feedback.hidden = true;
-  announcement.append(feedback);
-  const explanation = node('p', 'compat-detail');
-  const revision = history.status(app);
-  if (entry.conflict || revision === 'conflict') {
-    explanation.textContent = 'This publisher signed different releases at the same timestamp. Opening is unavailable until the conflict is resolved.';
-  } else if (revision === 'superseded') {
-    explanation.textContent = 'A newer signed release is available. Return to Discover to view it.';
-  } else if (stale) {
-    explanation.textContent = 'Refresh the directory before opening a saved release.';
-  } else if (canOpen()) {
-    actions.append(openButton(entry, 'detail', feedback));
-  } else {
-    explanation.textContent = 'This shell does not offer link opening. Select the address in Publication details.';
-  }
-  explanation.hidden = !explanation.textContent;
-  actions.append(announcement);
-  const preview = node('div', 'detail-art');
-  screenshot(preview, app.screenshots[0], detailMedia, false);
-  const about = node('div', 'detail-intro');
-  about.append(node('p', 'description', app.description || 'The publisher did not provide a description.'));
-  const timestamp = publicationTimestamp(app.signed.event.created_at);
-  if (timestamp) {
-    const updated = node('time', 'publication-date', `Updated ${timestamp.label}`);
-    updated.dateTime = timestamp.iso;
-    about.append(updated);
-  }
-  const recommendation = recommendControl(app);
-  if (recommendation) about.append(recommendation);
-
-  const publisher = node('div', 'detail-publisher');
-  const profile = node('details', 'publisher');
-  const summary = node('summary');
-  const profileLabel = node('span');
-  profileLabel.id = 'publisher-name';
-  summary.append(glyph('profile'), profileLabel, glyph('chevron'));
-  const profileAbout = node('p', 'description');
-  profileAbout.id = 'publisher-about';
-  profile.append(summary, profileAbout, reference('Signing key', app.npub));
-  publisher.append(profile);
-  names.append(publisher);
-
-  const caps = detailSection('Access');
-  const accessName = (name: string) => name === 'outbox' ? 'Nostr relays' : accessCopy(name).name;
-  const requiredNames = [...new Set(app.required.map(accessName))];
-  caps.append(node('p', 'access-summary', requiredNames.length ? `Uses ${accessList(requiredNames)}.` : 'No required access declared.'));
-  const accessDetails = node('details', 'access-details');
-  const accessHeading = node('summary', '', 'Access details');
-  accessHeading.append(glyph('down'));
-  accessDetails.append(accessHeading);
-  capabilities(accessDetails, 'Required', app.required);
-  capabilities(accessDetails, 'Optional', app.optional);
-  accessDetails.append(node('p', 'muted', 'These are publisher requests. Your shell decides which access is available.'));
-  if (app.required.length || app.optional.length) caps.append(accessDetails);
-
-  const publication = node('details', 'publication');
-  publication.id = 'publication-reference';
-  const referenceTitle = node('summary', '', 'Publication details');
-  referenceTitle.append(glyph('down'));
-  publication.append(referenceTitle, reference('Publication address', app.address), reference('Signed event ID', app.signed.event.id), reference('Format', app.format), reference('Artifact hash', app.artifactHash));
-  if (app.categories.length) publication.append(reference('Categories', app.categories.join(' · ')));
-  detail.replaceChildren(header, identity, about, preview, caps, explanation, publication, actions);
-  updatePublisher();
+  renderPublicationDetail(detail, entry, {backToSearch: Boolean(homeFilters), close: closeDetail, media: detailMedia,
+    open: feedback => openButton(entry, 'detail', feedback), revision: history.status(entry.publication),
+    stale, profile: profiles.get(entry.publication.publisher)});
 }
 
 function openButton(entry: CatalogEntry, placement: 'row' | 'detail', feedback: HTMLElement): HTMLButtonElement {

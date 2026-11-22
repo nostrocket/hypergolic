@@ -136,8 +136,9 @@ function validServerHints(tags: string[][]): boolean {
         !labels.every(label => /^(?=.{1,63}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(label)) ||
         origins.has(url.origin)) return false;
       origins.add(url.origin);
-    } catch {
-      return false;
+    } catch (error) {
+      if (error instanceof TypeError) return false; // URL rejected a malformed signed server hint.
+      throw error;
     }
   }
   return true;
