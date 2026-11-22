@@ -4,19 +4,23 @@ import { MAX_DIMENSION } from './media-header.ts';
 import { loadVerifiedImage } from './media-resource.ts';
 import { canReadResource } from './host.ts';
 
-async function displayImage(blob: Blob, signal: AbortSignal, apply: (image: HTMLImageElement) => void): Promise<void> {
+async function displayImage(blob: Blob, signal: AbortSignal, apply: (image: HTMLImageElement) => void): Promise<boolean> {
   const image = new Image();
   const url = URL.createObjectURL(blob);
   try {
     image.src = url;
     await image.decode();
     if (!signal.aborted && image.naturalWidth > 0 && image.naturalHeight > 0 &&
-      image.naturalWidth <= MAX_DIMENSION && image.naturalHeight <= MAX_DIMENSION) apply(image);
+      image.naturalWidth <= MAX_DIMENSION && image.naturalHeight <= MAX_DIMENSION) {
+      apply(image);
+      return true;
+    }
   } catch {
     // Invalid media falls through to the generic artwork.
   } finally {
     URL.revokeObjectURL(url);
   }
+  return false;
 }
 
 /** One viewport-scoped, bounded resource queue. No URL from a relay reaches an img element. */
@@ -61,6 +65,22 @@ export class ViewMedia {
     this.callbacks.set(target, start);
     if (this.observer) this.observer.observe(target);
     else queueMicrotask(start);
+  }
+
+  showFirstScreenshot(target: HTMLElement, candidates: readonly Media[], apply: (image: HTMLImageElement, media: Media) => void): void {
+    if (!candidates.length || !canReadResource()) return;
+    const signal = this.controller.signal;
+    this.queue.push(async () => {
+      for (const candidate of candidates) {
+        if (signal.aborted || !target.isConnected) return;
+        const blob = await loadVerifiedImage(candidate, signal, (url, options) => resource.bytes(url, options));
+        if (blob && await displayImage(blob, signal, image => {
+          if (target.isConnected) apply(image, candidate);
+        })) return;
+      }
+    });
+    // Detail constructs its elements before attaching them to the document.
+    queueMicrotask(() => this.pump());
   }
 
   private pump(): void {

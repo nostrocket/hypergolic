@@ -76,6 +76,8 @@ test('ignores optional malformed media while retaining independent valid signed 
     ['screenshot', `x ${imageHash}`, `x ${imageHash}`],
     ['screenshot', 'alt Board <on the right>', 'm image/png', `x ${imageHash}`],
     ['screenshot', `x ${imageHash}`, 'm image/svg+xml'],
+    ['screenshot', `x ${imageHash}`, 'm video/mp4'],
+    ['screenshot', `x ${imageHash}`, 'm video/mp4; codecs="avc1"'],
   ] }));
   assert.equal(app?.icon, undefined);
   assert.deepEqual(app?.screenshots, [{ hash: imageHash, mime: 'image/png', alt: 'Board <on the right>' }]);
