@@ -1,4 +1,4 @@
-import {test,expect,type Page,type FrameLocator} from '@playwright/test';
+import {test,expect,type Page,type FrameLocator} from './published-wire';
 import {build} from 'vite';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -47,17 +47,15 @@ async function openMap(page:Page, revised=false) {
     const bytes=Uint8Array.from(atob(html),c=>c.charCodeAt(0));
     const listeners=new Set<(event:{data:string})=>void>(), transfers=new Map<string,{base64:string;mime:string}>();
     const state={requests:[] as string[]}; (window as any).__mapProbe=state;
-    const emit=(message:unknown)=>{for(const listener of listeners)listener({data:JSON.stringify(message)});};
+    const emit=(message:unknown)=>{for(const listener of listeners)listener({data:window.nativeMessage(message)});};
     Object.defineProperty(window,'HypergolicHost',{value:{
       addEventListener:(_:string,listener:any)=>listeners.add(listener),removeEventListener:(_:string,listener:any)=>listeners.delete(listener),
       postMessage(raw:string){
         const envelope=JSON.parse(raw);
         if(envelope.type==='artifact.read'){
-          const start=envelope.sequence*49152,payload=bytes.slice(start,start+49152);
           emit({type:'artifact.chunk',sessionId:generation,sequence:envelope.sequence,publisher:'1'.repeat(64),
             appId:pin.appId,eventId:pin.eventId,version,htmlHash,
-            domains:['inc','intent','outbox','resource','storage'],base64:btoa(String.fromCharCode(...payload)),
-            byteLength:payload.length,totalBytes:bytes.length,done:start+49152>=bytes.length});return;
+            domains:['inc','intent','outbox','resource','storage'],...window.publishedPart(bytes,envelope.sequence)});return;
         }
         if(envelope.type!=='capability')return;
         const request=JSON.parse(envelope.message);

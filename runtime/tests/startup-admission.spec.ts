@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { expect, test } from '@playwright/test';
+import { expect, test } from './published-wire';
 
 const html = Buffer.from(`<!doctype html><html><head><title>Startup admission</title></head><body><output>starting</output>
 <script>
@@ -27,7 +27,7 @@ test('valid startup requests cross the bridge once with native deferral while pu
     const calls: Array<{type: string; deferred: boolean; sequence: number}> = [];
     const stored = new Map<string, string>();
     let active = 0, peak = 0;
-    const emit = (value: unknown) => {for (const listener of listeners) listener({data:JSON.stringify(value)});};
+    const emit = (value: unknown) => {for (const listener of listeners) listener({data:window.nativeMessage(value)});};
     const pump = () => {while (active < 4 && queue.length) queue.shift()!();};
     Object.defineProperty(window,'__startupCalls',{value:() => ({calls,peak})});
     Object.defineProperty(window,'HypergolicHost',{value:{
@@ -36,7 +36,7 @@ test('valid startup requests cross the bridge once with native deferral while pu
       postMessage(raw: string) {
         const req = JSON.parse(raw);
         if (req.type === 'artifact.read') {
-          emit({type:'artifact.chunk',sessionId:generation,sequence:req.sequence,base64:body,
+          emit({type:'artifact.chunk',sessionId:generation,sequence:req.sequence,text:new TextDecoder().decode(Uint8Array.from(atob(body), c => c.charCodeAt(0))),
             byteLength,totalBytes:byteLength,done:true,publisher:'1'.repeat(64),eventId:'2'.repeat(64),
             appId:'startup-admission',htmlHash,version,domains:['identity','relay','storage']});
         }
@@ -100,7 +100,7 @@ test('Outbox-only startup queues all three reads beyond four held calls without 
     const listeners=new Set<(value:{data:string})=>void>(),queue:Array<()=>void>=[];
     const calls:Array<{type:string;deferred:boolean;sequence:number}>=[];
     let active=0,peak=0;
-    const emit=(value:unknown)=>{for(const listener of listeners)listener({data:JSON.stringify(value)});};
+    const emit=(value:unknown)=>{for(const listener of listeners)listener({data:window.nativeMessage(value)});};
     const pump=()=>{while(active<4&&queue.length)queue.shift()!();};
     Object.defineProperty(window,'__outboxStartup',{value:()=>({calls,peak})});
     Object.defineProperty(window,'HypergolicHost',{value:{
@@ -108,7 +108,7 @@ test('Outbox-only startup queues all three reads beyond four held calls without 
       removeEventListener(_type:string,listener:(value:{data:string})=>void){listeners.delete(listener);},
       postMessage(raw:string){
         const req=JSON.parse(raw);
-        if(req.type==='artifact.read')emit({type:'artifact.chunk',sessionId:generation,sequence:req.sequence,base64:body,
+        if(req.type==='artifact.read')emit({type:'artifact.chunk',sessionId:generation,sequence:req.sequence,text:new TextDecoder().decode(Uint8Array.from(atob(body), c => c.charCodeAt(0))),
           byteLength,totalBytes:byteLength,done:true,publisher:'1'.repeat(64),eventId:'2'.repeat(64),appId:'outbox-startup',
           htmlHash,version,domains:['outbox','storage']});
         if(req.type!=='capability')return;

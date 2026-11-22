@@ -24,7 +24,7 @@ import CryptoKit
       appData: configuration.appData)
     let raw = reader.read(sequence: 0)!
     precondition(reader.read(sequence: 1) == nil, "One-use artifact reader")
-    return try json(raw)
+    return try json(String(raw.prefix(while: { $0 != "\n" })))
   }
   static func main() throws {
     let input = try json(String(contentsOfFile: CommandLine.arguments[1], encoding: .utf8))

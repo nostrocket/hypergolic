@@ -33,7 +33,12 @@ session may be registered again after revocation. Claimed bytes have moved to
 the host's ownership; the host must clear its copy on view teardown. The native
 modules and host views revoke their bytes on backgrounding or teardown.
 
-The Expo module transfer uses `registerPublishedSession`,
+For ordinary published HTML, the shell registers the session and calls
+`stagePublishedBody` with a native body handle and verified claims. The native
+owner checks the body and hands the session a one-use registry handle. Original
+HTML stays in native ownership during download, cache access and staging.
+
+Fixtures and callers holding verified bytes use `registerPublishedSession`,
 `beginPublishedArtifact`, `beginPublishedSnapshot`, `appendPublishedArtifact`,
 `finishPublishedArtifact`,
 `cancelPublishedArtifact`, `revokePublishedSession`, and
@@ -64,7 +69,7 @@ verified title, manifest kind, full event ID and publisher from the native
 registration. A named publication with a literal `5129:<eventId>` identifier
 retains its own identity and review label.
 
-The host claims the handle internally and exposes ordered 48 KiB chunks only to its exact top-level packaged document and native generation. The runtime rechecks original bytes/aggregate, inserts leading CSP before publisher markup, and mounts an opaque sandboxed guest with only exact admitted grants. The verifier requires leading doctype, html and head so no publisher content precedes CSP. Each domain still needs its owning native operation policy. The theme-only signed host fixture is a narrower QA composition, not the current published-domain limit.
+The host claims the handle internally and delivers ordered UTF-8 text fragments of up to 256 KiB only to its exact top-level packaged document and native generation. Each message carries a bounded JSON header followed by a newline and the original text. Fragment boundaries preserve Unicode scalars. The runtime rechecks original bytes/aggregate, inserts leading CSP before publisher markup, and mounts an opaque sandboxed guest with only exact admitted grants. The verifier requires leading doctype, html and head so no publisher content precedes CSP. Each domain still needs its owning native operation policy. The theme-only signed host fixture is a narrower QA composition, not the current published-domain limit.
 
 ## Testing
 

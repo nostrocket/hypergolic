@@ -1,4 +1,4 @@
-import {test, expect, type Page} from '@playwright/test';
+import {test, expect, type Page} from './published-wire';
 import {createServer, type Server} from 'node:http';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -22,12 +22,12 @@ test.beforeAll(async () => {
 test.afterAll(async () => {await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));});
 const digest = (input: string | Buffer) => createHash('sha256').update(input).digest('hex');
 async function open(page: Page, options: {main?: boolean; domains?: string[]; mesh?: unknown; change?: boolean; large?: boolean} = {}) {
-  const html = `<!doctype html><html><head><title>Owned Mesh</title></head><body><p id="owned">Owned Mesh</p>${options.large ? '<!--' + 'x'.repeat(50000) + '-->' : ''}</body></html>`;
+  const html = `<!doctype html><html><head><title>Owned Mesh</title></head><body><p id="owned">Owned Mesh</p>${options.large ? '<!--' + 'x'.repeat(270000) + '-->' : ''}</body></html>`;
   const hash = digest(html), metadata = {publisher: '1'.repeat(64), appId: 'owned-mesh', eventId: '2'.repeat(64), htmlHash: hash, version: digest(`${hash} /index.html\n`), domains: options.domains ?? ['mesh'], ...(options.mesh === null ? {} : {mesh: options.mesh ?? context})};
   await page.addInitScript(({generation, metadata, html, change}) => {
     if (window !== top) return;
     const listeners = new Set<(event: {data: string}) => void>();
-    const state = {posts: [] as any[], emit(value: object) {for (const listener of [...listeners]) listener({data: JSON.stringify(value)});}};
+    const state = {posts: [] as any[], emit(value: object) {for (const listener of [...listeners]) listener({data: window.nativeMessage(value)});}};
     (window as any).__native = state;
     Object.defineProperty(window, 'HypergolicHost', {value: {
       addEventListener: (_: string, listener: (event: {data: string}) => void) => listeners.add(listener),
@@ -35,9 +35,9 @@ async function open(page: Page, options: {main?: boolean; domains?: string[]; me
       postMessage(raw: string) {
         const row = JSON.parse(raw); state.posts.push(row);
         if (row.type !== 'artifact.read') return;
-        const bytes = new TextEncoder().encode(html), part = bytes.slice(row.sequence * 49152, (row.sequence + 1) * 49152);
+        const bytes = new TextEncoder().encode(html);
         const claims = change && row.sequence > 0 ? {...metadata, mesh: {...metadata.mesh, sourceRevision: '32345678-1234-4234-8234-123456789abc'}} : metadata;
-        state.emit({...claims, type: 'artifact.chunk', sessionId: generation, sequence: row.sequence, totalBytes: bytes.length, byteLength: part.length, base64: btoa(String.fromCharCode(...part)), done: (row.sequence + 1) * 49152 >= bytes.length});
+        state.emit({...claims, type: 'artifact.chunk', sessionId: generation, sequence: row.sequence, ...window.publishedPart(bytes, row.sequence)});
       },
     }});
   }, {generation, metadata: metadata as any, html, change: options.change ?? false});

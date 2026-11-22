@@ -35,6 +35,7 @@ struct PublishedArtifactHostInput {
 /// Sequential, one-use byte owner for the native host generation.
 /// The claimed copy disappears on the last read, any invalid sequence or teardown.
 final class PublishedArtifactReadOwner {
+  static let maximumChunkBytes = 256 * 1024
   private let claims: PublishedArtifactRegistry.Claims
   private let generation: String
   private let totalBytes: Int
@@ -57,13 +58,15 @@ final class PublishedArtifactReadOwner {
 
   func read(sequence: Int) -> String? {
     guard let bytes, sequence >= 0, sequence == nextSequence else { clear(); return nil }
-    let end = min(offset + PublishedArtifactTransfer.maximumChunkBytes, totalBytes)
+    var end = min(offset + Self.maximumChunkBytes, totalBytes)
+    // Keep each UTF-8 scalar intact across the WebKit message boundary.
+    while end < totalBytes && bytes[end] & 0xc0 == 0x80 { end -= 1 }
     guard end > offset else { clear(); return nil }
     let chunk = bytes[offset..<end]
     let done = end == totalBytes
     var response: [String: Any] = [
       "type": "artifact.chunk", "sessionId": generation, "sequence": sequence,
-      "base64": chunk.base64EncodedString(), "byteLength": chunk.count,
+      "byteLength": chunk.count,
       "totalBytes": totalBytes, "publisher": claims.publisher,
       "appId": claims.identifier, "eventId": claims.eventId,
       "version": claims.aggregateHash, "htmlHash": claims.htmlHash, "done": done,
@@ -76,7 +79,7 @@ final class PublishedArtifactReadOwner {
     offset = end
     nextSequence += 1
     if done { clear() }
-    return String(decoding: encoded, as: UTF8.self)
+    return String(decoding: encoded, as: UTF8.self) + "\n" + String(decoding: chunk, as: UTF8.self)
   }
 
   func clear() { bytes = nil }

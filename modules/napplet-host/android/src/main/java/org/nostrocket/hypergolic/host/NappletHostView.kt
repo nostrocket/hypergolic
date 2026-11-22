@@ -177,7 +177,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
             }
             val claims = published ?: return@addWebMessageListener
             val result = JSONObject().put("type", "artifact.chunk").put("sessionId", generation)
-              .put("sequence", chunk.sequence).put("base64", chunk.base64)
+              .put("sequence", chunk.sequence)
               .put("byteLength", chunk.byteLength).put("totalBytes", chunk.totalBytes)
               .put("publisher", claims.publisher).put("appId", claims.appId)
               .put("eventId", claims.eventId).put("version", claims.version)
@@ -186,7 +186,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
             claims.snapshot?.let { result.put("snapshot", it.toWire()) }
             configuration?.legacyReadOnly?.let { result.put("legacyReadOnly", JSONObject(it.metadata)) }
             configuration?.appData?.let { result.put("appData", JSONObject(it)) }
-            reply.postMessage(result.toString())
+            reply.postMessage(result.toString() + "\n" + chunk.text)
             return@addWebMessageListener
           }
           if (data.optString("sessionId") != generation) return@addWebMessageListener

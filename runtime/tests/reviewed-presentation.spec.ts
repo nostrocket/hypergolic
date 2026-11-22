@@ -1,4 +1,4 @@
-import {test,expect,type Page,type FrameLocator} from '@playwright/test';
+import {test,expect,type Page,type FrameLocator} from './published-wire';
 import {build} from 'vite';
 import {WorkspaceViews} from '../../src/shell/workspace-views';
 import {emptyWorkspace, openNapplet, focusNapplet, type NappletDescriptor} from '../../src/shell/workspace';
@@ -52,7 +52,7 @@ async function open(page:Page,appId:string,variant='exact',uploadMode='complete'
     const listeners=new Set<(event:{data:string})=>void>(),held=new Map<string,any>();
     const state:any={requests:[],diagnostics:[],batches:0,chunks:0,releaseImages:false};
     (window as any).__presentation=state;
-    const emit=(envelope:unknown)=>{for(const listener of listeners)listener({data:JSON.stringify(envelope)});};
+    const emit=(envelope:unknown)=>{for(const listener of listeners)listener({data:window.nativeMessage(envelope)});};
     const reply=(envelope:any,response:unknown)=>emit({type:'capability.result',sessionId:generation,sequence:envelope.sequence,response:response===null?null:JSON.stringify(response)});
     const matches=(event:any,filters:any[])=>filters.some(filter=>(!filter.kinds||filter.kinds.includes(event.kind))&&
       (!filter.authors||filter.authors.includes(event.pubkey))&&(!filter['#p']||event.tags.some((t:string[])=>t[0]==='p'&&filter['#p'].includes(t[1])))&&
@@ -64,11 +64,10 @@ async function open(page:Page,appId:string,variant='exact',uploadMode='complete'
         const envelope=JSON.parse(raw);state.requests.push(envelope);
         if(envelope.type==='ready'||envelope.type==='error'){state.diagnostics.push(envelope);return;}
         if(envelope.type==='artifact.read'){
-          const payload=bytes.slice(envelope.sequence*49152,(envelope.sequence+1)*49152);
           emit({type:'artifact.chunk',sessionId:generation,sequence:envelope.sequence,publisher:pin.publisher ?? '1'.repeat(64),
             appId:variant==='other-app'?'unreviewed-reader':appId,eventId:pin.eventId,version:aggregateHash,htmlHash,
             domains,
-            base64:btoa(String.fromCharCode(...payload)),byteLength:payload.length,totalBytes:bytes.length,done:(envelope.sequence+1)*49152>=bytes.length});return;
+            ...window.publishedPart(bytes,envelope.sequence)});return;
         }
         if(envelope.type==='relay-stream'){
           const request=JSON.parse(envelope.message);let delivery=0;
