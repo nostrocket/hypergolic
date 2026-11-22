@@ -233,6 +233,24 @@ jobs:
           node ../../scripts/import-discovery.mjs --check dist/index.html
           pnpm run test:browser
           pnpm audit --audit-level=high
+      - name: Run the NIP-5D and NAP conformance gate
+        working-directory: .
+        run: |
+          node --test tools/conformance/check.test.mjs
+          pnpm run conformance --json "$RUNNER_TEMP/shell-conformance.json" --markdown "$RUNNER_TEMP/shell-conformance.md"
+      - name: Show conformance evidence in the workflow summary
+        if: ${{ !cancelled() }}
+        run: |
+          if test -f "$RUNNER_TEMP/shell-conformance.md"; then
+            cat "$RUNNER_TEMP/shell-conformance.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Save the conformance report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: shell-conformance
+          path: ${{ runner.temp }}/shell-conformance.*
+          if-no-files-found: warn
       - run: pnpm verify
       - run: pnpm audit --audit-level=high
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

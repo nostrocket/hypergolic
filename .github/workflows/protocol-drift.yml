@@ -1,0 +1,22 @@
+name: Protocol spec drift
+on:
+  schedule:
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+concurrency: protocol-spec-drift
+jobs:
+  compare:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version-file: .nvmrc
+      - name: Compare upstream documents and maintain one review issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/conformance/drift.mjs --track
