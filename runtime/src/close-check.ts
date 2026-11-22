@@ -25,13 +25,20 @@ export function installCloseCheck(source: Window, live: () => boolean, report: (
         checkpoint.send({type: restore ? 'hypergolic.restoreCheckpoint' : 'hypergolic.checkpoint',
           id: restore ? value.id.replace('restore-', 'resume-') : value.id});
       } else source.postMessage({type:'hypergolic.closeCheck', id:value.id}, '*');
-    } else if (event.source === source && pending && !pending.id.startsWith('resume-') && !pending.id.startsWith('restore-') &&
-        value.type === 'hypergolic.closeCheck.result' && value.id === pending.id) {
-      finish(Object.keys(value).length === 3 && ['clean', 'dirty', 'unknown'].includes(value.state) ? value.state : 'unknown');
     }
   };
   window.addEventListener('message', receive);
   return {
+    windowReply(event: MessageEvent): boolean {
+      if (!event.isTrusted || event.source !== source || event.origin !== 'null' || !live() || !pending ||
+          pending.id.startsWith('resume-') || pending.id.startsWith('restore-')) return false;
+      const value = event.data;
+      if (value?.type !== 'hypergolic.closeCheck.result' || value.id !== pending.id) return false;
+      const valid = event.ports.length === 0 && Object.keys(value).length === 3 &&
+        ['clean', 'dirty', 'unknown'].includes(value.state) && performance.now() < pending.deadline;
+      finish(valid ? value.state : 'unknown');
+      return valid;
+    },
     checkpointResult(value: Record<string, unknown>) {
       if (!live() || !pending || !checkpoint) return;
       const exact = Object.keys(value).length === 3;

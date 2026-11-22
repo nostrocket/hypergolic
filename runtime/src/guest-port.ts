@@ -8,7 +8,7 @@ export type GuestBindingTransport = {send(value: object): void; listen(callback:
 /** One guest-created channel per verified frame generation. */
 export function createGuestPort(frame: HTMLIFrameElement, source: Window, bridge: ShellBridge,
   domains: readonly string[], account: () => string | undefined, consumeIntent: (receipt: unknown) => void,
-  routes: {checkpoint: ((value: Record<string, unknown>) => void) | undefined; keys: ReturnType<typeof createKeysSession> | null; media(value: unknown): boolean;
+  routes: {published: boolean; checkpoint: ((value: Record<string, unknown>) => void) | undefined; keys: ReturnType<typeof createKeysSession> | null; media(value: unknown): boolean;
     cvm: ((value: unknown) => void) | null; mesh: ((value: unknown) => boolean) | undefined}, ready: () => void, fail: () => void) {
   let port: MessagePort | undefined;
   let stopObserving: (() => void) | undefined;
@@ -20,9 +20,10 @@ export function createGuestPort(frame: HTMLIFrameElement, source: Window, bridge
   return {
     send,
     receive(event: MessageEvent) {
-      if (!current() || !event.isTrusted || event.source !== source || event.origin !== 'null') return;
-      if (port || event.data?.type !== 'napplet.hello' || Object.keys(event.data).length !== 1 || event.ports.length !== 1) {
+      if (!current() || !event.isTrusted || event.source !== source) return;
+      if (port || event.origin !== 'null' || event.data?.type !== 'napplet.hello' || Object.keys(event.data).length !== 1 || event.ports.length !== 1) {
         for (const unused of event.ports) unused.close();
+        if (port && routes.published) fail();
         return;
       }
       const connection = event.ports[0]!;

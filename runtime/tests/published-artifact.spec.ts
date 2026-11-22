@@ -202,6 +202,25 @@ test('a modern Theme guest receives its first reply over the private port withou
   });
 });
 
+test('a modern guest can answer a close check and retires on later window traffic', async ({page}) => {
+  await openPublished(page, 'early-theme');
+  const body = page.frameLocator('#napplet').locator('body');
+  await expect(body).toHaveText(/#(?:F5A04B|AA4708)/i);
+  await body.evaluate(() => {
+    window.addEventListener('message', event => {
+      if (event.source === parent && event.data?.type === 'hypergolic.closeCheck') {
+        parent.postMessage({type:'hypergolic.closeCheck.result', id:event.data.id, state:'dirty'}, '*');
+      }
+    });
+  });
+  await page.evaluate(() => window.postMessage({type:'hypergolic.close-check.request', id:'draft-check'}, '*'));
+  await expect.poll(() => page.evaluate(() => (window as any).__publishedTest.requests
+    .find((request: any) => request.type === 'close-check.result')?.state)).toBe('dirty');
+  await body.evaluate(() => parent.postMessage({type:'fixture.finished'}, '*'));
+  await expect(page.locator('#napplet')).toHaveCount(0);
+  await expect(page.getByRole('alert')).toBeVisible();
+});
+
 test('closing the guest channel retires its published frame', async ({page}) => {
   test.setTimeout(50_000);
   await tracePort(page, ['hypergolic.port.pong']);

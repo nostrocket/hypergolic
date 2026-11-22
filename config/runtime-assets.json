@@ -1,11 +1,11 @@
 {
   "production": {
-    "host.js": "acb73ca0d3d26fdef6fc62463baedce61ef810c0b0a1cb4512bdd2e0b284726b",
+    "host.js": "2f0eb384cd1a9c01cc5e531505eee1d2fc73e43453642a41876b33876b3427a3",
     "index.html": "1026e214e2bd05ecd753be39e18dfd1007a811f79195aa757df45d0a52782620",
     "fixture-release.json": "10e958547af875efb29f9878d9a1295d2606774563f73bebf3b1642fa11d5c1e"
   },
   "development": {
-    "host.js": "3df92ed5fc3d78090e4fe62527f9ad0aa2bcb36062f2788bb88a068ab77d19bb",
+    "host.js": "e93ad93d846c0bcc98f09920ccd350c64db1c8d6097ebd478c0b25de239bc859",
     "index.html": "1026e214e2bd05ecd753be39e18dfd1007a811f79195aa757df45d0a52782620",
     "fixture-release.json": "a3252f211e9eba322c344bfd9d18ea966283076d73cf69fc1e11bd6069d97f6e"
   }

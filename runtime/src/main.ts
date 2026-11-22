@@ -313,7 +313,7 @@ function mount(artifact: RuntimeMetadata) {
   };
   const cvm = artifact.domains.includes('cvm') ? createCvmGuestReceiver(sendGuest,native.cvm,live) : null;
   const guestPort = privatePort ? createGuestPort(frame, source, bridge, artifact.domains, account.current, routing.consume,
-    {keys, cvm, checkpoint:artifact.journalCheckpoint ? closeCheck.checkpointResult : undefined, mesh:mesh?.receiveValue, media:value => handleMediaRequest(value, hasMedia ? native.sendMedia : null, sendGuest)}, markReady, () => fail('runtime-bootstrap')) : null;
+    {published:artifact.published, keys, cvm, checkpoint:artifact.journalCheckpoint ? closeCheck.checkpointResult : undefined, mesh:mesh?.receiveValue, media:value => handleMediaRequest(value, hasMedia ? native.sendMedia : null, sendGuest)}, markReady, () => fail('runtime-bootstrap')) : null;
   const receiveGuest = guestMessageReceiver(frame, source, {
     domains: artifact.domains, routing, keys, account: account.current, sendMedia: hasMedia ? native.sendMedia : null,
     cvm,
@@ -334,7 +334,10 @@ function mount(artifact: RuntimeMetadata) {
   const receive = legacyMount ? (event: MessageEvent) => legacyMount.guard.receive(event, value => {
     if (!legacyImages?.receive(value)) legacy?.receive(value);
   }) : guestPort?.receive ?? receiveGuest;
-  const unbind = bindFrameListeners(frame, source, receive, loaded, failed);
+  const unbind = bindFrameListeners(frame, source, event => {
+    if (!legacyMount && closeCheck.windowReply(event)) return;
+    receive(event);
+  }, loaded, failed);
   cleanup = (): void => {
     guestPort?.close();
     shellTheme.close();
