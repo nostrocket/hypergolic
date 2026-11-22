@@ -165,3 +165,16 @@ their restoration behavior is supported.
 The shell tracks which checkpoint belongs to a suspended card for the current
 account session. Process termination and account switching end that association.
 Use **Save entry** for journal entries you want to keep across those transitions.
+
+On iPhone, the checkpoint can also remember that the user was typing when they
+left Journal. This flag stays in memory. While a native permission sheet is
+open, the sheet owns keyboard input. When it closes, Journal can resume typing
+at the saved selection. Choosing **Done** before leaving keeps the keyboard
+dismissed on return.
+
+To check this on a phone, leave the caret in the middle of an unfinished entry,
+go to Home while the keyboard is open, and open enough cards to reclaim
+Journal's view. Return to the original card, dismiss any pending permission
+sheet, and type a character without tapping the editor. Check that it appears
+at the original caret. Repeat after choosing **Done** before leaving and check
+that the text and caret survive with the keyboard dismissed.
