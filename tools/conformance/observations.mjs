@@ -93,7 +93,7 @@ export const observations = {
   'resource-svg-output': observeResourceSvg,
   'keys-registration': () => {
     const sent = [];
-    const session = createKeysSession({postMessage:message => sent.push(message)}, () => true);
+    const session = createKeysSession(message => sent.push(message), () => true);
     session.receive({type:'keys.registerAction', id:'request', action:{id:'search', label:'Search'}});
     return sent.some(m => m.type === 'keys.registerAction.result' && m.id === 'request' && m.actionId === 'search' && !m.error);
   },

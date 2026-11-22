@@ -1,9 +1,10 @@
+import {isKeysMessage, type createKeysSession} from './keys-adapter';
 import type {ShellBridge} from '@kehto/shell';
 import {quotaReply, validEnvelope, rejectEnvelope} from './guest-envelope';
 
 /** One guest-created channel per verified frame generation. */
 export function createGuestPort(frame: HTMLIFrameElement, source: Window, bridge: ShellBridge,
-  domains: readonly string[], account: () => string | undefined, consumeIntent: (receipt: unknown) => void, ready: () => void, fail: () => void) {
+  domains: readonly string[], account: () => string | undefined, consumeIntent: (receipt: unknown) => void, keys: ReturnType<typeof createKeysSession> | null, ready: () => void, fail: () => void) {
   let port: MessagePort | undefined;
   let closed = false;
   let operations = 0;
@@ -39,6 +40,10 @@ export function createGuestPort(frame: HTMLIFrameElement, source: Window, bridge
         if (++operations > 64 && !cleanup) {
           const reply = quotaReply(value, domains, 'quota-exceeded', account());
           if (reply) send(reply);
+          return;
+        }
+        if (isKeysMessage(value)) {
+          keys?.receive(value);
           return;
         }
         if (!validEnvelope(value)) {

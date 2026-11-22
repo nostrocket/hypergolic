@@ -103,7 +103,7 @@ async function openPublished(page: Page, mode: Mode = 'normal', extraQuery = '')
         ...part, byteLength: mode === 'wrong-byte-length' ? part.byteLength + 1 : part.byteLength,
         ...claims, ...snapshot, ...(mode === 'modern-intent' || mode === 'modern-services' || mode === 'early-theme' || mode === 'modern' || mode === 'implied-wrappers' || mode === 'snapshot' ? {manifestFormat:'nip-5d'} :
           mode === 'invalid-format' ? {manifestFormat:'unknown'} : {}), ...((mode==='soy-policy'||mode==='soy-policy-change')?{appData:{sourceKind:35129,policy:{profile:'soy.app-data/1',scope:mode==='soy-policy-change'&&sequence>0?'f'.repeat(64):'b7890c0793a7fa9c2570c56500f403724b1a4c0e453a9194ec7200132c634f8b',maxContentBytes:3072,relays:['wss://relay.damus.io'],defaultRelays:['wss://relay.damus.io']}}}:{}),
-        domains: mode === 'modern-services' ? ['identity','outbox','resource','storage','theme'] : mode==='soy-policy'||mode==='soy-policy-change'?['identity','outbox','theme']:mode === 'intent-only' || mode === 'modern-intent' ? ['intent'] : mode === 'published-approval' ? ['identity', 'relay', 'theme'] : mode === 'unknown-domain' ? ['future-domain'] : mode === 'outbox-domain' ? ['outbox', 'relay', 'theme'] : mode === 'outbox-only' ? ['outbox', 'theme'] : mode === 'relay-domain' ? ['relay', 'theme'] : mode === 'upload-domain' ? ['upload'] : mode === 'keys-domain' ? ['keys', 'theme'] : mode === 'all-domains' ? ['config', 'identity', 'inc', 'intent', 'link', 'notify', 'outbox', 'relay', 'resource', 'storage', 'theme', 'upload'] : ['theme'],
+        domains: mode === 'modern-services' ? ['identity','keys','outbox','resource','storage','theme'] : mode==='soy-policy'||mode==='soy-policy-change'?['identity','outbox','theme']:mode === 'intent-only' || mode === 'modern-intent' ? ['intent'] : mode === 'published-approval' ? ['identity', 'relay', 'theme'] : mode === 'unknown-domain' ? ['future-domain'] : mode === 'outbox-domain' ? ['outbox', 'relay', 'theme'] : mode === 'outbox-only' ? ['outbox', 'theme'] : mode === 'relay-domain' ? ['relay', 'theme'] : mode === 'upload-domain' ? ['upload'] : mode === 'keys-domain' ? ['keys', 'theme'] : mode === 'all-domains' ? ['config', 'identity', 'inc', 'intent', 'link', 'notify', 'outbox', 'relay', 'resource', 'storage', 'theme', 'upload'] : ['theme'],
       };
       const wire = window.nativeMessage(envelope);
       for (const listener of listenerSet) listener({ data: wire });
@@ -217,15 +217,21 @@ test('one private port serves multiple grants and delivers native account change
   const result = await body.evaluate(async () => {
     const api = (window as any).napplet;
     api.identity.onChanged((key: string) => {document.body.dataset.account = key;});
+    const {binding} = await api.keys.registerAction({id:'game.pause', label:'Pause', defaultKey:'p'});
+    api.keys.onAction('game.pause', () => {document.body.dataset.action = 'pause';});
     const pubkey = await api.identity.getPublicKey();
     const value = await api.storage.getItem('setting');
     const {schemes} = await api.resource.info();
     const {events} = await api.outbox.query({kinds:[1],limit:0});
-    return {pubkey, value, schemes, events, mediaAvailable:api.shell.supports('media')};
+    return {pubkey, value, schemes, events, binding, mediaAvailable:api.shell.supports('media')};
   });
-  expect(result).toEqual({pubkey:'1'.repeat(64), value:'saved setting', schemes:['data'], events:[], mediaAvailable:false});
+  expect(result).toEqual({pubkey:'1'.repeat(64), value:'saved setting', schemes:['data'], events:[], binding:'P', mediaAvailable:false});
   await page.evaluate(() => (window as any).__publishedTest.accountSnapshot('2'.repeat(64)));
   await expect(body).toHaveAttribute('data-account', '2'.repeat(64));
+  await page.evaluate(() => (window as any).__hypergolicInputActive(true));
+  await body.click();
+  await page.keyboard.press('p');
+  await expect(body).toHaveAttribute('data-action', 'pause');
   expect(await page.evaluate(() => (window as any).windowMessages)).toEqual(['napplet.hello']);
   expect(await body.evaluate(() => (window as any).windowMessages.filter((type:string) => !type.startsWith('hypergolic.')))).toEqual([]);
 });

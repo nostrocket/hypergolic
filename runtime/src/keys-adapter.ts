@@ -36,11 +36,11 @@ export function isKeysMessage(value: unknown): boolean {
 }
 
 /** A single verified frame owns these actions for its generation. */
-export function createKeysSession(source: Window, active: () => boolean) {
+export function createKeysSession(deliver: (value: object) => void, active: () => boolean) {
   const actions = new Map<string, Action>();
   const bindings = new Set<string>();
   let closed = false;
-  const send = (value: object): void => { if (!closed) source.postMessage(value, '*'); };
+  const send = (value: object): void => { if (!closed) deliver(value); };
   const refresh = (): void => {
     const snapshot: {actionId: string; key: string}[] = [];
     for (const action of actions.values()) {

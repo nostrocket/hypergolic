@@ -202,7 +202,7 @@ function approvalTimeouts(artifact: RuntimeMetadata): Readonly<Record<string, nu
   });
 }
 
-function createGuestEndpoint(artifact: RuntimeMetadata, hooks: ShellAdapter) {
+function createGuestEndpoint(artifact: RuntimeMetadata, hooks: ShellAdapter, sendInputState?: (value: object) => void) {
   const bridge = createShellBridge(hooks);
   const identity = Object.freeze({ dTag: artifact.appId, aggregateHash: artifact.identityHash ?? artifact.aggregateHash });
   const resolved = resolveShellEnvironment(hooks, identity);
@@ -214,7 +214,7 @@ function createGuestEndpoint(artifact: RuntimeMetadata, hooks: ShellAdapter) {
   const frame = createGuestFrame(artifact.title);
   const source = frame.contentWindow;
   if (!source) { bridge.destroy(); throw new Error('Frame unavailable'); }
-  const media = bindResourceMedia(source, frame);
+  const media = bindResourceMedia(source, frame, sendInputState);
   let policy = csp;
   if (artifact.legacyReadOnly) {
     policy = policy.replace("script-src 'unsafe-inline' 'wasm-unsafe-eval'", "script-src 'unsafe-inline' blob:");
@@ -239,7 +239,7 @@ function createGuestEndpoint(artifact: RuntimeMetadata, hooks: ShellAdapter) {
 }
 
 const portDomains = new Set(['shell', 'theme', 'storage', 'resource', 'relay', 'outbox', 'identity', 'lists',
-  'link', 'common', 'upload', 'config', 'notify', 'inc', 'intent']);
+  'link', 'common', 'upload', 'config', 'notify', 'inc', 'intent', 'keys']);
 
 function guestStartup() {
   let ready = false;
@@ -289,7 +289,8 @@ function mount(artifact: RuntimeMetadata) {
     const entry = bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId);
     return () => !stopped && entry !== undefined && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) === entry;
   }, artifact, account.read, shellTheme.theme, routing.setContext);
-  const { bridge, frame, source, media, environment, policy, destroyFrame } = createGuestEndpoint(artifact, hooks);
+  const { bridge, frame, source, media, environment, policy, destroyFrame } = createGuestEndpoint(artifact, hooks,
+    privatePort && artifact.domains.includes('keys') ? sendGuest : undefined);
   const hasMedia = artifact.published && artifact.domains.includes('media');
   const startup = guestStartup();
   const legacyMount = createLegacyMount(artifact.legacyReadOnly, artifact.appId, frame, source, native, live,
@@ -301,19 +302,20 @@ function mount(artifact: RuntimeMetadata) {
   const legacy = legacyMount?.receiver;
   const mesh = artifact.published && isNativeMeshContext(artifact.mesh, sessionId) && artifact.domains.includes('mesh')
     ? createMeshGuestReceiver(frame, source, native.mesh, live) : null;
-  const keys = artifact.domains.includes('keys') ? createKeysSession(source, () =>
+  const keys = artifact.domains.includes('keys') ? createKeysSession(sendGuest, () =>
     live() && isRuntimeInputActive() && document.hasFocus() && document.activeElement === frame) : null;
   const closeCheck = installCloseCheck(source, live,
     (id, state) => hostWindow.HypergolicHost?.postMessage(JSON.stringify({type: 'close-check.result', sessionId, id, state})),
     artifact.journalCheckpoint ? {idle: () => frame.inert && native.idleForCheckpoint()} : undefined);
   const markReady = () => {
     if (bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) && startup.complete()) {
+      if (keys && privatePort) media.refresh();
       keys?.refresh();
       if (artifact.domains.includes('notify')) void native.notify({type: 'notify.__register'}).catch(() => {});
       routing.ready();
     }
   };
-  const guestPort = privatePort ? createGuestPort(frame, source, bridge, artifact.domains, account.current, routing.consume, markReady, () => fail('runtime-bootstrap')) : null;
+  const guestPort = privatePort ? createGuestPort(frame, source, bridge, artifact.domains, account.current, routing.consume, keys, markReady, () => fail('runtime-bootstrap')) : null;
   const receiveGuest = guestMessageReceiver(frame, source, {
     domains: artifact.domains, routing, keys, account: account.current, sendMedia: hasMedia ? native.sendMedia : null,
     cvm:artifact.domains.includes('cvm')?createCvmGuestReceiver(source,native.cvm,live):null,

@@ -23,7 +23,7 @@ Use the open napplet’s workspace menu to pin it to Home. Shortcuts belong to t
 
 ## Guest transport
 
-Modern published releases using Shell, Theme, Storage, Resource, Relay, Outbox, Identity, Lists, Link, Common, Upload, Config, Notify, INC or Intent start with the [NIP-5D port handoff](https://github.com/dskvr/nips/blob/f60550c3409d6d81a875088ec83e660571e10504/5D.md#transport). Its injected bootstrap creates the channel before publisher scripts run. The shell accepts the port from the registered frame, binds the verified publication and grants, and answers requests there. The guest can ask for its theme before requesting Shell environment details. A release whose grants include Keys, Media, CVM or Mesh still uses the earlier transport for all its domains. Legacy releases and bundled guests also retain that transport. [Migration issue](https://github.com/nostrocket/hypergolic/issues/98).
+Modern published releases using Shell, Theme, Storage, Resource, Relay, Outbox, Identity, Lists, Link, Common, Upload, Config, Notify, INC, Intent or Keys start with the [NIP-5D port handoff](https://github.com/dskvr/nips/blob/f60550c3409d6d81a875088ec83e660571e10504/5D.md#transport). Its injected bootstrap creates the channel before publisher scripts run. The shell accepts the port from the registered frame, binds the verified publication and grants, and answers requests there. The guest can ask for its theme before requesting Shell environment details. A release whose grants include Media, CVM or Mesh still uses the earlier transport for all its domains. Legacy releases and bundled guests also retain that transport. [Migration issue](https://github.com/nostrocket/hypergolic/issues/98).
 
 ## Opening an older named release
 

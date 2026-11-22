@@ -7,11 +7,11 @@ let inputAllowed = true;
 let gameControls = false;
 let surface: HTMLIFrameElement | null = null;
 export const isRuntimeInputActive = (): boolean => inputActive;
-let recipient: Window | null = null;
+let recipient: ((value: object) => void) | null = null;
 const controlType = 'hypergolic.private.media-active';
 const publish = (): void => {
   if (surface) surface.inert = !mediaActive || !inputAllowed;
-  recipient?.postMessage({type:controlType,active:mediaActive,inputActive,gameControls,inputBlocked:!mediaActive || !inputAllowed}, '*');
+  recipient?.({type:controlType,active:mediaActive,inputActive,gameControls,inputBlocked:!mediaActive || !inputAllowed});
 };
 Object.defineProperty(window, '__hypergolicMediaActive', {
   value(active: boolean) { mediaActive = active === true; inputActive = mediaActive && inputAllowed; publish(); }, writable: false, configurable: false,
@@ -19,8 +19,12 @@ Object.defineProperty(window, '__hypergolicMediaActive', {
 Object.defineProperty(window, '__hypergolicInputActive', {
   value(active: boolean, controls = false) { gameControls = controls === true; inputAllowed = active === true; inputActive = mediaActive && inputAllowed; publish(); }, writable: false, configurable: false,
 });
-export function bindResourceMedia(source: Window, frame: HTMLIFrameElement): Readonly<{refresh: () => void; close: () => void}> {
-  recipient = source; surface = frame;
+export function bindResourceMedia(source: Window, frame: HTMLIFrameElement, sendInputState?: (value: object) => void): Readonly<{refresh: () => void; close: () => void}> {
+  recipient = value => {
+    source.postMessage(value, '*');
+    sendInputState?.(value);
+  };
+  surface = frame;
   return {refresh:publish,close(){mediaActive=false;inputActive=false;publish();recipient=null;surface=null;}};
 }
 function gameControlSelectors() {
