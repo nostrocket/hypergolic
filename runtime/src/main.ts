@@ -1,3 +1,4 @@
+import { bindFrameListeners, createGuestFrame, createLoadHandler } from './guest-frame';
 import { NAPPLET_LINK_LEASE_MS } from '../../src/links/link-contract';
 import {createLegacyImageMount} from './legacy-image-mount';
 import {injectLegacyImages} from './legacy-image-guest';
@@ -190,20 +191,6 @@ function makeHooks(native: ReturnType<typeof createNativeClient>, captureRecipie
   };
 }
 
-function createGuestFrame(title: string): HTMLIFrameElement {
-  const frame = document.createElement('iframe');
-  frame.id = 'napplet';
-  frame.title = title;
-  frame.setAttribute('sandbox', 'allow-scripts');
-  frame.setAttribute('referrerpolicy', 'no-referrer');
-  frame.setAttribute('allow', "camera 'none'; microphone 'none'; geolocation 'none'; payment 'none'; clipboard-read 'none'; clipboard-write 'none'");
-  const style = document.createElement('style');
-  style.textContent = 'html,body{margin:0;height:100%;overflow:hidden;background:#140f0b;color:#f3efeb}iframe{display:block;width:100%;height:100%;border:0}body>p{font:16px system-ui;padding:24px}';
-  document.head.append(style);
-  document.body.replaceChildren(frame);
-  return frame;
-}
-
 function approvalTimeouts(artifact: RuntimeMetadata): Readonly<Record<string, number>> {
   return Object.freeze({
     ...(artifact.domains.includes('link') ? {'link.openNapplet': NAPPLET_LINK_LEASE_MS + 5_000} : {}),
@@ -251,51 +238,52 @@ function createGuestEndpoint(artifact: RuntimeMetadata, hooks: ShellAdapter) {
   return { bridge, frame, source, media, environment, policy, destroyFrame };
 }
 
-function createLoadHandler(frame: HTMLIFrameElement, source: Window,
-  media: ReturnType<typeof bindResourceMedia>, legacyGuard: ReturnType<typeof createLegacyDocumentGuard> | undefined,
-  failed: () => void): () => void {
-  let frameLoaded = false;
-  return (): void => {
-    if (source.length > 0) { failed(); return; }
-    // A same-document legacy load must prove ownership of the original private port.
-    if (legacyGuard) {legacyGuard.loaded(); media.refresh(); return;}
-    if (frameLoaded) {failed(); return;}
-    frameLoaded = true;
-    media.refresh();
-    if (frame.contentWindow !== source) failed();
+const portDomains = new Set(['shell', 'theme', 'storage', 'resource', 'relay', 'outbox', 'identity', 'lists',
+  'link', 'common', 'upload', 'config', 'notify', 'inc', 'intent']);
+
+function guestStartup() {
+  let ready = false;
+  const deadline = window.setTimeout(() => fail('runtime-timeout'), 10_000);
+  const cancel = () => window.clearTimeout(deadline);
+  return {
+    isReady: () => ready,
+    cancel,
+    complete() {
+      if (ready) return false;
+      ready = true;
+      cancel();
+      diagnostic({type:'ready', sessionId});
+      return true;
+    },
   };
 }
 
-function bindFrameListeners(frame: HTMLIFrameElement, source: Window,
-  legacyGuard: ReturnType<typeof createLegacyDocumentGuard> | undefined,
-  receiveGuest: (event: MessageEvent) => void, loaded: () => void) {
-  const receive = (event: MessageEvent): void => {
-    if (event.isTrusted && (source.length > 0 || event.data?.type === 'hypergolic.nested-document')) {
-      fail('frame-navigation');
-      return;
-    }
-    if (legacyGuard) legacyGuard.receive(event, receiveGuest);
-    else receiveGuest(event);
-  };
-  window.addEventListener('message', receive);
-  frame.addEventListener('load', loaded);
-  return () => {
-    window.removeEventListener('message', receive);
-    frame.removeEventListener('load', loaded);
-  };
+function nativeGuestServices(artifact: RuntimeMetadata, live: () => boolean, send: (message: unknown) => void,
+  account: ReturnType<typeof createSessionAccount>, routing: ReturnType<typeof createGuestRouting>) {
+  return createNativeClient(hostWindow.HypergolicHost!, sessionId, {
+    ...(artifact.domains.includes('identity') && {onIdentity:account.update}),
+    requestTimeoutsMs:approvalTimeouts(artifact),
+    ...(artifact.published && artifact.mesh && {mesh:artifact.mesh}),
+    onRouting:routing.deliver,
+    onMedia:message => { if (artifact.published && artifact.domains.includes('media') && live()) send(message); },
+    onCvm:message => { if (artifact.domains.includes('cvm') && live()) send(message); },
+  });
 }
 
 function mount(artifact: RuntimeMetadata) {
   let legacyGuard: ReturnType<typeof createLegacyDocumentGuard> | undefined;
-  const live = () => !stopped && frame.contentWindow === source && (artifact.legacyReadOnly !== undefined ? legacyGuard?.isActive() === true : ready && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) !== undefined);
+  const live = () => !stopped && frame.contentWindow === source && (artifact.legacyReadOnly !== undefined ? legacyGuard?.isActive() === true : startup.isReady() && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) !== undefined);
+  const privatePort = artifact.manifestFormat === 'nip-5d' && !artifact.legacyReadOnly &&
+    artifact.domains.every(domain => portDomains.has(domain));
   const routing = createGuestRouting(artifact.domains, sessionId, live,
-    () => { void native.routing({type: 'routing.__register'}).catch(() => {}); }, () => fail('runtime-bootstrap'));
-  const account = createSessionAccount(message => native.request(message), live,
-    pubkey => source.postMessage({type:'identity.changed', pubkey}, '*'));
-  const native = createNativeClient(hostWindow.HypergolicHost!, sessionId,
-    {...(artifact.domains.includes('identity') ? {onIdentity:account.update} : {}), requestTimeoutsMs: approvalTimeouts(artifact), ...(artifact.published && artifact.mesh ? {mesh: artifact.mesh} : {}), onRouting: routing.deliver, onMedia: message => {
-      if (hasMedia && live()) source.postMessage(message, '*');
-    },onCvm:message=>{if(artifact.domains.includes('cvm')&&live())source.postMessage(message,'*');}});
+    () => { void native.routing({type: 'routing.__register'}).catch(() => {}); }, () => fail('runtime-bootstrap'),
+    privatePort ? message => guestPort?.send(message) : undefined);
+  const sendGuest = (message: unknown) => {
+    if (guestPort) guestPort.send(message);
+    else source.postMessage(message, '*');
+  };
+  const account = createSessionAccount(message => native.request(message), live, pubkey => sendGuest({type:'identity.changed', pubkey}));
+  const native = nativeGuestServices(artifact, live, sendGuest, account, routing);
   const shellTheme = createShellTheme(theme => bridge.publishTheme(theme));
   const hooks = makeHooks(native, () => {
     const entry = bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId);
@@ -303,11 +291,9 @@ function mount(artifact: RuntimeMetadata) {
   }, artifact, account.read, shellTheme.theme, routing.setContext);
   const { bridge, frame, source, media, environment, policy, destroyFrame } = createGuestEndpoint(artifact, hooks);
   const hasMedia = artifact.published && artifact.domains.includes('media');
-  let ready = false;
+  const startup = guestStartup();
   const legacyMount = createLegacyMount(artifact.legacyReadOnly, artifact.appId, frame, source, native, live,
-    () => fail('frame-navigation'), () => {
-      if (!ready) {ready = true; window.clearTimeout(deadline); diagnostic({type: 'ready', sessionId});}
-    });
+    () => fail('frame-navigation'), startup.complete);
   legacyGuard = legacyMount?.guard;
   const legacyNonce = legacyMount?.nonce ?? null;
   const legacyImages = legacyMount ? createLegacyImageMount(frame, source, legacyMount.nonce, native, legacyMount.guard,
@@ -320,21 +306,14 @@ function mount(artifact: RuntimeMetadata) {
   const closeCheck = installCloseCheck(source, live,
     (id, state) => hostWindow.HypergolicHost?.postMessage(JSON.stringify({type: 'close-check.result', sessionId, id, state})),
     artifact.journalCheckpoint ? {idle: () => frame.inert && native.idleForCheckpoint()} : undefined);
-  const deadline = window.setTimeout(() => fail('runtime-timeout'), 10_000);
-
   const markReady = () => {
-    if (!ready && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId)) {
-      ready = true;
-      window.clearTimeout(deadline);
-      diagnostic({ type: 'ready', sessionId });
+    if (bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) && startup.complete()) {
       keys?.refresh();
       if (artifact.domains.includes('notify')) void native.notify({type: 'notify.__register'}).catch(() => {});
       routing.ready();
     }
   };
-  const privatePort = artifact.manifestFormat === 'nip-5d' && !artifact.legacyReadOnly &&
-    artifact.domains.every(domain => domain === 'shell' || domain === 'theme');
-  const guestPort = privatePort ? createGuestPort(frame, source, bridge, artifact.domains, markReady, () => fail('runtime-bootstrap')) : null;
+  const guestPort = privatePort ? createGuestPort(frame, source, bridge, artifact.domains, account.current, routing.consume, markReady, () => fail('runtime-bootstrap')) : null;
   const receiveGuest = guestMessageReceiver(frame, source, {
     domains: artifact.domains, routing, keys, account: account.current, sendMedia: hasMedia ? native.sendMedia : null,
     cvm:artifact.domains.includes('cvm')?createCvmGuestReceiver(source,native.cvm,live):null,
@@ -345,7 +324,7 @@ function mount(artifact: RuntimeMetadata) {
       if (artifact.legacyReadOnly) return;
       if (mesh?.receive(event)) return;
       if (!validEnvelope(event.data)) {
-        if (ready && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId)) rejectEnvelope(event, source, artifact.domains);
+        if (startup.isReady() && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId)) rejectEnvelope(event, source, artifact.domains);
         return;
       }
       // Kehto performs session gating, frozen capability enforcement and theme dispatch.
@@ -353,8 +332,9 @@ function mount(artifact: RuntimeMetadata) {
       markReady();
     },
   });
-  const loaded = createLoadHandler(frame, source, media, legacyGuard, () => fail('frame-navigation'));
-  const unbind = bindFrameListeners(frame, source, legacyGuard, guestPort?.receive ?? receiveGuest, loaded);
+  const failed = () => fail('frame-navigation');
+  const loaded = createLoadHandler(frame, source, media, legacyGuard, failed);
+  const unbind = bindFrameListeners(frame, source, legacyGuard, guestPort?.receive ?? receiveGuest, loaded, failed);
   cleanup = (): void => {
     guestPort?.close();
     shellTheme.close();
@@ -365,7 +345,7 @@ function mount(artifact: RuntimeMetadata) {
     legacyMount?.close();
     keys?.close();
     media.close();
-    window.clearTimeout(deadline);
+    startup.cancel();
     unbind();
     destroyFrame(() => native.destroy());
   };

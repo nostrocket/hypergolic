@@ -1,5 +1,5 @@
 diff --git a/dist/index.js b/dist/index.js
-index 523bcf1..a8cd553 100644
+index 523bcf1..1ece8b8 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -12,10 +12,17 @@ function hexToBytes(hex) {
@@ -465,7 +465,7 @@ index 523bcf1..a8cd553 100644
          for (const url of objectUrls) URL.revokeObjectURL(url);
          objectUrls.clear();
        }
-@@ -2265,25 +2417,85 @@ function nappletNamespacePrelude(domains) {
+@@ -2265,25 +2417,95 @@ function nappletNamespacePrelude(domains) {
          ...Object.keys(sanitizedBehavior).length === 0 ? {} : { behavior: sanitizedBehavior }
        };
      };
@@ -510,11 +510,10 @@ index 523bcf1..a8cd553 100644
 +    const notify = (handler, delivery) => {
 +      try { handler(delivery); } catch { /* Other subscriptions still receive their delivery. */ }
 +    };
-+    const channel = new MessageChannel();
-+    const consume = channel.port1.postMessage.bind(channel.port1);
-+    const readData = Function.call.bind(Object.getOwnPropertyDescriptor(MessageEvent.prototype, "data").get);
-+    channel.port1.onmessage = (event) => {
-+      const { receipt, message } = readData(event);
++    const deliveryChannel = port ? null : new MessageChannel();
++    const consume = deliveryChannel ? deliveryChannel.port1.postMessage.bind(deliveryChannel.port1)
++      : receipt => post({type:"hypergolic.intent.consumed", receipt});
++    const receiveDelivery = (receipt, message) => {
 +      const delivery = Object.freeze(message.delivery);
 +      if (deliveryHandlers.size === 0) {
 +        storeDelivery(receipt, delivery);
@@ -523,7 +522,18 @@ index 523bcf1..a8cd553 100644
 +      for (const handler of [...deliveryHandlers]) notify(handler, delivery);
 +      consume(receipt);
 +    };
-+    target.parent.postMessage({ type: "hypergolic.intent.delivery-port" }, "*", [channel.port2]);
++    if (deliveryChannel) {
++      deliveryChannel.port1.onmessage = event => {
++        const {receipt, message} = dataOf(event);
++        receiveDelivery(receipt, message);
++      };
++      target.parent.postMessage({type:"hypergolic.intent.delivery-port"}, "*", [deliveryChannel.port2]);
++    } else {
++      let sequence = 0;
++      listen(event => {
++        if (event.data?.type === "intent.deliver") receiveDelivery(++sequence, event.data);
++      });
++    }
 +    const invokeRequest = (value, modern) => request(
 +      { type: "intent.invoke", request: normalizeRequest(value) },
 +      "intent.invoke.result",
@@ -567,7 +577,7 @@ index 523bcf1..a8cd553 100644
        available: (archetype) => request(
          { type: "intent.available", archetype },
          "intent.available.result",
-@@ -2367,8 +2579,11 @@ function nappletNamespacePrelude(domains) {
+@@ -2367,8 +2589,11 @@ function nappletNamespacePrelude(domains) {
        open: (url, options) => request(
          { type: "link.open", url, ...options ? { options } : {} },
          "link.open.result",
@@ -581,7 +591,7 @@ index 523bcf1..a8cd553 100644
        )
      };
    }
-@@ -2383,9 +2598,9 @@ function nappletNamespacePrelude(domains) {
+@@ -2383,9 +2608,9 @@ function nappletNamespacePrelude(domains) {
      };
    }
    function makeLists() {
@@ -593,7 +603,7 @@ index 523bcf1..a8cd553 100644
        add: (list, items, options) => req("lists.add", { list, items, ...options ? { options } : {} }),
        remove: (list, items, options) => req("lists.remove", { list, items, ...options ? { options } : {} })
      };
-@@ -2396,7 +2611,12 @@ function nappletNamespacePrelude(domains) {
+@@ -2396,7 +2621,12 @@ function nappletNamespacePrelude(domains) {
        encodeNip19: (input) => req("common.encodeNip19", { input }),
        decodeNip19: (value) => req("common.decodeNip19", { value }),
        getProfile: (targetValue) => req("common.getProfile", { target: targetValue }),
@@ -607,7 +617,7 @@ index 523bcf1..a8cd553 100644
        follow: (...pubkeys) => req("common.follow", { pubkeys }),
        unfollow: (...pubkeys) => req("common.unfollow", { pubkeys }),
        react: (targetEventId, reaction, customEmojiHref) => req("common.react", {
-@@ -2479,7 +2699,7 @@ function nappletNamespacePrelude(domains) {
+@@ -2479,7 +2709,7 @@ function nappletNamespacePrelude(domains) {
      return intent;
    }
    function isProtectedDomain(domain) {
@@ -616,7 +626,7 @@ index 523bcf1..a8cd553 100644
    }
    function makeDomain(domain, existing) {
      if (domain === "shell") return shell;
-@@ -2487,14 +2707,13 @@ function nappletNamespacePrelude(domains) {
+@@ -2487,14 +2717,13 @@ function nappletNamespacePrelude(domains) {
      if (domain === "identity") return makeProtectedIdentity();
      if (domain === "theme") return makeProtectedTheme();
      if (domain === "intent") return makeProtectedIntent();
@@ -632,7 +642,7 @@ index 523bcf1..a8cd553 100644
        case "media":
          return makeMedia();
        case "notify":
-@@ -2632,7 +2851,7 @@ function createKeysProxy(deps) {
+@@ -2632,7 +2861,7 @@ function createKeysProxy(deps) {
      },
      emit(windowId, envelope) {
        const win = deps.originRegistry.getIframeWindow(windowId);
@@ -641,7 +651,7 @@ index 523bcf1..a8cd553 100644
      }
    };
  }
-@@ -2645,7 +2864,7 @@ function createMediaProxy(deps) {
+@@ -2645,7 +2874,7 @@ function createMediaProxy(deps) {
      },
      emit(windowId, envelope) {
        const win = deps.originRegistry.getIframeWindow(windowId);
@@ -650,7 +660,7 @@ index 523bcf1..a8cd553 100644
      }
    };
  }
-@@ -2658,7 +2877,7 @@ function createNotifyProxy(deps) {
+@@ -2658,7 +2887,7 @@ function createNotifyProxy(deps) {
      },
      emit(windowId, envelope) {
        const win = deps.originRegistry.getIframeWindow(windowId);

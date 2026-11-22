@@ -103,7 +103,7 @@ export function validEnvelope(value: unknown): boolean {
     && keys.every(key => key === 'type' || key === 'id');
 }
 
-export function rejectEnvelope(event: MessageEvent, source: Window, domains: readonly string[]): void {
+export function rejectEnvelope(event: Pick<MessageEvent, 'data'>, source: Pick<Window, 'postMessage'>, domains: readonly string[], account?: string): void {
   if (domains.includes('common')) {
     const reply = commonFailure(event.data);
     if (reply) {source.postMessage(reply,'*');return;}
@@ -136,6 +136,6 @@ export function rejectEnvelope(event: MessageEvent, source: Window, domains: rea
     } catch { /* An invalid correlation identifier has no SDK recipient. */ }
     return;
   }
-  const reply = quotaReply(event.data, domains, 'invalid-request');
+  const reply = quotaReply(event.data, domains, 'invalid-request', account);
   if (reply) source.postMessage(reply, '*');
 }

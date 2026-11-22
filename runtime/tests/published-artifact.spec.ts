@@ -12,13 +12,14 @@ const identity = {
   publisher: '1'.repeat(64), appId: 'published-test', eventId: '2'.repeat(64), version, htmlHash,
 };
 
-type Mode = 'early-theme' | 'modern' | 'invalid-format' | 'unicode-full-chunk' | 'normal' | 'keys-domain' | 'bad-hash' | 'wrong-byte-length' | 'replayed-sequence' | 'unknown-domain' | 'relay-domain' | 'implied-wrappers' | 'attributed-head' | 'commented-head' | 'unsafe-head-comment' | 'upload-domain' | 'all-domains' | 'outbox-domain' | 'outbox-only' | 'published-approval' | 'intent-only' | 'soy-policy' | 'soy-policy-change'
+type Mode = 'modern-intent' | 'modern-services' | 'early-theme' | 'modern' | 'invalid-format' | 'unicode-full-chunk' | 'normal' | 'keys-domain' | 'bad-hash' | 'wrong-byte-length' | 'replayed-sequence' | 'unknown-domain' | 'relay-domain' | 'implied-wrappers' | 'attributed-head' | 'commented-head' | 'unsafe-head-comment' | 'upload-domain' | 'all-domains' | 'outbox-domain' | 'outbox-only' | 'published-approval' | 'intent-only' | 'soy-policy' | 'soy-policy-change'
   | 'snapshot' | 'snapshot-mismatch' | 'snapshot-title-change' | 'snapshot-discovery';
 
 function artifactFor(mode: Mode): Buffer {
+  if (mode === 'modern-services') return Buffer.from('<!doctype html><html><head><title>Services</title></head><body>Services</body></html>');
   if (mode === 'early-theme') return Buffer.from('<!doctype html><html><head><script>window.napplet.theme.get().then(theme => document.body.textContent = theme.colors.primary)</script></head><body>Waiting</body></html>');
   if (mode === 'published-approval') return approvalHtml;
-  if (mode === 'intent-only') return Buffer.from('<!doctype html><html><head><title>Intent</title></head><body><output id="deliveries"></output></body></html>');
+  if (mode === 'intent-only' || mode === 'modern-intent') return Buffer.from('<!doctype html><html><head><title>Intent</title></head><body><output id="deliveries"></output></body></html>');
   const source = html.toString();
   if (mode === 'unicode-full-chunk') return Buffer.from(source.replace('</head>', '<!--' + '🙂/\n'.repeat(70 * 1024) + '--></head>'));
   if(mode==='soy-policy'||mode==='soy-policy-change'||mode==='snapshot-title-change')return Buffer.from(source.replace('</body>','<!--'+'x'.repeat(272*1024)+'--></body>'));
@@ -59,6 +60,9 @@ async function openPublished(page: Page, mode: Mode = 'normal', extraQuery = '')
     let delivery = 0;
     const held = new Set<number>();
     const state = { requests: [] as unknown[], diagnostics: [] as unknown[],
+      accountSnapshot(pubkey: string) {
+        for (const listener of listenerSet) listener({data:JSON.stringify({type:'identity.snapshot', sessionId:generation, pubkey})});
+      },
       pushIntent(message: unknown, target = generation) {
         const sequence = ++delivery;
         for (const listener of listenerSet) listener({data: JSON.stringify({
@@ -97,9 +101,9 @@ async function openPublished(page: Page, mode: Mode = 'normal', extraQuery = '')
         type: 'artifact.chunk', sessionId: generation,
         sequence: mode === 'replayed-sequence' ? sequence + 1 : sequence,
         ...part, byteLength: mode === 'wrong-byte-length' ? part.byteLength + 1 : part.byteLength,
-        ...claims, ...snapshot, ...(mode === 'early-theme' || mode === 'modern' || mode === 'implied-wrappers' || mode === 'snapshot' ? {manifestFormat:'nip-5d'} :
+        ...claims, ...snapshot, ...(mode === 'modern-intent' || mode === 'modern-services' || mode === 'early-theme' || mode === 'modern' || mode === 'implied-wrappers' || mode === 'snapshot' ? {manifestFormat:'nip-5d'} :
           mode === 'invalid-format' ? {manifestFormat:'unknown'} : {}), ...((mode==='soy-policy'||mode==='soy-policy-change')?{appData:{sourceKind:35129,policy:{profile:'soy.app-data/1',scope:mode==='soy-policy-change'&&sequence>0?'f'.repeat(64):'b7890c0793a7fa9c2570c56500f403724b1a4c0e453a9194ec7200132c634f8b',maxContentBytes:3072,relays:['wss://relay.damus.io'],defaultRelays:['wss://relay.damus.io']}}}:{}),
-        domains: mode==='soy-policy'||mode==='soy-policy-change'?['identity','outbox','theme']:mode === 'intent-only' ? ['intent'] : mode === 'published-approval' ? ['identity', 'relay', 'theme'] : mode === 'unknown-domain' ? ['future-domain'] : mode === 'outbox-domain' ? ['outbox', 'relay', 'theme'] : mode === 'outbox-only' ? ['outbox', 'theme'] : mode === 'relay-domain' ? ['relay', 'theme'] : mode === 'upload-domain' ? ['upload'] : mode === 'keys-domain' ? ['keys', 'theme'] : mode === 'all-domains' ? ['config', 'identity', 'inc', 'intent', 'link', 'notify', 'outbox', 'relay', 'resource', 'storage', 'theme', 'upload'] : ['theme'],
+        domains: mode === 'modern-services' ? ['identity','outbox','resource','storage','theme'] : mode==='soy-policy'||mode==='soy-policy-change'?['identity','outbox','theme']:mode === 'intent-only' || mode === 'modern-intent' ? ['intent'] : mode === 'published-approval' ? ['identity', 'relay', 'theme'] : mode === 'unknown-domain' ? ['future-domain'] : mode === 'outbox-domain' ? ['outbox', 'relay', 'theme'] : mode === 'outbox-only' ? ['outbox', 'theme'] : mode === 'relay-domain' ? ['relay', 'theme'] : mode === 'upload-domain' ? ['upload'] : mode === 'keys-domain' ? ['keys', 'theme'] : mode === 'all-domains' ? ['config', 'identity', 'inc', 'intent', 'link', 'notify', 'outbox', 'relay', 'resource', 'storage', 'theme', 'upload'] : ['theme'],
       };
       const wire = window.nativeMessage(envelope);
       for (const listener of listenerSet) listener({ data: wire });
@@ -116,13 +120,15 @@ async function openPublished(page: Page, mode: Mode = 'normal', extraQuery = '')
         if (request.type === 'capability') {
           const wire = JSON.parse(request.message);
           let response;
-          if (mode === 'intent-only' && wire.type === 'routing.call') {
+          if ((mode === 'intent-only' || mode === 'modern-intent') && wire.type === 'routing.call') {
             const {message} = wire;
             const {archetype, action, convention} = message.request ?? {};
             const result = message.type === 'intent.invoke' ? {type: 'intent.invoke.result', id: message.id,
               result: {ok: true, handled: true, archetype, action, convention, handler: 'native-handler'}} : null;
             response = {type: 'routing.call.result', id: wire.id, response: result};
           }
+          else if (wire.type === 'storage.get') response = {type:'storage.get.result', id:wire.id, value:'saved setting'};
+          else if (wire.type === 'resource.info') response = {type:'resource.info.result', id:wire.id, info:{schemes:['data']}};
           else if (wire.type === 'identity.getPublicKey') response = {type: 'identity.getPublicKey.result', id: wire.id, pubkey: '1'.repeat(64)};
           else if (wire.type === 'outbox.query') response = {type: 'outbox.query.result', id: wire.id, events: []};
           else if (wire.type === 'outbox.publish') response = {type: 'outbox.publish.result', id: wire.id, ok: false, error: 'user rejected'};
@@ -193,6 +199,35 @@ test('a modern Theme guest receives its first reply over the private port withou
   expect(await page.evaluate(() => (window as any).themeTransport)).toEqual({
     windowTypes:['napplet.hello'], transferred:1, portTypes:['shell.ready', 'theme.get'],
   });
+});
+
+test('one private port serves multiple grants and delivers native account changes', async ({page}) => {
+  await page.addInitScript(() => {
+    const types: string[] = [];
+    (window as any).windowMessages = types;
+    window.addEventListener('message', event => {
+      if (window === top ? event.source === document.querySelector('iframe')?.contentWindow : event.source === parent) {
+        types.push(event.data?.type);
+      }
+    });
+  });
+  await openPublished(page, 'modern-services');
+  const body = page.frameLocator('#napplet').locator('body');
+  await expect(body).toHaveText('Services');
+  const result = await body.evaluate(async () => {
+    const api = (window as any).napplet;
+    api.identity.onChanged((key: string) => {document.body.dataset.account = key;});
+    const pubkey = await api.identity.getPublicKey();
+    const value = await api.storage.getItem('setting');
+    const {schemes} = await api.resource.info();
+    const {events} = await api.outbox.query({kinds:[1],limit:0});
+    return {pubkey, value, schemes, events, mediaAvailable:api.shell.supports('media')};
+  });
+  expect(result).toEqual({pubkey:'1'.repeat(64), value:'saved setting', schemes:['data'], events:[], mediaAvailable:false});
+  await page.evaluate(() => (window as any).__publishedTest.accountSnapshot('2'.repeat(64)));
+  await expect(body).toHaveAttribute('data-account', '2'.repeat(64));
+  expect(await page.evaluate(() => (window as any).windowMessages)).toEqual(['napplet.hello']);
+  expect(await body.evaluate(() => (window as any).windowMessages.filter((type:string) => !type.startsWith('hypergolic.')))).toEqual([]);
 });
 
 test('an unknown native manifest format is rejected before mounting', async ({page}) => {
@@ -529,6 +564,37 @@ test('verified Intent-only guest invokes modern URIs through the existing native
     .filter((value: any) => value.type === 'intent.invoke').map((value: any) => value.request));
   const normalized = {archetype: 'napptest', action: 'open', convention: 'napplet:napptest/open', payload: {msg: 'hello+world'}};
   expect(requests).toEqual([normalized, normalized]);
+});
+
+test('modern Intent buffers deliveries and returns credits on its one bootstrap port', async ({page}) => {
+  await page.addInitScript(() => {
+    if (window !== top) return;
+    const events: string[] = [];
+    (window as any).intentWindowEvents = events;
+    window.addEventListener('message', event => {
+      if (event.source === document.querySelector('iframe')?.contentWindow) events.push(event.data.type);
+    });
+  });
+  await openPublished(page, 'modern-intent');
+  const output = page.frameLocator('#napplet').locator('#deliveries');
+  await expect(output).toBeAttached();
+  await expect.poll(() => page.evaluate(() => (window as any).__publishedTest.requests.some((request:any) =>
+    request.type === 'capability' && JSON.parse(request.message).message?.type === 'routing.__register'))).toBe(true);
+  const credits = () => page.evaluate(() => (window as any).__publishedTest.requests.filter((r:any) => r.type === 'routing-ack').length);
+  const offered = await page.evaluate(() => [1,2,3,4,5].map(index => (window as any).__publishedTest.offerIntent({
+    type:'intent.deliver', delivery:{sender:'example-caller', archetype:'napptest', action:'open',
+      convention:'napplet:napptest/open', payload:{index}},
+  })));
+  expect(offered).toEqual([true,true,true,true,false]);
+  expect(await credits()).toBe(0);
+  await output.evaluate(element => {
+    (window as any).napplet.intent.onDelivery((delivery:any) => { element.textContent += String(delivery.payload.index); });
+  });
+  await expect(output).toHaveText('1234');
+  await expect.poll(credits).toBe(4);
+  const invoked = await output.evaluate(() => (window as any).napplet.intent.invoke('napplet:napptest/open'));
+  expect(invoked).toMatchObject({ok:true, handler:'native-handler'});
+  expect(await page.evaluate(() => (window as any).intentWindowEvents)).toEqual(['napplet.hello']);
 });
 
 test('verified Intent-only guest holds four credits until consumption and cannot forge a receipt', async ({page}) => {

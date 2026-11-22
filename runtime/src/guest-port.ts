@@ -1,15 +1,17 @@
 import type {ShellBridge} from '@kehto/shell';
-import {quotaReply, validEnvelope} from './guest-envelope';
+import {quotaReply, validEnvelope, rejectEnvelope} from './guest-envelope';
 
 /** One guest-created channel per verified frame generation. */
 export function createGuestPort(frame: HTMLIFrameElement, source: Window, bridge: ShellBridge,
-  domains: readonly string[], ready: () => void, fail: () => void) {
+  domains: readonly string[], account: () => string | undefined, consumeIntent: (receipt: unknown) => void, ready: () => void, fail: () => void) {
   let port: MessagePort | undefined;
   let closed = false;
   let operations = 0;
   let started = performance.now();
   const current = () => !closed && frame.isConnected && frame.contentWindow === source;
+  const send = (message: unknown) => { if (current()) port?.postMessage(message); };
   return {
+    send,
     receive(event: MessageEvent) {
       if (!current() || !event.isTrusted || event.source !== source || event.origin !== 'null') return;
       if (port || event.data?.type !== 'napplet.hello' || Object.keys(event.data).length !== 1 || event.ports.length !== 1) {
@@ -18,7 +20,6 @@ export function createGuestPort(frame: HTMLIFrameElement, source: Window, bridge
       }
       const connection = event.ports[0]!;
       port = connection;
-      const send = (message: unknown) => { if (current()) connection.postMessage(message); };
       const dispatch = bridge.bindPort(source, event.origin, send);
       connection.onmessageerror = fail;
       connection.onmessage = message => {
@@ -30,9 +31,18 @@ export function createGuestPort(frame: HTMLIFrameElement, source: Window, bridge
         const now = performance.now();
         if (now - started > 1000) { started = now; operations = 0; }
         const value = message.data;
-        if (++operations > 64 || !validEnvelope(value)) {
-          const reply = quotaReply(value, domains, operations > 64 ? 'quota-exceeded' : 'invalid-request');
+        if (value?.type === 'hypergolic.intent.consumed') {
+          if (Object.keys(value).length === 2) consumeIntent(value.receipt);
+          return;
+        }
+        const cleanup = value?.type === 'relay.close' || value?.type === 'outbox.close' || value?.type === 'resource.cancel';
+        if (++operations > 64 && !cleanup) {
+          const reply = quotaReply(value, domains, 'quota-exceeded', account());
           if (reply) send(reply);
+          return;
+        }
+        if (!validEnvelope(value)) {
+          rejectEnvelope(message, {postMessage:send}, domains, account());
           return;
         }
         dispatch(value);
