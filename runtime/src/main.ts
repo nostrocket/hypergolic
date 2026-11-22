@@ -312,8 +312,9 @@ function mount(artifact: RuntimeMetadata) {
     }
   };
   const cvm = artifact.domains.includes('cvm') ? createCvmGuestReceiver(sendGuest,native.cvm,live) : null;
+  const enforcePrivateChannel = artifact.published || fixtureName === 'napplet-discovery' || fixtureName === 'nap-support';
   const guestPort = privatePort ? createGuestPort(frame, source, bridge, artifact.domains, account.current, routing.consume,
-    {published:artifact.published, keys, cvm, checkpoint:artifact.journalCheckpoint ? closeCheck.checkpointResult : undefined, mesh:mesh?.receiveValue, media:value => handleMediaRequest(value, hasMedia ? native.sendMedia : null, sendGuest)}, markReady, () => fail('runtime-bootstrap')) : null;
+    {enforcePrivateChannel, keys, cvm, checkpoint:artifact.journalCheckpoint ? closeCheck.checkpointResult : undefined, mesh:mesh?.receiveValue, media:value => handleMediaRequest(value, hasMedia ? native.sendMedia : null, sendGuest)}, markReady, () => fail('runtime-bootstrap')) : null;
   const receiveGuest = guestMessageReceiver(frame, source, {
     domains: artifact.domains, routing, keys, account: account.current, sendMedia: hasMedia ? native.sendMedia : null,
     cvm,

@@ -39,6 +39,19 @@ test('bundled Support napplet reads live report, filters, expands and has no fil
   expect(result).toEqual({fs: false, media: false, identity: false, domains: true, bridge: 'undefined', writable: false});
 });
 
+for (const fixture of ['napplet-discovery', 'nap-support']) {
+  test(`bundled ${fixture} retires when it uses the window after connecting`, async ({page}) => {
+    await page.addInitScript(() => {
+      if (window === window.top) (window as any).HypergolicHost = {postMessage: () => undefined};
+    });
+    await page.goto(`/assets/runtime/index.html?sessionId=bundled-port&fixture=${fixture}`);
+    const body = page.frameLocator('#napplet').locator('body');
+    await body.evaluate(async () => { await (window as any).napplet.shell.ready(); });
+    await body.evaluate(() => parent.postMessage({type: 'fixture.finished'}, '*'));
+    await expect(page.locator('#napplet')).toHaveCount(0);
+  });
+}
+
 test('fallback discovery reports scoped availability without claiming global absence', async ({page}) => {
   await page.addInitScript(() => {
     (window as any).napplet = {shell: {ready: () => Promise.resolve({}), supports: (domain: string) => domain === 'theme'}};
