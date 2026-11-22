@@ -1,16 +1,16 @@
-import {listHeader} from '../../src/lists/napplet-recommendations.ts';
-import { outboxReadFailure } from '../../src/outbox/query-contract.ts';
-import { resourceFailure } from '../../src/resources/resource-contract.ts';
-import { queryFailure, storageFailure } from '../../src/runtime/capability-protocol.ts';
-import {COMMON_OPERATIONS,parseCommonRequest,commonFailure} from '../../src/common/common-contract.ts';
-import {parseOutboxSubscribe,parseOutboxClose} from '../../src/outbox/subscription-contract.ts';
-import {parseConfigMessage} from '../../src/presentation/config-contract.ts';
-import {captureNotifyRejection, parseNotifyMessage} from '../../src/presentation/notify-contract.ts';
-import { parseRoutingMessage } from '../../src/routing/routing-contract.ts';
-import { linkRequestId } from '../../src/links/link-contract.ts';
-import { parseUploadRequest, UploadError, UPLOAD_LIMITS } from '../../src/uploads/upload-contract.ts';
-import { text } from '../../src/storage/codec.ts';
-import { parseRelaySubscribe, parseRelayClose } from '../../src/network/relay-subscription-contract.ts';
+import {listHeader} from '../../src/lists/napplet-recommendations';
+import { outboxReadFailure } from '../../src/outbox/query-contract';
+import { resourceFailure } from '../../src/resources/resource-contract';
+import { queryFailure, storageFailure } from '../../src/runtime/capability-protocol';
+import {COMMON_OPERATIONS,parseCommonRequest,commonFailure} from '../../src/common/common-contract';
+import {parseOutboxSubscribe,parseOutboxClose} from '../../src/outbox/subscription-contract';
+import {parseConfigMessage} from '../../src/presentation/config-contract';
+import {captureNotifyRejection, parseNotifyMessage} from '../../src/presentation/notify-contract';
+import { parseRoutingMessage } from '../../src/routing/routing-contract';
+import { linkRequestId } from '../../src/links/link-contract';
+import { parseUploadRequest, UploadError, UPLOAD_LIMITS } from '../../src/uploads/upload-contract';
+import { text } from '../../src/storage/codec';
+import { parseRelaySubscribe, parseRelayClose } from '../../src/network/relay-subscription-contract';
 
 const privilegedRequests = new Set([...COMMON_OPERATIONS,'identity.getPublicKey', 'identity.getRelays', 'identity.getProfile',
   'identity.getFollows', 'identity.getMutes', 'identity.getBlocked', 'identity.getList',

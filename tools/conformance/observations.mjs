@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
-import { setImmediate as nextTurn } from 'node:timers/promises';
+import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
 import { finalizeEvent, generateSecretKey } from 'nostr-tools/pure';
-import { identityAdapter } from '../../runtime/src/identity-adapter.ts';
-import { quotaReply } from '../../runtime/src/guest-envelope.ts';
+import {observeIdentity} from './host.mjs';
 import {createKeysSession} from '../../runtime/src/keys-adapter.ts';
 import {projectMediaRequest} from '../../runtime/src/media-wire.ts';
 import {componentCases, runComponent} from './component-cases.mjs';
@@ -87,22 +87,17 @@ function streamContinuity() {
   } finally { session.revoke(); }
 }
 
-async function publicKeyAfterFailure() {
-  const replies = [];
-  const account = '1'.repeat(64);
-  let available = true;
-  const adapter = identityAdapter({async request(message) {
-    if (!available) throw new Error('Temporary owner failure');
-    return {type:'identity.getPublicKey.result', id:message.id, pubkey:account};
-  }}, () => () => true);
-  const ask = async id => {
-    adapter.handleMessage(d, {type:'identity.getPublicKey', id}, reply => replies.push(reply));
-    await nextTurn();
-    return replies.find(reply => reply.id === id);
-  };
-  assert.equal((await ask('connected'))?.pubkey, account, 'Connected identity control failed');
-  available = false;
-  return (await ask('same-account'))?.pubkey === account;
+async function themeQuotaReply() {
+  // Use the host's own bundler to resolve the same TypeScript entry point as the shipped runtime.
+  const runtime = new URL('../../runtime/', import.meta.url);
+  const vite = await import(createRequire(new URL('package.json', runtime)).resolve('vite'));
+  const server = await vite.createServer({root:fileURLToPath(runtime), configFile:false, logLevel:'error',
+    server:{middlewareMode:true, hmr:false, watch:null}, optimizeDeps:{noDiscovery:true}});
+  try {
+    const {quotaReply} = await server.ssrLoadModule('/src/guest-envelope.ts');
+    const reply = quotaReply({type:'theme.get', id:d}, ['theme']);
+    return reply?.type === 'theme.get.result' && reply.id === d && typeof reply.error === 'string';
+  } finally { await server.close(); }
 }
 
 export const observations = {
@@ -129,7 +124,7 @@ export const observations = {
   'relay-continuity': streamContinuity,
   'config-default': async () => await configuration(false) === 'light',
   'config-user-choice': async () => await configuration(true) === 'dark',
-  'identity-connected': publicKeyAfterFailure,
+  'identity-connected': observeIdentity,
   'intent-action': () => {
     const request = {archetype:'feed', convention:'napplet:feed/open'};
     const wire = fields => ({type:'intent.invoke', id:d, request:fields});
@@ -138,8 +133,5 @@ export const observations = {
     catch (error) { if (error instanceof RoutingRequestError) return true; throw error; }
     return false;
   },
-  'theme-reply': () => {
-    const reply = quotaReply({type:'theme.get', id:d}, ['theme']);
-    return reply?.type === 'theme.get.result' && reply.id === d && typeof reply.error === 'string';
-  },
+  'theme-reply': themeQuotaReply,
 };
