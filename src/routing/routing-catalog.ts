@@ -264,6 +264,39 @@ async function copyNamedCatalog(sqlite: SQLiteModule, into: Access): Promise<voi
     row.user,row.archetype,row.publisher,row.app_id) !== 1) return fail('STORAGE_FAILURE');
 }
 
+async function rememberRegistration(io: Access, user: string, check: () => void,
+  verify: ReturnType<typeof createRowVerifier>, handler: CatalogHandler, payload: string): Promise<string[]> {
+  const previous = await io.all<Row>('SELECT publisher, app_id, event_id, signed_event FROM routing_catalog WHERE user = ? AND publisher = ? AND app_id = ?', user, handler.publisher, handler.appId);
+  if (previous.length > 1) return fail('CORRUPT_STORAGE');
+  const old = previous[0];
+  if (old?.event_id === handler.eventId && old.signed_event === payload) return [];
+  const oldHandler = old ? await verify(user, old, check) : null;
+  const roles = new Set((oldHandler?.roles ?? []).map(role => role.archetype));
+  for (const role of handler.roles) roles.add(role.archetype);
+
+  const stats = await io.all<{count: number; bytes: number; owner_count: number}>('SELECT count(*) AS count, COALESCE(sum(length(CAST(signed_event AS BLOB))), 0) AS bytes, COALESCE(sum(user = ?), 0) AS owner_count FROM routing_catalog', user);
+  const stat = stats[0];
+  if (stats.length !== 1 || !stat || !count(stat.count) || !count(stat.bytes) || !count(stat.owner_count) || stat.count > CATALOG_LIMITS.total || stat.owner_count > CATALOG_LIMITS.perIdentity || stat.bytes > CATALOG_LIMITS.bytes) return fail('CORRUPT_STORAGE');
+  if ((!old && (stat.count >= CATALOG_LIMITS.total || stat.owner_count >= CATALOG_LIMITS.perIdentity)) ||
+      stat.bytes - (old ? utf8Bytes(old.signed_event) : 0) + utf8Bytes(payload) > CATALOG_LIMITS.bytes) {
+    if (handler.roles.length) return fail('QUOTA_EXCEEDED');
+    // A non-handler can launch without occupying a routing slot. If an
+    // update dropped its last role, retire the obsolete registration.
+    if (old && await io.run('DELETE FROM routing_catalog WHERE user = ? AND publisher = ? AND app_id = ?', user, handler.publisher, handler.appId) !== 1) return fail('STORAGE_FAILURE');
+    return [...roles];
+  }
+  if (await io.run('INSERT INTO routing_catalog (user, publisher, app_id, event_id, signed_event) VALUES (?, ?, ?, ?, ?) ON CONFLICT(user, publisher, app_id) DO UPDATE SET event_id = excluded.event_id, signed_event = excluded.signed_event', user, handler.publisher, handler.appId, handler.eventId, payload) !== 1) return fail('STORAGE_FAILURE');
+  const saved = await io.all<Row>('SELECT publisher, app_id, event_id, signed_event FROM routing_catalog WHERE user = ? AND publisher = ? AND app_id = ?', user, handler.publisher, handler.appId);
+  if (saved.length !== 1 || saved[0]!.signed_event !== payload || saved[0]!.event_id !== handler.eventId) return fail('STORAGE_FAILURE');
+  const defaults = await io.all<{archetype: string}>('SELECT archetype FROM routing_defaults WHERE user = ? AND publisher = ? AND app_id = ?', user, handler.publisher, handler.appId);
+  for (const {archetype} of defaults) {
+    if (handler.roles.some(role => role.archetype === archetype)) continue;
+    if (await io.run('DELETE FROM routing_defaults WHERE user = ? AND archetype = ?', user, archetype) !== 1) return fail('STORAGE_FAILURE');
+    roles.add(archetype);
+  }
+  return [...roles];
+}
+
 /** App-owned catalog and explicit preferences; removal does not touch napplet data or artifacts. */
 export async function openRoutingCatalog(sqlite: SQLiteModule, platform: 'android' | 'ios'): Promise<RoutingCatalog> {
   if (platform !== 'android' && platform !== 'ios') return fail('INVALID_INPUT');
@@ -295,37 +328,7 @@ export async function openRoutingCatalog(sqlite: SQLiteModule, platform: 'androi
     remember: async (owner: TrustedUser, artifact: VerifiedNappletArtifact, options?: RequestOptions) => {
       assertVerifiedArtifact(artifact);
       const handler = handlerFrom(artifact.manifest), payload = signedEvent(artifact.manifest);
-      return request(owner, options, async (io, user, check) => {
-        const previous = await io.all<Row>('SELECT publisher, app_id, event_id, signed_event FROM routing_catalog WHERE user = ? AND publisher = ? AND app_id = ?', user, handler.publisher, handler.appId);
-        if (previous.length > 1) return fail('CORRUPT_STORAGE');
-        const old = previous[0];
-        if (old?.event_id === handler.eventId && old.signed_event === payload) return [];
-        const oldHandler = old ? await verify(user, old, check) : null;
-        const roles = new Set((oldHandler?.roles ?? []).map(role => role.archetype));
-        for (const role of handler.roles) roles.add(role.archetype);
-
-        const stats = await io.all<{count: number; bytes: number; owner_count: number}>('SELECT count(*) AS count, COALESCE(sum(length(CAST(signed_event AS BLOB))), 0) AS bytes, COALESCE(sum(user = ?), 0) AS owner_count FROM routing_catalog', user);
-        const stat = stats[0];
-        if (stats.length !== 1 || !stat || !count(stat.count) || !count(stat.bytes) || !count(stat.owner_count) || stat.count > CATALOG_LIMITS.total || stat.owner_count > CATALOG_LIMITS.perIdentity || stat.bytes > CATALOG_LIMITS.bytes) return fail('CORRUPT_STORAGE');
-        if ((!old && (stat.count >= CATALOG_LIMITS.total || stat.owner_count >= CATALOG_LIMITS.perIdentity)) ||
-            stat.bytes - (old ? utf8Bytes(old.signed_event) : 0) + utf8Bytes(payload) > CATALOG_LIMITS.bytes) {
-          if (handler.roles.length) return fail('QUOTA_EXCEEDED');
-          // A non-handler can launch without occupying a routing slot. If an
-          // update dropped its last role, retire the obsolete registration.
-          if (old && await io.run('DELETE FROM routing_catalog WHERE user = ? AND publisher = ? AND app_id = ?', user, handler.publisher, handler.appId) !== 1) return fail('STORAGE_FAILURE');
-          return [...roles];
-        }
-        if (await io.run('INSERT INTO routing_catalog (user, publisher, app_id, event_id, signed_event) VALUES (?, ?, ?, ?, ?) ON CONFLICT(user, publisher, app_id) DO UPDATE SET event_id = excluded.event_id, signed_event = excluded.signed_event', user, handler.publisher, handler.appId, handler.eventId, payload) !== 1) return fail('STORAGE_FAILURE');
-        const saved = await io.all<Row>('SELECT publisher, app_id, event_id, signed_event FROM routing_catalog WHERE user = ? AND publisher = ? AND app_id = ?', user, handler.publisher, handler.appId);
-        if (saved.length !== 1 || saved[0]!.signed_event !== payload || saved[0]!.event_id !== handler.eventId) return fail('STORAGE_FAILURE');
-        const defaults = await io.all<{archetype: string}>('SELECT archetype FROM routing_defaults WHERE user = ? AND publisher = ? AND app_id = ?', user, handler.publisher, handler.appId);
-        for (const {archetype} of defaults) {
-          if (handler.roles.some(role => role.archetype === archetype)) continue;
-          if (await io.run('DELETE FROM routing_defaults WHERE user = ? AND archetype = ?', user, archetype) !== 1) return fail('STORAGE_FAILURE');
-          roles.add(archetype);
-        }
-        return [...roles];
-      });
+      return request(owner, options, (io, user, check) => rememberRegistration(io, user, check, verify, handler, payload));
     },
     list: (owner: TrustedUser, options?: RequestOptions) => request(owner, options, (io, user, check) => read(io, user, check, verify)),
     inspect: (owner: TrustedUser, options?: RequestOptions) => request(owner, options, (io, user, check) => read(io, user, check, verify, false)),
