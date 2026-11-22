@@ -9,6 +9,7 @@ final class RoutingEndpointRegistry: @unchecked Sendable {
   }
   private let lock = NSLock()
   private var endpoints: [String: Endpoint] = [:]
+  private var reviewGeneration: String?
   private var ownerUser = ""
   private var ownerEpoch: UInt64?
   private var ownerAvailable = false
@@ -20,12 +21,13 @@ final class RoutingEndpointRegistry: @unchecked Sendable {
       epoch <= Self.max, counter < Self.max,
       ownerEpoch == nil || epoch >= ownerEpoch!,
       ownerEpoch != epoch || ownerUser == user else { return false }
-    if ownerUser != user || ownerEpoch != epoch || ownerAvailable != available { counter += 1 }
+    if ownerUser != user || ownerEpoch != epoch || ownerAvailable != available { counter += 1; reviewGeneration = nil }
     ownerUser = user; ownerEpoch = epoch; ownerAvailable = available; return true
   }
   func setForeground(_ value: Bool) {
     lock.lock(); defer { lock.unlock() }
     if value != foreground { if counter < Self.max { counter += 1 } else { ownerAvailable = false } }
+    if !value { reviewGeneration = nil }
     foreground = value
   }
   func register(_ generation: String, user: String, epoch: UInt64, intent: Bool, inc: Bool, notify: Bool = false, config: Bool = false, trackPublished: Bool = false, link: Bool = false) -> Bool {
@@ -41,7 +43,20 @@ final class RoutingEndpointRegistry: @unchecked Sendable {
     guard var endpoint = endpoints[generation], endpoint.focused != value else { return false }
     if endpoint.reviewRevision < Self.max { endpoint.reviewRevision += 1 }; endpoint.focused = value; endpoints[generation] = endpoint; return true
   }
-  func revoke(_ generation: String) { lock.lock(); defer { lock.unlock() }; endpoints.removeValue(forKey: generation) }
+  func revoke(_ generation: String) {
+    lock.withLock {
+      if reviewGeneration == generation { reviewGeneration = nil }
+      _ = endpoints.removeValue(forKey: generation)
+    }
+  }
+  func setReviewGeneration(_ generation: String?) {
+    lock.withLock { reviewGeneration = generation.flatMap { active($0) ? $0 : nil } }
+  }
+  // UIKit may hide the keyboard before Fabric commits inputBlocked. The claim is
+  // published synchronously before presentation; either signal covers the editor.
+  func coversInput(_ generation: String, blocked: Bool) -> Bool {
+    lock.withLock { blocked || reviewGeneration == generation }
+  }
   private func active(_ generation: String) -> Bool {
     guard let endpoint = endpoints[generation] else { return false }
     return counter < Self.max && foreground && ownerAvailable && endpoint.ready && endpoint.epoch == ownerEpoch && endpoint.user == ownerUser

@@ -8,6 +8,27 @@ private final class TestClock: @unchecked Sendable {
 @main struct RoutingCoreTests {
   static var count = 0
   static func expect(_ value: Bool) { count += 1; precondition(value, "Routing assertion \(count)") }
+  static func checkJournalKeyboardReviewOrdering(user: String) {
+    let registry = RoutingEndpointRegistry()
+    expect(registry.synchronizeOwner(user, epoch: 0, available: true))
+    expect(registry.register("journal", user: user, epoch: 0, intent: false, inc: true))
+    registry.ready("journal")
+    registry.focus("journal", true)
+    registry.setReviewGeneration("journal")
+    expect(registry.coversInput("journal", blocked: false)) // Keyboard hides before Fabric blocks.
+    expect(registry.coversInput("journal", blocked: true))  // Keyboard hides after Fabric blocks.
+    expect(!registry.coversInput("other", blocked: false))
+    registry.setReviewGeneration(nil)
+    expect(registry.coversInput("journal", blocked: true))  // Resolving while dismissal animates.
+    expect(!registry.coversInput("journal", blocked: false)) // Done without a sheet cancels the handoff.
+    registry.setReviewGeneration("journal")
+    registry.setForeground(false)
+    expect(!registry.coversInput("journal", blocked: false))
+    registry.setForeground(true)
+    registry.setReviewGeneration("journal")
+    registry.revoke("journal")
+    expect(!registry.coversInput("journal", blocked: false))
+  }
   static func main() {
     let a = String(repeating: "a", count: 64), b = String(repeating: "b", count: 64), r = RoutingEndpointRegistry()
     expect(!r.register("old", user:a, epoch:0, intent:true, inc:true)); expect(r.synchronizeOwner(a, epoch:0, available:true))
@@ -27,6 +48,7 @@ private final class TestClock: @unchecked Sendable {
     let limit = RoutingEndpointRegistry(); expect(limit.synchronizeOwner(a, epoch:0, available:true))
     for i in 0..<64 { expect(limit.register("endpoint-\(i)", user:a, epoch:0, intent:true, inc:true)) }
     expect(!limit.register("overflow", user:a, epoch:0, intent:true, inc:true)); limit.revoke("endpoint-0"); expect(limit.register("replacement", user:a, epoch:0, intent:true, inc:true))
+    checkJournalKeyboardReviewOrdering(user: a)
     let presentation = RoutingEndpointRegistry(); expect(presentation.synchronizeOwner(a, epoch:0, available:true))
     expect(presentation.register("config-only", user:a, epoch:0, intent:false, inc:false, notify:false, config:true)); presentation.ready("config-only")
     expect(presentation.mayDeliver("config-only", domain:"config")); expect(!presentation.mayDeliver("config-only", domain:"notify")); expect(!presentation.mayDeliver("config-only", domain:"intent")); expect(!presentation.mayDeliver("config-only", domain:"inc"))

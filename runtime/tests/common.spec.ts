@@ -1,6 +1,6 @@
 import {npubEncode} from 'nostr-tools/nip19';
 import {createHash} from 'node:crypto';
-import {expect,test,type Page} from '@playwright/test';
+import {expect,test,type Page} from './published-wire';
 
 const generation = '8487e847-a1e9-4ad5-ac5d-42c3a5e104d9';
 const pubkey = '1'.repeat(64);
@@ -11,7 +11,7 @@ async function open(page:Page,domains = ['common','identity','relay'],social=fal
     if (window !== window.top) return;
     const listeners = new Set<(value:{data:string})=>void>();
     const requests:Record<string,unknown>[] = [];
-    const send = (value:object) => {for(const listener of listeners)listener({data:JSON.stringify(value)});};
+    const send = (value:object) => {for(const listener of listeners)listener({data:window.nativeMessage(value)});};
     const awaiting:Record<string,unknown>[]=[];
     (window as any).__commonProof = {requests,awaiting,review:()=>{const captured=awaiting.shift();if(!captured)throw Error('No pending native review');const request=JSON.parse(captured.message as string);send({type:'capability.result',sessionId:generation,sequence:captured.sequence,response:JSON.stringify({type:request.type+'.result',id:request.id,ok:false,error:'user-denied'})});}};
     Object.defineProperty(window,'HypergolicHost',{value:{
@@ -20,7 +20,7 @@ async function open(page:Page,domains = ['common','identity','relay'],social=fal
       postMessage(raw:string) {
         const captured = JSON.parse(raw);
         if (captured.type === 'artifact.read') {
-          send({type:'artifact.chunk',sessionId:generation,sequence:0,base64:btoa(html),byteLength:html.length,
+          send({type:'artifact.chunk',sessionId:generation,sequence:0,text:html,byteLength:html.length,
             totalBytes:html.length,publisher:pubkey,appId:'common-test',eventId:'2'.repeat(64),htmlHash:hash,version,domains,done:true});
           return;
         }

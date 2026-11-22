@@ -5,7 +5,6 @@ import UIKit
 final class PublishedHTTPSBridgeOwner: @unchecked Sendable {
   enum Failure: Error { case invalidOperation, busy, inactive }
   private static let artifactChunkBytes = 48 * 1024
-  private static let maximumReservedBodyBytes = 32 * 1024 * 1024
 
   private enum Reply {
     case avatar(CheckedContinuation<String, Error>)
@@ -73,10 +72,9 @@ final class PublishedHTTPSBridgeOwner: @unchecked Sendable {
       return
     }
     let admitted = lock.withLock {
-      let reserved = ready.values.reduce(reply.maximumBytes) { $0 + $1.body.count } +
-        pending.values.reduce(0) { $0 + $1.reply.maximumBytes }
-      guard foreground, reserved <= Self.maximumReservedBodyBytes,
-            pending.count + ready.count < 4, NativeTransportTickets.shared.consume(operationId) else { return false }
+      let reserved = ready.values.map { $0.body.count } + pending.values.map { $0.reply.maximumBytes }
+      guard foreground, PublishedHTTPResponse.admitsDownload(reply.maximumBytes, reservations: reserved),
+            NativeTransportTickets.shared.consume(operationId) else { return false }
       pending[operationId] = Pending(reply: reply)
       return true
     }
@@ -122,6 +120,14 @@ final class PublishedHTTPSBridgeOwner: @unchecked Sendable {
       if end == current.body.count { ready.removeValue(forKey: operationId) }
       else { ready[operationId] = current }
       return encoded
+    }
+  }
+
+  func takeArtifact(operationId: String) throws -> Data {
+    try lock.withLock {
+      guard foreground, let current = ready[operationId], current.cursor == 0 else { throw Failure.invalidOperation }
+      ready.removeValue(forKey: operationId)
+      return current.body
     }
   }
 

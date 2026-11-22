@@ -38,6 +38,7 @@ export interface PublishedRuntimeBinding { readonly publishedArtifact: string; r
   ready(generation: string): void; readyGeneration(): string | null; receive(event: NativeCapabilityEvent): void; assertApproval(origin: ApprovalOrigin,domain?:'outbox'|'common'): void; assertUpload(origin: ApprovalOrigin): void; revoke(): void }
 export interface RuntimeNativePort extends NativeCapabilityPort { checkpointAvailable?(generation: string, id: string, consume: boolean): boolean; newInstanceId(): string; subscriptions?: NativeRelaySubscriptionPort }
 export interface RuntimeOwner {
+  recordNavigationKeyboard?(sessionId: string, visible: boolean): void;
   canSuspend(session: NappletDescriptor): boolean;
   trySuspend(session: NappletDescriptor): boolean;
   publishedCapabilities(session: NappletDescriptor): PublishedCapabilities | null;
@@ -140,7 +141,7 @@ export function createRuntimeOwner(database: ShellDatabase,
     ...published, identity, database, currentWorkspace: () => identity.getSnapshot().session.workspace.getSnapshot().workspace, newInstanceId: () => native.newInstanceId(),
   }) : null;
   // A checkpoint is restored only after this owner actually reclaimed its exact card.
-  const suspended = new Map<string, {session: NappletDescriptor; user: string; epoch: number; id: string}>();
+  const suspended = new Map<string, {session: NappletDescriptor; user: string; epoch: number; id: string; editing?: boolean}>();
   const prepared = new Map<string, PreparedPublishedSession>();
   const running = new Map<string, PublishedRuntimeBinding>();
   const closeCapabilityReviews = (id: string) => {
@@ -174,7 +175,7 @@ export function createRuntimeOwner(database: ShellDatabase,
     const resume = previous && previous.user === configuration.user && previous.epoch === configuration.epoch &&
       samePublishedPin(previous.session, selected) ? previous.id : null;
     const checkpoint = configuration.domains.includes('storage') && supportsWorkspaceJournalCheckpoint(selected) ? createSessionCheckpoint(
-      resume, () => { if (suspended.get(selected.id) === previous) suspended.delete(selected.id); }) : null;
+      resume, () => { if (suspended.get(selected.id) === previous) suspended.delete(selected.id); }, previous?.editing) : null;
     const binding: PublishedRuntimeBinding = Object.freeze({
       checkpoint,
       publishedArtifact: hostInput,
@@ -228,7 +229,7 @@ export function createRuntimeOwner(database: ShellDatabase,
       const {user, epoch} = identity.sessionAuthority();
       if (!native.checkpointAvailable?.(checkpoint.generation, checkpoint.id, consume)) return false;
       if (consume) {
-        suspended.set(session.id, {session, user, epoch, id: checkpoint.id});
+        suspended.set(session.id, {session, user, epoch, ...checkpoint});
         // Once native fences this generation, the stage must retire its WebView even if teardown reports an error.
         try { binding.revoke(); } catch { /* Native view destruction releases its remaining resources. */ }
       }
@@ -236,6 +237,7 @@ export function createRuntimeOwner(database: ShellDatabase,
     } catch {return false;}
   };
   return Object.freeze({
+    recordNavigationKeyboard: (id: string, visible: boolean) => running.get(id)?.checkpoint?.recordNavigationKeyboard(visible),
     canSuspend: (session: NappletDescriptor) => suspend(session, false),
     trySuspend: (session: NappletDescriptor) => suspend(session, true),
     async openPublishedLink(link: string, signal: AbortSignal, review: (request: NappletConsentReview) => Promise<boolean>) {
@@ -299,9 +301,8 @@ export function createRuntimeOwner(database: ShellDatabase,
         ready.assertActive();
         if (routing) {
           const catalogOwner = {user: configurationUser(ready), assertActive: () => {ready.assertActive(); exactSession(session);}};
-          const previous = await routing.catalog.list(catalogOwner, {signal});
-          await routing.catalog.remember(catalogOwner, ready.artifact, {signal});
-          await routing.broker.catalogChanged(catalogOwner, previous.handlers.flatMap(handler => handler.roles.map(role => role.archetype)));
+          const changedRoles = await routing.catalog.remember(catalogOwner, ready.artifact, {signal});
+          if (changedRoles.length) await routing.broker.catalogChanged(catalogOwner, changedRoles);
         }
         ready.assertActive();
         const current = exactSession(session);
@@ -312,6 +313,7 @@ export function createRuntimeOwner(database: ShellDatabase,
           store.change({...workspace, sessions: workspace.sessions.map(value => value.id === session.id ? ready.descriptor : value)});
           ready.assertActive(); exactSession(session);
         }
+        ready.releaseBody();
         running.set(session.id, binding);
         return binding;
       } catch (error) { ready.revoke(); throw error; }

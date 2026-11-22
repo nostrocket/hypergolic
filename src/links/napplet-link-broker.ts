@@ -12,7 +12,7 @@ import { resolveBundledSession } from '../shell/fixtures.ts';
 import { conflictsWithPublishedRevision, focusNapplet, openNapplet, showOverview, samePublishedPin, type NappletDescriptor } from '../shell/workspace.ts';
 import { ShellStorageError } from '../storage/ports.ts';
 import { publishedCapabilityCompatibility } from '../napplets/first-open-consent.ts';
-import { assertVerifiedArtifact } from '../napplets/verified-artifact.ts';
+import { assertVerifiedArtifact, releasePublishedArtifact } from '../napplets/verified-artifact.ts';
 
 type Ports = Readonly<{
   identity: Pick<IdentityTransition, 'getSnapshot' | 'subscribe'>;
@@ -155,56 +155,58 @@ async function openExact(ports: Ports, launch: Launch, attempt: Attempt, active:
   requireRoom(matches());
   const networkReadGranted = launch.captured.origin.domains.includes('relay');
   const artifact = await runtime.resolveNappletLink(link.url, signal, active, networkReadGranted);
-  active();
-  assertVerifiedArtifact(artifact);
-  const { manifest, aggregateHash: version } = artifact;
-  const appId = manifest.tags.find(tag => tag[0] === 'd')?.[1];
-  const { pubkey: publisher, eventId } = manifest;
-  if (appId !== launch.coordinate.identifier || publisher !== launch.coordinate.pubkey) throw new Error('Unverified launch revision');
+  try {
+    active();
+    assertVerifiedArtifact(artifact);
+    const { manifest, aggregateHash: version } = artifact;
+    const appId = manifest.tags.find(tag => tag[0] === 'd')?.[1];
+    const { pubkey: publisher, eventId } = manifest;
+    if (appId !== launch.coordinate.identifier || publisher !== launch.coordinate.pubkey) throw new Error('Unverified launch revision');
 
-  const exact = (session: NappletDescriptor) => session.eventId === eventId && session.version === version;
-  const installed = matches();
-  // Different saved revisions continue through the ordinary explicit update flow.
-  const coordinate = {publisher, appId, eventId, version};
-  if (conflictsWithPublishedRevision(workspace.getSnapshot().workspace, coordinate)) return 'failed';
-  const loaded = installed.find(session => runtime.publishedReadyGeneration(session) !== null);
-  const existing = loaded ?? installed[0];
-  const candidates = existing ? [existing] : [];
-  requireRoom(candidates);
-  const requiredDomains = Object.freeze([...manifest.requiredDomains].sort());
-  const optionalDomains = Object.freeze([...manifest.optionalDomains].sort());
-  const { unsupportedDomains, unsupportedOptionalDomains } = publishedCapabilityCompatibility(requiredDomains, optionalDomains);
-  const review = reviewLaunch(ports, launch, Object.freeze({ publisher, appId, eventId, version, metadata: verifiedLaunchMetadata(artifact),
-    requiredDomains, optionalDomains, unsupportedDomains, unsupportedOptionalDomains }), attempt, active);
-  let next: NappletDescriptor;
-  if (loaded) {
-    if (!await review(false)) return 'rejected';
-    next = loaded;
-  } else {
-    next = await runtime.prepareNappletLink(artifact, signal, active, async (changesAccess, legacyAvailable) => {
-      const decision = await review(changesAccess, legacyAvailable);
-      if (decision) requireRoom(candidates);
-      return decision;
-    }, existing);
-    attempt.staged = next;
-  }
-  active();
-  const current = workspace.getSnapshot().workspace;
-  if (conflictsWithPublishedRevision(current, coordinate) ||
-      (existing ? !current.sessions.some(session => session.id === existing.id && sameTarget(session, existing))
-        : matches().length > 0)) return 'failed';
-  if (!exact(next) || next.source !== 'published' || next.publisher !== publisher || next.appId !== appId) throw new Error('Prepared launch mismatch');
-  requireRoom(candidates);
-  if (!workspace.admitView(next.id)) {
-    reportCapacity(ports, launch, 'views');
-    return 'failed';
-  }
-  attempt.created = !existing;
-  attempt.target = next;
-  const opened = openNapplet(current, next);
-  workspace.change(existing && !loaded ? {...opened, sessions: opened.sessions.map(session => session.id === next.id ? next : session)} : opened);
-  await workspace.flush();
-  return waitForMount(ports, launch, next, active, signal);
+    const exact = (session: NappletDescriptor) => session.eventId === eventId && session.version === version;
+    const installed = matches();
+    // Different saved revisions continue through the ordinary explicit update flow.
+    const coordinate = {publisher, appId, eventId, version};
+    if (conflictsWithPublishedRevision(workspace.getSnapshot().workspace, coordinate)) return 'failed';
+    const loaded = installed.find(session => runtime.publishedReadyGeneration(session) !== null);
+    const existing = loaded ?? installed[0];
+    const candidates = existing ? [existing] : [];
+    requireRoom(candidates);
+    const requiredDomains = Object.freeze([...manifest.requiredDomains].sort());
+    const optionalDomains = Object.freeze([...manifest.optionalDomains].sort());
+    const { unsupportedDomains, unsupportedOptionalDomains } = publishedCapabilityCompatibility(requiredDomains, optionalDomains);
+    const review = reviewLaunch(ports, launch, Object.freeze({ publisher, appId, eventId, version, metadata: verifiedLaunchMetadata(artifact),
+      requiredDomains, optionalDomains, unsupportedDomains, unsupportedOptionalDomains }), attempt, active);
+    let next: NappletDescriptor;
+    if (loaded) {
+      if (!await review(false)) return 'rejected';
+      next = loaded;
+    } else {
+      next = await runtime.prepareNappletLink(artifact, signal, active, async (changesAccess, legacyAvailable) => {
+        const decision = await review(changesAccess, legacyAvailable);
+        if (decision) requireRoom(candidates);
+        return decision;
+      }, existing);
+      attempt.staged = next;
+    }
+    active();
+    const current = workspace.getSnapshot().workspace;
+    if (conflictsWithPublishedRevision(current, coordinate) ||
+        (existing ? !current.sessions.some(session => session.id === existing.id && sameTarget(session, existing))
+          : matches().length > 0)) return 'failed';
+    if (!exact(next) || next.source !== 'published' || next.publisher !== publisher || next.appId !== appId) throw new Error('Prepared launch mismatch');
+    requireRoom(candidates);
+    if (!workspace.admitView(next.id)) {
+      reportCapacity(ports, launch, 'views');
+      return 'failed';
+    }
+    attempt.created = !existing;
+    attempt.target = next;
+    const opened = openNapplet(current, next);
+    workspace.change(existing && !loaded ? {...opened, sessions: opened.sessions.map(session => session.id === next.id ? next : session)} : opened);
+    await workspace.flush();
+    return waitForMount(ports, launch, next, active, signal);
+  } finally { releasePublishedArtifact(artifact); }
 }
 
 async function runLaunch(ports: Ports, launch: Launch): Promise<LaunchOutcome> {

@@ -1,4 +1,4 @@
-import {test, expect, type Page} from '@playwright/test';
+import {test, expect, type Page} from './published-wire';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 const generation = '12345678-1234-4234-8234-123456789abc';
@@ -17,10 +17,10 @@ async function open(page: Page, published = false, fixture = 'close-lab') {
         if (message.type === 'ready') state.__ready = true;
         if (message.type === 'close-check.result') state.__closeResults.push(message);
         if (message.type === 'artifact.read') {
-          const envelope = {type: 'artifact.chunk', sessionId: generation, sequence: message.sequence, base64: html,
+          const envelope = {type: 'artifact.chunk', sessionId: generation, sequence: message.sequence, text: new TextDecoder().decode(Uint8Array.from(atob(html), c => c.charCodeAt(0))),
             byteLength: atob(html).length, totalBytes: atob(html).length, publisher: '1'.repeat(64), appId: 'close-test', eventId: '2'.repeat(64),
             version, htmlHash: hash, domains: ['theme'], done: true};
-          for (const listener of listeners) listener({data: JSON.stringify(envelope)});
+          for (const listener of listeners) listener({data: window.nativeMessage(envelope)});
         }
       }
     }});

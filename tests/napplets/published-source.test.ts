@@ -268,3 +268,44 @@ test('requires a relay port that declares raw-frame bounds and public-IP pinning
   await assert.rejects(source.query({ kind: 35129, pubkey: PUBKEY, identifier: 'published-test' }, RELAYS, null, new AbortController().signal));
   assert.throws(() => createPublishedArtifactSource({ fetchPublicHttps: async () => new Response() } as unknown as PublishedSourceOptions));
 });
+
+test('stalled signed mirrors are hedged within one deadline and a healthy third origin cancels the loser', async t => {
+  t.mock.timers.enable({apis: ['setTimeout']});
+  const urls = ['https://first.example.org/', 'https://second.example.org/', 'https://third.example.org/'];
+  const attempts: string[] = [], cancelled: string[] = [];
+  const source = createPublishedArtifactSource({createRelayPool: unusedPool, blossomTimeoutMs: 3_000,
+    fetchPublicHttps: async (url, init) => {
+      attempts.push(url);
+      if (url === urls[2] + HASH) return new Response(BODY);
+      return new Promise((_resolve, reject) => init.signal.addEventListener('abort', () => {
+        cancelled.push(url); reject(Error('discarded'));
+      }));
+    }});
+  const read = source.readHtml(HASH, urls, 128, new AbortController().signal);
+  t.mock.timers.tick(749);
+  assert.deepEqual(attempts, [urls[0] + HASH]);
+  t.mock.timers.tick(1);
+  assert.deepEqual(attempts, urls.slice(0, 2).map(url => url + HASH));
+  t.mock.timers.tick(1_000);
+  assert.deepEqual(await read, BODY);
+  assert.deepEqual(attempts, urls.map(url => url + HASH));
+  assert.deepEqual(cancelled, [urls[1] + HASH, urls[0] + HASH]);
+});
+
+test('download progress delays the hedge and a fast signed first mirror makes no duplicate request', async t => {
+  t.mock.timers.enable({apis: ['setTimeout']});
+  let stream: ReadableStreamDefaultController<Uint8Array> | undefined;
+  let reads = 0;
+  const source = createPublishedArtifactSource({createRelayPool: unusedPool,
+    fetchPublicHttps: async () => { reads++; return new Response(new ReadableStream({start(controller) {stream = controller;}})); }});
+  const read = source.readHtml(HASH, ['https://first.example.org/', 'https://second.example.org/'], 128, new AbortController().signal);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  t.mock.timers.tick(700);
+  stream!.enqueue(BODY.slice(0, 2));
+  await new Promise<void>(resolve => setImmediate(resolve));
+  t.mock.timers.tick(700);
+  assert.equal(reads, 1);
+  stream!.enqueue(BODY.slice(2)); stream!.close();
+  assert.deepEqual(await read, BODY);
+  assert.equal(reads, 1);
+});

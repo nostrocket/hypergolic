@@ -1,4 +1,4 @@
-import {test,expect,type Page,type FrameLocator} from '@playwright/test';
+import {test,expect,type Page,type FrameLocator} from './published-wire';
 import {build} from 'vite';
 import {WorkspaceViews} from '../../src/shell/workspace-views';
 import {emptyWorkspace, openNapplet, focusNapplet, type NappletDescriptor} from '../../src/shell/workspace';
@@ -52,7 +52,7 @@ async function open(page:Page,appId:string,variant='exact',uploadMode='complete'
     const listeners=new Set<(event:{data:string})=>void>(),held=new Map<string,any>();
     const state:any={requests:[],diagnostics:[],batches:0,chunks:0,releaseImages:false};
     (window as any).__presentation=state;
-    const emit=(envelope:unknown)=>{for(const listener of listeners)listener({data:JSON.stringify(envelope)});};
+    const emit=(envelope:unknown)=>{for(const listener of listeners)listener({data:window.nativeMessage(envelope)});};
     const reply=(envelope:any,response:unknown)=>emit({type:'capability.result',sessionId:generation,sequence:envelope.sequence,response:response===null?null:JSON.stringify(response)});
     const matches=(event:any,filters:any[])=>filters.some(filter=>(!filter.kinds||filter.kinds.includes(event.kind))&&
       (!filter.authors||filter.authors.includes(event.pubkey))&&(!filter['#p']||event.tags.some((t:string[])=>t[0]==='p'&&filter['#p'].includes(t[1])))&&
@@ -64,11 +64,10 @@ async function open(page:Page,appId:string,variant='exact',uploadMode='complete'
         const envelope=JSON.parse(raw);state.requests.push(envelope);
         if(envelope.type==='ready'||envelope.type==='error'){state.diagnostics.push(envelope);return;}
         if(envelope.type==='artifact.read'){
-          const payload=bytes.slice(envelope.sequence*49152,(envelope.sequence+1)*49152);
           emit({type:'artifact.chunk',sessionId:generation,sequence:envelope.sequence,publisher:pin.publisher ?? '1'.repeat(64),
             appId:variant==='other-app'?'unreviewed-reader':appId,eventId:pin.eventId,version:aggregateHash,htmlHash,
             domains,
-            base64:btoa(String.fromCharCode(...payload)),byteLength:payload.length,totalBytes:bytes.length,done:(envelope.sequence+1)*49152>=bytes.length});return;
+            ...window.publishedPart(bytes,envelope.sequence)});return;
         }
         if(envelope.type==='relay-stream'){
           const request=JSON.parse(envelope.message);let delivery=0;
@@ -431,6 +430,7 @@ test('Workspace Journal restores an unfinished new entry and its interior caret 
   await expect(editor).toHaveValue('');
   await page.evaluate(() => (window as any).__hypergolicMediaActive(false));
   await journalControl(page, 'restore-wrong-receipt', 'unknown');
+  await expect(guest.locator('[data-hypergolic-restored-editor]')).toHaveCount(0);
   await expect(editor).toHaveValue('');
   await journalControl(page, receiptId.replace('resume-', 'restore-'));
   await expect(guest.getByLabel('Entry title')).toHaveValue(title);
@@ -533,17 +533,53 @@ test('Workspace Journal restores keyboard focus after a late consent sheet and r
   await expect(editor).toHaveValue('');
   await page.evaluate(() => (window as any).__hypergolicMediaActive(true));
   await journalControl(page, 'restore-late-sheet');
+  const marker = 'data-hypergolic-restored-editor';
+  await expect(editor).toHaveAttribute(marker, '');
+  await expect(guest.locator('[' + marker + ']')).toHaveCount(1);
   await expect(editor).toBeFocused();
   // Journal may ask for its INC topic after restore has focused the composer.
   const allowInput = (allow: boolean) => page.evaluate(allow => (window as any).__hypergolicInputActive(allow), allow);
   await allowInput(false);
   await expect(editor).not.toBeFocused();
+  await expect(editor).toHaveAttribute(marker, '');
   await allowInput(true);
   await expect(editor).toBeFocused();
   await page.keyboard.insertText('new ');
+  await expect(guest.locator('[' + marker + ']')).toHaveCount(0);
   await expect(editor).toHaveValue('unfinished new field notes');
   await title.fill('Continue here');
   await allowInput(false);
   await allowInput(true);
   await expect(editor).not.toBeFocused();
 });
+
+
+for (const [field, signal] of [
+  ['Entry title','pointer'], ['Links to notes, people or relays','key'],
+  ['Entry title','focus'], ['Entry body','composition'],
+] as const) {
+  test(`Workspace Journal marks only the restored ${field} until ${signal}`, async ({page}) => {
+    const guest = await open(page, 'workspace-journal');
+    const editor = guest.getByLabel(field, {exact:true});
+    const marker = 'data-hypergolic-restored-editor';
+    const marked = guest.locator('[' + marker + ']');
+    await editor.fill('unfinished reviewed draft');
+    await expect(marked).toHaveCount(0);
+    await page.evaluate(() => (window as any).__hypergolicMediaActive(false));
+    await journalControl(page, 'resume-marker');
+    await page.reload();
+    await expect(editor).toHaveValue('');
+    await page.evaluate(() => (window as any).__hypergolicMediaActive(true));
+    await journalControl(page, 'restore-marker');
+    await expect(editor).toHaveAttribute(marker, '');
+    await expect(marked).toHaveCount(1);
+    await editor.evaluate((element: HTMLElement) => element.blur());
+    await expect(editor).toHaveAttribute(marker, '');
+    await editor.focus();
+    if (signal === 'pointer') await editor.click();
+    if (signal === 'key') await editor.press('ArrowLeft');
+    if (signal === 'focus') await guest.getByLabel('Entry body', {exact:true}).focus();
+    if (signal === 'composition') await editor.dispatchEvent('compositionstart', {data:'文'});
+    await expect(marked).toHaveCount(0);
+  });
+}

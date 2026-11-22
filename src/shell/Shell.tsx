@@ -21,7 +21,7 @@ import { ShellBackdrop, WorkspaceBackdrop } from './ShellBackdrop';
 import {snapshotEventId} from '../napplets/published-identity';
 import {useCloseChecks} from './useCloseChecks';
 import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
-import { AccessibilityInfo, AppState, Keyboard, StyleSheet, Text, View, type ViewInstance } from 'react-native';
+import { AccessibilityInfo, AppState, Keyboard, Platform, StyleSheet, Text, View, type ViewInstance } from 'react-native';
 import { ShellModal as Modal } from './ShellModal';
 import { ShellPressable as Pressable } from './ShellPressable';
 import { cancelAnimation, Easing, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
@@ -164,24 +164,32 @@ export function Shell({ views: managedViews, blocked = false, hostActivityBlocke
     if (!busyRef.current) { position.set(focusedIndex); progress.set(workspace.overview ? 1 : 0); }
   }, [focusedIndex, fullscreen, position, progress, workspace.overview]);
 
+  const dismissForNavigation = useCallback(() => {
+    const state = current.current;
+    if (Platform.OS === 'ios' && AppState.currentState === 'active' && !blocked && !hostActivityBlocked &&
+        !settings && !state.home && !state.overview && state.focusedId) {
+      runtime?.recordNavigationKeyboard?.(state.focusedId, Keyboard.isVisible());
+    }
+    Keyboard.dismiss();
+  }, [blocked, hostActivityBlocked, runtime, settings]);
   const focusSession = useCallback((id: string) => {
     if (blocked || busyRef.current || closeChecks.isPending()) return;
     const state = current.current;
     const index = state.sessions.findIndex(session => session.id === id);
     if (index < 0) return;
-    Keyboard.dismiss();
+    dismissForNavigation();
     position.set(index);
     change(focusNapplet(state, id));
     runAnimation(progress, 0, () => AccessibilityInfo.announceForAccessibility(state.sessions[index].title));
-  }, [blocked, change, closeChecks, position, progress, runAnimation]);
+  }, [blocked, change, closeChecks, dismissForNavigation, position, progress, runAnimation]);
   const openOverview = useCallback(() => {
     if (blocked || busyRef.current || closeChecks.isPending()) return;
-    Keyboard.dismiss();
+    dismissForNavigation();
     overview.current?.revealCard(current.current.focusedId);
     change(showOverview(current.current));
     runAnimation(progress, 1, () => overview.current?.focusCard(current.current.focusedId));
-  }, [blocked, change, closeChecks, progress, runAnimation]);
-  const {openHome, openPin, togglePin, unpin} = useHomeNavigation({blocked: navigationBlocked, busyRef, closeChecks, current,
+  }, [blocked, change, closeChecks, dismissForNavigation, progress, runAnimation]);
+  const {openHome, openPin, togglePin, unpin} = useHomeNavigation({dismissForNavigation, blocked: navigationBlocked, busyRef, closeChecks, current,
     clearMenu, change, progress, focusSession, discover: () => openDiscovery()});
   useWorkspaceBack({ workspace, blocked, fullscreen, menuVisible, busy: busyRef, keyboard: keyboardVisible,
     closeChecks, dismissMenu, openOverview, openHome, focusSession });
@@ -195,7 +203,7 @@ export function Shell({ views: managedViews, blocked = false, hostActivityBlocke
   }
   const requestClose = (id: string) => {
     if (blocked || busyRef.current || closeChecks.isPending()) return;
-    Keyboard.dismiss();
+    dismissForNavigation();
     lastCloseId.current = id;
     void checkClose(id);
   };
@@ -205,7 +213,7 @@ export function Shell({ views: managedViews, blocked = false, hostActivityBlocke
     requestAnimationFrame(() => overview.current?.focusCard(lastCloseId.current));
   };
   const confirmClose = () => { if (closingId) closeSession(closingId); };
-  const openSettings = () => { if (!blocked && !busyRef.current && !closeChecks.isPending()) { Keyboard.dismiss(); setSettings(true); } };
+  const openSettings = () => { if (!blocked && !busyRef.current && !closeChecks.isPending()) { dismissForNavigation(); setSettings(true); } };
   const openFixture = useBundledNapplets({ current, runtime, position, progress, change, setSettings });
   const openBundledTest = () => openFixture('ux-lab');
   const publishedActions = () => publishedSettingsActions({
@@ -238,7 +246,7 @@ export function Shell({ views: managedViews, blocked = false, hostActivityBlocke
           onUnpin={unpin} onOverview={openOverview} onDiscover={openDiscovery} />} fullscreen={fullscreen} onZoomTarget={registerZoomTarget} closeCheck={closeCheck} workspace={workspace} progress={progress} position={position} scrollY={scrollY} swipeY={swipeY} swipeId={swipeId} busy={busy} blocked={stageBlocked} hostActivityBlocked={isHostActivityBlocked(hostActivityBlocked, obscured)} interactive={!handleDragging}
           pending={pendingApprovals ?? noPending} ref={overview} onHostEvent={receiveHostEvent} onFocus={focusSession} onClose={requestClose} onOpen={openDiscovery}
           onDragEnd={(id, close) => { runAnimation(swipeY, 0, () => { swipeId.set(null); if (close) requestClose(id); }, 140); }}
-          onHandleStart={() => { setHandleDragging(true); Keyboard.dismiss(); cancelAnimation(position); }}
+          onHandleStart={() => { setHandleDragging(true); dismissForNavigation(); cancelAnimation(position); }}
           onHandleEnd={onHandleEnd} />
       </View>
       <WorkspaceFullscreenContext value={fullscreen}>{footer}</WorkspaceFullscreenContext>

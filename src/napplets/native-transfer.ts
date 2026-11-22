@@ -1,8 +1,10 @@
-import { assertVerifiedArtifact, MAX_HTML_BYTES, type VerifiedNappletArtifact } from './verified-artifact.ts';
+import { assertVerifiedArtifact, nativeBodyOf, MAX_HTML_BYTES, type VerifiedNappletArtifact } from './verified-artifact.ts';
 import {verifiedPublicationIdentity} from './verified-publication-identity.ts';
 
 /** App-only Expo module surface. The WebView and napplet never receive this port. */
+import type { NativePublishedBodyPort } from './native-published-body.ts';
 export interface NativePublishedTransferPort {
+  readonly bodies?: NativePublishedBodyPort;
   registerPublishedSession(sessionId: string): boolean;
   beginPublishedArtifact(sessionId: string, publisher: string, identifier: string, eventId: string,
     aggregateHash: string, htmlHash: string, byteLength: number): string | null;
@@ -71,11 +73,23 @@ function active(signal: AbortSignal, assertActive: () => void): void {
  */
 export async function stageVerifiedArtifact(artifactInput: unknown, sessionId: string,
   port: NativePublishedTransferPort, signal: AbortSignal, assertActive: () => void,
-  revokeSession = () => port.revokePublishedSession(sessionId)): Promise<string> {
+  revokeSession = () => port.revokePublishedSession(sessionId), user?: string): Promise<string> {
   assertVerifiedArtifact(artifactInput);
   const artifact: VerifiedNappletArtifact = artifactInput;
   if (!SESSION.test(sessionId)) throw new PublishedTransferError();
   const publication = verifiedPublicationIdentity(artifact.manifest);
+  const native = nativeBodyOf(artifact);
+  if (native) {
+    active(signal, assertActive);
+    if (!user) throw new PublishedTransferError();
+    const claims = {user, sessionId, publisher: artifact.manifest.pubkey, identifier: publication.appId, eventId: artifact.manifest.eventId,
+      aggregateHash: artifact.aggregateHash, htmlHash: artifact.htmlHash,
+      ...(publication.kind === 5129 ? {title: publication.title} : {})};
+    const handle = await port.bodies?.stagePublishedBody(native.token, JSON.stringify(claims));
+    if (!handle) throw new PublishedTransferError();
+    try { active(signal, assertActive); } catch (error) { revokeSession(); throw error; }
+    return handle;
+  }
   const bytes = artifact.htmlBytes;
   if (bytes.length < 1 || bytes.length > MAX_HTML_BYTES) throw new PublishedTransferError();
   let uploadId: string | null = null;

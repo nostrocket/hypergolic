@@ -39,6 +39,11 @@ immutable descriptor, generation and live membership. Get/set/remove/keys use
 prepared SQL and transactional quotas: 256 keys, 1 KiB/key, 256 KiB/value and
 512 KiB/namespace including keys/values. Internal storage work is also bounded
 to 16 requests/binding and 128 total; workspace encoding is at most 512 KiB.
+Separate guest requests can reuse a completed namespace validation on the same SQLite connection.
+The cache stores only namespace identifiers and SQLite change counters. Writes on the connection
+or commits by another connection invalidate a hit. The host checks the counters on both sides
+of an indexed read, captures a fresh transaction on a change and clears the cache on account
+workspace binding or database close. Each request still has its own revocable authority.
 Delimiter-like keys are data and cannot choose another namespace. Missing is
 null; empty strings are preserved; write success follows commit.
 
@@ -160,3 +165,16 @@ their restoration behavior is supported.
 The shell tracks which checkpoint belongs to a suspended card for the current
 account session. Process termination and account switching end that association.
 Use **Save entry** for journal entries you want to keep across those transitions.
+
+On iPhone, the checkpoint can also remember that the user was typing when they
+left Journal. This flag stays in memory. While a native permission sheet is
+open, the sheet owns keyboard input. When it closes, Journal can resume typing
+at the saved selection. Choosing **Done** before leaving keeps the keyboard
+dismissed on return.
+
+To check this on a phone, leave the caret in the middle of an unfinished entry,
+go to Home while the keyboard is open, and open enough cards to reclaim
+Journal's view. Return to the original card, dismiss any pending permission
+sheet, and type a character without tapping the editor. Check that it appears
+at the original caret. Repeat after choosing **Done** before leaving and check
+that the text and caret survive with the keyboard dismissed.

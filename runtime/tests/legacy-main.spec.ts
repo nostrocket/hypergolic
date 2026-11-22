@@ -1,4 +1,4 @@
-import {test, expect, type Page} from '@playwright/test';
+import {test, expect, type Page} from './published-wire';
 import {build} from 'vite';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -33,19 +33,28 @@ async function open(page:Page,appId:keyof typeof pins,mode:Mode='legacy',event=a
   await page.route('**/assets/runtime/host.js',route=>route.fulfill({contentType:'text/javascript',body:host}));
   await page.addInitScript(({generation,html,appId,pin,publisher,mode,event,heldImageUrl,replacementImageUrl})=>{
     if(window!==window.top)return;
-    const bytes=Uint8Array.from(atob(html),c=>c.charCodeAt(0)),listeners=new Set<(event:{data:string})=>void>();
+    const signedBytes=Uint8Array.from(atob(html),c=>c.charCodeAt(0));
+    // Both approved legacy bodies fit in one frame. Supply a second frame to
+    // exercise a mid-stream metadata change before any digest check can run.
+    const bytes=mode==='changed-context'?new Uint8Array(256*1024+1):signedBytes;
+    if(mode==='changed-context')bytes.set(signedBytes);
+    const listeners=new Set<(event:{data:string})=>void>();
     const transfers=new Map<string,string>();let transferSequence=0;
-    const state:any={wire:[],diagnostics:[],chunks:[],imageReplies:[],reply:(envelope:unknown)=>{for(const listener of listeners)listener({data:JSON.stringify(envelope)});}};
+    const state:any={wire:[],diagnostics:[],chunks:[],digests:0,imageReplies:[],reply:(envelope:unknown)=>{for(const listener of listeners)listener({data:window.nativeMessage(envelope)});}};
     (window as any).__legacyMain=state;
+    if(mode==='changed-context'){
+      const digest=crypto.subtle.digest.bind(crypto.subtle);
+      crypto.subtle.digest=(algorithm, data)=>{state.digests++;return digest(algorithm,data);};
+    }
     Object.defineProperty(window,'HypergolicHost',{value:{addEventListener:(_:string,listener:(event:{data:string})=>void)=>listeners.add(listener),removeEventListener:(_:string,listener:(event:{data:string})=>void)=>listeners.delete(listener),postMessage:(raw:string)=>{
       const message=JSON.parse(raw);state.wire.push(message);
       if(message.type==='ready'||message.type==='error'){state.diagnostics.push(message);return;}
       if(message.type==='artifact.read'){
-        state.chunks.push(message.sequence);const offset=message.sequence*48*1024,chunk=bytes.slice(offset,offset+48*1024);
+        state.chunks.push(message.sequence);
         const context={profile:'legacy-read-only-v1',consent:mode!=='bad-consent',eventId:pin.eventId,htmlHash:pin.htmlHash,relays:['wss://relay.damus.io','wss://nos.lol','wss://relay.nostr.band','wss://relay.primal.net']};
         if(mode==='restricted-relays')context.relays=['wss://nos.lol'];
         if(mode==='changed-context'&&message.sequence>0)context.relays=['wss://relay.damus.io'];
-        state.reply({type:'artifact.chunk',sessionId:generation,sequence:message.sequence,base64:btoa(String.fromCharCode(...chunk)),byteLength:chunk.length,totalBytes:bytes.length,publisher,appId,eventId:mode==='wrong-pin'?'f'.repeat(64):pin.eventId,version:pin.version,htmlHash:pin.htmlHash,domains:mode==='synthetic-domain'?['relay']:[],done:offset+chunk.length===bytes.length,...(mode==='ordinary'?{}:{legacyReadOnly:context})});return;
+        state.reply({type:'artifact.chunk',sessionId:generation,sequence:message.sequence,...window.publishedPart(bytes,message.sequence),publisher,appId,eventId:mode==='wrong-pin'?'f'.repeat(64):pin.eventId,version:pin.version,htmlHash:pin.htmlHash,domains:mode==='synthetic-domain'?['relay']:[],...(mode==='ordinary'?{}:{legacyReadOnly:context})});return;
       }
       if(message.type==='capability'){
         const request=JSON.parse(message.message);
@@ -90,7 +99,7 @@ for(const appId of ['recipe-cards','longform'] as const)test(`actual main reads 
   await expect(page.locator('body > [role=status]')).toContainText('Read-only compatibility');
   expect(await frame.locator('body').evaluate(()=>({nostr:typeof(window as any).nostr,napplet:typeof(window as any).napplet}))).toEqual({nostr:'undefined',napplet:'undefined'});
   const state=await page.evaluate(()=>({wire:(window as any).__legacyMain.wire,chunks:(window as any).__legacyMain.chunks}));
-  expect(state.chunks.length).toBeGreaterThan(1);expect(state.wire.filter((m:any)=>m.type==='relay-stream').length).toBeGreaterThan(0);
+  expect(state.chunks).toEqual([0]);expect(state.wire.filter((m:any)=>m.type==='relay-stream').length).toBeGreaterThan(0);
   expect(state.wire.filter((m:any)=>m.type==='relay-stream').every((m:any)=>JSON.parse(m.message).type==='legacy.subscribe')).toBe(true);
   expect(state.wire.filter((m:any)=>m.type==='capability').every((m:any)=>['legacy.close','legacy.image.bytes','legacy.image.__chunk','legacy.image.cancel'].includes(JSON.parse(m.message).type))).toBe(true);
 });
@@ -154,6 +163,7 @@ for(const mode of ['bad-consent','wrong-pin','changed-context','synthetic-domain
   await expect(page.getByRole('alert')).toHaveText('The napplet could not be loaded.');
   expect(await page.evaluate(()=>(window as any).__legacyMain.diagnostics)).toContainEqual({type:'error',sessionId:generation,code:'artifact-integrity'});
   expect(await page.evaluate(()=>(window as any).__legacyMain.wire.some((m:any)=>m.type==='relay-stream'))).toBe(false);
+  if(mode==='changed-context')expect(await page.evaluate(()=>({chunks:(window as any).__legacyMain.chunks,digests:(window as any).__legacyMain.digests}))).toEqual({chunks:[0,1],digests:0});
 });
 
 test('actual main revokes genuine replacement documents and rejects stale native deliveries',async({page})=>{

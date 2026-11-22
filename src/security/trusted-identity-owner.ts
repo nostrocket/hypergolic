@@ -146,7 +146,7 @@ async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android
     const slot = reviewSlot = new ReviewSlot(approvals, uploads, () => {
       const state = transition.getSnapshot();
       return state.phase === 'ready' ? state.session.epoch : null;
-    }, transition.subscribe);
+    }, transition.subscribe, platform === 'ios' ? routingNative.setReviewGeneration : undefined);
     const cvmNative=loadCvmNativePort();
     if(relaySettings)relaySettings=withCvmRelayDefaults(relaySettings,cvmNative.configure);else cvmNative.configure([]);
     cvm=new CvmService(cvmNative.port);

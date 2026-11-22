@@ -6,12 +6,13 @@ import type { ShellDatabase } from '../storage/database.ts';
 import type { SQLiteModule, TrustedApp } from '../storage/ports.ts';
 import { conflictsWithPublishedRevision, samePublishedPin, type NappletDescriptor, type Workspace } from '../shell/workspace.ts';
 import { requestFirstOpenConsent, type NappletConsentReview } from './first-open-consent.ts';
-import { loadPublishedArtifact, PublishedLoadError, type PublishedArtifactSource } from './loader.ts';
+import { createPublishedRevisionReads } from './published-revision-reads.ts';
+import { PublishedLoadError, type PublishedArtifactSource } from './loader.ts';
 import { openPublishedArtifactCache } from './published-artifact-cache.ts';
 import { descriptorForPublishedArtifact, publishedHostInput } from './published-host-input.ts';
 import { stageAdmittedPublishedArtifact } from './admitted-transfer.ts';
 import { registerTransferSession, PublishedTransferError, type NativePublishedTransferPort } from './native-transfer.ts';
-import { assertVerifiedArtifact, type VerifiedNappletArtifact } from './verified-artifact.ts';
+import { retainPublishedArtifact, releasePublishedArtifact, type VerifiedNappletArtifact } from './verified-artifact.ts';
 import {matchesPublishedAppKey,snapshotEventId} from './published-identity.ts';
 
 export class PublishedSessionError extends Error {
@@ -28,6 +29,7 @@ export interface PreparedPublishedSession {
   readonly artifact: VerifiedNappletArtifact;
   /** Check the identity, accepted grant, and retained native-session lifetime. */
   assertActive(): void;
+  releaseBody(): void;
   revoke(): void;
 }
 export type PublishedUpdateReview = Readonly<{
@@ -48,14 +50,14 @@ export interface PublishedSessionDependencies {
 }
 
 type SessionPorts = PublishedSessionDependencies & {
-  hold(eventId: string): () => void;
+  revisions: ReturnType<typeof createPublishedRevisionReads>;
   protectedEvents(): ReadonlySet<string>;
 };
 
 function cacheFor(ports: SessionPorts, authority: SessionAuthority, owner: TrustedApp) {
   return openPublishedArtifactCache(ports.sqlite, {
     owner, epoch: authority.epoch, currentEpoch: () => ports.identity.getSnapshot().session.epoch,
-    protectedEvents: ports.protectedEvents,
+    protectedEvents: ports.protectedEvents, ...(ports.native.bodies ? {nativeBodies: ports.native.bodies} : {}),
   });
 }
 
@@ -81,22 +83,20 @@ async function loadSessionArtifact(ports: SessionPorts, request: PrepareRequest,
   link: string, authority: SessionAuthority, signal: AbortSignal,
   active: () => void): Promise<{artifact: VerifiedNappletArtifact; cacheHit: boolean}> {
   const selected = request.pinned;
-  let artifact: VerifiedNappletArtifact | null = request.candidate ?? null;
-  if (artifact) assertVerifiedArtifact(artifact);
+  let artifact: VerifiedNappletArtifact | null = request.candidate ? retainPublishedArtifact(request.candidate) : null;
   if (selected) {
     const owner: TrustedApp = Object.freeze({ user: authority.user, publisher: selected.publisher,
       appId: selected.appId, assertActive: active });
     const cache = await cacheFor(ports, authority, owner);
     try { artifact = await cache.get(selected.appId, selected.eventId!, { signal }); }
     finally { await cache.close(); }
-    active();
   }
   const cacheHit = Boolean(selected && artifact);
-  if (!artifact) artifact = await loadPublishedArtifact(link, { source: ports.source,
+  if (!artifact) artifact = await ports.revisions.load(link, { source: ports.source,
     lookupRelays: ports.lookupRelays(), signal, assertActive: active,
-    ...(selected ? { pinnedEventId: selected.eventId! } : {}) });
-  active();
-  return {artifact, cacheHit};
+    ...(selected ? { pinnedEventId: selected.eventId! } : {}) }, authority);
+  try { active(); return {artifact, cacheHit}; }
+  catch (error) { releasePublishedArtifact(artifact); throw error; }
 }
 
 async function preparePublishedSession(ports: SessionPorts, request: PrepareRequest,
@@ -119,6 +119,11 @@ async function preparePublishedSession(ports: SessionPorts, request: PrepareRequ
   let registered: ReturnType<typeof registerTransferSession> | undefined;
   let success = false;
   let release: (() => void) | undefined;
+  let ownedBody: VerifiedNappletArtifact | undefined;
+  const releaseBody = () => {
+    if (ownedBody) releasePublishedArtifact(ownedBody);
+    ownedBody = undefined;
+  };
   try {
     active();
     const selected = request.pinned;
@@ -135,6 +140,7 @@ async function preparePublishedSession(ports: SessionPorts, request: PrepareRequ
     const coordinate = selected ?? updateOf ?? exact?.existing;
     const link = request.link ?? (coordinate ? pinnedLink(coordinate) : '');
     const {artifact, cacheHit} = await loadSessionArtifact(ports, request, link, authority, controller.signal, active);
+    ownedBody = artifact;
     const id = selected?.id ?? exact?.existing?.id ?? ports.newInstanceId();
     if (!SESSION.test(id)) fail();
     let descriptor = descriptorForPublishedArtifact(artifact, id);
@@ -170,7 +176,7 @@ async function preparePublishedSession(ports: SessionPorts, request: PrepareRequ
     if (exact && !reviewed && !await chooseExact(false)) fail();
     if (legacyReadOnly) descriptor = Object.freeze({...descriptor, legacyReadOnly: true, legacyReadOnlyUser: authority.user});
     active();
-    release = ports.hold(artifact.manifest.eventId);
+    release = ports.revisions.hold(authority, artifact);
     if (!cacheHit) {
       const cache = await cacheFor(ports, authority, owner);
       try { await cache.put(artifact, { signal: controller.signal }); }
@@ -184,10 +190,11 @@ async function preparePublishedSession(ports: SessionPorts, request: PrepareRequ
     active();
     const hostInput = publishedHostInput(artifact, admission, descriptor, authority, handle, ports.networkRelays?.() ?? []);
     success = true;
-    return Object.freeze({ descriptor, hostInput, artifact,
+    return Object.freeze({ descriptor, hostInput, artifact, releaseBody,
       assertActive: () => { active(); admission.assertActive(); },
       revoke: () => {
         controller.abort();
+        releaseBody();
         release?.();
         registered?.revoke();
       },
@@ -204,6 +211,7 @@ async function preparePublishedSession(ports: SessionPorts, request: PrepareRequ
   finally {
     externalSignal.removeEventListener('abort', cancel);
     if (!success) {
+      releaseBody();
       release?.();
       controller.abort();
       if (registered) try { registered.revoke(); } catch { /* Native owner also expires. */ }
@@ -226,45 +234,44 @@ async function preparePublishedUpdate(ports: SessionPorts, selected: NappletDesc
   let previous: VerifiedNappletArtifact | null;
   try { previous = await cache.get(selected.appId, selected.eventId!, { signal }); }
   finally { await cache.close(); }
-  active();
-  if (!previous) previous = await loadPublishedArtifact(link, { source: ports.source,
-    lookupRelays: ports.lookupRelays(), signal, assertActive: active, pinnedEventId: selected.eventId! });
-  active();
-  const previousDescriptor = descriptorForPublishedArtifact(previous, selected.id);
-  if (!samePublishedPin(previousDescriptor, selected)) fail();
-  const candidate = await loadPublishedArtifact(link, { source: ports.source,
-    lookupRelays: ports.lookupRelays(), signal, assertActive: active });
-  active();
-  if (candidate.manifest.eventId === selected.eventId) return null;
-  if (candidate.manifest.created_at <= previous.manifest.created_at ||
-      candidate.manifest.pubkey !== selected.publisher ||
-      candidate.manifest.tags.find(tag => tag[0] === 'd')?.[1] !== selected.appId) fail();
-  const request = Object.freeze({ publisher: selected.publisher, appId: selected.appId,
-    previousEventId: selected.eventId!, nextEventId: candidate.manifest.eventId,
-    previousVersion: selected.version, nextVersion: candidate.aggregateHash,
-    domains: Object.freeze([...candidate.manifest.requiredDomains].sort()),
-    optionalDomains: Object.freeze([...candidate.manifest.optionalDomains].sort()) });
-  if (await reviewUpdate(request) !== true) fail();
-  active();
-  return preparePublishedSession(ports, { candidate, updateOf: selected }, signal, reviewConsent);
+  if (!previous) previous = await ports.revisions.load(link, { source: ports.source,
+    lookupRelays: ports.lookupRelays(), signal, assertActive: active, pinnedEventId: selected.eventId! }, authority);
+  let candidate: VerifiedNappletArtifact | undefined;
+  try {
+    active();
+    const previousDescriptor = descriptorForPublishedArtifact(previous, selected.id);
+    if (!samePublishedPin(previousDescriptor, selected)) fail();
+    candidate = await ports.revisions.load(link, { source: ports.source,
+      lookupRelays: ports.lookupRelays(), signal, assertActive: active }, authority);
+    active();
+    if (candidate.manifest.eventId === selected.eventId) return null;
+    if (candidate.manifest.created_at <= previous.manifest.created_at ||
+        candidate.manifest.pubkey !== selected.publisher ||
+        candidate.manifest.tags.find(tag => tag[0] === 'd')?.[1] !== selected.appId) fail();
+    const request = Object.freeze({ publisher: selected.publisher, appId: selected.appId,
+      previousEventId: selected.eventId!, nextEventId: candidate.manifest.eventId,
+      previousVersion: selected.version, nextVersion: candidate.aggregateHash,
+      domains: Object.freeze([...candidate.manifest.requiredDomains].sort()),
+      optionalDomains: Object.freeze([...candidate.manifest.optionalDomains].sort()) });
+    if (await reviewUpdate(request) !== true) fail();
+    active();
+    return await preparePublishedSession(ports, { candidate, updateOf: selected }, signal, reviewConsent);
+  } finally {
+    releasePublishedArtifact(previous);
+    if (candidate) releasePublishedArtifact(candidate);
+  }
 }
 
 /** This coordinator is process-owned; no reference to it is passed into guest content. */
 export function createPublishedSessionCoordinator(dependencies: PublishedSessionDependencies) {
-  const held = new Map<string, number>();
-  const ports: SessionPorts = {...dependencies,
-    hold(id) {
-      held.set(id, (held.get(id) ?? 0) + 1);
-      let released = false;
-      return () => {
-        if (released) return;
-        released = true;
-        const count = held.get(id)! - 1;
-        if (count) held.set(id, count); else held.delete(id);
-      };
-    },
+  const revisions = createPublishedRevisionReads(async (authority, publisher, appId, eventId, signal, assertActive) => {
+    const cache = await cacheFor(ports, authority, {user: authority.user, publisher, appId, assertActive});
+    try { return await cache.get(appId, eventId, {signal}); }
+    finally { await cache.close(); }
+  });
+  const ports: SessionPorts = {...dependencies, revisions,
     protectedEvents() {
-      const ids = new Set(held.keys());
+      const ids = revisions.protectedEvents();
       const workspace = dependencies.currentWorkspace?.();
       if (workspace) for (const item of [...workspace.sessions, ...workspace.pins ?? []]) {
         if (item.source === 'published' && item.eventId) ids.add(item.eventId);
@@ -276,9 +283,9 @@ export function createPublishedSessionCoordinator(dependencies: PublishedSession
     openLink: async (link: string, signal: AbortSignal, review: ConsentReview) =>
       (await preparePublishedSession(ports, { link }, signal, review)) ?? fail(),
     resolveExact: (link: string, signal: AbortSignal, assertActive: () => void, networkReadGranted = false) =>
-      loadPublishedArtifact(link, { source: ports.source, lookupRelays: ports.lookupRelays(),
+      revisions.load(link, { source: ports.source, lookupRelays: ports.lookupRelays(),
         ...(networkReadGranted ? {networkRelays: ports.networkRelays?.() ?? []} : {}),
-        signal, assertActive }),
+        signal, assertActive }, ports.identity.sessionAuthority()),
     prepareExact: (candidate: VerifiedNappletArtifact, exactOpen: ExactOpenPreparation, signal: AbortSignal) =>
       preparePublishedSession(ports, { candidate, exactOpen }, signal, async () => false),
     reopenPinned: async (descriptor: NappletDescriptor, signal: AbortSignal, review: ConsentReview) =>

@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
-import { expect, test } from '@playwright/test';
+import { expect, test } from './published-wire';
 
 const generation = '12345678-1234-1234-1234-123456789abc';
 const cap = 20 * 1024 * 1024;
-const chunkSize = 48 * 1024;
+const chunkSize = 256 * 1024;
 const marker = 'Verified large artifact';
 const document = `<!doctype html><html><head></head><body><p>${marker}</p></body></html>`;
 const digest = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
@@ -27,8 +27,8 @@ for (const totalBytes of [cap, cap + 1]) {
           proof.reads.push(sequence);
           const size = Math.min(chunkSize, totalBytes - sequence * chunkSize);
           const payload = sequence === 0 ? document.padEnd(size, ' ') : ' '.repeat(size);
-          const data = JSON.stringify({
-            type: 'artifact.chunk', sessionId: generation, sequence, base64: btoa(payload),
+          const data = window.nativeMessage({
+            type: 'artifact.chunk', sessionId: generation, sequence, text: payload,
             byteLength: size, totalBytes, publisher: '1'.repeat(64), appId: 'large-artifact',
             eventId: '2'.repeat(64), version, htmlHash, domains: ['theme'],
             done: (sequence + 1) * chunkSize >= totalBytes,

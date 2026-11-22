@@ -25,6 +25,30 @@ test('catalog persists verified metadata and explicit identity-local defaults ac
   await catalog.prefer(owner(), 'note', null); assert.deepEqual((await catalog.list(owner())).defaults, []);
   await catalog.close();
 });
+test('unchanged opens touch only their own signed row at 1, 16 and 64 registrations', async t => {
+  const sqlite = new DiskSQLite(), catalog = await openRoutingCatalog(sqlite, 'ios');
+  t.after(async () => { await catalog.close(); sqlite.cleanup(); });
+  const first = await artifact();
+  await catalog.remember(owner(), first);
+  for (let size = 1; size <= 64; size++) {
+    if (size > 1) await catalog.remember(owner(), await artifact(9, 'app-' + size));
+    if (![1, 16, 64].includes(size)) continue;
+    const start = sqlite.calls.length;
+    assert.deepEqual(await catalog.remember(owner(), first), []);
+    const statements = sqlite.calls.slice(start).filter(({sql}) => sql.includes('routing_catalog'));
+    assert.equal(statements.length, 1);
+    assert.match(statements[0]!.sql, /WHERE user = \? AND publisher = \? AND app_id = \?$/);
+  }
+  const before = await catalog.list(owner());
+  const warm = await catalog.list(owner());
+  assert.equal(warm.handlers.length, 64);
+  assert(warm.handlers.every((handler, index) => handler === before.handlers[index]));
+  const plain = await modernHandler([], ['theme']);
+  assert.deepEqual(await catalog.remember(owner(), plain), []);
+  assert.equal((await catalog.list(owner())).handlers.length, 64);
+  await assert.rejects(catalog.remember(owner(), await modernHandler()), {code: 'QUOTA_EXCEEDED'});
+});
+
 test('rejects structural lookalikes, unknown handlers and roles instead of granting authority', async t => {
   const sqlite = new DiskSQLite(); t.after(() => sqlite.cleanup());
   const catalog = await openRoutingCatalog(sqlite, 'android'), a = await artifact();

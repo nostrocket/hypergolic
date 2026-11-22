@@ -1,19 +1,19 @@
 import { useCallback } from 'react';
-import { AccessibilityInfo, Keyboard } from 'react-native';
+import { AccessibilityInfo } from 'react-native';
 import type { SharedValue } from 'react-native-reanimated';
 import { isPinned, pinKey, pinNapplet, showHome, unpinNapplet } from './pins';
 import { openNapplet, type NappletDescriptor, type Workspace } from './workspace';
 
-export function useHomeNavigation({blocked, busyRef, closeChecks, current, clearMenu, change, progress, focusSession, discover}: {
-  blocked: boolean; busyRef: {current: boolean}; closeChecks: {isPending(): boolean}; current: {current: Workspace};
+export function useHomeNavigation({dismissForNavigation, blocked, busyRef, closeChecks, current, clearMenu, change, progress, focusSession, discover}: {
+  dismissForNavigation(): void; blocked: boolean; busyRef: {current: boolean}; closeChecks: {isPending(): boolean}; current: {current: Workspace};
   clearMenu(): void; change(state: Workspace): void; progress: SharedValue<number>;
   focusSession(id: string): void; discover(): void;
 }) {
   const openHome = useCallback(() => {
     if (blocked || busyRef.current || closeChecks.isPending()) return;
-    Keyboard.dismiss(); clearMenu(); change(showHome(current.current)); progress.set(1);
+    dismissForNavigation(); clearMenu(); change(showHome(current.current)); progress.set(1);
     AccessibilityInfo.announceForAccessibility('Home');
-  }, [blocked, busyRef, change, clearMenu, closeChecks, current, progress]);
+  }, [blocked, busyRef, change, clearMenu, closeChecks, current, dismissForNavigation, progress]);
   const openPin = (pin: NappletDescriptor) => {
     if (blocked) return;
     if (pin.source === 'bundled' && pin.appId === 'napplet-discovery') { discover(); return; }

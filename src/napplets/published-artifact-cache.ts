@@ -1,9 +1,10 @@
+import { adoptNativePublishedBody, type NativePublishedBodyPort } from './native-published-body.ts';
 import { createConnection, type Access, type StorageConnection } from '../storage/connection.ts';
 import { fail, type RequestOptions, type SQLiteModule, type TrustedApp } from '../storage/ports.ts';
 import type { NappletReference } from './resolve-link.ts';
 import {matchesPublishedAppKey,snapshotEventId} from './published-identity.ts';
 import {verifiedPublicationIdentity} from './verified-publication-identity.ts';
-import { assertVerifiedArtifact, MAX_HTML_BYTES, MAX_MANIFEST_BYTES, verifyArtifact, verifyManifest, type VerifiedNappletArtifact } from './verified-artifact.ts';
+import { NappletVerificationError, assertVerifiedArtifact, nativeBodyOf, verifyPublishedBody, MAX_HTML_BYTES, MAX_MANIFEST_BYTES, verifyArtifact, verifyManifest, type VerifiedNappletArtifact } from './verified-artifact.ts';
 
 export const PUBLISHED_ARTIFACT_CACHE_DATABASE = 'hypergolic-published-artifacts-v1.db';
 export const PUBLISHED_ARTIFACT_CACHE_MAX_ROWS = 32;
@@ -14,6 +15,7 @@ export type PublishedArtifactCacheAuthority = Readonly<{
   owner: TrustedApp;
   epoch: number;
   currentEpoch: () => number;
+  nativeBodies?: NativePublishedBodyPort;
   protectedEvents?: () => ReadonlySet<string>;
 }>;
 
@@ -27,7 +29,7 @@ export interface PublishedArtifactCache {
 const HEX64 = /^[0-9a-f]{64}$/;
 const IDENTIFIER_MAX_BYTES = 255;
 const MAX_STORED_ROW_BYTES = MAX_HTML_BYTES + MAX_MANIFEST_BYTES;
-type Row = { publisher: string; identifier: string; event_id: string; signed_event: string; html: Uint8Array; byte_count: number };
+type Row = { row_id: number; html_bytes: number; html_type: string; publisher: string; identifier: string; event_id: string; signed_event: string; html: Uint8Array; byte_count: number };
 const MAX_ACCOUNT_BYTES = 64 * 1024 * 1024;
 const CACHE_TABLE = `CREATE TABLE verified_published_artifacts (
     row_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -108,6 +110,7 @@ export async function openPublishedArtifactCache(
   };
   const assertOpen = () => { assertIdentity(); storage?.assertOpen(); };
   assertIdentity();
+  const bodies = authority.nativeBodies;
   const connection = await sqlite.openDatabaseAsync(PUBLISHED_ARTIFACT_CACHE_DATABASE, { useNewConnection: true, enableChangeListener: false });
   try {
     assertIdentity();
@@ -117,16 +120,25 @@ export async function openPublishedArtifactCache(
     storage = createConnection(connection);
     const binding = storage.lease(assertIdentity);
     await binding.submit(undefined, check => storage!.transaction(check, initialize));
-    const request = <T>(options: RequestOptions | undefined, action: (io: Access) => Promise<T>) => {
+    const request = <T>(options: RequestOptions | undefined, action: (io: Access) => Promise<T>, bodyFile?: string) => {
       assertOpen();
-      return binding.submit(options, check => storage!.transaction(check, action));
+      return binding.submit(options, async check => {
+        if (!bodyFile) return storage!.transaction(check, action);
+        await connection.runAsync('ATTACH DATABASE ? AS body_store', bodyFile);
+        try { return await storage!.transaction(check, action); }
+        finally {
+          try { await connection.execAsync('DETACH DATABASE body_store'); }
+          catch { await storage!.abort(); fail('STORAGE_FAILURE'); }
+        }
+      });
     };
     const cache: PublishedArtifactCache = {
       get: async (identifier, eventId, options) => {
         assertOpen();
         if (identifier !== appId || !HEX64.test(eventId) || !matchesPublishedAppKey(identifier,eventId)) return fail('INVALID_INPUT');
         const rows = await request(options, io => io.all<Row>(
-          'SELECT publisher, identifier, event_id, signed_event, html, byte_count FROM verified_published_artifacts WHERE user = ? AND publisher = ? AND identifier = ? AND event_id = ?',
+          `SELECT publisher, identifier, event_id, row_id, signed_event, ${bodies ? '' : 'html,'} length(html) AS html_bytes,
+            typeof(html) AS html_type, byte_count FROM verified_published_artifacts WHERE user = ? AND publisher = ? AND identifier = ? AND event_id = ?`,
           user, publisher, identifier, eventId));
         if (rows.length === 0) return null;
         const row = rows[0]!;
@@ -134,8 +146,8 @@ export async function openPublishedArtifactCache(
           assertOpen();
           if (rows.length !== 1 || row.publisher !== publisher || row.identifier !== identifier || row.event_id !== eventId ||
               typeof row.signed_event !== 'string' || new TextEncoder().encode(row.signed_event).byteLength > MAX_MANIFEST_BYTES ||
-              !(row.html instanceof Uint8Array) || row.html.byteLength === 0 || row.html.byteLength > MAX_HTML_BYTES ||
-              row.byte_count !== new TextEncoder().encode(row.signed_event).byteLength + row.html.byteLength || row.byte_count > MAX_STORED_ROW_BYTES) fail('CORRUPT_STORAGE');
+              row.html_type !== 'blob' || !Number.isSafeInteger(row.html_bytes) || row.html_bytes < 1 || row.html_bytes > MAX_HTML_BYTES ||
+              row.byte_count !== new TextEncoder().encode(row.signed_event).byteLength + row.html_bytes || row.byte_count > MAX_STORED_ROW_BYTES) fail('CORRUPT_STORAGE');
           const coordinate: NappletReference = snapshotEventId(identifier)
             ? Object.freeze({kind:5129,pubkey:publisher,eventId})
             : Object.freeze({ kind: 35129, pubkey: publisher, identifier, relayHints: Object.freeze([]) });
@@ -144,14 +156,40 @@ export async function openPublishedArtifactCache(
           const manifest = await verifyManifest(coordinate, event);
           assertOpen();
           if (manifest.pubkey !== publisher || manifest.id !== eventId || manifest.eventId !== eventId) return null;
+          if (bodies) {
+            const token = await bodies.createPublishedBodyToken();
+            let retained = false;
+            try {
+              const file = await bodies.publishedBodyDatabase(token, user, row.html_bytes);
+              await request(options, async io => {
+                const copied = await io.run(`INSERT INTO body_store.payload (id, body)
+                  SELECT 1, html FROM main.verified_published_artifacts
+                  WHERE row_id = ? AND user = ? AND publisher = ? AND identifier = ? AND event_id = ? AND signed_event = ?`,
+                  row.row_id, user, publisher, identifier, eventId, row.signed_event);
+                if (copied !== 1) fail('CONFLICT');
+              }, file);
+              assertOpen();
+              const length = await bodies.verifyCachedPublishedBody(token, manifest.expectedHtmlHash);
+              assertOpen();
+              if (options?.signal?.aborted) fail('CANCELLED');
+              if (length === -2 || length === -3) fail('CORRUPT_STORAGE');
+              if (length !== row.html_bytes) fail('STORAGE_FAILURE');
+              const artifact = await verifyPublishedBody(manifest, adoptNativePublishedBody(bodies, token, manifest.expectedHtmlHash, length));
+              assertOpen();
+              retained = true;
+              return artifact;
+            } finally { if (!retained) bodies.releasePublishedBody(token); }
+          }
           const artifact = await verifyArtifact(manifest, new Uint8Array(row.html));
           assertOpen();
           return artifact;
         } catch (error) {
           assertOpen();
-          if ((error as { code?: string })?.code === 'REVOKED' || (error as { code?: string })?.code === 'CANCELLED') throw error;
+          const code = (error as {code?: string})?.code;
+          if (code === 'CONFLICT') return null;
+          if (code !== 'CORRUPT_STORAGE' && !(error instanceof NappletVerificationError) && !(error instanceof SyntaxError)) throw error;
           // Persistent bytes are untrusted. Remove a corrupt entry and let the caller fetch afresh.
-          await request(options, io => io.run('DELETE FROM verified_published_artifacts WHERE user = ? AND publisher = ? AND identifier = ? AND event_id = ?', user, publisher, identifier, eventId));
+          await request(options, io => io.run('DELETE FROM verified_published_artifacts WHERE row_id = ? AND user = ? AND publisher = ? AND identifier = ? AND event_id = ?', row.row_id, user, publisher, identifier, eventId));
           return null;
         }
       },
@@ -165,14 +203,23 @@ export async function openPublishedArtifactCache(
         const eventBytes = new TextEncoder().encode(signedEvent);
         const byteCount = eventBytes.byteLength + artifact.htmlByteLength;
         if (eventBytes.byteLength > MAX_MANIFEST_BYTES || artifact.htmlByteLength > MAX_HTML_BYTES || byteCount > MAX_STORED_ROW_BYTES) return fail('QUOTA_EXCEEDED');
+        const body = nativeBodyOf(artifact);
+        if (body && !bodies) return fail('STORAGE_FAILURE');
+        const file = body ? await bodies!.publishedBodyDatabase(body.token, user, body.byteLength) : undefined;
         await request(options, async io => {
-          const htmlBytes = artifact.htmlBytes;
           await io.run('DELETE FROM verified_published_artifacts WHERE user = ? AND publisher = ? AND identifier = ? AND event_id = ?',
             user, publisher, identifier, artifact.manifest.eventId);
-          await io.run(`INSERT INTO verified_published_artifacts (user, publisher, identifier, event_id, signed_event, html, byte_count)
-            VALUES (?, ?, ?, ?, ?, ?, ?)`, user, publisher, identifier, artifact.manifest.eventId, signedEvent, htmlBytes, byteCount);
+          if (body) {
+            const copied = await io.run(`INSERT INTO verified_published_artifacts (user, publisher, identifier, event_id, signed_event, html, byte_count)
+              SELECT ?, ?, ?, ?, ?, body, ? FROM body_store.payload WHERE id = 1 AND length(body) = ?`,
+              user, publisher, identifier, artifact.manifest.eventId, signedEvent, byteCount, body.byteLength);
+            if (copied !== 1) fail('STORAGE_FAILURE');
+          } else {
+            await io.run(`INSERT INTO verified_published_artifacts (user, publisher, identifier, event_id, signed_event, html, byte_count)
+              VALUES (?, ?, ?, ?, ?, ?, ?)`, user, publisher, identifier, artifact.manifest.eventId, signedEvent, artifact.htmlBytes, byteCount);
+          }
           await pruneCache(io, user, authority.protectedEvents ?? (() => new Set()));
-        });
+        }, file);
       },
       revoke: () => binding.revoke(),
       close: () => storage!.close(),

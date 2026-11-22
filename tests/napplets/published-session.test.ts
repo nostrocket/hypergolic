@@ -685,3 +685,52 @@ test('exact discovery review binds staging, then transfers lifetime to the mount
     {code: 'PUBLISHED_TRANSFER_FAILED'});
   assert.equal(calls.filter(call => call.startsWith('register:')).length, 1);
 });
+
+test('named repeat opens resolve the selected relay roles before reusing only the account’s exact signed body', async t => {
+  const { database, sqlite } = await setup(t);
+  const html = getEmbeddedTestHtmlBytes();
+  const hash = createHash('sha256').update(html).digest('hex');
+  const event = (created_at: number, content: string) => finalizeEvent({kind: 35129, created_at, content,
+    tags: [['d', 'repeat'], ['x', hash], ['R', 'theme']]}, new Uint8Array(32).fill(48));
+  const first = event(1, 'First'), second = event(2, 'Second'), conflict = event(2, 'Conflict');
+  const link = naddrEncode({kind: 35129, pubkey: first.pubkey, identifier: 'repeat'});
+  const lookup = 'wss://lookup.example.org', network = 'wss://network.example.org';
+  const queries: string[][] = [];
+  let events = [first], user = USER, reads = 0, online = true;
+  const ports: PublishedSessionDependencies = {
+    database, sqlite, native: native([]), newInstanceId: () => SESSION,
+    identity: {sessionAuthority: () => ({user, epoch: 1, assertActive() {}}),
+      getSnapshot: () => ({session: {epoch: 1}})} as PublishedSessionDependencies['identity'],
+    lookupRelays: () => [lookup], networkRelays: () => [network],
+    source: {async query(_coordinate, relays) {queries.push([...relays]); return events;},
+      async readHtml() {reads++; if (!online) throw Error('offline'); return html;}},
+  };
+  const service = createPublishedSessionCoordinator(ports), signal = new AbortController().signal;
+  const opened = await service.openLink(link, signal, async () => true);
+  online = false;
+  // A held prepared artifact and then a cold account-scoped SQLite row both survive a mirror outage.
+  assert.equal((await service.resolveExact(link, signal, () => {}, true)).manifest.id, first.id);
+  opened.revoke();
+  const cold = createPublishedSessionCoordinator(ports);
+  for (let index = 0; index < 7; index++) {
+    assert.equal((await cold.resolveExact(link, signal, () => {})).manifest.id, first.id);
+  }
+  (await cold.openLink(link, signal, async () => { throw Error('existing exact consent'); })).revoke();
+  assert.equal(reads, 1);
+  assert.deepEqual(queries, [[lookup], [lookup, network], ...Array.from({length: 8}, () => [lookup])]);
+  events = [second, conflict];
+  await assert.rejects(cold.resolveExact(link, signal, () => {}), {code: 'PUBLISHED_REVISION_CONFLICT'});
+  assert.equal(reads, 1);
+  events = [second, first];
+  await assert.rejects(cold.resolveExact(link, signal, () => {}), {code: 'PUBLISHED_DOWNLOAD_UNAVAILABLE'});
+  online = true;
+  assert.equal((await cold.resolveExact(link, signal, () => {})).manifest.id, second.id);
+  events = [first];
+  online = false;
+  user = '42'.repeat(32);
+  await assert.rejects(cold.resolveExact(link, signal, () => {}), {code: 'PUBLISHED_DOWNLOAD_UNAVAILABLE'});
+  user = USER;
+  sqlite.raw(PUBLISHED_ARTIFACT_CACHE_DATABASE).prepare('UPDATE verified_published_artifacts SET html = ?').run(new Uint8Array(html.length));
+  await assert.rejects(cold.resolveExact(link, signal, () => {}), {code: 'PUBLISHED_DOWNLOAD_UNAVAILABLE'});
+  assert.equal(reads, 5);
+});

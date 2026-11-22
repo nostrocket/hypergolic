@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { expect, test, type Page, type Frame } from '@playwright/test';
+import { expect, test, type Page, type Frame } from './published-wire';
 
 const generation = '4ba3bdc3-8130-4a46-b5b9-3d4087a214a6';
 const media = 'media-90c4a736-d407-472b-bf89-8b6de2abdd0d';
@@ -10,7 +10,7 @@ async function open(page: Page, grant = true, mixed = false, liveProfile = false
   await page.addInitScript(({generation, media, html, hash, version, grant, mixed, liveProfile}) => {
     if (window !== window.top) return;
     const listeners = new Set<(event:{data:string})=>void>();
-    const send = (value:object) => { for (const listener of listeners) listener({data:JSON.stringify(value)}); };
+    const send = (value:object) => { for (const listener of listeners) listener({data:window.nativeMessage(value)}); };
     const push = (message:object, sessionId = generation) => send({type:'media.event',sessionId,message});
     const requests: object[] = [];
     let lastSequence = 0;
@@ -24,7 +24,7 @@ async function open(page: Page, grant = true, mixed = false, liveProfile = false
       postMessage(raw:string) {
         const row = JSON.parse(raw);
         if (row.type === 'artifact.read') send({type:'artifact.chunk',sessionId:generation,sequence:0,
-          base64:btoa(html),byteLength:html.length,totalBytes:html.length,publisher:'1'.repeat(64),
+          text:html,byteLength:html.length,totalBytes:html.length,publisher:'1'.repeat(64),
           appId:'media-test',eventId:'2'.repeat(64),htmlHash:hash,version,domains,done:true});
         if (row.type !== 'media' && row.type !== 'capability') return;
         if (row.sequence !== lastSequence + 1 || row.type === 'media' && raw.length > 32 * 1024) return;

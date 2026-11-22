@@ -1,4 +1,4 @@
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {expect, test, type Locator, type Page} from './published-wire';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 
@@ -53,8 +53,8 @@ async function open(page: Page, body: string, origin = androidOrigin) {
           const request = JSON.parse(raw);
           nativeCalls.push(request.type);
           if (request.type !== 'artifact.read') return;
-          const data = JSON.stringify({type: 'artifact.chunk', sessionId: generation,
-            sequence: request.sequence, base64, byteLength, totalBytes: byteLength, done: true,
+          const data = window.nativeMessage({type: 'artifact.chunk', sessionId: generation,
+            sequence: request.sequence, text: new TextDecoder().decode(Uint8Array.from(atob(base64), c => c.charCodeAt(0))), byteLength, totalBytes: byteLength, done: true,
             publisher: '1'.repeat(64), eventId: '2'.repeat(64), appId: 'local-form', htmlHash, version, domains: []});
           for (const listener of listeners) listener({data});
         },

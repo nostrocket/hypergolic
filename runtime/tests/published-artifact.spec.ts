@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './published-wire';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 
@@ -12,15 +12,15 @@ const identity = {
   publisher: '1'.repeat(64), appId: 'published-test', eventId: '2'.repeat(64), version, htmlHash,
 };
 
-type Mode = 'escaped-full-chunk' | 'normal' | 'keys-domain' | 'bad-hash' | 'malformed-base64' | 'replayed-sequence' | 'unknown-domain' | 'relay-domain' | 'attributed-head' | 'commented-head' | 'unsafe-head-comment' | 'upload-domain' | 'all-domains' | 'outbox-domain' | 'outbox-only' | 'published-approval' | 'intent-only' | 'soy-policy' | 'soy-policy-change'
+type Mode = 'unicode-full-chunk' | 'normal' | 'keys-domain' | 'bad-hash' | 'wrong-byte-length' | 'replayed-sequence' | 'unknown-domain' | 'relay-domain' | 'attributed-head' | 'commented-head' | 'unsafe-head-comment' | 'upload-domain' | 'all-domains' | 'outbox-domain' | 'outbox-only' | 'published-approval' | 'intent-only' | 'soy-policy' | 'soy-policy-change'
   | 'snapshot' | 'snapshot-mismatch' | 'snapshot-title-change' | 'snapshot-discovery';
 
 function artifactFor(mode: Mode): Buffer {
   if (mode === 'published-approval') return approvalHtml;
   if (mode === 'intent-only') return Buffer.from('<!doctype html><html><head><title>Intent</title></head><body><output id="deliveries"></output></body></html>');
   const source = html.toString();
-  if (mode === 'escaped-full-chunk') return Buffer.from(source.replace('</head>', '<!--' + '?'.repeat(48 * 1024) + '--></head>'));
-  if(mode==='soy-policy'||mode==='soy-policy-change'||mode==='snapshot-title-change')return Buffer.from(source.replace('</body>','<!--'+'x'.repeat(64*1024)+'--></body>'));
+  if (mode === 'unicode-full-chunk') return Buffer.from(source.replace('</head>', '<!--' + '🙂/\n'.repeat(70 * 1024) + '--></head>'));
+  if(mode==='soy-policy'||mode==='soy-policy-change'||mode==='snapshot-title-change')return Buffer.from(source.replace('</body>','<!--'+'x'.repeat(272*1024)+'--></body>'));
   if (mode === 'keys-domain') return Buffer.from(source.replace('</body>', `
     <keys-declarative-editor id="keys-declarative" style="display:block">
       <template shadowrootmode="closed"><input aria-label="Declarative editor"></template>
@@ -75,8 +75,7 @@ async function openPublished(page: Page, mode: Mode = 'normal', extraQuery = '')
     // The bad-hash case keeps the NIP-5A version internally consistent with
     // its false file claim, so it reaches and exercises byte verification.
     const emit = (sequence: number) => {
-      const payload = bytes.slice(sequence * 48 * 1024, (sequence + 1) * 48 * 1024);
-      const base64 = mode === 'malformed-base64' ? '!!!!' : btoa(String.fromCharCode(...payload));
+      const part = window.publishedPart(bytes, sequence);
       const snapshot = mode.startsWith('snapshot') ? {
         appId: ' 5129:'+identity.eventId,
         snapshot:{kind:5129,eventId:mode==='snapshot-mismatch'?'f'.repeat(64):identity.eventId,
@@ -86,13 +85,12 @@ async function openPublished(page: Page, mode: Mode = 'normal', extraQuery = '')
       const envelope = {
         type: 'artifact.chunk', sessionId: generation,
         sequence: mode === 'replayed-sequence' ? sequence + 1 : sequence,
-        base64, byteLength: payload.length, totalBytes: htmlLength,
+        ...part, byteLength: mode === 'wrong-byte-length' ? part.byteLength + 1 : part.byteLength,
         ...claims, ...snapshot, ...((mode==='soy-policy'||mode==='soy-policy-change')?{appData:{sourceKind:35129,policy:{profile:'soy.app-data/1',scope:mode==='soy-policy-change'&&sequence>0?'f'.repeat(64):'b7890c0793a7fa9c2570c56500f403724b1a4c0e453a9194ec7200132c634f8b',maxContentBytes:3072,relays:['wss://relay.damus.io'],defaultRelays:['wss://relay.damus.io']}}}:{}),
         domains: mode==='soy-policy'||mode==='soy-policy-change'?['identity','outbox','theme']:mode === 'intent-only' ? ['intent'] : mode === 'published-approval' ? ['identity', 'relay', 'theme'] : mode === 'unknown-domain' ? ['future-domain'] : mode === 'outbox-domain' ? ['outbox', 'relay', 'theme'] : mode === 'outbox-only' ? ['outbox', 'theme'] : mode === 'relay-domain' ? ['relay', 'theme'] : mode === 'upload-domain' ? ['upload'] : mode === 'keys-domain' ? ['keys', 'theme'] : mode === 'all-domains' ? ['config', 'identity', 'inc', 'intent', 'link', 'notify', 'outbox', 'relay', 'resource', 'storage', 'theme', 'upload'] : ['theme'],
-        done: (sequence + 1) * 48 * 1024 >= htmlLength,
       };
-      const wire = JSON.stringify(envelope);
-      for (const listener of listenerSet) listener({ data: mode === 'escaped-full-chunk' ? wire.replaceAll('/', '\\/') : wire });
+      const wire = window.nativeMessage(envelope);
+      for (const listener of listenerSet) listener({ data: wire });
     };
     Object.defineProperty(window, 'HypergolicHost', { value: {
       addEventListener: (_type: string, listener: (event: { data: string }) => void) => listenerSet.add(listener),
@@ -140,8 +138,8 @@ async function publishedGuest(page: Page) {
 // Calculated in Node to keep browser fixture setup simple and deterministic.
 const awaitHashVersionPlaceholder = digest(`${'f'.repeat(64)} /index.html\n`);
 
-test('a full artifact chunk fits with escaped Base64 slashes', async ({page}) => {
-  await openPublished(page, 'escaped-full-chunk');
+test('a full-size artifact preserves Unicode scalars and raw newlines across chunks', async ({page}) => {
+  await openPublished(page, 'unicode-full-chunk');
   await expect(page.frameLocator('#napplet').getByTestId('lab')).toHaveAttribute('data-ready', 'true');
 });
 
@@ -224,7 +222,7 @@ test('published runtime exposes only the bounded native-declared domains', async
   expect(await guest.evaluate(() => (window as any).napplet.shell.supports('storage'))).toBe(false);
 });
 
-for (const mode of ['bad-hash', 'malformed-base64', 'replayed-sequence', 'unknown-domain'] as const) {
+for (const mode of ['bad-hash', 'wrong-byte-length', 'replayed-sequence', 'unknown-domain'] as const) {
   test(`published ${mode} fails closed before creating the napplet frame`, async ({ page }) => {
     await openPublished(page, mode);
     await expect(page.getByRole('alert')).toHaveText('The napplet could not be loaded.');

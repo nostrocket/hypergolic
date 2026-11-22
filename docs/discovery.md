@@ -10,17 +10,28 @@ The selected listing’s Open button shows a spinner until Hypergolic returns a 
 
 ## Build and import
 
-The portable guest lives in `apps/discovery` in the separate `napplets` monorepo. Build it with Node.js 24.20.0 and pnpm 10.34.5. From the Hypergolic checkout, set `NAPPLETS_CHECKOUT` to the guest monorepo checkout.
+The portable guest is authored in the separate `napplets` repository. This
+checkout includes its build source, tests and scoped lockfile in
+[`napplets/discovery`](../napplets/discovery). The source corresponds to
+`apps/discovery` at authoring commit `013896df9352ce78bd93bdea359666005a443bc3`.
+Use Node.js 24.20.0 and pnpm 10.34.5 to reproduce the shipped HTML.
 
 ```sh
-export NAPPLETS_CHECKOUT=../napplets
-pnpm --dir "$NAPPLETS_CHECKOUT" install --frozen-lockfile
-pnpm --dir "$NAPPLETS_CHECKOUT" --filter @napplets/discovery build
-node scripts/import-discovery.mjs "$NAPPLETS_CHECKOUT/apps/discovery/dist/index.html"
-pnpm run runtime:build
+pnpm --dir napplets/discovery install --frozen-lockfile
+pnpm --dir napplets/discovery run build
+node scripts/import-discovery.mjs --check napplets/discovery/dist/index.html
 ```
 
-The guest build produces one self-contained HTML file. The import records its SHA-256 and derived runtime version, then the runtime build packages the verified bundle for both native hosts. Review the imported bytes and digests together.
+For an intentional update, sync the reviewed authoring source and its exact
+dependencies, run the guest tests, then import the new build and regenerate
+the native runtime. The importer records the HTML SHA-256 and aggregate version.
+
+```sh
+pnpm --dir napplets/discovery run type-check
+pnpm --dir napplets/discovery test
+node scripts/import-discovery.mjs napplets/discovery/dist/index.html
+pnpm run runtime:build
+```
 
 ## Published catalog updates
 
@@ -30,10 +41,29 @@ With an address configured, Hypergolic checks for a release when the user opens 
 
 An unchanged grant under the current support profile allows the verified update to proceed automatically. A new or changed grant opens trusted access review showing the publisher, exact release, and required and optional capabilities. Declining the review, losing focus during the check, or failing to reach a verified release leaves the current catalog in place. Other published napplets retain explicit version review. [Published admission and grants](published-network.md#published-admission-and-updates)
 
-A retained published pin can reopen from its verified artifact cache. The guest keeps the last verified listing in memory during a failed refresh and pauses opening while the listing is stale. The directory starts a fresh listing session when the guest reloads.
+A retained published pin can reopen from its verified artifact cache. Directory
+rows live in the current guest session. After a failed refresh, Discover
+keeps the last results, shows when it checked them and pauses Open until a
+refresh succeeds. Reloading starts a fresh directory. The bundled catalog has
+no storage grant or portable account-and-relay key for a persistent directory.
 
+## First page and relay coverage
 
-Discover uses public relay queries. When the shell offers Outbox query, the catalog can retry a partially covered page. With ordinary Relay queries, individual peer failures may be indistinguishable from an empty result. Search covers the publications loaded so far.
+Discover opens a short-lived standard Relay subscription for early signed
+publications while a one-shot query checks the selected relays. Hypergolic's
+stream previews its first two selected Network peers. The one-shot query covers
+the full selection and determines ordering and pagination. Both paths verify
+the event signature, filter and revision before displaying a listing.
+[Relay subscriptions](relay-subscriptions.md)
+
+Each page has one 5.5-second deadline. A measured response-size limit can
+trigger a smaller page within that deadline. A timeout or transport failure
+offers an explicit retry. If the one-shot read times out after a verified
+preview arrived, Discover keeps the rows and marks coverage partial. An
+optional Outbox query can also indicate incomplete coverage. A plain Relay
+query cannot distinguish an empty response from a reachable subset, so the
+empty state names reachable relays and offers Refresh. Search covers the
+publications loaded so far. [Relay query](relay-query.md) · [Outbox routing](outbox-routing.md)
 
 ## Details and public recommendations
 

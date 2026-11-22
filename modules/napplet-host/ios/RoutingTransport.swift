@@ -14,6 +14,8 @@ final class RoutingTransportRegistry: @unchecked Sendable {
   private let endpoints = RoutingEndpointRegistry()
   private let lock = NSRecursiveLock()
   private var rows: [String: Row] = [:]
+  func setReviewGeneration(_ generation: String?) { endpoints.setReviewGeneration(generation) }
+  func coversInput(_ generation: String, blocked: Bool) -> Bool { endpoints.coversInput(generation, blocked: blocked) }
   private var sink: (@Sendable (String) -> Void)?
   func observeLifecycle(_ value: (@Sendable (String) -> Void)?) { lock.withLock { sink = value } }
   func state() -> String { lock.withLock {

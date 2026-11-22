@@ -446,3 +446,31 @@ test('optional AUTH announcement does not prevent published manifest lookup', as
   const result = await createNativePublishedRelayLookup(h.port).query(coordinate, [relayA], null, new AbortController().signal);
   assert.equal(result.length, 1);
 });
+
+test('an authenticated exact pin completes before an unrelated silent peer; an invalid signature cannot win', async () => {
+  const signed = event('a'.repeat(64));
+  const waiting = deferred<string[]>(), pending = deferred<string[]>();
+  const fixture = harness((url, _request, sub) => url === relayA ? [eventFrame(sub, {...signed, sig: '0'.repeat(128)}), eose(sub)]
+    : url === relayB ? waiting.promise : pending.promise);
+  const lookup = createNativePublishedRelayLookup(fixture.port);
+  const operation = lookup.query(coordinate, [relayA, relayB, 'wss://third.example.org'], signed.id, new AbortController().signal);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(fixture.cancelled.length, 0);
+  const reply = fixture.calls[1]!;
+  waiting.resolve([eventFrame(reply.subscriptionId, signed), eose(reply.subscriptionId)]);
+  assert.deepEqual(await operation, [signed]);
+  assert.deepEqual(fixture.cancelled, [fixture.calls[2]!.id]);
+});
+
+test('the normal native lookup reconciles responding peers and cancels a silent peer after its own budget', async t => {
+  t.mock.timers.enable({apis: ['setTimeout']});
+  const signed = event('a'.repeat(64)), waiting = deferred<string[]>();
+  const fixture = harness((url, _wire, sub) => url === relayA ? [eventFrame(sub, signed), eose(sub)] : waiting.promise);
+  const result = createNativePublishedRelayLookup(fixture.port).query(coordinate, [relayA, relayB], null, new AbortController().signal);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  t.mock.timers.tick(1_999);
+  assert.deepEqual(fixture.cancelled, []);
+  t.mock.timers.tick(1);
+  assert.deepEqual(await result, [signed]);
+  assert.deepEqual(fixture.cancelled, [fixture.calls[1]!.id]);
+});

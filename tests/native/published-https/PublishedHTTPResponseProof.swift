@@ -8,6 +8,15 @@ import Foundation
       guard response.status == 200, response.body == Data(body.utf8) else { throw NSError(domain: "accepted response", code: 1) }
       checks += 1
     }
+    func check(_ value: Bool, _ name: String) throws {
+      guard value else { throw NSError(domain: name, code: 1) }
+      checks += 1
+    }
+    let ceiling = PublishedHTTPResponse.maximumArtifactBodyBytes
+    try check(PublishedHTTPResponse.admitsDownload(ceiling, reservations: [ceiling]), "stalled first mirror allows one full hedge")
+    try check(!PublishedHTTPResponse.admitsDownload(ceiling, reservations: [ceiling, 1]), "ready bytes remain charged")
+    try check(!PublishedHTTPResponse.admitsDownload(1, reservations: [ceiling, ceiling]), "no third reservation")
+    try check(PublishedHTTPResponse.admitsDownload(ceiling, reservations: [1]), "cancelled or completed first request releases room")
     func reject(_ wire: Data, maximumBodyBytes: Int = 20) throws {
       do {
         _ = try PublishedHTTPResponse.parse(wire, maximumBodyBytes: maximumBodyBytes)

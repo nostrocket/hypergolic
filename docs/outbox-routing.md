@@ -31,11 +31,13 @@ this profile. A single-author one-shot read budgets up to half of its remaining
 deadline for route discovery and leaves the original remainder for data. A slow
 Lookup peer can leave the verified author metadata incomplete. The shell uses any verified route already
 found or the existing Network fallback. A timeout does not cache an absent list.
-Data peers run serially. Each nonlast peer gets at most half the remaining
-total deadline, and the last peer gets the remaining time, capped by the
-existing native ten-second maximum. The next peer starts after the prior
-native promise settles. Later tail peers remain best-effort under the original
-deadline. No new destinations or connection slots are added.
+One-shot reads share two native data-peer slots across callers. Two selected
+peers can overlap, and the FIFO queue promotes the oldest waiter when a native
+promise settles. A cancelled call keeps its slot until native settlement. Each
+nonlast peer gets at most half the remaining total deadline, and the last peer
+gets the remaining time, capped at ten seconds. Verified rows from finished
+peers survive expiry with incomplete coverage. Relay hints follow the original
+plan order even when peers finish out of order.
 
 One-shot reads and subscription route planning share two admitted app work
 slots. A FIFO queue holds at most eight waiting operations across that service;

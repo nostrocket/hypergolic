@@ -11,7 +11,14 @@ import Foundation
     func hash(_ data: Data) -> String {
       SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
-    let html = Data(repeating: 0x61, count: PublishedArtifactRegistry.maximumHTMLBytes)
+    var html = Data(repeating: 0x61, count: PublishedArtifactRegistry.maximumHTMLBytes)
+    let split = PublishedArtifactReadOwner.maximumChunkBytes - 1
+    html.replaceSubrange(split..<split + 4, with: "🙂".utf8)
+    func frame(_ response: String) throws -> ([String: Any], Data) {
+      let cut = response.utf8.firstIndex(of: 10)!
+      let fields = try JSONSerialization.jsonObject(with: Data(response.utf8[..<cut])) as! [String: Any]
+      return (fields, Data(response.utf8[response.utf8.index(after: cut)...]))
+    }
     let htmlHash = hash(html)
     let version = hash(Data("\(htmlHash) /index.html\n".utf8))
     let publisher = String(repeating: "a", count: 64)
@@ -134,7 +141,7 @@ import Foundation
     let configuredClaim = configuredRegistry.claim(configuredHandle, claims: configured.claims, viewGeneration: generation)
     try check(configuredClaim != nil, "invalid config did not consume staged artifact")
     let configuredReader = PublishedArtifactReadOwner(claimed: configuredClaim!, domains: boundConfiguration.domains)
-    let configuredChunk = try JSONSerialization.jsonObject(with: Data(configuredReader.read(sequence: 0)!.utf8)) as! [String: Any]
+    let configuredChunk = try frame(configuredReader.read(sequence: 0)!).0
     try check(configuredChunk["domains"] as? [String] == ["identity", "relay"], "configured domains delivered to runtime")
     let input = PublishedArtifactHostInput(try json(fields))
     try check(input?.claims == claims && input?.handle == handle, "exact bounded prop")
@@ -147,20 +154,17 @@ import Foundation
     while collected.count < html.count {
       let text = reader.read(sequence: sequence)
       try check(text != nil, "sequential read")
-      let object = try JSONSerialization.jsonObject(with: Data(text!.utf8)) as! [String: Any]
-      let base64 = object["base64"] as? String
-      let bytes = base64.flatMap { Data(base64Encoded: $0) }
-      try check(bytes != nil && bytes!.base64EncodedString() == base64, "canonical Base64")
-      try check(bytes!.count >= 1 && bytes!.count <= PublishedArtifactTransfer.maximumChunkBytes,
-        "48 KiB chunk ceiling")
+      let (object, bytes) = try frame(text!)
+      try check(!bytes.isEmpty && bytes.count <= PublishedArtifactReadOwner.maximumChunkBytes, "bounded UTF-8 text")
+      if sequence == 0 { try check(bytes.count == split, "four-byte scalar starts next frame") }
       try check(object["type"] as? String == "artifact.chunk" && object["sessionId"] as? String == generation &&
-        object["sequence"] as? Int == sequence && object["byteLength"] as? Int == bytes!.count &&
+        object["sequence"] as? Int == sequence && object["byteLength"] as? Int == bytes.count &&
         object["totalBytes"] as? Int == html.count, "exact sequence and lengths")
       try check(object["publisher"] as? String == publisher && object["appId"] as? String == appId &&
         object["eventId"] as? String == eventId && object["version"] as? String == version &&
         object["htmlHash"] as? String == htmlHash && object["domains"] as? [String] == ["theme"],
         "immutable claims and capabilities returned")
-      collected.append(bytes!)
+      collected.append(bytes)
       try check(object["done"] as? Bool == (collected.count == html.count), "final marker")
       sequence += 1
     }
@@ -296,14 +300,12 @@ import Foundation
       "invalid host generation denied")
     let liveSnapshot = registry.claim(try stageSnapshot(), claims: snapshotInput.claims, viewGeneration: generation)!
     let snapshotReader = PublishedArtifactReadOwner(claimed: liveSnapshot, domains: snapshotCapability.domains)
-    for sequence in 0..<2 {
-      let chunk = try JSONSerialization.jsonObject(with: Data(snapshotReader.read(sequence: sequence)!.utf8)) as! [String: Any]
-      try check(chunk["sessionId"] as? String == generation &&
-        chunk["publisher"] as? String == publisher && chunk["eventId"] as? String == eventId &&
-        chunk["appId"] as? String == key && chunk["snapshot"].flatMap(PublishedArtifactRegistry.Snapshot.init) == snapshot,
-        "each chunk carries immutable snapshot and generation")
-    }
-    try check(snapshotReader.read(sequence: 2) == nil, "snapshot bytes exhausted")
+    let chunk = try frame(snapshotReader.read(sequence: 0)!).0
+    try check(chunk["sessionId"] as? String == generation &&
+      chunk["publisher"] as? String == publisher && chunk["eventId"] as? String == eventId &&
+      chunk["appId"] as? String == key && chunk["snapshot"].flatMap(PublishedArtifactRegistry.Snapshot.init) == snapshot,
+      "snapshot frame carries immutable claims and generation")
+    try check(snapshotReader.read(sequence: 1) == nil, "snapshot bytes exhausted")
     try check(liveSnapshot.claims.snapshot?.requester(publisher: liveSnapshot.claims.publisher) ==
       "Snapshot (kind 5129): \(snapshotTitle)\nManifest event ID: \(eventId)\nPublisher: \(publisher)",
       "native requester displays trusted title, full event ID and publisher")

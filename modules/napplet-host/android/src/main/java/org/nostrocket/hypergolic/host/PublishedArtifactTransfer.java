@@ -165,6 +165,14 @@ public final class PublishedArtifactTransfer {
         snapshot, viewGeneration);
   }
 
+  synchronized String stageOwned(byte[] body, String sessionId, String publisher, String identifier,
+      String eventId, String aggregateHash, String htmlHash, String title) {
+    PublishedArtifactRegistry.Snapshot snapshot = title == null ? null : PublishedArtifactRegistry.Snapshot.create(eventId, title);
+    if (title != null && snapshot == null) return null;
+    if (now() < 0) return null;
+    return registry.stage(body, sessionId, publisher, identifier, eventId, aggregateHash, htmlHash, snapshot);
+  }
+
   private boolean reject(String uploadId) {
     cancelPublishedArtifact(uploadId);
     return false;
