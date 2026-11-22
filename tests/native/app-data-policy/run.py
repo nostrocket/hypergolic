@@ -116,16 +116,16 @@ def main():
     rows, request = cases()
     (work/"cases.json").write_text(encode({"cases":rows, "request":request})+"\n")
     fragments = {
-        "android-metadata": extract(android/"NappletHostView.kt", '            val result = JSONObject().put("type", "artifact.chunk")', "            reply.postMessage(result.toString())"),
+        "android-metadata": extract(android/"NappletHostView.kt", '            val result = JSONObject().put("type", "artifact.chunk")', "            reply.postMessage("),
         "android-snapshot": extract(android/"NativeApprovalSigningData.kt", "internal fun PublishedArtifactRegistry.Snapshot.toWire()", "internal fun parseSnapshotMetadata"),
         "swift-config": extract(ios/"CapabilityTransport.swift", "struct CapabilityConfiguration {", "/// Lease queries are synchronous"),
     }
     (work/"Projection.kt").write_text('package org.nostrocket.hypergolic.host\nimport org.json.JSONObject\nimport org.json.JSONArray\n'+fragments["android-snapshot"]+'\ninternal object NativeChunkProjection {\n'+
         'data class Claims(val publisher:String,val appId:String,val eventId:String,val version:String,val htmlHash:String,val snapshot:PublishedArtifactRegistry.Snapshot?=null)\n'+
-        'data class Chunk(val sequence:Int,val base64:String,val byteLength:Int,val totalBytes:Int,val done:Boolean)\n'+
+        'data class Chunk(val sequence:Int,val byteLength:Int,val totalBytes:Int,val done:Boolean)\n'+
         'fun project(configuration:CapabilityConfiguration?,generation:String):JSONObject {\n'+
         'val claims=Claims(configuration!!.publisher,configuration.appId,"b".repeat(64),configuration.version,"a".repeat(64))\n'+
-        'val chunk=Chunk(0,"YQ==",1,1,true)\n'+fragments["android-metadata"]+'return result\n}\n}\n')
+        'val chunk=Chunk(0,1,1,true)\n'+fragments["android-metadata"]+'return result\n}\n}\n')
     (work/"Configuration.swift").write_text("import Foundation\nimport CoreFoundation\n"+fragments["swift-config"])
     def artifact(group, name, version):
         matches = list((args.cache/group/name/version).glob("*/*.jar"))
