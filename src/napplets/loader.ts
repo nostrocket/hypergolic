@@ -30,7 +30,7 @@ export interface PublishedLoadOptions {
 }
 type PublishedLoadCode = 'PUBLISHED_LOAD_FAILED' | 'PUBLISHED_NOT_FOUND' | 'PUBLISHED_PIN_CONFLICT' | 'PUBLISHED_UNSUPPORTED_MANIFEST' |
   'PUBLISHED_REVISION_CONFLICT' | 'PUBLISHED_LOOKUP_UNAVAILABLE' |
-  'PUBLISHED_DOWNLOAD_UNAVAILABLE' | 'PUBLISHED_HASH_MISMATCH' | 'PUBLISHED_INVALID_HTML';
+  'PUBLISHED_DOWNLOAD_UNAVAILABLE' | 'PUBLISHED_NO_DOWNLOAD_SERVER' | 'PUBLISHED_HASH_MISMATCH' | 'PUBLISHED_INVALID_HTML';
 
 export class PublishedLoadError extends Error {
   readonly code: PublishedLoadCode;
@@ -113,6 +113,7 @@ export async function downloadPublishedArtifact(chosen: VerifiedNappletManifest,
   }
   catch (error) {
     active(options);
+    if (error instanceof PublishedLoadError && error.code === 'PUBLISHED_NO_DOWNLOAD_SERVER') throw error;
     if (error instanceof NappletHtmlEnvelopeError) throw new PublishedLoadError('PUBLISHED_INVALID_HTML');
     throw new PublishedLoadError(error instanceof NappletHashMismatchError ? 'PUBLISHED_HASH_MISMATCH' : 'PUBLISHED_DOWNLOAD_UNAVAILABLE');
   }

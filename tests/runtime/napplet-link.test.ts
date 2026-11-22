@@ -213,7 +213,7 @@ test('exact mounted pins are reviewed and reused, different saved revisions keep
 test('signed lookup outcomes stop before review and never substitute a target', async () => {
   for (const code of [
     'PUBLISHED_REVISION_CONFLICT', 'PUBLISHED_NOT_FOUND', 'PUBLISHED_UNSUPPORTED_MANIFEST',
-    'PUBLISHED_LOOKUP_UNAVAILABLE', 'PUBLISHED_DOWNLOAD_UNAVAILABLE', 'PUBLISHED_HASH_MISMATCH', 'PUBLISHED_INVALID_HTML', 'PUBLISHED_LOAD_FAILED',
+    'PUBLISHED_LOOKUP_UNAVAILABLE', 'PUBLISHED_NO_DOWNLOAD_SERVER', 'PUBLISHED_DOWNLOAD_UNAVAILABLE', 'PUBLISHED_HASH_MISMATCH', 'PUBLISHED_INVALID_HTML', 'PUBLISHED_LOAD_FAILED',
   ] as const) {
     const env = setup();
     env.failLookup(new PublishedLoadError(code));
