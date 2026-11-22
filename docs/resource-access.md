@@ -14,6 +14,8 @@ Native Resource GETs identify the client with the fixed Hypergolic Resource User
 
 A resource grant permits any validated public HTTPS hostname. Each connection resolves and checks all addresses, rejects private/mixed results, pins a permitted address, and verifies TLS against the hostname. HTTPS URLs reject credentials, IP literals, local/private aliases, fragments and malformed controls. A Resource grant authorizes these native routes. The [browser boundary](native-contract.md#artifact-and-browser-boundary) has separately documented networking limits. Its inner CSP admits Blob image/media previews only when resource is granted; the trusted CSP remains the leading head policy before all preludes.
 
+The [default Resource policy](https://github.com/napplet/naps/blob/8c0645d32ceb159bc3e8bcec1107a92862b7e86a/naps/NAP-RESOURCE.md#default-resource-policy) requires SVG conversion to PNG or WebP. Hypergolic currently returns `decode-failed` for an SVG illustration. In a batch, other supported images still arrive in request order. The conformance check measures the returned bytes. Isolated conversion is tracked in [#114](https://github.com/nostrocket/hypergolic/issues/114).
+
 ## Selected schemes
 
 | Scheme | Behavior |

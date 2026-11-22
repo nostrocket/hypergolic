@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import { finalizeEvent, generateSecretKey } from 'nostr-tools/pure';
+import {observeResourceSvg} from './resource-svg.mjs';
 import {observeIdentity} from './host.mjs';
 import {createKeysSession} from '../../runtime/src/keys-adapter.ts';
 import {projectMediaRequest} from '../../runtime/src/media-wire.ts';
@@ -89,6 +90,7 @@ async function themeQuotaReply() {
 
 export const observations = {
   ...Object.fromEntries(componentCases.map(([id, , file, name]) => [id, () => runComponent(file, name)])),
+  'resource-svg-output': observeResourceSvg,
   'keys-registration': () => {
     const sent = [];
     const session = createKeysSession({postMessage:message => sent.push(message)}, () => true);
