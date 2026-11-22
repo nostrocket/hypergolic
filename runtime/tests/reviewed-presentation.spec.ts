@@ -65,7 +65,7 @@ async function open(page:Page,appId:string,variant='exact',uploadMode='complete'
         if(envelope.type==='ready'||envelope.type==='error'){state.diagnostics.push(envelope);return;}
         if(envelope.type==='artifact.read'){
           emit({type:'artifact.chunk',sessionId:generation,sequence:envelope.sequence,publisher:pin.publisher ?? '1'.repeat(64),
-            appId:variant==='other-app'?'unreviewed-reader':appId,eventId:pin.eventId,version:aggregateHash,htmlHash,
+            appId:variant==='other-app'?'unreviewed-reader':appId,eventId:variant==='new-event'?'f'.repeat(64):pin.eventId,version:aggregateHash,htmlHash,
             domains,
             ...window.publishedPart(bytes,envelope.sequence)});return;
         }
@@ -126,10 +126,10 @@ async function open(page:Page,appId:string,variant='exact',uploadMode='complete'
   },{generation,appId,pin,variant,html:bytes.toString('base64'),htmlHash,aggregateHash,note,pack,png,savedFeed,domains,pngHash,uploadMode});
   await page.goto(`/assets/runtime/index.html?sessionId=${generation}&source=published`);
   const frame=page.frameLocator('#napplet');
+  await expect(frame.locator('body')).not.toHaveText('');
   await expect(frame.locator('#hypergolic-reviewed-presentation')).toHaveCount(variant==='exact'&&appId!=='workspace-journal'?1:0);
   await expect(frame.locator('[data-hypergolic-emoji-images]')).toHaveCount(appId==='emoji-browser'&&variant==='exact'?1:0);
   await expect(frame.locator('[data-hypergolic-creator-upload]')).toHaveCount(appId==='emoji-pack-creator'&&variant==='exact'?1:0);
-  await expect(frame.locator('body')).not.toHaveText('');
   return frame;
 }
 async function fits(locator:ReturnType<FrameLocator['locator']>) {
@@ -355,13 +355,13 @@ test('exact Emoji Pack Creator desktop retains its original two-column metadata 
   const columns=await frame.locator('.meta').evaluate(element=>getComputedStyle(element).gridTemplateColumns.split(' '));
   expect(columns).toHaveLength(2);expect((await frame.locator('main').boundingBox())!.height).toBe(740);
 });
-for(const appId of ['emoji-browser','creator-signals','mapplets','feed-builder','emoji-pack-creator'])for(const variant of ['other-app','new-version']){
+for(const appId of ['emoji-browser','creator-signals','mapplets','feed-builder','emoji-pack-creator'])for(const variant of ['other-app','new-version','new-event']){
   test(`ordinary ${appId} ${variant} receives no presentation override`,async({page})=>{await open(page,appId,variant);});
 }
 test('unpublished, wrong-app and future-version metadata retain byte-identical documents and CSP',()=>{
   const html='<head><meta http-equiv="Content-Security-Policy" content="default-src none"></head><body></body>';
-  for(const pin of pins){for(const metadata of [{published:false,appId:pin.appId,aggregateHash:pin.aggregateHash},
-    {published:true,appId:'other',aggregateHash:pin.aggregateHash},{published:true,appId:pin.appId,aggregateHash:'f'.repeat(64)}]){
+  for(const pin of pins){for(const metadata of [{eventId:pin.eventId,published:false,appId:pin.appId,aggregateHash:pin.aggregateHash},
+    {eventId:pin.eventId,published:true,appId:'other',aggregateHash:pin.aggregateHash},{eventId:pin.eventId,published:true,appId:pin.appId,aggregateHash:'f'.repeat(64)}]){
     expect(injectReviewedPresentation(html,metadata)).toBe(html);
     expect(injectCreatorUpload(html,{...metadata,domains:['upload']})).toBe(html);
   }}

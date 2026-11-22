@@ -1,5 +1,4 @@
-type EmojiMetadata = Readonly<{published: boolean; appId: string; aggregateHash: string}>;
-const emojiVersion = '24b16ab3eb550d50eff01a3c42c6e56c3a81da4cf6914b11dc766d8575767381';
+import {reviewedPresentationApp, type PresentationPin} from './reviewed-presentation-pin';
 
 /** The pinned guest refreshes its cache before pending resolver images finish loading. */
 function installEmojiImages(): void {
@@ -25,8 +24,8 @@ function installEmojiImages(): void {
   };
 }
 
-export function injectEmojiImages(html: string, metadata: EmojiMetadata): string {
-  if (!metadata.published || metadata.appId !== 'emoji-browser' || metadata.aggregateHash !== emojiVersion) return html;
+export function injectEmojiImages(html: string, metadata: PresentationPin): string {
+  if (reviewedPresentationApp(metadata) !== 'emoji-browser') return html;
   const csp = /<meta http-equiv="Content-Security-Policy" content="[^"]*">/;
   if (!csp.test(html)) throw new Error('Emoji image compatibility requires host CSP');
   return html.replace(csp, value => `${value}<script data-hypergolic-emoji-images>(${installEmojiImages.toString()})();</script>`);

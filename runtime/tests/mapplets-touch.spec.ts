@@ -34,15 +34,15 @@ test.beforeAll(async()=>{
   document=/const document = `([\s\S]+?)`;/.exec(readFileSync('tools/build.mjs','utf8'))![1]!;
 });
 
-async function openMap(page:Page, revised=false) {
+async function openMap(page:Page, variant: 'exact' | 'new-version' | 'new-event' = 'exact') {
   const original=readFileSync('.test-fixtures/presentation/mapplets.html');
   expect(sha(original)).toBe(pin.sha256);expect(original.length).toBe(pin.bytes);
-  const bytes=revised?Buffer.concat([original,Buffer.from('\n<!-- hypothetical update -->')]):original;
+  const bytes=variant==='new-version'?Buffer.concat([original,Buffer.from('\n<!-- hypothetical update -->')]):original;
   const htmlHash=sha(bytes),version=sha(htmlHash+' /index.html\n');
   await page.route('**/*',route=>route.abort());
   await page.route('**/assets/runtime/index.html?*',route=>route.fulfill({contentType:'text/html',body:document}));
   await page.route('**/assets/runtime/host.js',route=>route.fulfill({contentType:'text/javascript',body:host}));
-  await page.addInitScript(({html,pin,generation,assets,release,htmlHash,version})=>{
+  await page.addInitScript(({html,pin,generation,assets,release,htmlHash,version,variant})=>{
     if(window!==window.top)return;
     const bytes=Uint8Array.from(atob(html),c=>c.charCodeAt(0));
     const listeners=new Set<(event:{data:string})=>void>(), transfers=new Map<string,{base64:string;mime:string}>();
@@ -54,7 +54,7 @@ async function openMap(page:Page, revised=false) {
         const envelope=JSON.parse(raw);
         if(envelope.type==='artifact.read'){
           emit({type:'artifact.chunk',sessionId:generation,sequence:envelope.sequence,publisher:'1'.repeat(64),
-            appId:pin.appId,eventId:pin.eventId,version,htmlHash,
+            appId:pin.appId,eventId:variant==='new-event'?'e'.repeat(64):pin.eventId,version,htmlHash,
             domains:['inc','intent','outbox','resource','storage'],...window.publishedPart(bytes,envelope.sequence)});return;
         }
         if(envelope.type!=='capability')return;
@@ -72,7 +72,7 @@ async function openMap(page:Page, revised=false) {
         emit({type:'capability.result',sessionId:generation,sequence:envelope.sequence,response:JSON.stringify(response)});
       },
     }});
-  },{html:bytes.toString('base64'),pin,generation,assets,release,htmlHash,version});
+  },{html:bytes.toString('base64'),pin,generation,assets,release,htmlHash,version,variant});
   await page.goto(`/assets/runtime/index.html?sessionId=${generation}&source=published`);
   const frame=page.frameLocator('#napplet');
   await expect(frame.locator('#loadingPanel')).toBeHidden();
@@ -165,8 +165,8 @@ test('exact Mapplets keeps ordinary touch pan, pinch and armed mouse selection',
   await expect(map.edit).toBeVisible();await expectNoIntent(page);
 });
 
-test('an unreviewed Mapplets version retains the original input behavior',async({page})=>{
-  const frame=await openMap(page,true),map=await selection(frame,page);
+for (const variant of ['new-version', 'new-event'] as const) test(`Mapplets ${variant} retains the original input behavior`,async({page})=>{
+  const frame=await openMap(page,variant),map=await selection(frame,page);
   await map.arm();await map.drag();
   await expect(map.edit).toBeHidden();await expect(map.canvas).toHaveClass(/is-selecting/);
   await expectNoIntent(page);

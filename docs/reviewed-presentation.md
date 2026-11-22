@@ -1,8 +1,6 @@
 # Reviewed publication presentation
 
-Five exact ordinary publications receive fixed host CSS after artifact verification.
-Their original signed HTML, script behavior, capability grants and CSP are unchanged.
-The override requires `published: true` and the exact app ID and aggregate hash:
+Five reviewed signed publications receive app-specific layout corrections. Hypergolic checks the signed event ID, app ID and verified HTML version before applying a correction. Publishing the same HTML in a new event requires a separate review. The same rule selects the Emoji Browser image helper, the Emoji Pack Creator upload helper and the Mapplets touch helper. [Reviewed release identities](../runtime/src/reviewed-presentation-pin.ts)
 
 | Publication | Aggregate hash | Correction |
 | --- | --- | --- |

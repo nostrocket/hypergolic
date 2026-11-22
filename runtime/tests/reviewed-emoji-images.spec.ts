@@ -1,7 +1,7 @@
 import {test, expect, type Page} from '@playwright/test';
 import {injectEmojiImages} from '../src/reviewed-emoji-images';
 
-const pin = {published:true, appId:'emoji-browser', aggregateHash:'24b16ab3eb550d50eff01a3c42c6e56c3a81da4cf6914b11dc766d8575767381'};
+const pin = {eventId:'215099f7b55eb6cf0ec945f77b8c259f4a899b469f0b297f19df395cf9ec20fd',published:true, appId:'emoji-browser', aggregateHash:'24b16ab3eb550d50eff01a3c42c6e56c3a81da4cf6914b11dc766d8575767381'};
 const document = '<head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\'; img-src blob:; connect-src blob:"></head><body data-fixture-ready></body>';
 const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=';
 
