@@ -1,5 +1,5 @@
 diff --git a/dist/index.js b/dist/index.js
-index 523bcf1..237e758 100644
+index 523bcf1..593043e 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -12,10 +12,17 @@ function hexToBytes(hex) {
@@ -156,7 +156,7 @@ index 523bcf1..237e758 100644
        const msg = event.data;
        if (typeof msg !== "object" || msg === null || typeof msg.type !== "string") return;
        if (msg.type === "shell.ready") {
-@@ -1265,7 +1309,18 @@ function scriptJson(value) {
+@@ -1265,7 +1309,24 @@ function scriptJson(value) {
  }
  function renderNappletNamespacePrelude(options) {
    const domains = uniqueBareDomains(["shell", ...options.domains]);
@@ -170,18 +170,24 @@ index 523bcf1..237e758 100644
 +    requestTimeoutsMs[operation] = timeout;
 +  }
 +  // Only host-owned, self-contained functions may be serialized into the bootstrap.
-+  const installer = options.privatePort && options.installGuestBinding ? Function.prototype.toString.call(options.installGuestBinding) : "undefined";
-+  if (/<\/script/i.test(installer)) throw new TypeError("Invalid guest binding");
-+  return `<script data-kehto-nip5d-injection>(${nappletNamespacePrelude.toString()})(${scriptJson(domains)},${scriptJson(requestTimeoutsMs)},(${snapshotAppData.toString()})(${scriptJson(eligibleAppData(options.appData, domains) ?? null)}),${options.privatePort === true},${installer});</script>`;
++  const bindings = options.privatePort ? (options.guestBindings ?? []).map(binding => {
++    const functions = binding.map(fn => {
++      const source = Function.prototype.toString.call(fn);
++      if (/<\/script/i.test(source)) throw new TypeError("Invalid guest binding");
++      return "(" + source + ")";
++    });
++    return "[" + functions.join(",") + "]";
++  }) : [];
++  return `<script data-kehto-nip5d-injection>(${nappletNamespacePrelude.toString()})(${scriptJson(domains)},${scriptJson(requestTimeoutsMs)},(${snapshotAppData.toString()})(${scriptJson(eligibleAppData(options.appData, domains) ?? null)}),${options.privatePort === true},[${bindings.join(",")}]);</script>`;
  }
  function injectNappletNamespacePrelude(html, options) {
    const prelude = renderNappletNamespacePrelude(options);
-@@ -1281,30 +1336,52 @@ function injectNappletNamespacePrelude(html, options) {
+@@ -1281,30 +1342,52 @@ function injectNappletNamespacePrelude(html, options) {
    }
    return `${prelude}${html}`;
  }
 -function nappletNamespacePrelude(domains) {
-+function nappletNamespacePrelude(domains, requestTimeoutsMs = {}, appData, privatePort = false, installGuestBinding) {
++function nappletNamespacePrelude(domains, requestTimeoutsMs = {}, appData, privatePort = false, bindings = []) {
    const target = window;
    const allowed = new Set(domains);
 +  const policyJSON = JSON.stringify(appData);
@@ -237,7 +243,7 @@ index 523bcf1..237e758 100644
          const incoming = event.data;
          if (typeof incoming !== "object" || incoming === null) return;
          const msg = incoming;
-@@ -1326,7 +1403,7 @@ function nappletNamespacePrelude(domains) {
+@@ -1326,7 +1409,7 @@ function nappletNamespacePrelude(domains) {
        const timer = setTimeout(() => {
          off();
          reject(new Error(`${message.type} timed out`));
@@ -246,7 +252,7 @@ index 523bcf1..237e758 100644
        post(outbound);
      });
    }
-@@ -1418,7 +1495,8 @@ function nappletNamespacePrelude(domains) {
+@@ -1418,7 +1501,8 @@ function nappletNamespacePrelude(domains) {
        const domains2 = freezeStrings(rawDomains);
        const services = freezeStrings(Array.isArray(message.services) ? message.services : []);
        environment = Object.freeze({
@@ -256,7 +262,7 @@ index 523bcf1..237e758 100644
          services
        });
        off();
-@@ -1437,7 +1515,7 @@ function nappletNamespacePrelude(domains) {
+@@ -1437,7 +1521,7 @@ function nappletNamespacePrelude(domains) {
        return Object.freeze(strings);
      }
      function supports(domain) {
@@ -265,7 +271,7 @@ index 523bcf1..237e758 100644
      }
      const shell2 = {
        ready: () => ready,
-@@ -1813,6 +1891,17 @@ function nappletNamespacePrelude(domains) {
+@@ -1813,6 +1897,17 @@ function nappletNamespacePrelude(domains) {
      "submit"
    ]);
    let keysSmartForwardingInstalled = false;
@@ -283,7 +289,7 @@ index 523bcf1..237e758 100644
    function normalizeKeyName(key) {
      if (typeof key !== "string") return "";
      return key.length === 1 ? key.toUpperCase() : key;
-@@ -1821,6 +1910,7 @@ function nappletNamespacePrelude(domains) {
+@@ -1821,6 +1916,7 @@ function nappletNamespacePrelude(domains) {
      return `${value.ctrl}|${value.alt}|${value.shift}|${value.meta}|${normalizeKeyName(value.key)}`;
    }
    function bindingComboKey(binding) {
@@ -291,7 +297,7 @@ index 523bcf1..237e758 100644
      if (typeof binding !== "string" || binding.trim() === "") return null;
      const parts = binding.split("+");
      const key = parts.pop()?.trim();
-@@ -1904,24 +1994,48 @@ function nappletNamespacePrelude(domains) {
+@@ -1904,24 +2000,48 @@ function nappletNamespacePrelude(domains) {
      if (keysSmartForwardingInstalled) return;
      keysSmartForwardingInstalled = true;
      listen((event) => {
@@ -346,7 +352,7 @@ index 523bcf1..237e758 100644
          keyEvent.preventDefault?.();
          notifyKeyAction(actionId);
          return;
-@@ -1958,7 +2072,7 @@ function nappletNamespacePrelude(domains) {
+@@ -1958,7 +2078,7 @@ function nappletNamespacePrelude(domains) {
          }
          callbacks.add(callback);
          const off = listen((event) => {
@@ -355,7 +361,7 @@ index 523bcf1..237e758 100644
            const msg = event.data;
            if (typeof msg === "object" && msg !== null && msg.type === "keys.action" && msg.actionId === actionId) callback();
          });
-@@ -2033,6 +2147,8 @@ function nappletNamespacePrelude(domains) {
+@@ -2033,6 +2153,8 @@ function nappletNamespacePrelude(domains) {
    }
    function makeConfig() {
      let schema = null;
@@ -364,7 +370,7 @@ index 523bcf1..237e758 100644
      return {
        registerSchema: (nextSchema, version2) => request(
          { type: "config.registerSchema", schema: nextSchema, ...version2 === void 0 ? {} : { version: version2 } },
-@@ -2044,15 +2160,27 @@ function nappletNamespacePrelude(domains) {
+@@ -2044,15 +2166,27 @@ function nappletNamespacePrelude(domains) {
        ),
        get: () => request({ type: "config.get" }, "config.values", (msg) => msg.values ?? {}),
        subscribe(callback) {
@@ -395,7 +401,7 @@ index 523bcf1..237e758 100644
          });
        },
        openSettings: (options) => fire({ type: "config.openSettings", ...options && typeof options === "object" ? options : {} }),
-@@ -2062,7 +2190,7 @@ function nappletNamespacePrelude(domains) {
+@@ -2062,7 +2196,7 @@ function nappletNamespacePrelude(domains) {
            const msg = event.data;
            if (typeof msg === "object" && msg !== null && msg.type === "config.schemaError") callback(msg);
          });
@@ -404,7 +410,7 @@ index 523bcf1..237e758 100644
        },
        get schema() {
          return schema;
-@@ -2071,18 +2199,42 @@ function nappletNamespacePrelude(domains) {
+@@ -2071,18 +2205,42 @@ function nappletNamespacePrelude(domains) {
    }
    function makeResource() {
      const objectUrls = /* @__PURE__ */ new Set();
@@ -449,7 +455,7 @@ index 523bcf1..237e758 100644
              if (objectUrl) {
                URL.revokeObjectURL(objectUrl);
                objectUrls.delete(objectUrl);
-@@ -2090,14 +2242,17 @@ function nappletNamespacePrelude(domains) {
+@@ -2090,14 +2248,17 @@ function nappletNamespacePrelude(domains) {
              }
            }
          };
@@ -468,7 +474,7 @@ index 523bcf1..237e758 100644
          for (const url of objectUrls) URL.revokeObjectURL(url);
          objectUrls.clear();
        }
-@@ -2265,25 +2420,95 @@ function nappletNamespacePrelude(domains) {
+@@ -2265,25 +2426,95 @@ function nappletNamespacePrelude(domains) {
          ...Object.keys(sanitizedBehavior).length === 0 ? {} : { behavior: sanitizedBehavior }
        };
      };
@@ -580,7 +586,7 @@ index 523bcf1..237e758 100644
        available: (archetype) => request(
          { type: "intent.available", archetype },
          "intent.available.result",
-@@ -2367,8 +2592,11 @@ function nappletNamespacePrelude(domains) {
+@@ -2367,8 +2598,11 @@ function nappletNamespacePrelude(domains) {
        open: (url, options) => request(
          { type: "link.open", url, ...options ? { options } : {} },
          "link.open.result",
@@ -594,7 +600,7 @@ index 523bcf1..237e758 100644
        )
      };
    }
-@@ -2383,9 +2611,9 @@ function nappletNamespacePrelude(domains) {
+@@ -2383,9 +2617,9 @@ function nappletNamespacePrelude(domains) {
      };
    }
    function makeLists() {
@@ -606,7 +612,7 @@ index 523bcf1..237e758 100644
        add: (list, items, options) => req("lists.add", { list, items, ...options ? { options } : {} }),
        remove: (list, items, options) => req("lists.remove", { list, items, ...options ? { options } : {} })
      };
-@@ -2396,7 +2624,12 @@ function nappletNamespacePrelude(domains) {
+@@ -2396,7 +2630,12 @@ function nappletNamespacePrelude(domains) {
        encodeNip19: (input) => req("common.encodeNip19", { input }),
        decodeNip19: (value) => req("common.decodeNip19", { value }),
        getProfile: (targetValue) => req("common.getProfile", { target: targetValue }),
@@ -620,7 +626,7 @@ index 523bcf1..237e758 100644
        follow: (...pubkeys) => req("common.follow", { pubkeys }),
        unfollow: (...pubkeys) => req("common.unfollow", { pubkeys }),
        react: (targetEventId, reaction, customEmojiHref) => req("common.react", {
-@@ -2479,7 +2712,7 @@ function nappletNamespacePrelude(domains) {
+@@ -2479,7 +2718,7 @@ function nappletNamespacePrelude(domains) {
      return intent;
    }
    function isProtectedDomain(domain) {
@@ -629,7 +635,7 @@ index 523bcf1..237e758 100644
    }
    function makeDomain(domain, existing) {
      if (domain === "shell") return shell;
-@@ -2487,14 +2720,13 @@ function nappletNamespacePrelude(domains) {
+@@ -2487,14 +2726,13 @@ function nappletNamespacePrelude(domains) {
      if (domain === "identity") return makeProtectedIdentity();
      if (domain === "theme") return makeProtectedTheme();
      if (domain === "intent") return makeProtectedIntent();
@@ -645,18 +651,18 @@ index 523bcf1..237e758 100644
        case "media":
          return makeMedia();
        case "notify":
-@@ -2576,6 +2808,10 @@ function nappletNamespacePrelude(domains) {
+@@ -2576,6 +2814,10 @@ function nappletNamespacePrelude(domains) {
      }
      return guardNappletNamespace(next);
    }
-+  if (port && installGuestBinding) installGuestBinding({
-+    send: post,
-+    listen: callback => listen(event => callback(event.data))
-+  });
++  if (port) {
++    const wire = Object.freeze({send: post, listen: callback => listen(event => callback(event.data))});
++    for (const [install, ...helpers] of bindings) install(wire, ...helpers);
++  }
    let root = buildNappletNamespace(target.napplet);
    Object.defineProperty(target, "napplet", {
      get() {
-@@ -2632,7 +2868,7 @@ function createKeysProxy(deps) {
+@@ -2632,7 +2874,7 @@ function createKeysProxy(deps) {
      },
      emit(windowId, envelope) {
        const win = deps.originRegistry.getIframeWindow(windowId);
@@ -665,7 +671,7 @@ index 523bcf1..237e758 100644
      }
    };
  }
-@@ -2645,7 +2881,7 @@ function createMediaProxy(deps) {
+@@ -2645,7 +2887,7 @@ function createMediaProxy(deps) {
      },
      emit(windowId, envelope) {
        const win = deps.originRegistry.getIframeWindow(windowId);
@@ -674,7 +680,7 @@ index 523bcf1..237e758 100644
      }
    };
  }
-@@ -2658,7 +2894,7 @@ function createNotifyProxy(deps) {
+@@ -2658,7 +2900,7 @@ function createNotifyProxy(deps) {
      },
      emit(windowId, envelope) {
        const win = deps.originRegistry.getIframeWindow(windowId);
@@ -684,7 +690,7 @@ index 523bcf1..237e758 100644
    };
  }
 diff --git a/dist/index.d.ts b/dist/index.d.ts
-index 0ec36f0..e1b4588 100644
+index 0ec36f0..8e1aadd 100644
 --- a/dist/index.d.ts
 +++ b/dist/index.d.ts
 @@ -241,7 +241,16 @@ interface WebrtcHooks {
@@ -729,13 +735,16 @@ index 0ec36f0..e1b4588 100644
      /**
       * Handle an incoming postMessage from a napplet iframe.
       *
-@@ -594,11 +607,19 @@ declare function createShellBridge(hooks: ShellAdapter): ShellBridge;
+@@ -594,11 +607,22 @@ declare function createShellBridge(hooks: ShellAdapter): ShellBridge;
   * ```
   */
  interface NappletNamespacePreludeOptions {
 +    readonly privatePort?: boolean;
 +    /** Trusted host binding serialized inside the private bootstrap. */
-+    readonly installGuestBinding?: (wire: {send(message: object): void; listen(callback: (value: unknown) => void): () => void}) => void;
++    readonly guestBindings?: readonly (readonly [
++        (wire: {send(message: object): void; listen(callback: (value: unknown) => void): () => void}, ...helpers: never[]) => void,
++        ...((...args: never[]) => unknown)[]
++    ])[];
 +    readonly appData?: ShellAppDataPolicy;
      /**
       * Optional bare NAP domain names the shell exposes to this napplet.

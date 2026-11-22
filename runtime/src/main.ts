@@ -23,7 +23,7 @@ import {createMeshGuestReceiver, isNativeMeshContext, type NativeMeshContext} fr
 import {injectMeshFacade} from './mesh-guest.ts';
 import type {AppDataPolicy} from '../../src/app-data/app-data-context';
 import {createCvmGuestReceiver} from './cvm-native';
-import {injectCvmFacade} from './cvm-guest';
+import {injectCvmFacade, installCvmFacade} from './cvm-guest';
 import './legacy-webview';
 import { injectMediaFacade, installMediaFacade } from './media-guest';
 import { guestMessageReceiver, handleMediaRequest } from './guest-message-receiver';
@@ -50,7 +50,7 @@ import type { HostOperationContext, NappletMessage, ServiceRuntimeContext } from
 import { createIdentityAdapter, createSessionAccount } from './identity-adapter';
 import { createNativeClient, type NativeHost } from './native-client';
 import { publishedCspParts, readPublishedArtifact } from './published-artifact';
-import { ensureSecureRandomUuid } from './secure-random-compat';
+import { ensureSecureRandomUuid, secureUuidV4 } from './secure-random-compat';
 
 type FailureCode = 'invalid-session' | 'bridge-unavailable' | 'fixture-integrity'
   | 'artifact-integrity' | 'runtime-bootstrap' | 'runtime-timeout' | 'frame-navigation';
@@ -239,7 +239,7 @@ function createGuestEndpoint(artifact: RuntimeMetadata, hooks: ShellAdapter, sen
 }
 
 const portDomains = new Set(['shell', 'theme', 'storage', 'resource', 'relay', 'outbox', 'identity', 'lists',
-  'link', 'common', 'upload', 'config', 'notify', 'inc', 'intent', 'keys', 'media']);
+  'link', 'common', 'upload', 'config', 'notify', 'inc', 'intent', 'keys', 'media', 'cvm']);
 
 function guestStartup() {
   let ready = false;
@@ -315,11 +315,12 @@ function mount(artifact: RuntimeMetadata) {
       routing.ready();
     }
   };
+  const cvm = artifact.domains.includes('cvm') ? createCvmGuestReceiver(sendGuest,native.cvm,live) : null;
   const guestPort = privatePort ? createGuestPort(frame, source, bridge, artifact.domains, account.current, routing.consume, keys,
-    value => handleMediaRequest(value, hasMedia ? native.sendMedia : null, sendGuest), markReady, () => fail('runtime-bootstrap')) : null;
+    value => handleMediaRequest(value, hasMedia ? native.sendMedia : null, sendGuest), cvm, markReady, () => fail('runtime-bootstrap')) : null;
   const receiveGuest = guestMessageReceiver(frame, source, {
     domains: artifact.domains, routing, keys, account: account.current, sendMedia: hasMedia ? native.sendMedia : null,
-    cvm:artifact.domains.includes('cvm')?createCvmGuestReceiver(source,native.cvm,live):null,
+    cvm,
     closed: () => stopped, live,
     dispatch(event) {
       if (legacyImages?.receive(event)) return;
@@ -372,11 +373,14 @@ function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
   const withDiagnostics = !artifact.published && fixtureName === 'nap-support' ? injectSupportReport(guest) : guest;
   const injected = injectNappletNamespacePrelude(injectCreatorUpload(withDiagnostics, artifact), {
     ...environment.capabilities, privatePort,
-    ...(privatePort && artifact.domains.includes('media') && {installGuestBinding:installMediaFacade}),
+    guestBindings: [
+      ...(artifact.domains.includes('media') ? [[installMediaFacade] as const] : []),
+      ...(artifact.domains.includes('cvm') ? [[installCvmFacade, secureUuidV4] as const] : []),
+    ],
     requestTimeoutsMs: approvalTimeouts(artifact),
   });
   const withMedia=!privatePort && artifact.published && artifact.domains.includes('media') ? injectMediaFacade(injected) : injected;
-  const withCvm = artifact.published && artifact.domains.includes('cvm') ? injectCvmFacade(withMedia) : withMedia;
+  const withCvm = !privatePort && artifact.published && artifact.domains.includes('cvm') ? injectCvmFacade(withMedia) : withMedia;
   frame.srcdoc = prefix + (artifact.published && isNativeMeshContext(artifact.mesh, sessionId) && artifact.domains.includes('mesh') ? injectMeshFacade(withCvm) : withCvm);
 }
 

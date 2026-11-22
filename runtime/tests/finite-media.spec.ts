@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { expect, test, type Page, type Frame } from './published-wire';
+import { expect, test, holdShellReadiness, type Page, type Frame } from './published-wire';
 
 const generation = '4ba3bdc3-8130-4a46-b5b9-3d4087a214a6';
 const media = 'media-90c4a736-d407-472b-bf89-8b6de2abdd0d';
@@ -66,20 +66,7 @@ async function open(page: Page, grant = true, mixed = false, liveProfile = false
 }
 
 test('modern Media creates and retires a session on one port while Shell readiness is withheld', async ({page}) => {
-  await page.addInitScript(() => {
-    if (window !== top) return;
-    const wire = {windowTypes:[] as string[], portTypes:[] as string[], transfers:0};
-    (window as any).mediaWire = wire;
-    window.addEventListener('message', event => {
-      if (event.source !== document.querySelector('iframe')?.contentWindow) return;
-      wire.windowTypes.push(event.data.type);
-      wire.transfers += event.ports.length;
-      event.ports[0]?.addEventListener('message', message => {
-        wire.portTypes.push(message.data.type);
-        if (message.data.type === 'shell.ready') message.stopImmediatePropagation();
-      });
-    });
-  });
+  const readWire = await holdShellReadiness(page);
   const guest = await open(page, true, false, false, true);
   const result = await guest.evaluate(async () => {
     const api = (window as any).napplet.media;
@@ -93,7 +80,7 @@ test('modern Media creates and retires a session on one port while Shell readine
   await expect.poll(() => page.evaluate(() => (window as any).__mediaProof.requests.at(-1).type)).toBe('media.session.destroy');
   await page.evaluate(id => (window as any).__mediaProof.push({type:'media.session.ended',sessionId:id,reason:'preempted'}),media);
   await expect(guest.locator('body')).toHaveAttribute('data-ended','preempted');
-  expect(await page.evaluate(() => (window as any).mediaWire)).toEqual({
+  expect(await readWire()).toEqual({
     transfers:1, windowTypes:['napplet.hello'], portTypes:['shell.ready','media.session.create','media.session.destroy'],
   });
 });

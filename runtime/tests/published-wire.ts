@@ -1,9 +1,10 @@
-import {test as base} from '@playwright/test';
+import {test as base, type Page} from '@playwright/test';
 export * from '@playwright/test';
 
 type Part = {text: string; byteLength: number; totalBytes: number; done: boolean};
 declare global {
   interface Window {
+    guestWire: {windowTypes: string[]; portTypes: string[]; transfers: number};
     publishedPart(bytes: Uint8Array, sequence: number): Part;
     nativeMessage(message: unknown): string;
   }
@@ -39,3 +40,20 @@ export const test = base.extend({
     await use(context);
   },
 });
+
+export async function holdShellReadiness(page: Page) {
+  await page.addInitScript(() => {
+    if (window !== top) return;
+    const wire = window.guestWire = {windowTypes:[] as string[], portTypes:[] as string[], transfers:0};
+    window.addEventListener('message', event => {
+      if (event.source !== document.querySelector('iframe')?.contentWindow) return;
+      wire.windowTypes.push(event.data.type);
+      wire.transfers += event.ports.length;
+      event.ports[0]?.addEventListener('message', message => {
+        wire.portTypes.push(message.data.type);
+        if (message.data.type === 'shell.ready') message.stopImmediatePropagation();
+      });
+    });
+  });
+  return () => page.evaluate(() => window.guestWire);
+}

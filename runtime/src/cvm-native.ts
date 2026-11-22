@@ -42,13 +42,13 @@ export function createCvmNative(native:NativeHost,generation:string,next:()=>num
   });
 }
 /** Public input never receives a private native token or a source-config field. */
-export function createCvmGuestReceiver(source:Window,call:(value:unknown)=>Promise<Readonly<Record<string,unknown>>>,live:()=>boolean){
+export function createCvmGuestReceiver(send:(value:object)=>void,call:(value:unknown)=>Promise<Readonly<Record<string,unknown>>>,live:()=>boolean){
   return (value:unknown):void=>{
     if(!live()||!value||typeof value!=='object'||!CVM_OPERATIONS.includes((value as {type?:string}).type??''))return;
     let request:CvmOperation;
     try{request=parseCvmOperation(value);}catch(error){
-      const row=value as {id?:unknown;type?:unknown};if(typeof row?.id==='string'&&row.id.length<=128&&typeof row.type==='string')source.postMessage(cvmFailure(row.type,row.id,error),'*');return;
+      const row=value as {id?:unknown;type?:unknown};if(typeof row?.id==='string'&&row.id.length<=128&&typeof row.type==='string')send(cvmFailure(row.type,row.id,error));return;
     }
-    void call(request).then(reply=>{if(live())source.postMessage(reply,'*');},error=>{if(live())source.postMessage(cvmFailure(request.type,request.id,error),'*');});
+    void call(request).then(reply=>{if(live())send(reply);},error=>{if(live())send(cvmFailure(request.type,request.id,error));});
   };
 }

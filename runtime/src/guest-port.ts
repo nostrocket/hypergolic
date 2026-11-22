@@ -2,10 +2,12 @@ import {isKeysMessage, type createKeysSession} from './keys-adapter';
 import type {ShellBridge} from '@kehto/shell';
 import {quotaReply, validEnvelope, rejectEnvelope} from './guest-envelope';
 
+export type GuestBindingTransport = {send(value: object): void; listen(callback: (value: unknown) => void): () => void};
+
 /** One guest-created channel per verified frame generation. */
 export function createGuestPort(frame: HTMLIFrameElement, source: Window, bridge: ShellBridge,
   domains: readonly string[], account: () => string | undefined, consumeIntent: (receipt: unknown) => void, keys: ReturnType<typeof createKeysSession> | null,
-  receiveMedia: (value: unknown) => boolean, ready: () => void, fail: () => void) {
+  receiveMedia: (value: unknown) => boolean, cvm: ((value: unknown) => void) | null, ready: () => void, fail: () => void) {
   let port: MessagePort | undefined;
   let closed = false;
   let operations = 0;
@@ -48,6 +50,10 @@ export function createGuestPort(frame: HTMLIFrameElement, source: Window, bridge
           return;
         }
         if (receiveMedia(value)) return;
+        if (typeof value?.type === 'string' && value.type.startsWith('cvm.')) {
+          cvm?.(value);
+          return;
+        }
         if (!validEnvelope(value)) {
           rejectEnvelope(message, {postMessage:send}, domains, account());
           return;

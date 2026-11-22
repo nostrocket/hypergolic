@@ -1,9 +1,9 @@
 import type { MediaAction, MediaEvent, MediaState } from './media-wire';
 
-type MediaTransport = {send(value: object): void; listen(callback: (value: unknown) => void): () => void};
+import type {GuestBindingTransport} from './guest-port';
 
 /** Runs in the verified guest bootstrap before publisher scripts. */
-export function installMediaFacade(wire?: MediaTransport): void {
+export function installMediaFacade(wire?: GuestBindingTransport): void {
   const guest = window as Window & {napplet?: {shell?: {ready(): Promise<unknown>}; media?: object}};
   const parentWindow = window.parent;
   const post = wire?.send ?? ((value: object) => parentWindow.postMessage(value, '*'));
