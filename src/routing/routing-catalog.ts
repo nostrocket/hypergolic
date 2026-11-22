@@ -23,7 +23,7 @@ export type ReviewedDefaultImport = Readonly<{
   target: Readonly<HandlerKey & { eventId: string; version: string }> | null;
 }>;
 export interface RoutingCatalog {
-  remember(owner: TrustedUser, artifact: VerifiedNappletArtifact, options?: RequestOptions): Promise<void>;
+  remember(owner: TrustedUser, artifact: VerifiedNappletArtifact, options?: RequestOptions): Promise<readonly string[]>;
   list(owner: TrustedUser, options?: RequestOptions): Promise<CatalogSnapshot>;
   inspect(owner: TrustedUser, options?: RequestOptions): Promise<CatalogSnapshot>;
   prefer(owner: TrustedUser, archetype: string, handler: Readonly<{ publisher: string; appId: string }> | null, options?: RequestOptions): Promise<void>;
@@ -140,6 +140,26 @@ async function verifiedRow(row: Row, check: () => void): Promise<CatalogHandler 
     return handlerFrom(manifest);
   } catch {check(); return null;}
 }
+// Always read the live SQLite row. Reuse a verification only for identical
+// signed bytes and their exact owner, catalog key and event ID.
+function createRowVerifier() {
+  const entries = new Map<string, {payload: string; handler: CatalogHandler}>();
+  let currentUser: string | undefined;
+  return async (user: string, row: Row, check: () => void) => {
+    check();
+    if (currentUser !== user) { entries.clear(); currentUser = user; }
+    const key = JSON.stringify([row.publisher, row.app_id]);
+    const cached = entries.get(key);
+    if (cached && cached.handler.eventId === row.event_id && cached.payload === row.signed_event) return cached.handler;
+    entries.delete(key);
+    const handler = await verifiedRow(row, check);
+    if (handler) {
+      if (entries.size >= CATALOG_LIMITS.perIdentity) entries.clear();
+      entries.set(key, {payload: row.signed_event, handler});
+    }
+    return handler;
+  };
+}
 async function applyReviewedDefault(io: Access, user: string, check: () => void,
   {archetype, current, target}: ReviewedDefaultImport): Promise<void> {
   const saved = await readDefault(io, user, archetype);
@@ -157,10 +177,10 @@ async function applyReviewedDefault(io: Access, user: string, check: () => void,
       handler.manifest.format !== 'nip-5d' || !handler.roles.some(role => role.archetype === archetype)) return fail('INVALID_INPUT');
   await writeDefault(io, user, archetype, target);
 }
-async function read(io: Access, user: string, check: () => void, repair = true): Promise<CatalogSnapshot> {
+async function read(io: Access, user: string, check: () => void, verify: ReturnType<typeof createRowVerifier>, repair = true): Promise<CatalogSnapshot> {
   const rows = await io.all<Row>('SELECT publisher, app_id, event_id, signed_event FROM routing_catalog WHERE user = ? ORDER BY publisher, app_id', user);
   if (rows.length > CATALOG_LIMITS.perIdentity) return fail('CORRUPT_STORAGE');
-  const verified = await completed(rows.map(row => verifiedRow(row, check))); check();
+  const verified = await completed(rows.map(row => verify(user, row, check))); check();
   const handlers = verified.filter((handler): handler is CatalogHandler => handler !== null);
   const rowsDefaults = await io.all<DefaultRow>('SELECT archetype, publisher, app_id FROM routing_defaults WHERE user = ? ORDER BY archetype', user);
   if (rowsDefaults.length > CATALOG_LIMITS.perIdentity * 16) return fail('CORRUPT_STORAGE');
@@ -249,6 +269,7 @@ export async function openRoutingCatalog(sqlite: SQLiteModule, platform: 'androi
   if (platform !== 'android' && platform !== 'ios') return fail('INVALID_INPUT');
   const db = await sqlite.openDatabaseAsync(ROUTING_DATABASE, DB_OPTIONS);
   const connection = createConnection(db);
+  const verify = createRowVerifier();
   try {
     await configure(db, platform);
     await connection.transaction(() => connection.assertOpen(), async io => {
@@ -275,24 +296,44 @@ export async function openRoutingCatalog(sqlite: SQLiteModule, platform: 'androi
       assertVerifiedArtifact(artifact);
       const handler = handlerFrom(artifact.manifest), payload = signedEvent(artifact.manifest);
       return request(owner, options, async (io, user, check) => {
-        const statements = await completed([io.all<Record<string, unknown>>('SELECT count(*) AS count, COALESCE(sum(length(CAST(signed_event AS BLOB))), 0) AS bytes, COALESCE(sum(user = ?), 0) AS owner_count FROM routing_catalog', user), io.all<Record<string, unknown>>('SELECT length(CAST(signed_event AS BLOB)) AS bytes FROM routing_catalog WHERE user = ? AND publisher = ? AND app_id = ?', user, handler.publisher, handler.appId)]);
-        const stats = statements[0]!, previous = statements[1]!;
+        const previous = await io.all<Row>('SELECT publisher, app_id, event_id, signed_event FROM routing_catalog WHERE user = ? AND publisher = ? AND app_id = ?', user, handler.publisher, handler.appId);
+        if (previous.length > 1) return fail('CORRUPT_STORAGE');
+        const old = previous[0];
+        if (old?.event_id === handler.eventId && old.signed_event === payload) return [];
+        const oldHandler = old ? await verify(user, old, check) : null;
+        const roles = new Set((oldHandler?.roles ?? []).map(role => role.archetype));
+        for (const role of handler.roles) roles.add(role.archetype);
+
+        const stats = await io.all<{count: number; bytes: number; owner_count: number}>('SELECT count(*) AS count, COALESCE(sum(length(CAST(signed_event AS BLOB))), 0) AS bytes, COALESCE(sum(user = ?), 0) AS owner_count FROM routing_catalog', user);
         const stat = stats[0];
-        if (stats.length !== 1 || !stat || !count(stat.count) || !count(stat.bytes) || !count(stat.owner_count) || previous.length > 1 || previous.some(row => !count(row.bytes)) || stat.count > CATALOG_LIMITS.total || stat.owner_count > CATALOG_LIMITS.perIdentity || stat.bytes > CATALOG_LIMITS.bytes) return fail('CORRUPT_STORAGE');
-        if (stat.count + (previous.length ? 0 : 1) > CATALOG_LIMITS.total || stat.owner_count + (previous.length ? 0 : 1) > CATALOG_LIMITS.perIdentity || stat.bytes - (previous.length ? previous[0]!.bytes as number : 0) + utf8Bytes(payload) > CATALOG_LIMITS.bytes) return fail('QUOTA_EXCEEDED');
+        if (stats.length !== 1 || !stat || !count(stat.count) || !count(stat.bytes) || !count(stat.owner_count) || stat.count > CATALOG_LIMITS.total || stat.owner_count > CATALOG_LIMITS.perIdentity || stat.bytes > CATALOG_LIMITS.bytes) return fail('CORRUPT_STORAGE');
+        if ((!old && (stat.count >= CATALOG_LIMITS.total || stat.owner_count >= CATALOG_LIMITS.perIdentity)) ||
+            stat.bytes - (old ? utf8Bytes(old.signed_event) : 0) + utf8Bytes(payload) > CATALOG_LIMITS.bytes) {
+          if (handler.roles.length) return fail('QUOTA_EXCEEDED');
+          // A non-handler can launch without occupying a routing slot. If an
+          // update dropped its last role, retire the obsolete registration.
+          if (old && await io.run('DELETE FROM routing_catalog WHERE user = ? AND publisher = ? AND app_id = ?', user, handler.publisher, handler.appId) !== 1) return fail('STORAGE_FAILURE');
+          return [...roles];
+        }
         if (await io.run('INSERT INTO routing_catalog (user, publisher, app_id, event_id, signed_event) VALUES (?, ?, ?, ?, ?) ON CONFLICT(user, publisher, app_id) DO UPDATE SET event_id = excluded.event_id, signed_event = excluded.signed_event', user, handler.publisher, handler.appId, handler.eventId, payload) !== 1) return fail('STORAGE_FAILURE');
         const saved = await io.all<Row>('SELECT publisher, app_id, event_id, signed_event FROM routing_catalog WHERE user = ? AND publisher = ? AND app_id = ?', user, handler.publisher, handler.appId);
         if (saved.length !== 1 || saved[0]!.signed_event !== payload || saved[0]!.event_id !== handler.eventId) return fail('STORAGE_FAILURE');
-        await read(io, user, check);
+        const defaults = await io.all<{archetype: string}>('SELECT archetype FROM routing_defaults WHERE user = ? AND publisher = ? AND app_id = ?', user, handler.publisher, handler.appId);
+        for (const {archetype} of defaults) {
+          if (handler.roles.some(role => role.archetype === archetype)) continue;
+          if (await io.run('DELETE FROM routing_defaults WHERE user = ? AND archetype = ?', user, archetype) !== 1) return fail('STORAGE_FAILURE');
+          roles.add(archetype);
+        }
+        return [...roles];
       });
     },
-    list: (owner: TrustedUser, options?: RequestOptions) => request(owner, options, (io, user, check) => read(io, user, check)),
-    inspect: (owner: TrustedUser, options?: RequestOptions) => request(owner, options, (io, user, check) => read(io, user, check, false)),
+    list: (owner: TrustedUser, options?: RequestOptions) => request(owner, options, (io, user, check) => read(io, user, check, verify)),
+    inspect: (owner: TrustedUser, options?: RequestOptions) => request(owner, options, (io, user, check) => read(io, user, check, verify, false)),
     prefer: (owner: TrustedUser, archetypeInput: string, selected: Readonly<{ publisher: string; appId: string }> | null, options?: RequestOptions) => {
       const archetype = routingRole(archetypeInput), selectedKey = selected === null ? null : key(selected);
       return request(owner, options, async (io, user, check) => {
         if (selectedKey === null) { await io.run('DELETE FROM routing_defaults WHERE user = ? AND archetype = ?', user, archetype); return; }
-        const snapshot = await read(io, user, check);
+        const snapshot = await read(io, user, check, verify);
         if (!snapshot.handlers.some(handler => handler.publisher === selectedKey.publisher && handler.appId === selectedKey.appId && handler.roles.some(role => role.archetype === archetype))) return fail('INVALID_INPUT');
         await writeDefault(io, user, archetype, selectedKey);
       });

@@ -299,9 +299,8 @@ export function createRuntimeOwner(database: ShellDatabase,
         ready.assertActive();
         if (routing) {
           const catalogOwner = {user: configurationUser(ready), assertActive: () => {ready.assertActive(); exactSession(session);}};
-          const previous = await routing.catalog.list(catalogOwner, {signal});
-          await routing.catalog.remember(catalogOwner, ready.artifact, {signal});
-          await routing.broker.catalogChanged(catalogOwner, previous.handlers.flatMap(handler => handler.roles.map(role => role.archetype)));
+          const changedRoles = await routing.catalog.remember(catalogOwner, ready.artifact, {signal});
+          if (changedRoles.length) await routing.broker.catalogChanged(catalogOwner, changedRoles);
         }
         ready.assertActive();
         const current = exactSession(session);
@@ -312,6 +311,7 @@ export function createRuntimeOwner(database: ShellDatabase,
           store.change({...workspace, sessions: workspace.sessions.map(value => value.id === session.id ? ready.descriptor : value)});
           ready.assertActive(); exactSession(session);
         }
+        ready.releaseBody();
         running.set(session.id, binding);
         return binding;
       } catch (error) { ready.revoke(); throw error; }
