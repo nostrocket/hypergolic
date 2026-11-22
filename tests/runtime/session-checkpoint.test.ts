@@ -39,3 +39,40 @@ test('remount restores only its committed receipt, preserving it across an unsuc
   assert.equal(checkpoint.receive(event(first.id, 'g2')), false);
   assert.equal(checkpoint.saved(), null);
 });
+
+test('only a matched clean receipt carries the native editing intent into the exact restore', () => {
+  for (const editing of [true, false, undefined]) {
+    const save = createSessionCheckpoint(null, () => assert.fail());
+    save.ready('g1');
+    const request = save.request(true, () => 'original')!;
+    assert.equal(save.receive({...event(request.id, 'old'), editing: true}), false);
+    assert.equal(save.saved(), null);
+    assert.equal(save.receive({...event(request.id, 'g1', 'unknown'), editing: true}), true);
+    assert.equal(save.saved(), null);
+    save.request(true, () => 'original');
+    assert.equal(save.receive({...event(request.id), ...(editing === undefined ? {} : {editing})}), true);
+    const saved = save.saved()!;
+    const restored = createSessionCheckpoint(saved.id, () => {}, saved.editing);
+    restored.ready('g2');
+    assert.deepEqual(restored.request(false, () => assert.fail()), {
+      id: 'restore-original', generation: 'g2', ...(editing === undefined ? {} : {editing}),
+    });
+    restored.receive(event('restore-original', 'g2'));
+    assert.equal(restored.restoring(), false);
+    assert.equal(restored.saved(), null);
+  }
+});
+
+test('navigation samples the prior keyboard before the sheet hides it and drops the sample on reactivation', () => {
+  const card = createSessionCheckpoint(null, () => assert.fail());
+  card.recordNavigationKeyboard(true);
+  card.ready('g1');
+  assert.deepEqual(card.request(true, () => 'initial'), {id: 'resume-initial', generation: 'g1'});
+  card.recordNavigationKeyboard(true);
+  assert.equal(card.request(true, () => 'leaving')?.editing, true);
+  assert.equal(card.request(true, () => 'retry')?.editing, true);
+  card.request(false, () => assert.fail());
+  assert.equal(card.request(true, () => 'unobserved')?.editing, undefined);
+  card.recordNavigationKeyboard(false);
+  assert.equal(card.request(true, () => 'dismissed')?.editing, false);
+});

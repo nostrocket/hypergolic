@@ -2,7 +2,7 @@ export const CLOSE_CHECK_SERVICE = 'hypergolic.close-check.v1';
 export const CLOSE_CHECK_TIMEOUT_MS = 500;
 export type CloseState = 'clean' | 'dirty' | 'unknown';
 export type CloseCheckRequest = Readonly<{sessionId: string; generation: string; id: string}>;
-export type CloseCheckEvent = CloseCheckRequest & Readonly<{type: 'close-check'; state: CloseState}>;
+export type CloseCheckEvent = CloseCheckRequest & Readonly<{type: 'close-check'; state: CloseState; editing?: boolean}>;
 type Pending = {request: CloseCheckRequest; deadline: number; timer: ReturnType<typeof setTimeout>; resolve(state: CloseState | null): void};
 
 /** One ephemeral check; neither guest clean claims nor correlations survive a lifecycle change. */

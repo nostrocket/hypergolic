@@ -41,9 +41,15 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
   private var zoomResetSequence = 0
   private var zoomResetInterruptedAt: TimeInterval = 0
   private var closeCheckDeadline: TimeInterval = 0
-  private enum RestoredEditorFocus { case none, armed, afterReview }
-  private var restoredEditorFocus = RestoredEditorFocus.none
+  private var restoredEditorArmed = false
   private var guestFrame: WKFrameInfo?
+  private var verifiedJournal = false
+  private var editingAtDeparture = false
+  private var keyboardDismissed = false
+  private var keyboardVisible = false
+  private var requestEditorInput: Bool?
+  private var focusEpoch: UInt64 = 0
+  private var settledFocusEpoch: UInt64?
   private var focusEvaluationPending = false
   private var focusRetry: DispatchWorkItem?
   private var focusRetryUntil: TimeInterval = 0
@@ -90,6 +96,9 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     NotificationCenter.default.addObserver(self, selector: #selector(mediaBackground), name: UIApplication.willResignActiveNotification, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(editorWindowBecameKey), name: UIWindow.didBecomeKeyNotification, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(mediaForeground), name: UIApplication.didBecomeActiveNotification, object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(editorKeyboardShown), name: UIResponder.keyboardDidShowNotification, object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(editorKeyboardHidden), name: UIResponder.keyboardWillHideNotification, object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(editorKeyboardDidHide), name: UIResponder.keyboardDidHideNotification, object: nil)
     clipsToBounds = true
     backgroundColor = UIColor(red: 18/255, green: 14/255, blue: 10/255, alpha: 1)
   }
@@ -114,10 +123,14 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     closeCheckId = nil
     guard live, ready, loaded, !disposed, UIApplication.shared.applicationState == .active,
       raw.utf8.count <= 256, let data = raw.data(using: .utf8),
-      let value = try? JSONSerialization.jsonObject(with: data) as? [String: String],
-      Set(value.keys) == ["id", "generation"], value["generation"] == generation,
-      let id = value["id"], id.range(of: "^[A-Za-z0-9_-]{1,80}$", options: .regularExpression) != nil,
+      let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      value["generation"] as? String == generation,
+      let id = value["id"] as? String, id.range(of: "^[A-Za-z0-9_-]{1,80}$", options: .regularExpression) != nil,
       let view = webView, let expectedURL, view.url == expectedURL else { return }
+    let hasEditing = value["editing"] != nil
+    guard Set(value.keys) == (hasEditing ? ["id", "generation", "editing"] : ["id", "generation"]),
+      !hasEditing || (verifiedJournal && (id.hasPrefix("restore-") || id.hasPrefix("resume-")) && (value["editing"] as? NSNumber).map { CFGetTypeID($0) == CFBooleanGetTypeID() } == true) else { return }
+    requestEditorInput = value["editing"] as? Bool
     closeCheckId = id
     if id.hasPrefix("resume-"), active || !RoutingTransport.shared.armCheckpoint(generation, id: id) { return }
     let timeout = id.hasPrefix("restore-") ? 16.0 : id.hasPrefix("resume-") ? 2.0 : 0.5
@@ -156,68 +169,147 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
       if !pendingNativeReplies.isEmpty || closeUnsafeUntil > now { guarded = "dirty" }
       else if id.hasPrefix("resume-"), active || !RoutingTransport.shared.finishCheckpoint(generation, id: id) { guarded = "unknown" }
     }
-    if guarded == "clean", id.hasPrefix("restore-"), publishedSource != nil {
-      restoredEditorFocus = .armed
-      focusRetryUntil = ProcessInfo.processInfo.systemUptime + 2
-      focusRestoredEditor()
+    var receipt: [String: Any] = ["type": "close-check", "sessionId": sessionId ?? "", "generation": generation, "id": id, "state": guarded]
+    if guarded == "clean", verifiedJournal {
+      if id.hasPrefix("resume-") {
+        let intent = requestEditorInput ?? editingAtDeparture
+        receipt["editing"] = intent
+        traceEditor("saved editing=\(intent) navigation=\(requestEditorInput != nil)")
+      } else if id.hasPrefix("restore-") {
+        traceEditor("restored editing=\(requestEditorInput == true)")
+        if requestEditorInput == true {
+          restoredEditorArmed = true
+          focusRetryUntil = ProcessInfo.processInfo.systemUptime + 3
+          focusRestoredEditor()
+        }
+      }
     }
-    onEvent?(["type": "close-check", "sessionId": sessionId ?? "", "generation": generation, "id": id, "state": guarded])
+    onEvent?(receipt)
   }
 
   func setGameControls(_ enabled: Bool) {
     gameControls = enabled
     updateInputActivity()
   }
+  private func traceEditor(_ message: String) {
+    if ProcessInfo.processInfo.environment["HYPERGOLIC_JOURNAL_FOCUS_TRACE"] == "1" {
+      FileHandle.standardError.write(Data(("Journal editor " + message + "\n").utf8))
+    }
+  }
+
+  @objc private func editorKeyboardShown() {
+    guard active, !inputBlocked, window?.isKeyWindow == true, let view = webView, Self.textResponder(in: view) else { return }
+    keyboardVisible = true
+    keyboardDismissed = false
+  }
+  @objc private func editorKeyboardHidden() {
+    if active && !inputBlocked && keyboardVisible { keyboardDismissed = true }
+    keyboardVisible = false
+  }
+  @objc private func editorKeyboardDidHide() {
+    // UIKit also hides its keyboard when the native review covers the guest.
+    // A stable, uncovered editor whose user dismissed the keyboard must stay dismissed.
+    if keyboardDismissed && active && !RoutingTransport.shared.coversInput(generation, blocked: inputBlocked) && settledFocusEpoch == focusEpoch &&
+        window?.rootViewController?.presentedViewController == nil {
+      cancelRestoredFocus("dismissed")
+    }
+  }
+  private static func responder(in view: UIView) -> UIView? {
+    if view.isFirstResponder { return view }
+    for child in view.subviews { if let found = responder(in: child) { return found } }
+    return nil
+  }
+  private static func textResponder(in view: WKWebView) -> Bool { responder(in: view) is UITextInput }
+  private func captureEditing() {
+    if verifiedJournal && active && !inputBlocked, let view = webView {
+      editingAtDeparture = !keyboardDismissed && (keyboardVisible || Self.textResponder(in: view))
+      traceEditor("departure editing=\(editingAtDeparture) keyboard=\(keyboardVisible) responder=\(Self.textResponder(in: view))")
+    }
+  }
+
   func setInputBlocked(_ blocked: Bool) {
     guard inputBlocked != blocked else { return }
+    if blocked { captureEditing() }
+    if verifiedJournal { traceEditor("gate blocked=\(blocked) armed=\(restoredEditorArmed) active=\(active)") }
+    focusEpoch &+= 1
     inputBlocked = blocked
     if blocked { webView?.endEditing(true) }
-    else if restoredEditorFocus != .none {
-      restoredEditorFocus = .afterReview
-      focusRetryUntil = ProcessInfo.processInfo.systemUptime + 2
+    updateInputActivity()
+    if !blocked, restoredEditorArmed {
+      focusRetryUntil = ProcessInfo.processInfo.systemUptime + 3
       focusRestoredEditor()
     }
-    updateInputActivity()
   }
   @objc private func editorWindowBecameKey(_ notification: Notification) {
     if let key = notification.object as? UIWindow, key === window { focusRestoredEditor() }
   }
+
+  // An AX-focused field or document.activeElement alone can survive a UIKit dismissal.
+  // Reacquire both responders, only for the exact field still marked by the verified restore.
   private func focusRestoredEditor() {
-    guard restoredEditorFocus != .none, live, ready, loaded, !disposed, active, !inputBlocked,
-      UIApplication.shared.applicationState == .active, let view = webView, let window = view.window,
-      window.isKeyWindow, view.url == expectedURL else { return }
-    // React can unblock the guest before UIKit finishes dismissing its review.
-    if window.rootViewController?.presentedViewController != nil {
-      scheduleRestoredFocus()
-      return
-    }
-    guard !focusEvaluationPending, let frame = guestFrame, frame.webView === view else { return }
-    let phase = restoredEditorFocus
-    // Run synchronously in the verified guest frame so WebKit establishes an
-    // editing session. The opaque iframe keeps all text and selection data.
-    let script = """
-      (() => {
-        const field = document.activeElement;
-        if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) ||
-          !field.closest('[role="group"][aria-label="Entry editor"]') ||
-          !['Entry title', 'Entry body', 'Links to notes, people or relays'].includes(field.getAttribute('aria-label'))) return false;
-        const { selectionStart, selectionEnd, selectionDirection } = field;
-        if (selectionStart === null || selectionEnd === null) return false;
-        field.blur();
-        field.focus({ preventScroll: true });
-        field.setSelectionRange(selectionStart, selectionEnd, selectionDirection ?? 'none');
-        return document.activeElement === field;
-      })()
-      """
+    guard restoredEditorArmed, live, ready, loaded, !disposed, active, !inputBlocked,
+      settledFocusEpoch != focusEpoch, UIApplication.shared.applicationState == .active,
+      let view = webView, view.url == expectedURL else { return }
+    guard let window = view.window, window.isKeyWindow else { scheduleRestoredFocus(); return }
+    if RoutingTransport.shared.coversInput(generation, blocked: false) || window.rootViewController?.presentedViewController != nil { scheduleRestoredFocus(); return }
+    guard !focusEvaluationPending, let frame = guestFrame, frame.webView === view else { scheduleRestoredFocus(); return }
+    if let responder = Self.responder(in: window), !responder.isDescendant(of: view),
+      responder is UITextInput || responder is UIControl { scheduleRestoredFocus(); return }
+    let epoch = focusEpoch
     focusEvaluationPending = true
-    view.evaluateJavaScript(script, in: frame, in: .defaultClient) { [weak self, weak view] result in
-      guard let self, self.webView === view else { return }
-      self.focusEvaluationPending = false
-      guard self.restoredEditorFocus != .none else { return }
-      if case let .success(value) = result, value as? Bool == true, self.restoredEditorFocus == phase {
-        if phase == .afterReview { self.cancelRestoredFocus() }
-      } else { self.scheduleRestoredFocus() }
+    view.evaluateJavaScript(Self.editorScript(focus: false), in: frame, in: .defaultClient) { [weak self, weak view] result in
+      guard let self, let view, self.webView === view else { return }
+      let marked: Bool
+      if case let .success(value) = result { marked = value as? Bool == true } else { marked = false }
+      self.traceEditor("marker found=\(marked)")
+      guard self.canContinueEditor(epoch, view: view), marked else {
+        self.finishEditorAttempt(epoch, view: view, focused: false)
+        return
+      }
+      if !Self.textResponder(in: view) { _ = view.becomeFirstResponder() }
+      view.evaluateJavaScript(Self.editorScript(focus: true), in: frame, in: .defaultClient) { [weak self, weak view] result in
+        guard let self, let view, self.webView === view else { return }
+        let focused: Bool
+        if case let .success(value) = result { focused = value as? Bool == true } else { focused = false }
+        self.finishEditorAttempt(epoch, view: view, focused: focused)
+      }
     }
+  }
+  private func canContinueEditor(_ epoch: UInt64, view: WKWebView) -> Bool {
+    if let window = view.window, let other = Self.responder(in: window), !other.isDescendant(of: view),
+      other is UITextInput || other is UIControl { return false }
+    return verifiedJournal && epoch == focusEpoch && restoredEditorArmed && live && ready && loaded && !disposed &&
+      active && !RoutingTransport.shared.coversInput(generation, blocked: inputBlocked) && view.url == expectedURL && UIApplication.shared.applicationState == .active &&
+      view.window?.isKeyWindow == true && view.window?.rootViewController?.presentedViewController == nil
+  }
+  private func finishEditorAttempt(_ epoch: UInt64, view: WKWebView, focused: Bool) {
+    focusEvaluationPending = false
+    guard restoredEditorArmed else { return }
+    let native = Self.textResponder(in: view)
+    traceEditor("handoff dom=\(focused) responder=\(native) current=\(canContinueEditor(epoch, view: view))")
+    if canContinueEditor(epoch, view: view), focused && native {
+      // More than one unrelated startup sheet can cover the same restore. Stop
+      // polling this transition, but keep the exact marker eligible for the next.
+      settledFocusEpoch = epoch
+    } else { scheduleRestoredFocus() }
+  }
+  private static func editorScript(focus: Bool) -> String {
+    """
+    (() => {
+      const field = document.querySelector('[role="group"][aria-label="Entry editor"] [data-hypergolic-restored-editor=""]');
+      if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) ||
+        !field.matches('input[aria-label="Entry title"],textarea[aria-label="Entry body"],input[aria-label="Links to notes, people or relays"]')) return false;
+      const current = document.activeElement;
+      if (current && current !== field && current !== document.body && current !== document.documentElement) return false;
+      if (!\(focus)) return true;
+      const {selectionStart, selectionEnd, selectionDirection} = field;
+      if (selectionStart === null || selectionEnd === null) return false;
+      field.blur();
+      field.focus({preventScroll:true});
+      field.setSelectionRange(selectionStart, selectionEnd, selectionDirection || 'none');
+      return document.hasFocus() && document.activeElement === field;
+    })()
+    """
   }
   private func scheduleRestoredFocus() {
     guard !inputBlocked, focusRetry == nil, ProcessInfo.processInfo.systemUptime < focusRetryUntil else { return }
@@ -228,19 +320,16 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     focusRetry = retry
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: retry)
   }
-  private func cancelRestoredFocus() {
-    restoredEditorFocus = .none
+  private func cancelRestoredFocus(_ reason: String) {
+    if restoredEditorArmed { traceEditor("cancel reason=" + reason) }
+    focusEpoch &+= 1
+    settledFocusEpoch = nil
+    restoredEditorArmed = false
     focusRetry?.cancel()
     focusRetry = nil
   }
-  override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-    let target = super.hitTest(point, with: event)
-    if target != nil, event?.type == .touches,
-      event?.allTouches?.contains(where: { $0.phase == .began }) == true { cancelRestoredFocus() }
-    return target
-  }
   override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-    cancelRestoredFocus()
+    if active && !inputBlocked { cancelRestoredFocus("press") }
     super.pressesBegan(presses, with: event)
   }
   private func updateInputActivity(foreground: Bool? = nil) {
@@ -251,18 +340,19 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
 
   func setActive(_ isActive: Bool) {
     guard active != isActive else { return }
+    if !isActive { captureEditing() }
     active = isActive
-    if !isActive { cancelRestoredFocus() }
+    if !isActive { cancelRestoredFocus("departure") }
     if !isActive {zoomResetInterruptedAt = ProcessInfo.processInfo.systemUptime; selectedFilePicker.cancel()}
     if configuration != nil { ApprovalTransport.setFocused(generation, active: isActive); UploadTransport.focus(generation, active: isActive); LinkTransport.focus(generation, isActive); RoutingTransport.shared.focus(generation, isActive) }
     updateMediaPlayback()
     // Dismiss only this retained view's editor; keep its loaded document and position.
-    if !isActive { webView?.endEditing(true) }
+    if !isActive { webView?.endEditing(true) } else { focusRestoredEditor() }
   }
 
   @objc private func mediaBackground() {
     zoomResetInterruptedAt = ProcessInfo.processInfo.systemUptime
-    cancelRestoredFocus()
+    cancelRestoredFocus("background")
     closeCheckId = nil; selectedFilePicker.background(); updateMediaPlayback(foreground: false)
   }
   @objc private func mediaForeground() { updateMediaPlayback(foreground: true) }
@@ -368,6 +458,11 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     }
     configuration = publishedConfiguration
     configurationSource = input.configuration
+    verifiedJournal = publishedConfiguration?.domains.contains("storage") == true &&
+      input.claims.identifier == "workspace-journal" &&
+      input.claims.publisher == "b902388aa1e557a54b91081dfaf431fffd22739c1eac2502f3bdc9b3e6522278" &&
+      input.claims.eventId == "54ae23083f1dccfaecf88e0df7281d6c9f1502dc31f288c127379169a36f53e2" &&
+      input.claims.aggregateHash == "4b916fa338865a96e18ff1c4d9468eb6de8040a2bae4d2b90b65fccaa3819573"
     publishedReader = PublishedArtifactReadOwner(claimed: claimed, domains: publishedConfiguration?.domains ?? ["theme"], appData: publishedConfiguration?.appData, legacyReadOnly: publishedConfiguration?.legacyReadOnly?.metadata)
     publishedSource = raw
     // Loaded verified read views survive suspension. Native stream/approval/transfer
@@ -499,6 +594,13 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     controller.addUserScript(WKUserScript(source: pageDiagnosticSource(url: url),
       injectionTime: .atDocumentStart, forMainFrameOnly: true, in: .page))
     let view = WKWebView(frame: bounds, configuration: configuration)
+    if verifiedJournal {
+      let touch = JournalDirectTouch { [weak self] in
+        guard let self, self.active, !self.inputBlocked else { return }
+        self.cancelRestoredFocus("touch")
+      }
+      view.addGestureRecognizer(touch)
+    }
     view.navigationDelegate = self
     view.uiDelegate = self
     view.isOpaque = false
@@ -893,7 +995,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
     finiteVideo.retire();liveRadio.dispose()
     closeCheckId = nil
     guestFrame = nil
-    cancelRestoredFocus()
+    cancelRestoredFocus("destroy")
     pendingNativeReplies.removeAll()
     selectedFilePicker.cancel()
     NotificationCenter.default.removeObserver(self)
@@ -1012,5 +1114,23 @@ private final class DiagnosticReceiver: NSObject, WKScriptMessageHandlerWithRepl
                              replyHandler: @escaping @MainActor @Sendable (Any?, String?) -> Void) {
     guard let owner else { replyHandler(nil, "Session unavailable"); return }
     owner.receive(message, reply: replyHandler)
+  }
+}
+
+
+/// Hit testing can visit a covered view without delivering the modal's tap to it.
+@MainActor private final class JournalDirectTouch: UIGestureRecognizer {
+  let began: () -> Void
+  init(_ began: @escaping () -> Void) {
+    self.began = began
+    super.init(target: nil, action: nil)
+    cancelsTouchesInView = false
+    delaysTouchesBegan = false
+    delaysTouchesEnded = false
+  }
+  @available(*, unavailable) required init?(coder: NSCoder) { fatalError("Use init(_:)") }
+  override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+    began()
+    state = .failed
   }
 }

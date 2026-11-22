@@ -2,6 +2,7 @@ import { requireNativeModule } from 'expo';
 import type { RoutingNativePort, RoutingNativeState } from './routing-port';
 import { routingRecord } from './routing-contract';
 interface RoutingModule {
+  setReviewGeneration?(generation: string | null): void;
   routingState(): string;
   mayDeliverRouting(generation: string, revision: number, domain: string): boolean;
   mayReviewRouting(generation: string, revision: number): boolean;
@@ -13,6 +14,7 @@ interface RoutingModule {
 export function loadRoutingNativePort(): RoutingNativePort {
   const module = requireNativeModule<RoutingModule>('HypergolicNappletHost');
   return Object.freeze({
+    setReviewGeneration: (generation: string | null) => module.setReviewGeneration?.(generation),
     state: () => {
       const value = routingRecord(JSON.parse(module.routingState()), ['user', 'epoch', 'revision', 'available', 'ownerAvailable', 'foreground']);
       if (typeof value.user !== 'string' || !/^[0-9a-f]{64}$/.test(value.user) || !Number.isSafeInteger(value.epoch) || (value.epoch as number) < 0 || !Number.isSafeInteger(value.revision) || (value.revision as number) < 0 || typeof value.available !== 'boolean' || typeof value.ownerAvailable !== 'boolean' || typeof value.foreground !== 'boolean') throw new Error('Routing owner unavailable');

@@ -26,16 +26,30 @@ function source() {
   };
 }
 
-function openSlot(t: {after(action: () => void): void}) {
+function openSlot(t: {after(action: () => void): void}, publishGeneration?: (generation: string | null) => void) {
   const approvals = source(), uploads = source();
   let epoch: number | null = 0, refresh = () => {};
   const slot = new ReviewSlot(approvals, uploads, () => epoch, listener => {
     refresh = listener;
     return () => {refresh = () => {};};
-  });
+  }, publishGeneration);
   t.after(() => slot.dispose());
   return {slot, approvals, uploads, changeEpoch(next: number | null) {epoch = next; refresh();}};
 }
+
+test('native input observes the exact reservation before presentation and a failing observer cannot strand a sheet', t => {
+  const events: (string | null)[] = [];
+  const {slot, uploads} = openSlot(t, generation => {
+    events.push(generation);
+    throw new Error('native input observer unavailable');
+  });
+  slot.subscribe(() => events.push(slot.getSnapshot()?.lane ?? 'dismissed'));
+  assert.ok(slot.reserveRouting(route));
+  uploads.show(upload);
+  slot.releaseRouting(route.id);
+  uploads.show(null);
+  assert.deepEqual(events, [origin.generation, 'routing', origin.generation, 'upload', null, 'dismissed']);
+});
 
 test('Upload-first Intent fails with its own result and a fresh retry owns the slot without an effect', async t => {
   const {slot, uploads} = openSlot(t);

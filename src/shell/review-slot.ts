@@ -32,7 +32,10 @@ export class ReviewSlot {
   private readonly epoch: () => number | null;
 
   constructor(approval: ReviewSource, upload: ReviewSource,
-    epoch: () => number | null, subscribeIdentity: (listener: () => void) => () => void) {
+    epoch: () => number | null, subscribeIdentity: (listener: () => void) => () => void,
+    publishGeneration?: (generation: string | null) => void) {
+    // Reserve native input before a presentation subscriber can mount the sheet.
+    if (publishGeneration) this.subscribe(() => publishGeneration(this.current?.item.origin.generation ?? null));
     this.approval = approval; this.upload = upload; this.epoch = epoch;
     this.subscriptions = [approval.subscribe(this.refresh), upload.subscribe(this.refresh), subscribeIdentity(this.refresh)];
     this.refresh();

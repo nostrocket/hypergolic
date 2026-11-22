@@ -184,6 +184,7 @@ public final class NappletHostModule: Module {
     Function("rejectCvmRequest") { (token: String) in CvmTransport.shared.reject(token) }
     Function("finishCvmRequest") { (token: String, response: String?) in CvmTransport.shared.finish(token, response: response) }
     Function("sendCvmEvent") { (generation: String, revision: String, requestToken: String, response: String) -> Bool in CvmTransport.shared.send(generation,revision:revision,requestToken:requestToken,response:response) }
+    Function("setReviewGeneration") { (generation: String?) in RoutingTransport.shared.setReviewGeneration(generation) }
     Function("routingState") { RoutingTransport.shared.state() }
     Function("mayReviewRouting") { (generation: String, revision: UInt64) -> Bool in RoutingTransport.shared.mayReview(generation, revision: revision) }
     Function("routingReviewRevision") { (generation: String, revision: UInt64) -> Int64 in RoutingTransport.shared.reviewRevision(generation, revision: revision) }
