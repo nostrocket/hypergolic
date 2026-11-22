@@ -10,7 +10,7 @@ const png = 'iVBORw0KGgoAAAANSUhEUgAAAJYAAAAwCAIAAAB8JhRGAAABHElEQVR4nO3bMQ7CQAx
 const imageHash = digest(new Uint8Array(Buffer.from(png, 'base64')));
 const grid = manifest({ title: 'Grid Game', extra: [
   ['t', 'game'], ['R', 'relay'], ['O', 'unknown-feature'],
-  ['icon', imageHash, 'image/png'], ['screenshot', `x ${imageHash}`, 'alt Amber cells on a grid', 'm image/png'],
+  ['server', 'https://media.example.org'], ['icon', imageHash, 'image/png'], ['screenshot', `x ${imageHash}`, 'alt Amber cells on a grid', 'm image/png'],
 ] });
 const gridAddress = naddrEncode({ kind: KIND, identifier: 'shared', pubkey: grid.pubkey });
 const tool = manifest({ publisher: 2, d: 'tools', format: 'legacy', title: 'Relay Tool', description: 'Inspect public events',
@@ -132,7 +132,7 @@ async function boot(page: Page, options: { relay?: boolean; direct?: boolean; pe
       resource: {
         bytes: async (url: string) => {
           fixture.resourceUrls.push(url);
-          if (url !== `blossom:sha256:${imageHash}`) throw new Error('Unavailable');
+          if (url !== `https://media.example.org/${imageHash}`) throw new Error('Unavailable');
           if (options.failArtwork) throw Error('Owned unavailable artwork');
           const blob = new Blob([Uint8Array.from(atob(png), char => char.charCodeAt(0))], {type: 'image/png'});
           if (options.holdArtwork) return new Promise(resolve => {fixture.releaseArtwork = () => resolve(blob);});

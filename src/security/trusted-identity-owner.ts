@@ -162,7 +162,7 @@ async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android
     const readAvatar = createProfileAvatarReader(requireNativeModule<NativePublishedHttpsPort>('HypergolicNappletHost'));
     const profileAvatar = createProfileAvatarStore(identityData, readAvatar);
     const publishedSource = loadNativePublishedArtifactSource();
-    const launchReviewMedia = createLaunchReviewMedia(identityData, readAvatar, publishedSource, () => resourceSettings?.servers() ?? []);
+    const launchReviewMedia = createLaunchReviewMedia(identityData, readAvatar, publishedSource);
     releaseAvatar = bindProfileAvatarOwner(transition, profileAvatar);
     runtime = createRuntimeOwner(database, transition, capability,
       { service: approvals, destinations: () => relaySettings?.getSettings().networkRelays ?? [], canSign: user => selectedSigner(vault, user), closeReview: id => slot.close(id) },

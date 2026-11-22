@@ -31,7 +31,7 @@ test('reads actual Battleship PNG through the Resource proxy and verifies bytes 
   assert.equal(calls.length, 1);
 });
 
-test('rejects altered bytes and unavailable mirrors before using the configured Blossom fallback', async () => {
+test('rejects altered bytes and unavailable mirrors without requesting another origin', async () => {
   const calls: string[] = [];
   const image = await loadVerifiedImage(icon, new AbortController().signal, async url => {
     calls.push(url);
@@ -42,8 +42,8 @@ test('rejects altered bytes and unavailable mirrors before using the configured 
     if (url.startsWith('https:')) throw new Error('Unavailable');
     return blob();
   });
-  assert.equal(image?.type, 'image/png');
-  assert.deepEqual(calls, [...icon.servers!.map(origin => `${origin}/${icon.hash}`), `blossom:sha256:${icon.hash}`]);
+  assert.equal(image, undefined);
+  assert.deepEqual(calls, icon.servers!.map(origin => `${origin}/${icon.hash}`));
 });
 
 test('does not decode wrong MIME, oversized media or untrusted non-image bytes', async () => {
@@ -70,15 +70,15 @@ test('cancellation prevents later mirror attempts and late successful results', 
   assert.equal(await loadVerifiedImage(icon, control.signal, async () => { throw new Error('Must not run'); }), undefined);
 });
 
-test('bounds signed-mirror attempts while preserving configured-only listings', async () => {
+test('bounds signed-mirror attempts and skips reads for listings without mirrors', async () => {
   const calls: string[] = [];
   await loadVerifiedImage({ ...icon, servers: Array.from({ length: 16 }, (_, i) => `https://mirror${i}.org`) },
     new AbortController().signal, async url => { calls.push(url); throw new Error('Unavailable'); });
-  assert.equal(calls.length, 5);
-  assert.equal(calls.at(-1), `blossom:sha256:${icon.hash}`);
+  assert.equal(calls.length, 4);
   const image = await loadVerifiedImage({ ...icon, servers: [] }, new AbortController().signal, async url => {
-    assert.equal(url, `blossom:sha256:${icon.hash}`);
+    calls.push(url);
     return blob();
   });
-  assert.equal(image?.type, 'image/png');
+  assert.equal(image, undefined);
+  assert.equal(calls.length, 4);
 });

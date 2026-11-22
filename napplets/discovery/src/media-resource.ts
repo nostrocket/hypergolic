@@ -8,7 +8,6 @@ type ReadResource = (url: string, options: { signal: AbortSignal }) => Promise<B
 /** Signed mirrors use the existing public HTTPS Resource policy, never browser networking. */
 export async function loadVerifiedImage(media: Media, signal: AbortSignal, read: ReadResource): Promise<Blob | undefined> {
   const urls = [...new Set(media.servers ?? [])].slice(0, MAX_MIRRORS).map(origin => `${origin}/${media.hash}`);
-  urls.push(`blossom:sha256:${media.hash}`);
   for (const url of urls) {
     if (signal.aborted) return;
     try {
