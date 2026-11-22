@@ -24,6 +24,12 @@ export async function setup(t:{after(fn:()=>void):void}, assertAuthority:()=>voi
  async function register(value:unknown=schema,version=1,registration=source){const request=dispatch({type:'config.registerSchema',id:'register-'+ ++counter,schema:value,version},registration);await request.promise;assert.equal(request.reply().ok,true);}
  async function get(registration=source){const request=dispatch({type:'config.get',id:'get-'+ ++counter},registration);await request.promise;return request.reply()?.values;}
  return {broker,source,store,records,sent,dispatch,register,get,state:()=>state,
+ setStoredRecord(raw:string) {
+   const key='scope.'+createHash('sha256').update(JSON.stringify([source.user,source.publisher,source.appId,source.version])).digest('hex');
+   const previous=records.get(key);
+   records.set(key,raw);
+   return () => {if(previous===undefined) records.delete(key); else records.set(key,previous);};
+ },
  expire(token:string){live.delete(token);},
  pauseRead(afterReads=0){const entered=deferred(),released=deferred();readGate.current={entered:entered.resolve,wait:released.promise,remaining:afterReads};return{entered:entered.promise,release(){readGate.current=null;released.resolve();}};},
  synchronizeRoutingOwner(user:string,epoch:number,available:boolean){

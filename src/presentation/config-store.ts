@@ -56,7 +56,7 @@ export async function openConfigStore(native: ConfigSecureStore, hash: (text: st
       if (!update) return current;
       const next = captureRecord(update(current)), encoded = JSON.stringify(next);
       if (new TextEncoder().encode(encoded).length > CONFIG_LIMITS.bytes) throw new ShellStorageError('QUOTA_EXCEEDED');
-      if (raw === encoded) return next;
+      if (raw === encoded || raw === null && !Object.keys(next.ordinary).length && !Object.keys(next.secrets).length) return next;
       check();
       try {await native.setItemAsync(key, encoded, options);} catch {throw new ShellStorageError('STORAGE_INDETERMINATE');}
       check();

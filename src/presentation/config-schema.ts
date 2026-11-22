@@ -135,25 +135,29 @@ export function captureConfigSchema(input: unknown): ConfigSchema {
   }
   return node(captured, 1, true);
 }
-function resolve(schema: ConfigSchema, persisted: unknown, inherited: unknown): ConfigValue | undefined {
+function resolve(schema: ConfigSchema, persisted: unknown, inherited: unknown, useDefaults: boolean): ConfigValue | undefined {
+  if (!useDefaults && persisted === undefined) return undefined;
   if (schema['x-napplet-secret'] === true || schema.type === 'array' && schema.items?.['x-napplet-secret'] === true) return configValueValid(schema, persisted) ? persisted : undefined;
   if (schema.type !== 'object') {
-    for (const value of [persisted, schema.default, inherited]) if (value !== undefined && configValueValid(schema, value)) return value;
+    for (const value of useDefaults ? [persisted, schema.default, inherited] : [persisted]) if (value !== undefined && configValueValid(schema, value)) return value;
     return undefined;
   }
   const saved = record(persisted) ? persisted : {};
   const defaults = record(schema.default) ? schema.default : record(inherited) ? inherited : {};
   const result: Record<string, ConfigValue> = {};
   for (const [key, child] of Object.entries(schema.properties!)) {
-    const value = resolve(child, own(saved, key) ? saved[key] : undefined, own(defaults, key) ? defaults[key] : undefined);
+    const value = resolve(child, own(saved, key) ? saved[key] : undefined, own(defaults, key) ? defaults[key] : undefined, useDefaults);
     if (value !== undefined) Object.defineProperty(result, key, {value, enumerable: true});
   }
   if (Object.keys(result).length === 0 && persisted === undefined && schema.default === undefined && inherited === undefined) return undefined;
   return result;
 }
 export function resolveConfigValues(schema: ConfigSchema, persisted: unknown): ConfigValues {
-  const result = resolve(schema, persisted, undefined) ?? {};
+  const result = resolve(schema, persisted, undefined, true) ?? {};
   return routingPayload(result) as ConfigValues;
+}
+export function savedConfigValues(schema: ConfigSchema, persisted: unknown): ConfigValues {
+  return routingPayload(resolve(schema, persisted, undefined, false) ?? {}) as ConfigValues;
 }
 export const configValuesConform = configValueValid;
 export type ConfigSecretField = Readonly<{path: readonly string[]; schema: ConfigSchema}>;

@@ -70,7 +70,11 @@ selected resolution rules. Invalid values are withheld; an invalid registration
 keeps the previous valid schema. A rejected registration returns a negative ACK
 and pushes one `config.schemaError` to its captured live requester. The native
 reply fallback likewise reports both outcomes, without delivery after revocation.
-Schema changes purge removed or invalid secrets.
+Schema changes purge removed or invalid secrets. Untouched fields follow the
+current default. Saving an explicit choice preserves it even when it equals
+the default. Resetting a field and saving makes it follow future defaults.
+Older records did not track which values were chosen, so valid stored values
+are treated as prior choices until the user resets them.
 
 Configuration persistence is scoped to identity, publisher, application and the
 verified aggregate artifact hash. Instance IDs do not alter persistence. A
