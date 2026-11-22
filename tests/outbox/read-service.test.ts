@@ -189,7 +189,7 @@ test('the single-author reservation is exclusive to one-shot reads', async () =>
   assert.ok(budgets[2]?.[1] && budgets[2][1] <= 100);
 });
 
-test('one-shot data visits the next existing peer after a native deadline without overlapping promises', async () => {
+test('one-shot data verifies a fast second peer while the first is waiting', async () => {
   const h = harness({async resolve(){throw Error('unused');}},['wss://slow.nostr.net','wss://carrier.nostr.net']);
   const trace: string[] = [], attempts: number[] = [];
   let active = 0, peak = 0;
@@ -205,12 +205,12 @@ test('one-shot data visits the next existing peer after a native deadline withou
   const result = await h.service.query({...request,filters:{kinds:[1]},options:{timeoutMs:240}},author,signal(),()=>{},token);
   assert.deepEqual(result.events.map(row=>row.event.id),[event.id]);
   assert.equal(result.incomplete,true);
-  assert.equal(peak,1);
+  assert.equal(peak,2);
   assert.equal(active,0);
-  assert.deepEqual(trace,['start:wss://slow.nostr.net','settled:wss://slow.nostr.net',
-    'start:wss://carrier.nostr.net','settled:wss://carrier.nostr.net']);
+  assert.deepEqual(trace,['start:wss://slow.nostr.net','start:wss://carrier.nostr.net',
+    'settled:wss://carrier.nostr.net','settled:wss://slow.nostr.net']);
   assert.ok(attempts[0]! <= 120);
-  assert.ok(attempts[1]! <= 240 - attempts[0]!);
+  assert.ok(attempts[1]! <= 240);
 });
 
 test('a six-peer one-shot retains a useful first response instead of dividing time into sixths', async () => {
@@ -247,21 +247,58 @@ test('a fast first Outbox peer remains useful and cancellation never starts a la
   assert.ok(deadlines[0]! <= 120 && deadlines[1]! <= 240);
 
   const controller = new AbortController();
-  let started!: () => void, release!: (frames:string[]) => void;
+  let started!: () => void;
+  const releases: (() => void)[] = [];
   const entered = new Promise<void>(resolve=>{started=resolve;});
   h.calls.length = 0;
   h.native.queryOutboxRelay = async (_token,_id,relay,_wire,sub) => {
-    h.calls.push(relay);started();
-    return new Promise(resolve=>{release=()=>resolve([JSON.stringify(['EVENT',sub,event]),JSON.stringify(['EOSE',sub])]);});
+    h.calls.push(relay);
+    if (h.calls.length === 2) started();
+    return new Promise(resolve=>{releases.push(()=>resolve([JSON.stringify(['EVENT',sub,event]),JSON.stringify(['EOSE',sub])]));});
   };
   const pending = h.service.query({...request,filters:{kinds:[1]}},author,controller.signal,()=>{},token);
   await entered;
   controller.abort();
   await assert.rejects(pending);
-  release([]);
+  for (const release of releases) release();
   await new Promise(resolve=>setTimeout(resolve,5));
-  assert.deepEqual(h.calls,['wss://first.nostr.net']);
-  assert.equal(h.cancelled.length,1);
+  assert.deepEqual(h.calls,['wss://first.nostr.net','wss://later.nostr.net']);
+  assert.equal(h.cancelled.length,2);
+});
+
+test('two reads share two native peers fairly, including cancelled promises still settling', async () => {
+  const network = ['wss://first.nostr.net','wss://second.nostr.net','wss://third.nostr.net'];
+  const h = harness({async resolve(){throw Error('unused');}},network);
+  const calls: {kind: number; relay: string; finish(): void}[] = [];
+  let active = 0, peak = 0;
+  h.native.queryOutboxRelay = async (_token,_id,relay,wire,sub) => {
+    active++; peak = Math.max(peak, active);
+    const kind = JSON.parse(wire)[2].kinds[0];
+    return new Promise(resolve => calls.push({kind,relay,finish() {
+      active--; resolve([JSON.stringify(['EOSE',sub])]);
+    }}));
+  };
+  const flush = () => new Promise<void>(resolve => setImmediate(resolve));
+  const read = (kind: number, signal: AbortSignal) => h.service.query({...request,filters:{kinds:[kind]}},author,signal,()=>{},token);
+  const controller = new AbortController();
+  const first = read(1,controller.signal);
+  await flush();
+  const second = read(2,signal());
+  await flush();
+  assert.deepEqual(calls.map(({kind}) => kind),[1,1]);
+  calls[0]!.finish(); await flush();
+  assert.deepEqual(calls.map(({kind}) => kind),[1,1,2]);
+  controller.abort(); await assert.rejects(first);
+  await flush(); // Native cancellation does not release the still occupied slot.
+  assert.equal(calls.length,3);
+  calls[1]!.finish(); await flush();
+  assert.deepEqual(calls.map(({kind}) => kind),[1,1,2,2]);
+  calls[2]!.finish(); calls[3]!.finish(); await flush();
+  calls[4]!.finish();
+  assert.equal((await second).incomplete,false);
+  assert.deepEqual(calls.filter(call=>call.kind===2).map(call=>call.relay),network);
+  assert.equal(peak,2);
+  assert.equal(active,0);
 });
 
 test('single-author metadata cache waits are bounded without turning revocation into a fallback', async () => {
@@ -516,15 +553,22 @@ test('long advisory relay hints cannot crowd out signed Outbox events', async ()
   assert.equal(result.incomplete,false);
 });
 
-test('the one-shot deadline can expire between signed frames without opening another relay', async t => {
+test('the original deadline preserves a completed peer and cancels an in-flight peer during verification', async t => {
   const first = 'wss://first.nostr.net', second = 'wss://second.nostr.net', third = 'wss://third.nostr.net';
   const routes = {...list,write:[first,second,third]};
   const h = harness({async resolve(){return {list:routes,source:'cache',incomplete:false};}});
   const later = finalizeEvent({kind:1,created_at:2,tags:[],content:'late'},key);
   let clock = 0;
+  let releaseSecond!: () => void;
+  const firstSettled = new Promise<void>(resolve => {releaseSecond = resolve;});
   t.mock.method(performance,'now',()=>clock);
   h.native.queryOutboxRelay = async (_token,_id,relay,_wire,sub) => {
     h.calls.push(relay);
+    if (relay === third) {
+      releaseSecond(); // A free worker proves the first peer has been accepted.
+      return new Promise<string[]>(() => {});
+    }
+    if (relay === second) await firstSettled;
     const frame = JSON.stringify(['EVENT',sub,relay === first ? event : later]);
     const frames = [frame,JSON.stringify(['EOSE',sub])];
     if (relay === second) {
@@ -533,7 +577,7 @@ test('the one-shot deadline can expire between signed frames without opening ano
     return frames;
   };
   const result = await h.service.query({...request,options:{timeoutMs:1000}},author,signal(),()=>{},token);
-  assert.deepEqual(h.calls,[first,second]);
+  assert.deepEqual(h.calls,[first,second,third]);
   assert.deepEqual(result.events.map(row=>row.event.id),[event.id]);
   assert.equal(result.incomplete,true);
   assert.equal(h.cancelled.length,1);

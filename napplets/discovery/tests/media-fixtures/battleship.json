@@ -1,0 +1,90 @@
+{
+  "id": "a59018965178aeadaa625ec93324190d76109384b61c8e8f8ab16f82620a09c7",
+  "pubkey": "266815e0c9210dfa324c6cba3573b14bee49da4209a9456f9484e5106cd408a5",
+  "created_at": 1794957557,
+  "kind": 35129,
+  "tags": [
+    [
+      "d",
+      "battleship"
+    ],
+    [
+      "x",
+      "0e3face917042133ae23103a56bf3d9ce2b4fa301db2c77f62a580ed1c9d14cb"
+    ],
+    [
+      "icon",
+      "3c9c0025a017b30af0f0be952c5dec1c9b2584fea65cbbcdcb0b2d5e31befb58",
+      "image/png"
+    ],
+    [
+      "R",
+      "cvm"
+    ],
+    [
+      "R",
+      "identity"
+    ],
+    [
+      "R",
+      "outbox"
+    ],
+    [
+      "O",
+      "common"
+    ],
+    [
+      "O",
+      "dm"
+    ],
+    [
+      "O",
+      "intent"
+    ],
+    [
+      "O",
+      "resource"
+    ],
+    [
+      "O",
+      "storage"
+    ],
+    [
+      "O",
+      "theme"
+    ],
+    [
+      "title",
+      "Battleship"
+    ],
+    [
+      "z",
+      "battleship"
+    ],
+    [
+      "i",
+      "napplet:battleship/join"
+    ],
+    [
+      "server",
+      "https://cdn.hzrd149.com"
+    ],
+    [
+      "server",
+      "https://blossom.ditto.pub"
+    ],
+    [
+      "client",
+      "napplet.run"
+    ],
+    [
+      "screenshot",
+      "x db8524cafd67eecefb6c75e004f1efae44029b6d99b05aa7ce84e692a8faf786",
+      "m image/png",
+      "dim 1200x750",
+      "size 247627"
+    ]
+  ],
+  "content": "Player-versus-player Battleship over ContextVM. Your home server lives in a NIP-78 record; invite anyone by pubkey.",
+  "sig": "1e704709b979d67a1c713976c0994aa00106295eac96f0c7db681e648b3fb4f70b84ef500570c46f848726f7c3003e566286dad6bbb57d9c3cf9caa8bcc92b43"
+}

@@ -42,6 +42,7 @@ export function createOutboxReadService(resolver: OutboxAuthorResolver,
   native: NativeOutboxQueryPort,
   settings: () => RelaySettingsSnapshot, now: () => number = Date.now, verifyBatch?: QueryBatchVerifier) {
   const admission = createOutboxReadAdmission();
+  const dataPeers = createOutboxReadAdmission();
   async function bounded<T>(timeoutMs: number, signal: AbortSignal, assertActive: () => void,
     work: (signal: AbortSignal, active: () => void, remaining: (handoff?: boolean) => number) => Promise<T>): Promise<T> {
     const startedAt = now();
@@ -100,7 +101,7 @@ export function createOutboxReadService(resolver: OutboxAuthorResolver,
         newInstanceId: () => native.newInstanceId(),
         queryPublishedRelay: (id, url, wire, sub, timeoutMs) => native.queryOutboxRelay(nativeToken,id,url,wire,sub,timeoutMs!),
         cancelPublishedRelay: id => native.cancelPublishedRelay(id),
-      },() => plan.relays,remaining(true),{allowPartialOnLimit:true,outbox:true,...(verifyBatch ? {verifyBatch} : {})});
+      },() => plan.relays,remaining(true),{allowPartialOnLimit:true,outbox:true,admitPeer:dataPeers.acquire,...(verifyBatch ? {verifyBatch} : {})});
       const result = await transport.queryDetailed(capOutboxFilters(request.filters,OUTBOX_QUERY_COUNTS.events),leased,current,
         {maximumFilters:wide ? OUTBOX_QUERY_FILTERS : QUERY_LIMITS.filters, allowSearch:true}); current();
       const maximum = OUTBOX_QUERY_COUNTS.events;
