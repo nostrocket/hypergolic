@@ -2,13 +2,17 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseRoutingMessage, parseIntentRequest, routingPayload, transposeConvention } from '../../src/routing/routing-contract.ts';
 
-test('capture exact immutable payload and independent routing role/convention', () => {
+test('capture exact immutable payload and matching routing role/convention', () => {
   const payload = { target: ['hello', 3, false, null], nested: { caption: '⚡' } };
-  const request = parseIntentRequest({ archetype: 'note', convention: 'napplet:profile/open', payload, behavior: { focus: true } });
+  const request = parseIntentRequest({ archetype: 'note', action:'open', convention: 'napplet:note/open', payload, behavior: { focus: true } });
   payload.target[0] = 'changed'; assert.deepEqual(request.payload, { target: ['hello', 3, false, null], nested: { caption: '⚡' } });
   assert(Object.isFrozen(request) && Object.isFrozen(request.payload)); assert.equal(request.action, 'open');
-  assert.deepEqual(parseIntentRequest({ archetype: 'note' }), { archetype: 'note', action: 'open' });
-  assert.deepEqual(parseIntentRequest({ archetype: 'note', payload: null }).payload, null);
+  for (const fields of [
+    {archetype:'note'}, {archetype:'note', action:'open'}, {archetype:'note', convention:'napplet:note/open'},
+    ...['napplet:other/open', 'napplet:note/edit', 'napplet:note/open?q=1', 'napplet:note/open#target']
+      .map(convention => ({archetype:'note', action:'open', convention})),
+  ]) assert.throws(() => parseIntentRequest(fields));
+  assert.deepEqual(parseIntentRequest({ archetype: 'note', action:'open', convention:'napplet:note/open', payload: null }).payload, null);
 });
 test('reject accessor/prototype/symbol/hidden/unsupported values without executing guest code', () => {
   let read = false; const accessor = { get archetype() { read = true; return 'note'; } };

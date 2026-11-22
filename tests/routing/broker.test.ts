@@ -12,7 +12,7 @@ test('availability uses signed retained catalog even before its handler runs', a
 test('approved dispatch sends exact payload only after actual target subscription readiness', async t => {
   const h = await setup(t); await h.register(h.target); await h.subscribeTarget();
   const payload = {literal: '+', nested: [null, false, 3, {'__proto__': null}], unicode: '⚡'};
-  const result = h.dispatch(h.source, {type: 'intent.invoke', id: 'invoke', request: {archetype: 'note', convention: 'napplet:note/open', payload}});
+  const result = h.dispatch(h.source, {type: 'intent.invoke', id: 'invoke', request: {archetype: 'note', action:'open', convention:'napplet:note/open', payload}});
   payload.literal = 'mutated';
   const review = await reviewReady(h.reviews); assert.equal(review.request.kind, 'intent');
   if (review.request.kind !== 'intent') throw Error('Wrong review');
@@ -25,7 +25,7 @@ test('saved defaults select the exact publisher and still require review on ever
   const h = await setup(t); await h.register(h.target); await h.subscribeTarget(); await h.catalog.remember({user, assertActive() {}}, h.b);
   await h.catalog.prefer({user, assertActive() {}}, 'note', {publisher: h.a.manifest.pubkey, appId: 'notes'});
   for (const id of ['first', 'second']) {
-    const result = h.dispatch(h.source, {type: 'intent.invoke', id, request: {archetype: 'note', payload: null}});
+    const result = h.dispatch(h.source, {type: 'intent.invoke', id, request: {archetype: 'note', action:'open', convention:'napplet:note/open', payload: null}});
     const review = await reviewReady(h.reviews); assert.equal(review.request.kind, 'intent');
     if (review.request.kind !== 'intent') throw Error('Wrong review'); assert.equal(review.request.selected!.publisher, h.a.manifest.pubkey);
     h.reviews.decide(review.id, {allow: true}); await result.promise; assert.equal(result.reply().result.ok, true);
@@ -34,7 +34,7 @@ test('saved defaults select the exact publisher and still require review on ever
 });
 test('explicit dTags shared by publishers fail without arbitrary routing or a chooser', async t => {
   const h = await setup(t); await h.catalog.remember({user, assertActive() {}}, h.b);
-  const result = h.dispatch(h.source, {type: 'intent.invoke', id: 'direct', request: {archetype: 'note', handler: 'notes'}});
+  const result = h.dispatch(h.source, {type: 'intent.invoke', id: 'direct', request: {archetype: 'note', action:'open', convention:'napplet:note/open', handler: 'notes'}});
   await result.promise; assert.equal(result.reply().result.error, 'ambiguous handler'); assert.equal(h.reviews.getSnapshot(), null); assert.equal(h.activated.length, 0);
 });
 test('forged registration and forged sender fields cannot acquire a route', async t => {
@@ -42,30 +42,44 @@ test('forged registration and forged sender fields cannot acquire a route', asyn
   const forged = h.dispatch(h.source, {type: 'intent.available', id: 'forged', archetype: 'note'}, {publisher: h.a.manifest.pubkey}); await forged.promise; assert.equal(forged.reply(), undefined);
   const sender = h.dispatch(h.source, {type: 'inc.emit', topic: 'napplet:note/open', sender: 'forged'}); await sender.promise; assert.equal(sender.reply(), undefined); assert.equal(h.sent.length, 0);
 });
+test('malformed handoffs receive a refusal before review or delivery', async t => {
+  const h = await setup(t);
+  const request = {archetype:'note', action:'open', convention:'napplet:note/open'};
+  for (const fields of [{}, {request, sender:'forged'}, {request:{...request, handlerHint:'notes'}},
+    {request:{...request, action:'edit'}}, {request:{...request, convention:'napplet:note/open?q=1'}}]) {
+    const result = h.dispatch(h.source, {type:'intent.invoke', id:'refused', ...fields});
+    await result.promise;
+    assert.deepEqual(result.reply(), {type:'intent.invoke.result', id:'refused',
+      result:{ok:false, handled:false, error:'invalid convention'}});
+  }
+  assert.equal(h.reviews.getSnapshot(), null);
+  assert.deepEqual(h.sent, []);
+  assert.deepEqual(h.activated, []);
+});
 test('identity revocation during review neither opens a handler nor discloses the payload', async t => {
-  const h = await setup(t), result = h.dispatch(h.source, {type: 'intent.invoke', id: 'pending', request: {archetype: 'note', payload: {private: true}}});
+  const h = await setup(t), result = h.dispatch(h.source, {type: 'intent.invoke', id: 'pending', request: {archetype: 'note', action:'open', convention:'napplet:note/open', payload: {private: true}}});
   const review = await reviewReady(h.reviews); h.lifecycle({available: false, ownerAvailable: false});
   h.reviews.decide(review.id, {allow: true}); await result.promise; assert.equal(result.reply(), undefined); assert.equal(h.activated.length, 0); assert.equal(h.sent.length, 0);
 });
 test('removing a catalog handler during review invalidates the chosen event pin', async t => {
-  const h = await setup(t), result = h.dispatch(h.source, {type: 'intent.invoke', id: 'removed', request: {archetype: 'note'}});
+  const h = await setup(t), result = h.dispatch(h.source, {type: 'intent.invoke', id: 'removed', request: {archetype: 'note', action:'open', convention:'napplet:note/open'}});
   const review = await reviewReady(h.reviews); await h.catalog.remove({user, assertActive() {}}, {publisher: h.a.manifest.pubkey, appId: 'notes'});
   h.reviews.decide(review.id, {allow: true}); await result.promise; assert.equal(result.reply().result.error, 'invoke failed'); assert.equal(h.activated.length, 0);
 });
 test('replayed internal correlation IDs cannot dispatch a second effect', async t => {
   const h = await setup(t); await h.register(h.target); await h.subscribeTarget();
-  const first = h.dispatch(h.source, {type: 'intent.invoke', id: 'first', request: {archetype: 'note'}}, {}, 'same-call'); const review = await reviewReady(h.reviews); h.reviews.decide(review.id, {allow: true}); await first.promise;
-  const second = h.dispatch(h.source, {type: 'intent.invoke', id: 'second', request: {archetype: 'note'}}, {}, 'same-call'); await second.promise; assert.equal(second.reply(), undefined); assert.equal(h.sent.length, 1);
+  const first = h.dispatch(h.source, {type: 'intent.invoke', id: 'first', request: {archetype: 'note', action:'open', convention:'napplet:note/open'}}, {}, 'same-call'); const review = await reviewReady(h.reviews); h.reviews.decide(review.id, {allow: true}); await first.promise;
+  const second = h.dispatch(h.source, {type: 'intent.invoke', id: 'second', request: {archetype: 'note', action:'open', convention:'napplet:note/open'}}, {}, 'same-call'); await second.promise; assert.equal(second.reply(), undefined); assert.equal(h.sent.length, 1);
 });
 test('topic allowance survives background without granting background delivery or a backlog', async t => {
   const h = await setup(t); await h.register(h.target); await h.subscribeTarget();
   h.lifecycle({available: false, foreground: false}); assert.equal(h.native.mayDeliver(h.target.generation, h.native.state().revision, 'inc'), false);
   h.lifecycle({available: true, foreground: true});
-  const result = h.dispatch(h.source, {type: 'intent.invoke', id: 'resumed', request: {archetype: 'note'}}); const review = await reviewReady(h.reviews); h.reviews.decide(review.id, {allow: true}); await result.promise;
+  const result = h.dispatch(h.source, {type: 'intent.invoke', id: 'resumed', request: {archetype: 'note', action:'open', convention:'napplet:note/open'}}); const review = await reviewReady(h.reviews); h.reviews.decide(review.id, {allow: true}); await result.promise;
   assert.equal(result.reply().result.ok, true); assert.equal(h.sent.length, 1);
 });
 test('close cancels a pending review even before native teardown arrives', async t => {
-  const h = await setup(t), result = h.dispatch(h.source, {type: 'intent.invoke', id: 'closed', request: {archetype: 'note'}});
+  const h = await setup(t), result = h.dispatch(h.source, {type: 'intent.invoke', id: 'closed', request: {archetype: 'note', action:'open', convention:'napplet:note/open'}});
   await reviewReady(h.reviews); h.broker.close(h.source.generation); await result.promise;
   assert.equal(result.reply(), undefined); assert.equal(h.sent.length, 0); assert.equal(h.activated.length, 0);
 });
@@ -152,7 +166,7 @@ test('same-HTML snapshots use independent opaque IDs and approved dispatch selec
   assert.ok(candidates.some((row:{dTag?:string})=>row.dTag===lookalike));
   assert.deepEqual(candidates.find((row:{id:string})=>row.id===id),{id,title:'Snapshot handler',actions:['open'],
     conventions:[convention],contracts:[{convention,params:['msg']}],isDefault:false});
-  const run=h.dispatch(h.source,{type:'intent.invoke',id:'exact-snapshot',request:{archetype:'napptest',convention,handler:id,payload:{msg:'exact'}}});
+  const run=h.dispatch(h.source,{type:'intent.invoke',id:'exact-snapshot',request:{archetype:'napptest',action:'open',convention,handler:id,payload:{msg:'exact'}}});
   const review=await reviewReady(h.reviews);
   assert.equal(review.request.kind,'intent');
   if(review.request.kind!=='intent')throw Error('Wrong review');
@@ -163,7 +177,7 @@ test('same-HTML snapshots use independent opaque IDs and approved dispatch selec
     delivery:{sender:namedIntentId(h.source.publisher,h.source.appId),archetype:'napptest',action:'open',convention,payload:{msg:'exact'}}}});
   assert.equal((await h.catalog.list(owner)).defaults[0]?.appId,h.target.appId);
   await h.catalog.remove(owner,{publisher:h.target.publisher,appId:h.target.appId});
-  const removed=h.dispatch(h.source,{type:'intent.invoke',id:'missing-snapshot',request:{archetype:'napptest',convention,handler:id}});
+  const removed=h.dispatch(h.source,{type:'intent.invoke',id:'missing-snapshot',request:{archetype:'napptest',action:'open',convention,handler:id}});
   await removed.promise;
   assert.equal(removed.reply().result.error,'no handler');
   assert.equal(h.reviews.getSnapshot(),null);

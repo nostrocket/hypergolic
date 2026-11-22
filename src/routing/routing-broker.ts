@@ -20,9 +20,7 @@ const actions = (handler: CatalogHandler, role: string): readonly string[] => {
 function compatible(handler: CatalogHandler, request: IntentRequest): boolean {
   const role = handler.roles.find(value => value.archetype === request.archetype);
   if (!role || !actions(handler, request.archetype).includes(request.action)) return false;
-  if (!role.contracts) return request.convention === undefined || role.conventions.length === 0 || role.conventions.includes(request.convention);
-  const convention = `napplet:${request.archetype}/${request.action}`;
-  return (request.convention === undefined || request.convention === convention) && role.conventions.includes(convention);
+  return role.conventions.includes(request.convention);
 }
 const publishedIntentId = (publisher: string, appId: string): string =>
   snapshotEventId(appId) ? routingAppLabel(appId) : namedIntentId(publisher,appId);
@@ -134,7 +132,7 @@ export class RoutingBroker {
     return this.native.send(target.registration.generation, revision, message);
   }
   private async invoke(endpoint: Endpoint, revision: number, request: IntentRequest, active: () => void, signal: AbortSignal): Promise<Readonly<Record<string, unknown>>> {
-    const base = { archetype: request.archetype, action: request.action, ...(request.convention === undefined ? {} : { convention: request.convention }) };
+    const base = { archetype: request.archetype, action: request.action, convention:request.convention };
     const failure = (error: string) => Object.freeze({ ...base, ok: false, handled: false, error });
     try {
       const mayReview = () => this.native.mayReview(endpoint.registration.generation, revision);
@@ -160,8 +158,7 @@ export class RoutingBroker {
       if (!actions(handler, request.archetype).includes(request.action)) return failure('unsupported action');
       const role = handler.roles.find(value => value.archetype === request.archetype);
       if (!role) return failure('no handler');
-      const conventions = role.conventions;
-      const convention = request.convention ?? conventions.find(value => value.endsWith('/' + request.action)) ?? `napplet:${request.archetype}/${request.action}`;
+      const convention = request.convention;
       if (!compatible(handler, request)) return failure('unsupported convention');
       if (decision.remember) { const owner = this.owner(endpoint, revision, 'intent'); await this.catalog.prefer(owner, request.archetype, handler, { signal }); active(); await this.catalogChanged(owner, [request.archetype]); active(); }
       const sessionId = await this.targets.activate(handler, request, signal, active, endpoint.registration, revision); active();
@@ -227,7 +224,9 @@ export class RoutingBroker {
       if (wrapper.type !== 'routing.call') return;
       const id = routingText(wrapper.id, 128), revision = wrapper.revision;
       if (!Number.isSafeInteger(revision) || (revision as number) < 0 || this.refresh() !== revision) return;
-      const control = routingRecord(wrapper.message, ['type'], ['id', 'request', 'archetype', 'topic', 'payload', 'target', 'channelId']);
+      const rawMessage = wrapper.message;
+      const invoke = rawMessage !== null && typeof rawMessage === 'object' && 'type' in rawMessage && rawMessage.type === 'intent.invoke';
+      const control = invoke ? {type:'intent.invoke'} : routingRecord(rawMessage, ['type'], ['id', 'request', 'archetype', 'topic', 'payload', 'target', 'channelId']);
       const domain = control.type === 'routing.__register' ? expected.domains.includes('intent') ? 'intent' : 'inc' : typeof control.type === 'string' && control.type.startsWith('intent.') ? 'intent' : 'inc';
       const generation = expected.generation;
       let endpoint = this.endpoints.get(generation);
@@ -244,7 +243,16 @@ export class RoutingBroker {
       let result: Readonly<Record<string, unknown>> | null;
       if (control.type === 'routing.__register') { routingRecord(wrapper.message, ['type']); result = null; }
       else {
-        const message = parseRoutingMessage(wrapper.message);
+        let message: RoutingMessage;
+        try { message = parseRoutingMessage(rawMessage); }
+        catch (error) {
+          if (!invoke || !('id' in rawMessage)) throw error;
+          const requestId = routingText(rawMessage.id, ROUTING_LIMITS.id);
+          active();
+          response = JSON.stringify({type:'routing.call.result', id, response:{type:'intent.invoke.result', id:requestId,
+            result:{ok:false, handled:false, error:'invalid convention'}}});
+          return;
+        }
         try { result = await this.operate(selected, capturedRevision, message, active, controller.signal); }
         catch (error) { active(); result = routingFailure(message, error instanceof ReviewBusyError ? error.message : undefined); }
         if (result !== null && new TextEncoder().encode(JSON.stringify(result)).length > ROUTING_LIMITS.payloadBytes) result = routingFailure(message);

@@ -55,11 +55,11 @@ test('Upload-first Intent fails with its own result and a fresh retry owns the s
   const {slot, uploads} = openSlot(t);
   const h = await setup(t, undefined, ['inc'], new RoutingReviewService(slot));
   uploads.show(upload);
-  const invoke = (id: string) => h.dispatch(h.source, {type: 'intent.invoke', id, request: {archetype: 'note'}});
+  const invoke = (id: string) => h.dispatch(h.source, {type: 'intent.invoke', id, request: {archetype: 'note', action:'open', convention:'napplet:note/open'}});
   const blocked = invoke('blocked');
   await blocked.promise;
   assert.deepEqual(blocked.reply(), {type: 'intent.invoke.result', id: 'blocked',
-    result: {ok: false, handled: false, archetype: 'note', action: 'open', error: 'review busy'}});
+    result: {ok: false, handled: false, archetype: 'note', action: 'open', convention:'napplet:note/open', error: 'review busy'}});
   assert.equal(h.reviews.getSnapshot(), null);
   assert.ok(slot.owns('upload', upload.id));
   uploads.show(null);
@@ -135,7 +135,7 @@ test('blurred requests cannot observe an unrelated focused review', async t => {
   for (const current of [null, anotherUpload]) {
     uploads.show(current);
     const result = h.dispatch(h.source, {type: 'intent.invoke', id: current ? 'busy' : 'empty',
-      request: {archetype: 'absent'}});
+      request: {archetype: 'absent',action:'open',convention:'napplet:absent/open'}});
     await result.promise;
     assert.equal(result.reply().result.error, 'no handler');
     const topic = reviews.ask({kind: 'topic', origin: h.source, topic: 'example'}, () => {}, () => false);
