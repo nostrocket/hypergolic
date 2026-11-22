@@ -228,16 +228,56 @@ diff --git a/dist/index.js b/dist/index.js
            const msg = event.data;
            if (typeof msg === "object" && msg !== null && msg.type === "keys.action" && msg.actionId === actionId) callback();
          });
-@@ -2047,7 +2120,7 @@
+@@ -2033,6 +2106,8 @@
+   }
+   function makeConfig() {
+     let schema = null;
++    let subscribers = 0;
++    let lastValues;
+     return {
+       registerSchema: (nextSchema, version2) => request(
+         { type: "config.registerSchema", schema: nextSchema, ...version2 === void 0 ? {} : { version: version2 } },
+@@ -2044,15 +2119,27 @@
+       ),
+       get: () => request({ type: "config.get" }, "config.values", (msg) => msg.values ?? {}),
+       subscribe(callback) {
++        let active = true;
++        let delivered = false;
          const off = listen((event) => {
            if (!isParentMessage(event)) return;
            const msg = event.data;
 -          if (typeof msg === "object" && msg !== null && msg.type === "config.values") callback(msg.values ?? {});
-+          if (typeof msg === "object" && msg !== null && msg.type === "config.values" && msg.id === void 0) callback(msg.values ?? {});
++          if (msg?.type !== "config.values" || msg.id !== void 0) return;
++          delivered = true;
++          lastValues = JSON.stringify(msg.values ?? {});
++          callback(JSON.parse(lastValues));
          });
-         fire({ type: "config.subscribe" });
+-        fire({ type: "config.subscribe" });
++        if (++subscribers === 1) fire({ type: "config.subscribe" });
++        else if (lastValues !== void 0) queueMicrotask(() => {
++          if (active && !delivered) callback(JSON.parse(lastValues));
++        });
          return subscriptionHandle(() => {
-@@ -2071,18 +2144,42 @@
+-          fire({ type: "config.unsubscribe" });
++          active = false;
+           off();
++          if (--subscribers === 0) {
++            lastValues = void 0;
++            fire({ type: "config.unsubscribe" });
++          }
+         });
+       },
+       openSettings: (options) => fire({ type: "config.openSettings", ...options && typeof options === "object" ? options : {} }),
+@@ -2062,7 +2149,7 @@
+           const msg = event.data;
+           if (typeof msg === "object" && msg !== null && msg.type === "config.schemaError") callback(msg);
+         });
+-        return off;
++        return Object.assign(off, {close:off});
+       },
+       get schema() {
+         return schema;
+@@ -2071,18 +2158,42 @@
    }
    function makeResource() {
      const objectUrls = /* @__PURE__ */ new Set();
@@ -282,7 +322,7 @@ diff --git a/dist/index.js b/dist/index.js
              if (objectUrl) {
                URL.revokeObjectURL(objectUrl);
                objectUrls.delete(objectUrl);
-@@ -2090,14 +2187,17 @@
+@@ -2090,14 +2201,17 @@
              }
            }
          };
@@ -301,7 +341,7 @@ diff --git a/dist/index.js b/dist/index.js
          for (const url of objectUrls) URL.revokeObjectURL(url);
          objectUrls.clear();
        }
-@@ -2265,25 +2365,85 @@
+@@ -2265,25 +2379,85 @@
          ...Object.keys(sanitizedBehavior).length === 0 ? {} : { behavior: sanitizedBehavior }
        };
      };
@@ -404,20 +444,23 @@ diff --git a/dist/index.js b/dist/index.js
        available: (archetype) => request(
          { type: "intent.available", archetype },
          "intent.available.result",
-@@ -2367,7 +2527,10 @@
+@@ -2367,8 +2541,11 @@
        open: (url, options) => request(
          { type: "link.open", url, ...options ? { options } : {} },
          "link.open.result",
 -        resultOrError,
+-        { rejectOnError: false }
 +        (msg) => {
 +          if (msg.status !== "opened" && msg.status !== "denied") throw new Error("invalid link result");
 +          return typeof url === "string" && url.startsWith("nostr:naddr1") && msg.status === "denied" && typeof msg.error === "string" ? { status: msg.status, error: msg.error } : { status: msg.status };
 +        },
--        { rejectOnError: false }
 +        { rejectOnError: false, timeoutMs: typeof url === "string" && url.startsWith("nostr:naddr1") ? requestTimeoutsMs["link.openNapplet"] : undefined }
        )
      };
-@@ -2384,8 +2547,8 @@
+   }
+@@ -2383,9 +2560,9 @@
+     };
+   }
    function makeLists() {
 -    const req = (type, payload) => request({ type, ...payload }, `${type}.result`, resultOrError, { rejectOnError: false });
 +    const req = (type, payload) => request({ type, ...payload }, `${type}.result`, withoutEnvelope, { rejectOnError: false });
@@ -427,8 +470,7 @@ diff --git a/dist/index.js b/dist/index.js
        add: (list, items, options) => req("lists.add", { list, items, ...options ? { options } : {} }),
        remove: (list, items, options) => req("lists.remove", { list, items, ...options ? { options } : {} })
      };
-   }
-@@ -2396,7 +2559,12 @@
+@@ -2396,7 +2573,12 @@
        encodeNip19: (input) => req("common.encodeNip19", { input }),
        decodeNip19: (value) => req("common.decodeNip19", { value }),
        getProfile: (targetValue) => req("common.getProfile", { target: targetValue }),
@@ -442,7 +484,7 @@ diff --git a/dist/index.js b/dist/index.js
        follow: (...pubkeys) => req("common.follow", { pubkeys }),
        unfollow: (...pubkeys) => req("common.unfollow", { pubkeys }),
        react: (targetEventId, reaction, customEmojiHref) => req("common.react", {
-@@ -2479,7 +2647,7 @@
+@@ -2479,7 +2661,7 @@
      return intent;
    }
    function isProtectedDomain(domain) {
@@ -451,7 +493,7 @@ diff --git a/dist/index.js b/dist/index.js
    }
    function makeDomain(domain, existing) {
      if (domain === "shell") return shell;
-@@ -2487,14 +2655,13 @@
+@@ -2487,14 +2669,13 @@
      if (domain === "identity") return makeProtectedIdentity();
      if (domain === "theme") return makeProtectedTheme();
      if (domain === "intent") return makeProtectedIntent();

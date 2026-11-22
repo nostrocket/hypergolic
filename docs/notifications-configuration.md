@@ -106,9 +106,10 @@ The identity-list permission interception also recognizes this routing boundary.
 
 The selected draft mentions a preferred manifest schema without defining its
 encoding. Hypergolic uses public runtime `config.registerSchema`; it does not
-invent a manifest encoding. The installed SDK's `config.onSchemaError` returns a
-teardown function, while the selected draft describes a subscription close
-operation. The fixture calls the installed teardown function. Negative schema
+invent a manifest encoding. Configuration listeners share one wire subscription per view. Each receives its
+own initial values. Closing the last listener releases the subscription and its
+cached values. Schema-error listeners support both `.close()` and the existing
+callable teardown. Negative schema
 registration ACKs preserve the draft error code on the wire; the SDK displays its
 error string without inventing a code prefix.
 

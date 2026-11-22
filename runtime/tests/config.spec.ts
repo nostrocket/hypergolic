@@ -23,6 +23,62 @@ test('genuine configuration SDK observes positive schema ACK, exact default snap
  await guest.locator('#config-subscribe').click();await expect(guest.locator('#config-events')).toHaveText(JSON.stringify([defaults]));const next={...defaults,theme:'light',token:'public-browser-token + ⚡'};await page.evaluate(values=>(window as any).configPush({type:'config.values',values}),next);await expect(guest.locator('#config-events')).toHaveText(JSON.stringify([defaults,next]));
  await guest.locator('#config-open').click();await expect.poll(async()=>page.evaluate(()=>(window as any).configNative.calls.some((row:any)=>row.type==='config.openSettings'&&row.section==='Basics'))).toBe(true);await guest.locator('#config-unsubscribe').click();await expect.poll(async()=>page.evaluate(()=>(window as any).configNative.calls.some((row:any)=>row.type==='config.unsubscribe'))).toBe(true);
 });
+test('independent listeners share one subscription and each receives its own snapshot', async ({page}) => {
+ const guest = await open(page);
+ await guest.locator('#config-register').click();
+ await expect(guest.locator('#config-status')).toHaveText('Configuration schema accepted.');
+ const frame = page.frames().find(child => child.parentFrame() === page.mainFrame())!;
+ await frame.evaluate(() => {
+   const root = window as any;
+   root.firstValues = [];
+   root.nextValues = [];
+   root.firstSub = root.napplet.config.subscribe((values:any) => {
+     root.firstValues.push(values.theme);
+     values.theme = 'edited by first callback';
+   });
+ });
+ await expect.poll(() => frame.evaluate(() => (window as any).firstValues)).toEqual(['dark']);
+ await frame.evaluate(() => {
+   const root = window as any;
+   root.nextSub = root.napplet.config.subscribe((values:any) => root.nextValues.push(values.theme));
+ });
+ await expect.poll(() => frame.evaluate(() => (window as any).nextValues)).toEqual(['dark']);
+ await page.evaluate(() => (window as any).configPush({type:'config.values',values:{theme:'auto'}}));
+ await expect.poll(() => frame.evaluate(() => [(window as any).firstValues, (window as any).nextValues]))
+   .toEqual([['dark','auto'],['dark','auto']]);
+ await frame.evaluate(() => { (window as any).firstSub.close(); (window as any).firstSub.close(); });
+ await page.evaluate(() => (window as any).configPush({type:'config.values',values:{theme:'light'}}));
+ await expect.poll(() => frame.evaluate(() => (window as any).nextValues)).toEqual(['dark','auto','light']);
+ expect(await frame.evaluate(() => (window as any).firstValues)).toEqual(['dark','auto']);
+ const calls = () => page.evaluate(() => (window as any).configNative.calls.map((row:any) => row.type).filter((type:string) =>
+   type === 'config.subscribe' || type === 'config.unsubscribe'));
+ expect(await calls()).toEqual(['config.subscribe']);
+ await frame.evaluate(() => (window as any).nextSub.close());
+ await expect.poll(calls).toEqual(['config.subscribe','config.unsubscribe']);
+});
+
+test('schema errors have a close handle and retain callable teardown', async ({page}) => {
+ await open(page);
+ const frame = page.frames().find(child => child.parentFrame() === page.mainFrame())!;
+ await frame.evaluate(() => {
+   const root = window as any;
+   root.errorsSeen = [];
+   const listen = (name:string) => root.napplet.config.onSchemaError(() => root.errorsSeen.push(name));
+   root.closeHandle = listen('handle');
+   root.off = listen('function');
+ });
+ const push = () => page.evaluate(() => (window as any).configPush({type:'config.schemaError',code:'invalid-schema',error:'invalid'}));
+ await push();
+ await expect.poll(() => frame.evaluate(() => (window as any).errorsSeen)).toEqual(['handle','function']);
+ await frame.evaluate(() => (window as any).closeHandle.close());
+ await push();
+ await expect.poll(() => frame.evaluate(() => (window as any).errorsSeen)).toEqual(['handle','function','function']);
+ await frame.evaluate(() => (window as any).off());
+ await push();
+ await frame.evaluate(async () => { await (window as any).napplet.config.registerSchema({type:'object',properties:{}}); });
+ expect(await frame.evaluate(() => (window as any).errorsSeen)).toEqual(['handle','function','function']);
+});
+
 test('no-schema emits error without values; forbidden schema receives negative SDK ACK without default success',async({page})=>{
  const guest=await open(page);await guest.locator('#config-subscribe').click();await expect(guest.locator('#config-errors')).toContainText('no-schema');await expect(guest.locator('#config-events')).toBeEmpty();
  await guest.locator('#config-bad-default').click();await expect(guest.locator('#config-status')).toContainText('Request failed: Schema rejected: secret-with-default');await guest.locator('#config-bad-pattern').click();await expect(guest.locator('#config-status')).toContainText('Request failed: Schema rejected: pattern-not-allowed');await expect(guest.locator('#config-errors')).toContainText('no-schema');await expect(guest.locator('#config-result')).toBeEmpty();
