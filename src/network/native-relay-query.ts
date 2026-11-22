@@ -61,7 +61,7 @@ function readPeerFrames(port: NativeQueryPort, request: PeerRequest, lifetime: R
     : port.queryPublishedRelay(operation,relay,wire,subscription);
 }
 type PeerRead = (relay: string, index: number) => Promise<'complete' | 'invalid' | 'failed'>;
-async function readPeers(relays: readonly string[], readRelay: PeerRead, retry: boolean): Promise<void> {
+async function readPeers(relays: readonly string[], readRelay: PeerRead, retry: boolean, workers: 1 | 2): Promise<void> {
   // Two peers leave native capacity for other reads. A failed connection gets
   // one fresh attempt; invalid frames never retry or contribute partial data.
   let next = 0;
@@ -71,7 +71,7 @@ async function readPeers(relays: readonly string[], readRelay: PeerRead, retry: 
       if (await readRelay(relay, index) === 'failed' && retry) await readRelay(relay, index);
     }
   };
-  await Promise.all(Array.from({length: Math.min(2, relays.length)}, worker));
+  await Promise.all(Array.from({length: Math.min(workers, relays.length)}, worker));
 }
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 type QueryCounts = Readonly<{events: number; frames: number}>;
@@ -292,7 +292,10 @@ export function createNativeRelayQuery(port: NativeQueryPort,
             return 'complete';
         };
         const work = async () => {
-          await readPeers(relays, readRelay, completeRelays);
+          // Outbox data reads share native admission. Standalone verification
+          // callers without that pool retain their sequential dispatch contract.
+          const workers = !options.outbox || completeRelays || options.admitPeer ? 2 : 1;
+          await readPeers(relays, readRelay, completeRelays, workers);
           active();
           checkDeadline?.();
           if (collection.completed() === 0) {
