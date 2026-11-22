@@ -430,6 +430,7 @@ test('Workspace Journal restores an unfinished new entry and its interior caret 
   await expect(editor).toHaveValue('');
   await page.evaluate(() => (window as any).__hypergolicMediaActive(false));
   await journalControl(page, 'restore-wrong-receipt', 'unknown');
+  await expect(guest.locator('[data-hypergolic-restored-editor]')).toHaveCount(0);
   await expect(editor).toHaveValue('');
   await journalControl(page, receiptId.replace('resume-', 'restore-'));
   await expect(guest.getByLabel('Entry title')).toHaveValue(title);
@@ -532,17 +533,53 @@ test('Workspace Journal restores keyboard focus after a late consent sheet and r
   await expect(editor).toHaveValue('');
   await page.evaluate(() => (window as any).__hypergolicMediaActive(true));
   await journalControl(page, 'restore-late-sheet');
+  const marker = 'data-hypergolic-restored-editor';
+  await expect(editor).toHaveAttribute(marker, '');
+  await expect(guest.locator('[' + marker + ']')).toHaveCount(1);
   await expect(editor).toBeFocused();
   // Journal may ask for its INC topic after restore has focused the composer.
   const allowInput = (allow: boolean) => page.evaluate(allow => (window as any).__hypergolicInputActive(allow), allow);
   await allowInput(false);
   await expect(editor).not.toBeFocused();
+  await expect(editor).toHaveAttribute(marker, '');
   await allowInput(true);
   await expect(editor).toBeFocused();
   await page.keyboard.insertText('new ');
+  await expect(guest.locator('[' + marker + ']')).toHaveCount(0);
   await expect(editor).toHaveValue('unfinished new field notes');
   await title.fill('Continue here');
   await allowInput(false);
   await allowInput(true);
   await expect(editor).not.toBeFocused();
 });
+
+
+for (const [field, signal] of [
+  ['Entry title','pointer'], ['Links to notes, people or relays','key'],
+  ['Entry title','focus'], ['Entry body','composition'],
+] as const) {
+  test(`Workspace Journal marks only the restored ${field} until ${signal}`, async ({page}) => {
+    const guest = await open(page, 'workspace-journal');
+    const editor = guest.getByLabel(field, {exact:true});
+    const marker = 'data-hypergolic-restored-editor';
+    const marked = guest.locator('[' + marker + ']');
+    await editor.fill('unfinished reviewed draft');
+    await expect(marked).toHaveCount(0);
+    await page.evaluate(() => (window as any).__hypergolicMediaActive(false));
+    await journalControl(page, 'resume-marker');
+    await page.reload();
+    await expect(editor).toHaveValue('');
+    await page.evaluate(() => (window as any).__hypergolicMediaActive(true));
+    await journalControl(page, 'restore-marker');
+    await expect(editor).toHaveAttribute(marker, '');
+    await expect(marked).toHaveCount(1);
+    await editor.evaluate((element: HTMLElement) => element.blur());
+    await expect(editor).toHaveAttribute(marker, '');
+    await editor.focus();
+    if (signal === 'pointer') await editor.click();
+    if (signal === 'key') await editor.press('ArrowLeft');
+    if (signal === 'focus') await guest.getByLabel('Entry body', {exact:true}).focus();
+    if (signal === 'composition') await editor.dispatchEvent('compositionstart', {data:'文'});
+    await expect(marked).toHaveCount(0);
+  });
+}

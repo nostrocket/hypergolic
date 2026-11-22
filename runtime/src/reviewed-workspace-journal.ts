@@ -13,6 +13,11 @@ function journalEditor() {
   let composing = false;
   let inputAllowed = false;
   let restoredField: Control | undefined;
+  const restoredMarker = 'data-hypergolic-restored-editor';
+  function clearRestoredField() {
+    restoredField?.removeAttribute(restoredMarker);
+    restoredField = undefined;
+  }
   function focusRestoredField() {
     const field = restoredField;
     if (!inputAllowed || !field?.isConnected || (document.activeElement === field && document.hasFocus())) return;
@@ -22,14 +27,15 @@ function journalEditor() {
   }
   window.addEventListener('focus', event => { if (event.target === window) focusRestoredField(); });
   window.addEventListener('focusin', event => {
-    if (event.target instanceof HTMLElement && event.target !== restoredField) restoredField = undefined;
+    if (event.target instanceof HTMLElement && event.target !== restoredField &&
+        event.target !== document.body && event.target !== document.documentElement) clearRestoredField();
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
       lastField = fields().findIndex(field => field === event.target);
   }, true);
-  window.addEventListener('compositionstart', () => { composing = true; edits++; }, true);
-  window.addEventListener('compositionend', () => { composing = false; edits++; }, true);
+  window.addEventListener('compositionstart', () => { clearRestoredField(); composing = true; edits++; }, true);
+  window.addEventListener('compositionend', () => { clearRestoredField(); composing = false; edits++; }, true);
   for (const type of ['input', 'pointerdown', 'keydown']) {
-    window.addEventListener(type, event => { if (event.isTrusted) { edits++; restoredField = undefined; } }, true);
+    window.addEventListener(type, event => { if (event.isTrusted) { edits++; clearRestoredField(); } }, true);
   }
   function capture(): Draft | null {
     if (!isNewEntry() || composing) return null;
@@ -51,11 +57,16 @@ function journalEditor() {
     controls[1]!.scrollTop = draft.scroll;
     // Startup consent can occlude the editor even after focus first succeeds.
     // Keep only the field, never a stale cursor, until the user's next input.
+    clearRestoredField();
     restoredField = active;
     focusRestoredField();
     const actual = capture();
-    return !!actual && actual.values.length === draft.values.length && actual.values.every((value, index) => value === draft.values[index]) &&
+    const matches = !!actual && restoredField === active && actual.values.length === draft.values.length &&
+      actual.values.every((value, index) => value === draft.values[index]) && actual.cursor.field === draft.cursor.field &&
       actual.cursor.start === draft.cursor.start && actual.cursor.end === draft.cursor.end;
+    if (matches) active.setAttribute(restoredMarker, '');
+    else clearRestoredField();
+    return matches;
   }
   return {editor, capture, apply, revision: () => edits, setInputAllowed(allowed: boolean) {
     inputAllowed = allowed;
