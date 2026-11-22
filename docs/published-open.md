@@ -2,6 +2,16 @@
 
 Discover and other napplets with Link access use NAP-LINK to open a named kind-35129 publication. The caller passes its Nostr address. The shell resolves the address and reviews the signed revision it actually found. See the [link contract](external-links.md) for URL handling, result codes and limits.
 
+## Supported publication kinds
+
+| Publication | Open from Settings | Find in Discover | Open through NAP-LINK |
+| --- | --- | --- | --- |
+| Named (35129) | Yes, by address | Yes | Yes, by address |
+| Snapshot (5129) | Yes, by event link | No | No |
+| Root (15129) | No | No | No |
+
+The [pinned NIP-5D draft](https://github.com/dskvr/nips/blob/f60550c3409d6d81a875088ec83e660571e10504/5D.md) defines all three kinds. A root belongs to a publisher and has no named identifier.
+
 ## Review and launch
 
 1. The shell checks the caller’s Link access, focused workspace session and selected account. It admits one launch at a time. Before contacting relays, it checks whether the named target can use a live view and, for a new target, whether there is room for another card.

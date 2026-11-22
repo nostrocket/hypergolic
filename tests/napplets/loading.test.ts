@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { finalizeEvent, getPublicKey } from 'nostr-tools/pure';
-import { naddrEncode } from 'nostr-tools/nip19';
-import { NappletLinkError, resolveNappletLink } from '../../src/napplets/resolve-link.ts';
+import { naddrEncode, neventEncode } from 'nostr-tools/nip19';
+import { NappletLinkError, resolveNappletLink, resolvePublishedReference } from '../../src/napplets/resolve-link.ts';
 import {
   MAX_HTML_BYTES, MAX_MANIFEST_BYTES, NappletVerificationError, verifyArtifact, verifyManifest,
 } from '../../src/napplets/verified-artifact.ts';
@@ -37,6 +37,17 @@ test('resolves lowercase naddr and nostr:naddr with validated non-authoritative 
   });
   assert.equal(Object.isFrozen(resolveNappletLink(LINK)), true);
   assert.equal(Object.isFrozen(resolveNappletLink(LINK).relayHints), true);
+});
+
+test('direct opening accepts named addresses and snapshot events while catalog links accept named addresses', () => {
+  const id = 'ab'.repeat(32);
+  const snapshot = neventEncode({ id, kind: 5129 });
+  const root = neventEncode({ id, kind: 15129 });
+  assert.deepEqual(resolvePublishedReference(LINK), coordinate());
+  assert.deepEqual(resolvePublishedReference(snapshot), { kind: 5129, eventId: id });
+  assert.throws(() => resolvePublishedReference(root), NappletLinkError);
+  assert.throws(() => resolveNappletLink(snapshot), NappletLinkError);
+  assert.throws(() => resolveNappletLink(root), NappletLinkError);
 });
 
 test('accepts valid naddr TLV ordering from a published external napplet', () => {
