@@ -28,6 +28,10 @@ function artifactFor(mode: Mode): Buffer {
   if (mode === 'implied-wrappers') return Buffer.from(`<!doctype html><!-- Field guide --><title>Field guide</title>
     <script>window.firstScript = {
       api: Boolean(window.napplet?.shell),
+      theme: window.napplet.shell.supports('theme'),
+      relay: window.napplet.shell.supports('relay'),
+      unknown: window.napplet.shell.supports('toString'),
+      services: window.napplet.shell.services,
       policy: document.head.firstElementChild?.getAttribute('http-equiv'),
       title: document.title
     };</script><p id="welcome">Ready</p>`);
@@ -273,7 +277,7 @@ test('the first publisher script in a document with implied wrappers sees the na
   const welcome = page.frameLocator('#napplet').locator('body > #welcome');
   await expect(welcome).toHaveText('Ready');
   expect(await welcome.evaluate(() => (window as any).firstScript)).toEqual({
-    api: true, policy: 'Content-Security-Policy', title: 'Field guide',
+    api: true, theme: true, relay: false, unknown: false, services: [], policy: 'Content-Security-Policy', title: 'Field guide',
   });
 });
 

@@ -2,7 +2,7 @@ import {execFileSync} from 'node:child_process';
 import { writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { observations } from './observations.mjs';
-import { observeHost } from './host.mjs';
+import { observeFirstThemeRequest, observeHost } from './host.mjs';
 import { rules } from './rules.mjs';
 import { assess, gate, markdown } from './report.mjs';
 import specs from './specs.json' with {type:'json'};
@@ -13,6 +13,8 @@ const checks = {...observations, 'cleartext-publication':() => runComponent('sec
 for (const engine of ['chromium', 'webkit']) {
   let snapshot;
   const observe = () => snapshot ??= observeHost(engine);
+  checks[engine + '-first-domain-call'] = () => observeFirstThemeRequest(engine);
+  checks[engine + '-early-discovery'] = async () => (await observe()).beforeShellInit;
   checks[engine + '-environment'] = async () => (await observe()).exposesTheme;
   checks[engine + '-sandbox'] = async () => (await observe()).sandbox === 'allow-scripts';
   checks[engine + '-srcdoc'] = async () => (await observe()).srcdoc;

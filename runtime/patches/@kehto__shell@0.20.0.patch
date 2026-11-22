@@ -138,6 +138,11 @@ diff --git a/dist/index.js b/dist/index.js
          services
        });
        off();
+@@ -1439,3 +1476,3 @@
+     function supports(domain) {
+-      return typeof domain === "string" && environment?.capabilities.domains.includes(domain) === true;
++      return typeof domain === "string" && allowed.has(domain) && Object.prototype.hasOwnProperty.call(root, domain);
+     }
 @@ -1813,6 +1850,17 @@
      "submit"
    ]);

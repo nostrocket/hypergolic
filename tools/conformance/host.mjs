@@ -28,7 +28,16 @@ async function withHost(engine, observe) {
 export function observeHost(engine) {
   return withHost(engine, async (page, url) => {
     await page.addInitScript(() => {
-      if (window !== window.top) return;
+      if (window !== window.top) {
+        window.addEventListener('message', event => {
+          if (event.source === parent && event.data?.type === 'shell.init' && window.beforeShellInit === undefined) {
+            const api = window.napplet;
+            window.beforeShellInit = Boolean(api?.theme) && api.shell.supports('theme') &&
+              !api.shell.supports('relay') && !api.shell.supports('unknown') && api.shell.services.length === 0;
+          }
+        });
+        return;
+      }
       const messages = [];
       window.conformanceMessages = messages;
       window.HypergolicHost = {postMessage() {}};
@@ -45,12 +54,54 @@ export function observeHost(engine) {
     await browsers.expect(iframe.contentFrame().getByTestId('theme-status')).toHaveText('Host colors');
     const exposesTheme = await iframe.contentFrame().getByTestId('lab').evaluate(() =>
       window.napplet?.shell?.supports('theme') === true && window.napplet?.shell?.supports('relay') === false);
-    return await page.evaluate(exposesTheme => ({
-      exposesTheme,
+    const beforeShellInit = await iframe.contentFrame().getByTestId('lab').evaluate(() => window.beforeShellInit === true);
+    return await page.evaluate(({exposesTheme, beforeShellInit}) => ({
+      exposesTheme, beforeShellInit,
       sandbox: document.querySelector('#napplet').getAttribute('sandbox'),
       srcdoc: document.querySelector('#napplet').hasAttribute('srcdoc'),
       messages: window.conformanceMessages,
-    }), exposesTheme);
+    }), {exposesTheme, beforeShellInit});
+  });
+}
+
+// Exercise a granted Theme request on the current window transport with readiness delayed.
+export function observeFirstThemeRequest(engine) {
+  return withHost(engine, async (page, url) => {
+    await page.addInitScript(() => {
+      if (window !== window.top) return;
+      window.HypergolicHost = {postMessage() {}};
+      window.addEventListener('message', event => {
+        if (event.source !== document.querySelector('#napplet')?.contentWindow || event.data?.type !== 'shell.ready') return;
+        if (!window.heldReadiness) {
+          event.stopImmediatePropagation();
+          window.heldReadiness = true;
+        }
+      });
+    });
+    await page.goto(url + 'ux-lab');
+    await page.waitForFunction(() => window.heldReadiness === true);
+    return page.frameLocator('#napplet').locator('body').evaluate(async () => {
+      const readTheme = (id, timeout) => new Promise(resolve => {
+        const finish = value => {
+          window.removeEventListener('message', receive);
+          clearTimeout(timer);
+          resolve(value);
+        };
+        const receive = event => {
+          if (event.source === parent && event.data?.type === 'theme.get.result' && event.data.id === id) {
+            finish(Boolean(event.data.theme?.colors));
+          }
+        };
+        const timer = setTimeout(() => finish(false), timeout);
+        window.addEventListener('message', receive);
+        parent.postMessage({type:'theme.get', id}, '*');
+      });
+      const first = await readTheme('before-readiness', 2000);
+      if (window.napplet.shell.services.length) throw new Error('Readiness control was released early');
+      parent.postMessage({type:'shell.ready'}, '*');
+      if (!await readTheme('after-readiness', 5000)) throw new Error('Theme control received no colors');
+      return first;
+    });
   });
 }
 

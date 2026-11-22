@@ -115,7 +115,8 @@ authorize native effects or establish authoritative saved data.
 | Fixture SDK | 0.27.2, built separately |
 
 Kehto release source: [f031d5d](https://github.com/kehto/web/tree/f031d5d2264d047cd40e2524bf12b7f68c74caa6).
-Wire authority: [SHELL/THEME 5ac0490](https://github.com/napplet/naps/tree/5ac0490461ca6fec2f0d2e45b4835cf9bc08de24/naps),
+Shell capability discovery follows [NAP-SHELL 377bf93](https://github.com/napplet/naps/blob/377bf939c6c906817084b43dd21d424de646dbc2/naps/NAP-SHELL.md).
+Earlier native integration references include [SHELL/THEME 5ac0490](https://github.com/napplet/naps/tree/5ac0490461ca6fec2f0d2e45b4835cf9bc08de24/naps),
 [NIP-5A a2494f4](https://github.com/nostr-protocol/nips/blob/a2494f4f81d46684e5814a9bf35e2b1df978f955/5A.md)
 and [NIP-5D draft 24711d9](https://github.com/dskvr/nips/blob/24711d9c47bbdd07908bf1d52bf677d9cbc530f0/5D.md).
 Package compatibility is not full protocol/native conformance.
