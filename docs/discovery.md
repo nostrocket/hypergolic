@@ -19,7 +19,7 @@ Use Node.js 24.20.0 and pnpm 10.34.5 to reproduce the shipped HTML.
 ```sh
 pnpm --dir napplets/discovery install --frozen-lockfile
 pnpm --dir napplets/discovery run build
-cmp napplets/discovery/dist/index.html runtime/fixtures/napplet-discovery.html
+node scripts/import-discovery.mjs --check napplets/discovery/dist/index.html
 ```
 
 For an intentional update, sync the reviewed authoring source and its exact

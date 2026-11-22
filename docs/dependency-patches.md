@@ -55,7 +55,7 @@ ip-address, brace-expansion, source-map-js, proxy-addr, compression, shell-quote
 MCP SDK, Hono, Zod, qs, body-parser, Hono's Node server, Fallow, xcode's uuid,
 node-forge, minimatch and its optimizer dependency.
 The manifests are the version authority. Runtime and lab projects have separate
-lockfiles and pins; review all ten installed projects when auditing the repository.
+lockfiles and pins; review all installed projects when auditing the repository.
 
 Expo CLI and its certificate library use `node-forge@1.4.3`. This release rejects
 small-order Ed25519 public keys and fixes HTTP header parsing and TLS error

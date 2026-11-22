@@ -4,8 +4,9 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 // Pass the independent napplets workspace artifact explicitly; builds never fetch a feed.
-const source = process.argv[2];
-assert(source, 'Usage: node scripts/import-discovery.mjs <discovery/dist/index.html>');
+const check = process.argv[2] === '--check';
+const source = process.argv[check ? 3 : 2];
+assert(source, 'Usage: node scripts/import-discovery.mjs [--check] <discovery/dist/index.html>');
 const bytes = await readFile(resolve(source));
 assert(bytes.length > 0 && bytes.length <= 2 * 1024 * 1024, 'Catalog exceeds the host artifact bound');
 const html = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
@@ -19,7 +20,15 @@ const bundle = {title: 'Discover', appId: 'napplet-discovery', sha256, aggregate
 const manifest = {kind: 35129, content: 'Find published Napplets and open them in your workspace.',
   tags: [['d', bundle.appId], ['title', bundle.title], ['path', '/index.html', sha256], ['x', aggregateHash, 'aggregate'], ['R', 'relay'], ...['link', 'resource', 'theme', 'lists', 'outbox'].map(domain => ['O', domain])], aggregateHash};
 const root = new URL('../', import.meta.url);
-await writeFile(new URL('runtime/fixtures/napplet-discovery.html', root), bytes);
-await writeFile(new URL('runtime/fixtures/napplet-discovery-manifest.json', root), JSON.stringify(manifest, null, 2) + '\n');
-await writeFile(new URL('src/runtime/discovery-bundle.ts', root), '/** Generated from the independently built catalog by scripts/import-discovery.mjs. */\nexport const DISCOVERY_BUNDLE = Object.freeze(' + JSON.stringify(bundle, null, 2).replace('"domains": [', '"domains": Object.freeze([').replace(/\n  \]\n}/, '\n  ])\n}') + ');\n');
+const moduleSource = '/** Generated from the independently built catalog by scripts/import-discovery.mjs. */\nexport const DISCOVERY_BUNDLE = Object.freeze(' + JSON.stringify(bundle, null, 2).replace('"domains": [', '"domains": Object.freeze([').replace(/\n  \]\n}/, '\n  ])\n}') + ');\n';
+const artifacts = [
+  ['runtime/fixtures/napplet-discovery.html', bytes],
+  ['runtime/fixtures/napplet-discovery-manifest.json', Buffer.from(JSON.stringify(manifest, null, 2) + '\n')],
+  ['src/runtime/discovery-bundle.ts', Buffer.from(moduleSource)],
+];
+for (const [name, expected] of artifacts) {
+  const file = new URL(name, root);
+  if (check) assert((await readFile(file)).equals(expected), 'Stale Discover artifact: ' + name);
+  else await writeFile(file, expected);
+}
 console.log(JSON.stringify({sha256, aggregateHash, bytes: bytes.length}));

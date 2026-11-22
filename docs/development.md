@@ -109,7 +109,7 @@ native build. Report each result and any blocked or skipped stage separately.
 Both final React Doctor and aislop scores must reach 100/100 without hiding
 findings. The standard local React Doctor command disables telemetry and its
 scoring service; clean local diagnostics do not provide a numeric score.
-CI obtains numeric scores and audits all ten lockfiles. See the
+CI obtains numeric scores and audits every tracked pnpm lockfile. See the
 [patch and exception record](dependency-patches.md).
 
 `check` does not run every behavioral test. Run the suites relevant to the change,
