@@ -21,6 +21,10 @@ The [pinned NIP-5D draft](https://github.com/dskvr/nips/blob/f60550c3409d6d81a87
 
 Use the open napplet’s workspace menu to pin it to Home. Shortcuts belong to the selected account. See [workspace storage](workspace-storage.md).
 
+## Opening an older named release
+
+A release that signs a file listing can still open through legacy compatibility. The shell verifies its signature and HTML hash, identifies the older format in the launch review, and asks before opening it from an address. A saved capability grant alone cannot approve that choice. Reopening an exact saved pin can reuse its existing grant. A manual update identifies the older format in the version review. Automatic catalog refresh keeps the current release when an update would require legacy compatibility.
+
 ## Opening a snapshot from Settings
 
 Settings also accepts a lowercase NIP-19 `nevent` link for a kind-5129 snapshot. The shell queries the configured Lookup relays and verifies the exact signed event, including any publisher or kind supplied in the link. The snapshot’s signed hash and capabilities govern verification and access. Snapshots retain separate grants and data and reopen by exact event ID.

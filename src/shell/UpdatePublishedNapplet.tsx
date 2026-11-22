@@ -1,3 +1,4 @@
+import { LEGACY_MANIFEST_NOTICE } from './launch-access-copy';
 import { publishedOpenFailureText } from './published-settings-actions';
 import { PublishedLoadError } from '../napplets/loader';
 import { MEDIA_ACCESS_DETAIL } from '../runtime/support-report';
@@ -97,6 +98,7 @@ function UpdateVersionReview({sessionId, request, decide}: {
   const updateSupport = publishedCapabilityCompatibility(request.domains, request.optionalDomains);
   return <View style={styles.card} testID={`published-update-review-${sessionId}`}>
     <Text accessibilityRole="header" style={styles.title}>Use this verified update?</Text>
+    {request.legacyManifest && <Text style={styles.detail}>{LEGACY_MANIFEST_NOTICE}</Text>}
     <Text style={styles.detail}>Publisher</Text><Text selectable style={styles.claim}>{request.publisher}</Text>
     <Text style={styles.detail}>Napplet</Text><Text selectable style={styles.claim}>{request.appId}</Text>
     <Text style={styles.detail}>Current event</Text><Text selectable style={styles.claim}>{request.previousEventId}</Text>

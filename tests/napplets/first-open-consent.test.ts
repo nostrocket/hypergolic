@@ -40,7 +40,7 @@ test('only explicit trusted review persists the exact publisher, signed coordina
   const admission = await requestFirstOpenConsent(candidate, owner, storage, new AbortController().signal, owner.assertActive,
     async request => { seen = request; return true; });
   assert.deepEqual(seen, { user, publisher, appId: 'hello', eventId: candidate.manifest.eventId,
-    metadata: { title: 'hello', description: '', reference: naddrEncode({ kind: 35129, pubkey: publisher, identifier: 'hello' }),
+    metadata: { legacyManifest: true, title: 'hello', description: '', reference: naddrEncode({ kind: 35129, pubkey: publisher, identifier: 'hello' }),
       version: candidate.aggregateHash, htmlHash: candidate.htmlHash },
     domains: ['theme'], unsupportedDomains: [], optionalDomains: [], unsupportedOptionalDomains: [] });
   assert.equal(Object.isFrozen(seen), true);
@@ -49,6 +49,21 @@ test('only explicit trusted review persists the exact publisher, signed coordina
   const reopened = await requestFirstOpenConsent(candidate, owner, storage, new AbortController().signal, owner.assertActive,
     async () => { assert.fail('an exact existing grant must reopen silently'); });
   assertVerifiedNappletAdmission(reopened, candidate);
+});
+
+test('legacy format review cannot reuse a grant replaced while the prompt is open', async t => {
+  const {database} = await setup(t);
+  const {owner, storage} = control(database);
+  const candidate = await artifact();
+  const signal = new AbortController().signal;
+  await requestFirstOpenConsent(candidate, owner, storage, signal, owner.assertActive, async () => true);
+  const grant = await storage.readAccessGrant();
+  assert.ok(grant);
+  await assert.rejects(requestFirstOpenConsent(candidate, owner, storage, signal, owner.assertActive, async request => {
+    assert.equal(request.metadata.legacyManifest, true);
+    await storage.replaceAccessGrant([], grant.revision, {}, 'changed');
+    return true;
+  }, 'direct-open'), FirstOpenConsentError);
 });
 
 test('denial, changed capabilities, and structural lookalikes cannot admit', async t => {

@@ -34,6 +34,7 @@ export interface PreparedPublishedSession {
 }
 export type PublishedUpdateReview = Readonly<{
   publisher: string; appId: string; previousEventId: string; nextEventId: string;
+  legacyManifest?: true;
   previousVersion: string; nextVersion: string; domains: readonly string[]; optionalDomains: readonly string[];
 }>;
 
@@ -170,7 +171,7 @@ async function preparePublishedSession(ports: SessionPorts, request: PrepareRequ
       admission = await requestFirstOpenConsent(artifact, owner, grant.port, controller.signal, active, exact ? async () => {
         reviewed = true;
         return chooseExact(true);
-      } : review, reopensPin ? 'saved-pin' : 'review');
+      } : review, reopensPin ? 'saved-pin' : opensLink ? 'direct-open' : 'review');
     } finally { grant.revoke(); }
     active();
     if (exact && !reviewed && !await chooseExact(false)) fail();
@@ -250,6 +251,7 @@ async function preparePublishedUpdate(ports: SessionPorts, selected: NappletDesc
         candidate.manifest.tags.find(tag => tag[0] === 'd')?.[1] !== selected.appId) fail();
     const request = Object.freeze({ publisher: selected.publisher, appId: selected.appId,
       previousEventId: selected.eventId!, nextEventId: candidate.manifest.eventId,
+      ...(candidate.manifest.format === 'legacy-path' && {legacyManifest:true as const}),
       previousVersion: selected.version, nextVersion: candidate.aggregateHash,
       domains: Object.freeze([...candidate.manifest.requiredDomains].sort()),
       optionalDomains: Object.freeze([...candidate.manifest.optionalDomains].sort()) });

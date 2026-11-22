@@ -9,6 +9,7 @@ export type PublishedLaunchIcon = Readonly<{ hash: string; mime: string; serverH
 export type VerifiedLaunchMetadata = Readonly<{
   title: string;
   description: string;
+  legacyManifest?: true;
   icon?: PublishedLaunchIcon;
   reference: string;
   version: string;
@@ -30,5 +31,5 @@ export function verifiedLaunchMetadata(artifact: VerifiedNappletArtifact): Verif
   const [icon] = icons;
   const artwork = icons.length === 1 && icon?.length === 3 && /^[0-9a-f]{64}$/.test(icon[1]!) && isLaunchIconMime(icon[2]!)
     ? Object.freeze({ hash: icon[1]!, mime: icon[2]!, serverHints: manifest.serverHints }) : undefined;
-  return Object.freeze({ title, description, ...(artwork && { icon: artwork }), reference, version, htmlHash });
+  return Object.freeze({ title, description, ...(manifest.format === 'legacy-path' && {legacyManifest:true as const}), ...(artwork && { icon: artwork }), reference, version, htmlHash });
 }

@@ -1,3 +1,4 @@
+import { LEGACY_MANIFEST_NOTICE } from './launch-access-copy';
 import { MEDIA_ACCESS_DETAIL } from '../runtime/support-report';
 import { useRef } from 'react';
 import { AccessibilityInfo, ScrollView, StyleSheet, Text, type TextInstance } from 'react-native';
@@ -20,6 +21,7 @@ export function DiscoveryAccessReview({ review, decide }: {
     {review && <><TrustedBand label="Catalog access" /><ScrollView contentContainerStyle={styles.content}>
       <Text ref={heading} accessibilityRole="header" style={styles.heading}>Allow catalog access?</Text>
       <Text style={styles.body}>This verified catalog release needs your review before it can replace the current one.</Text>
+      {review.metadata.legacyManifest && <Text style={styles.body}>{LEGACY_MANIFEST_NOTICE}</Text>}
       <Text style={styles.body}>Publisher</Text><Text selectable style={styles.claim}>{review.publisher}</Text>
       <Text style={styles.body}>Catalog</Text><Text selectable style={styles.claim}>{review.appId}</Text>
       <Text style={styles.body}>Release</Text><Text selectable style={styles.claim}>{review.eventId}</Text>

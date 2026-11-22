@@ -76,6 +76,7 @@ export function createDiscoveryController(ports: DiscoveryControllerPorts) {
         if (reviewed.update || request.publisher !== coordinate.pubkey || request.appId !== coordinate.identifier ||
             request.previousEventId !== selected.eventId || request.previousVersion !== selected.version ||
             request.nextEventId === selected.eventId) throw new Error('Invalid catalog update review');
+        if (request.legacyManifest) return false;
         reviewed.update = request;
         return true;
       };
