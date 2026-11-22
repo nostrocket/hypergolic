@@ -15,6 +15,18 @@ type GuestMessageRoutes = Readonly<{
   live(): boolean;
   dispatch(event: MessageEvent): void;
 }>;
+export function handleMediaRequest(value: unknown, sendMedia: GuestMessageRoutes['sendMedia'], reply: (message: object) => void): boolean {
+  if (!sendMedia || !value || typeof value !== 'object' || !('type' in value) ||
+      typeof value.type !== 'string' || !value.type.startsWith('media.')) return false;
+  const request = projectMediaRequest(value);
+  if (request && sendMedia(request)) return true;
+  if (value.type === 'media.session.create' && 'id' in value) {
+    const id = mediaRequestId(value.id);
+    if (id) reply({type:'media.session.create.result', id, error:'Unsupported media request.'});
+  }
+  return true;
+}
+
 export function guestMessageReceiver(frame: HTMLIFrameElement, source: Window, routes: GuestMessageRoutes) {
   let operations = 0;
   let windowStart = performance.now();
@@ -34,15 +46,7 @@ export function guestMessageReceiver(frame: HTMLIFrameElement, source: Window, r
       if (routes.live()) routes.keys?.receive(event.data);
       return;
     }
-    if (routes.sendMedia && routes.live() && typeof event.data?.type === 'string' && event.data.type.startsWith('media.')) {
-      const request = projectMediaRequest(event.data);
-      if (request && routes.sendMedia(request)) return;
-      if (event.data.type === 'media.session.create') {
-        const id = mediaRequestId(event.data.id);
-        if (id) source.postMessage({type:'media.session.create.result', id, error:'Unsupported media request.'}, '*');
-      }
-      return;
-    }
+    if (routes.live() && handleMediaRequest(event.data, routes.sendMedia, value => source.postMessage(value, '*'))) return;
     if(typeof event.data?.type==='string'&&event.data.type.startsWith('cvm.')){routes.cvm?.(event.data);return;}
     routes.dispatch(event);
   };

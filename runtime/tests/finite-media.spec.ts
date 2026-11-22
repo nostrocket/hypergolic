@@ -3,11 +3,11 @@ import { expect, test, type Page, type Frame } from './published-wire';
 
 const generation = '4ba3bdc3-8130-4a46-b5b9-3d4087a214a6';
 const media = 'media-90c4a736-d407-472b-bf89-8b6de2abdd0d';
-async function open(page: Page, grant = true, mixed = false, liveProfile = false) {
+async function open(page: Page, grant = true, mixed = false, liveProfile = false, modern = false) {
   const html = '<!doctype html><html><head><title>Media proof</title></head><body><p>Media proof</p></body></html>';
   const digest = (value: string) => createHash('sha256').update(value).digest('hex');
   const hash = digest(html);
-  await page.addInitScript(({generation, media, html, hash, version, grant, mixed, liveProfile}) => {
+  await page.addInitScript(({generation, media, html, hash, version, grant, mixed, liveProfile, modern}) => {
     if (window !== window.top) return;
     const listeners = new Set<(event:{data:string})=>void>();
     const send = (value:object) => { for (const listener of listeners) listener({data:window.nativeMessage(value)}); };
@@ -25,7 +25,7 @@ async function open(page: Page, grant = true, mixed = false, liveProfile = false
         const row = JSON.parse(raw);
         if (row.type === 'artifact.read') send({type:'artifact.chunk',sessionId:generation,sequence:0,
           text:html,byteLength:html.length,totalBytes:html.length,publisher:'1'.repeat(64),
-          appId:'media-test',eventId:'2'.repeat(64),htmlHash:hash,version,domains,done:true});
+          appId:'media-test',eventId:'2'.repeat(64),htmlHash:hash,version,domains,...(modern && {manifestFormat:'nip-5d'}),done:true});
         if (row.type !== 'media' && row.type !== 'capability') return;
         if (row.sequence !== lastSequence + 1 || row.type === 'media' && raw.length > 32 * 1024) return;
         lastSequence = row.sequence;
@@ -56,14 +56,47 @@ async function open(page: Page, grant = true, mixed = false, liveProfile = false
         }
       },
     }});
-  }, {generation,media,html,hash,version:digest(`${hash} /index.html\n`),grant,mixed,liveProfile});
+  }, {generation,media,html,hash,version:digest(`${hash} /index.html\n`),grant,mixed,liveProfile,modern});
   await page.goto(`/assets/runtime/index.html?sessionId=${generation}&source=published`);
   await expect(page.frameLocator('#napplet').getByText('Media proof')).toBeVisible();
   const guest = await (await page.locator('#napplet').elementHandle())?.contentFrame();
   if (!guest) throw new Error('Missing proof frame');
-  await guest.evaluate(() => (window as any).napplet.shell.ready());
+  if (!modern) await guest.evaluate(() => (window as any).napplet.shell.ready());
   return guest;
 }
+
+test('modern Media creates and retires a session on one port while Shell readiness is withheld', async ({page}) => {
+  await page.addInitScript(() => {
+    if (window !== top) return;
+    const wire = {windowTypes:[] as string[], portTypes:[] as string[], transfers:0};
+    (window as any).mediaWire = wire;
+    window.addEventListener('message', event => {
+      if (event.source !== document.querySelector('iframe')?.contentWindow) return;
+      wire.windowTypes.push(event.data.type);
+      wire.transfers += event.ports.length;
+      event.ports[0]?.addEventListener('message', message => {
+        wire.portTypes.push(message.data.type);
+        if (message.data.type === 'shell.ready') message.stopImmediatePropagation();
+      });
+    });
+  });
+  const guest = await open(page, true, false, false, true);
+  const result = await guest.evaluate(async () => {
+    const api = (window as any).napplet.media;
+    const session = await api.createSession({owner:'shell',source:{url:'https://video.example.org/clip.mp4'}});
+    const state = await new Promise(resolve => api.onState(session.sessionId,resolve));
+    api.onEnded(session.sessionId, (value: {reason: string}) => document.body.dataset.ended = value.reason);
+    api.destroySession(session.sessionId);
+    return {session,state};
+  });
+  expect(result).toEqual({session:{sessionId:media,owner:'shell'},state:{status:'paused',volume:1}});
+  await expect.poll(() => page.evaluate(() => (window as any).__mediaProof.requests.at(-1).type)).toBe('media.session.destroy');
+  await page.evaluate(id => (window as any).__mediaProof.push({type:'media.session.ended',sessionId:id,reason:'preempted'}),media);
+  await expect(guest.locator('body')).toHaveAttribute('data-ended','preempted');
+  expect(await page.evaluate(() => (window as any).mediaWire)).toEqual({
+    transfers:1, windowTypes:['napplet.hello'], portTypes:['shell.ready','media.session.create','media.session.destroy'],
+  });
+});
 
 test('finite Media projects the signed Videos call shape and preserves late state and retirement', async ({page}) => {
   const guest = await open(page);

@@ -25,8 +25,8 @@ import type {AppDataPolicy} from '../../src/app-data/app-data-context';
 import {createCvmGuestReceiver} from './cvm-native';
 import {injectCvmFacade} from './cvm-guest';
 import './legacy-webview';
-import { injectMediaFacade } from './media-guest';
-import { guestMessageReceiver } from './guest-message-receiver';
+import { injectMediaFacade, installMediaFacade } from './media-guest';
+import { guestMessageReceiver, handleMediaRequest } from './guest-message-receiver';
 import { injectAndroidGuestHelpers } from './android-guest-helpers';
 import { installCloseCheck, CLOSE_CHECK_SERVICE } from './close-check';
 import { injectSupportReport } from './support-report';
@@ -239,7 +239,7 @@ function createGuestEndpoint(artifact: RuntimeMetadata, hooks: ShellAdapter, sen
 }
 
 const portDomains = new Set(['shell', 'theme', 'storage', 'resource', 'relay', 'outbox', 'identity', 'lists',
-  'link', 'common', 'upload', 'config', 'notify', 'inc', 'intent', 'keys']);
+  'link', 'common', 'upload', 'config', 'notify', 'inc', 'intent', 'keys', 'media']);
 
 function guestStartup() {
   let ready = false;
@@ -315,7 +315,8 @@ function mount(artifact: RuntimeMetadata) {
       routing.ready();
     }
   };
-  const guestPort = privatePort ? createGuestPort(frame, source, bridge, artifact.domains, account.current, routing.consume, keys, markReady, () => fail('runtime-bootstrap')) : null;
+  const guestPort = privatePort ? createGuestPort(frame, source, bridge, artifact.domains, account.current, routing.consume, keys,
+    value => handleMediaRequest(value, hasMedia ? native.sendMedia : null, sendGuest), markReady, () => fail('runtime-bootstrap')) : null;
   const receiveGuest = guestMessageReceiver(frame, source, {
     domains: artifact.domains, routing, keys, account: account.current, sendMedia: hasMedia ? native.sendMedia : null,
     cvm:artifact.domains.includes('cvm')?createCvmGuestReceiver(source,native.cvm,live):null,
@@ -371,9 +372,10 @@ function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
   const withDiagnostics = !artifact.published && fixtureName === 'nap-support' ? injectSupportReport(guest) : guest;
   const injected = injectNappletNamespacePrelude(injectCreatorUpload(withDiagnostics, artifact), {
     ...environment.capabilities, privatePort,
+    ...(privatePort && artifact.domains.includes('media') && {installGuestBinding:installMediaFacade}),
     requestTimeoutsMs: approvalTimeouts(artifact),
   });
-  const withMedia=artifact.published && artifact.domains.includes('media') ? injectMediaFacade(injected) : injected;
+  const withMedia=!privatePort && artifact.published && artifact.domains.includes('media') ? injectMediaFacade(injected) : injected;
   const withCvm = artifact.published && artifact.domains.includes('cvm') ? injectCvmFacade(withMedia) : withMedia;
   frame.srcdoc = prefix + (artifact.published && isNativeMeshContext(artifact.mesh, sessionId) && artifact.domains.includes('mesh') ? injectMeshFacade(withCvm) : withCvm);
 }

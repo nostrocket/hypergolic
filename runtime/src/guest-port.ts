@@ -4,7 +4,8 @@ import {quotaReply, validEnvelope, rejectEnvelope} from './guest-envelope';
 
 /** One guest-created channel per verified frame generation. */
 export function createGuestPort(frame: HTMLIFrameElement, source: Window, bridge: ShellBridge,
-  domains: readonly string[], account: () => string | undefined, consumeIntent: (receipt: unknown) => void, keys: ReturnType<typeof createKeysSession> | null, ready: () => void, fail: () => void) {
+  domains: readonly string[], account: () => string | undefined, consumeIntent: (receipt: unknown) => void, keys: ReturnType<typeof createKeysSession> | null,
+  receiveMedia: (value: unknown) => boolean, ready: () => void, fail: () => void) {
   let port: MessagePort | undefined;
   let closed = false;
   let operations = 0;
@@ -46,6 +47,7 @@ export function createGuestPort(frame: HTMLIFrameElement, source: Window, bridge
           keys?.receive(value);
           return;
         }
+        if (receiveMedia(value)) return;
         if (!validEnvelope(value)) {
           rejectEnvelope(message, {postMessage:send}, domains, account());
           return;
