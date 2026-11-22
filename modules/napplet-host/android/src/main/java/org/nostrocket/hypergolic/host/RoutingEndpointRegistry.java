@@ -71,6 +71,7 @@ final class RoutingPushCredits {
     if (envelope != null) parked.put(id, envelope);
     return true;
   }
+  boolean isIdle() { return pending.isEmpty(); }
   boolean contains(long id) { return pending.containsKey(id); }
   void release(long id) { pending.remove(id); }
   void expire(long id) { if (Boolean.FALSE.equals(pending.get(id))) release(id); }

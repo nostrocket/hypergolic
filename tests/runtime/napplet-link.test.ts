@@ -1,3 +1,5 @@
+import { WorkspaceViews } from '../../src/shell/workspace-views.ts';
+import { setup as setupStorage, registration as storageRegistration } from '../storage/harness.ts';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -16,7 +18,7 @@ import { ReviewSlot } from '../../src/shell/review-slot.ts';
 import type { TransitionSnapshot } from '../../src/security/identity-transition.ts';
 import { bundledDescriptor, resolveBundledSession } from '../../src/shell/fixtures.ts';
 import { emptyWorkspace, openNapplet, showOverview, type NappletDescriptor } from '../../src/shell/workspace.ts';
-import type { WorkspaceController } from '../../src/storage/workspace-controller.ts';
+import { openWorkspaceController, type WorkspaceController } from '../../src/storage/workspace-controller.ts';
 import type { NativeRegistration } from '../../src/runtime/capability-protocol.ts';
 
 const secret = Uint8Array.from([...new Uint8Array(31), 7]);
@@ -66,13 +68,21 @@ function setup(initial = openNapplet(emptyWorkspace(), source), reviews = new Ro
   let focused = false;
   const lookups: { address: string; networkReadGranted?: boolean }[] = [];
   let staged = 0;
+  let hasRoom = true;
+  let admit = true;
+  const residents = new Set<string>();
+  const capacity: ('cards' | 'views')[] = [];
+  let openOverview: (() => void) | undefined;
   let stageError: PublishedTransferError | null = null;
   let paused: Promise<void> | null = null;
   let lookupError: PublishedLoadError | null = null;
   const discarded: string[] = [];
   const changes = subscriptions(), lifecycle = subscriptions(), account = subscriptions();
   const controller: WorkspaceController = persisted ?? {
+    views: new WorkspaceViews(initial),
     getSnapshot: () => ({ workspace, saving: false, error: null }), subscribe: changes.subscribe,
+    canLoadView: ids => hasRoom || ids.some(id => residents.has(id)),
+    admitView: id => admit && (hasRoom || residents.has(id)),
     change: state => { workspace = state; changes.emit(); }, acceptUpdate: async () => { throw Error('Unexpected update'); }, flush: async () => {},
     freeze() {}, resume() {}, revoke() {},
   };
@@ -86,7 +96,7 @@ function setup(initial = openNapplet(emptyWorkspace(), source), reviews = new Ro
   };
   const held = new Map<string, string>(), responses = new Map<string, unknown>();
   const broker = createNappletLinkBroker({
-    identity: { getSnapshot: () => transition, subscribe: account.subscribe }, reviews, native,
+    identity: { getSnapshot: () => transition, subscribe: account.subscribe }, reviews, native, reportCapacity: (reason, choose) => { capacity.push(reason); openOverview = choose; },
     capability: {
       take: token => held.get(token) ?? null, isActive: token => held.has(token),
       finish: (token, response) => {
@@ -131,7 +141,8 @@ function setup(initial = openNapplet(emptyWorkspace(), source), reviews = new Ro
   return {
     run, review, decide, reviews, responses, discarded, controller, transition,
     state: () => controller.getSnapshot().workspace, staged: () => staged, lookups,
-    ready: () => { mounted = true; lifecycle.emit(); },
+    capacity, chooseOverview: () => openOverview?.(), fillViews: () => { hasRoom = false; }, refuseAdmission: () => { admit = false; },
+    ready: () => { mounted = true; residents.add(target.id); lifecycle.emit(); },
     focusTarget: () => { focused = true; lifecycle.emit(); },
     overview: () => controller.change(showOverview(controller.getSnapshot().workspace)),
     unfocus: (notify = true) => { focusRevision++; if (notify) lifecycle.emit(); },
@@ -180,6 +191,7 @@ test('exact mounted pins are reviewed and reused, different saved revisions keep
   const initial = openNapplet(openNapplet(emptyWorkspace(), target), source);
   const existing = setup(initial);
   existing.ready();
+  existing.fillViews();
   const pending = existing.run('open');
   const review = await existing.review();
   assert.equal(review.request.kind, 'published-open');
@@ -326,10 +338,104 @@ test('a full workspace reports its exact capacity without starting a review', as
   const env = setup(openNapplet(full, source));
   await env.run('full');
   assert.equal(env.responses.get('full'), 'blocked-by-policy');
+  assert.deepEqual(env.capacity, ['cards']);
+  assert.equal(env.lookups.length, 0);
   assert.equal(env.reviews.getSnapshot(), null);
   assert.equal(env.staged(), 0);
 });
 
+
+test('a ninth link open at live-view capacity returns before lookup, review, staging or focus', {timeout: 1000}, async () => {
+  const env = setup();
+  env.fillViews();
+  await env.run('ninth');
+  assert.deepEqual(env.capacity, ['views']);
+  assert.equal(env.responses.get('ninth'), 'blocked-by-policy');
+  assert.equal(env.lookups.length, 0);
+  assert.equal(env.reviews.getSnapshot(), null);
+  assert.equal(env.staged(), 0);
+  assert.deepEqual(env.state().sessions, [source]);
+});
+
+test('capacity feedback offers overview while the same caller still has focus', async () => {
+  const env = setup();
+  env.fillViews();
+  await env.run('full');
+  assert.equal(env.state().overview, false);
+  env.chooseOverview();
+  assert.equal(env.state().overview, true);
+  const stale = setup();
+  stale.fillViews();
+  await stale.run('full');
+  stale.unfocus();
+  stale.chooseOverview();
+  assert.equal(stale.state().overview, false);
+});
+
+test('the link broker shares the eight resident slots with the real workspace controller', {timeout: 2000}, async t => {
+  const {database} = await setupStorage(t);
+  const controller = await openWorkspaceController(database.bindWorkspace(storageRegistration()), emptyWorkspace, () => {});
+  const residents = Array.from({length: 7}, (_, index) => ({...target, id: 'resident-' + index, appId: 'resident-' + index}));
+  for (const card of [...residents, source]) controller.change(openNapplet(controller.getSnapshot().workspace, card));
+  await controller.flush();
+  const env = setup(undefined, undefined, controller);
+  assert.equal(controller.views.getSnapshot().size, 8);
+  await env.run('no-room');
+  assert.equal(env.responses.get('no-room'), 'blocked-by-policy');
+  assert.deepEqual(env.capacity, ['views']);
+  assert.equal(env.lookups.length, 0);
+  const suspended: string[] = [];
+  const oldest = residents[0]!;
+  const unbind = controller.views.bind({
+    canSuspend: session => session.id === oldest.id,
+    trySuspend: session => { if (session.id !== oldest.id) return false; suspended.push(session.id); return true; },
+  });
+  t.after(unbind);
+  const open = env.run('make-room');
+  const review = await env.review();
+  assert.deepEqual(suspended, []);
+  env.decide(review.id, true);
+  await until(() => env.state().focusedId === target.id);
+  env.ready();
+  env.focusTarget();
+  await open;
+  assert.equal(env.responses.get('make-room'), 'opened');
+  assert.deepEqual(suspended, [oldest.id]);
+  assert.equal(env.state().sessions.length, 9);
+  assert.equal(controller.views.getSnapshot().size, 8);
+  assert.ok(controller.views.getSnapshot().has(source.id));
+  assert.ok(controller.views.getSnapshot().has(target.id));
+  assert.ok(!controller.views.getSnapshot().has(oldest.id));
+});
+
+test('losing room during review stops the approved link before staging', {timeout: 1000}, async () => {
+  const env = setup();
+  const pending = env.run('review-race');
+  const review = await env.review();
+  env.fillViews();
+  env.decide(review.id, true);
+  await pending;
+  assert.deepEqual(env.capacity, ['views']);
+  assert.equal(env.responses.get('review-race'), 'blocked-by-policy');
+  assert.equal(env.staged(), 0);
+  assert.deepEqual(env.discarded, []);
+  assert.equal(env.state().focusedId, source.id);
+});
+
+test('a failed final admission discards staged bytes and keeps the original focus', {timeout: 1000}, async () => {
+  const env = setup();
+  const pending = env.run('commit-race');
+  const review = await env.review();
+  env.refuseAdmission();
+  env.decide(review.id, true);
+  await pending;
+  assert.deepEqual(env.capacity, ['views']);
+  assert.equal(env.responses.get('commit-race'), 'blocked-by-policy');
+  assert.equal(env.staged(), 1);
+  assert.deepEqual(env.discarded, [target.id]);
+  assert.deepEqual(env.state().sessions, [source]);
+  assert.equal(env.state().focusedId, source.id);
+});
 
 test('a changed native focus revision takes precedence over a late lookup diagnostic', async () => {
   const env = setup();

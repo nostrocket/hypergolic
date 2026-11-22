@@ -137,6 +137,9 @@ public final class NappletHostModule: Module {
       publishedRelay.cancel(operationId: operationId)
     }
     Function("revokeAllPublishedRelay") { publishedRelay.revokeAll() }
+    Function("checkpointAvailable") { (generation: String, id: String, consume: Bool) -> Bool in
+      RoutingTransport.shared.checkpointAvailable(generation, id: id, consume: consume)
+    }
     Function("newInstanceId") { NativeTransportTickets.shared.issue() }
     Function("takeSubscription") { (token: String) -> String? in RelaySubscriptionTransport.shared.registry.take(token) }
     Function("acceptSubscription") { (token: String) -> Bool in RelaySubscriptionTransport.shared.registry.accept(token) }

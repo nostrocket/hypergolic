@@ -44,7 +44,8 @@ import { createApprovalOwner, createUploadOwner } from './approval-owner';
 import { loadNativeApprovalPort } from '../runtime/native-approval-port';
 import { loadNativeRelayQuery } from '../network/native-relay-query-port';
 import { openNativeRelaySettings, type NativeRelaySettings } from '../network/relay-settings-native';
-import { Platform } from 'react-native';
+import { Alert, Platform } from 'react-native';
+import { MAX_LOADED_VIEWS } from '../shell/workspace-activity';
 import { createRuntimeOwner, type RuntimeOwner } from '../runtime/runtime-owner';
 import { loadNativeCapabilityPort } from '../runtime/native-capability-port';
 import { loadNativePublishedArtifactSource } from '../napplets/native-published-source-port';
@@ -92,6 +93,14 @@ export interface TrustedIdentityOwner {
 export class WorkspaceStartupError extends Error {
   constructor() { super('Workspace could not be opened'); this.name = 'WorkspaceStartupError'; }
 }
+function reportCapacity(reason: 'cards' | 'views', openOverview: () => void): void {
+  const message = reason === 'cards'
+    ? 'All 64 cards are in use. Close a card in All napplets, then try again.'
+    : `All ${MAX_LOADED_VIEWS} loaded napplets need to stay open. Save your work and close a loaded card in All napplets, then try again.`;
+  Alert.alert('Workspace is full', message,
+    [{text: 'Cancel', style: 'cancel'}, {text: 'All napplets', onPress: openOverview}]);
+}
+
 async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android' | 'ios'): Promise<{ cvm:CvmService; profileAvatar: ProfileAvatarStore; launchReviewMedia: LaunchReviewMedia; notificationSettings: NotificationSettingsService; config: ConfigBroker; notify: NotifyBroker; routing: Readonly<{broker: RoutingBroker; catalog: RoutingCatalog; reviews: RoutingReviewService; settings: RoutingSettingsService}>; listAccess: IdentityListAccess | null; transition: IdentityTransition; runtime: RuntimeOwner; approvals: ApprovalService; relaySettings: NativeRelaySettings | null; resourceSettings: NativeResourceSettings | null; uploadSettings: NativeUploadSettings | null; uploads: UploadService; reviewSlot: ReviewSlot; fixturePublisher: FixturePublisher | undefined }> {
   const database = await openShellDatabase(SQLite, platform).catch(() => { throw new WorkspaceStartupError(); });
   let relaySettings: NativeRelaySettings | null = null;
@@ -142,7 +151,7 @@ async function openOwnerWorkspace(vault: NativeIdentityVault, platform: 'android
     if(relaySettings)relaySettings=withCvmRelayDefaults(relaySettings,cvmNative.configure);else cvmNative.configure([]);
     cvm=new CvmService(cvmNative.port);
     const reviews = new RoutingReviewService(slot);
-    const nappletLinks = createNappletLinkBroker({ identity: transition, runtime: () => runtime, capability, native: routingNative, reviews });
+    const nappletLinks = createNappletLinkBroker({ identity: transition, runtime: () => runtime, capability, native: routingNative, reviews, reportCapacity });
     notifyBroker = new NotifyBroker(capability, routingNative, notifyPermissions);
     configBroker = new ConfigBroker(capability, routingNative, await openNativeConfigStore(), slot);
     routingBroker = new RoutingBroker(capability, routingNative, routingCatalog, reviews, createRoutingTargets(transition, () => runtime, reviews, routingNative));

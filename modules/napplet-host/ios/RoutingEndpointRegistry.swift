@@ -73,6 +73,7 @@ struct RoutingPushCredits {
     parked[id] = envelope
     return true
   }
+  var isIdle: Bool { pending.isEmpty }
   func contains(_ id: UInt64) -> Bool { pending[id] != nil }
   mutating func release(_ id: UInt64) { pending.removeValue(forKey: id) }
   mutating func expire(_ id: UInt64) { if pending[id] == false { release(id) } }

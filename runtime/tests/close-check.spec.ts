@@ -60,3 +60,11 @@ test('malformed reply cannot report clean and replay cannot resolve a new check'
   await request(page, 'next'); await frame.locator('body').evaluate(() => window.parent.postMessage({type: 'hypergolic.closeCheck.result', id: 'malformed', state: 'clean'}, '*'));
   await expect.poll(() => results(page)).toContainEqual({type: 'close-check.result', sessionId: generation, id: 'next', state: 'unknown'});
 });
+
+test('ordinary clean guests cannot acknowledge a private checkpoint or restore', async ({page}) => {
+  await open(page);
+  for (const id of ['resume-private', 'restore-private']) {
+    await request(page, id);
+    await expect.poll(() => results(page)).toContainEqual({type:'close-check.result', sessionId:generation, id, state:'unknown'});
+  }
+});

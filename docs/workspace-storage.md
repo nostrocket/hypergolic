@@ -66,11 +66,10 @@ generation or approve an operation.
 
 ## Lazy restoration and transitions
 
-Restore initially mounts only the last focused napplet. Other entries show Open
-to load until selected. Visited views remain mounted through focus, Settings and
-overview changes; closing, accepted replacement or account epoch change tears
-down the applicable generation. Opening order and persisted instance IDs do not
-change merely on focus.
+Restore initially mounts the focused napplet when its card is open. Other cards
+load on selection. Switching to Home, Settings or All napplets normally keeps
+visited views mounted. Closing a card, accepting a replacement or changing the
+account epoch tears down the applicable generation.
 
 Foreground Android views can remain resumed for live overview previews; focus
 separately gates media and privileged work. Activity background pauses rendering
@@ -136,4 +135,28 @@ Custom unmarked controls need markup from the game author.
 
 A focused napplet uses the landscape viewport. **All napplets** stays available in the upper corner and returns to the overview without closing the napplet. Android Back also opens the overview after dismissing any open keyboard or shell surface.
 
-The workspace keeps up to eight native napplet views loaded. Opening another card shows a prompt to close a loaded card first. Existing drafts stay in their running views until you choose which card to close.
+### Reclaiming background views
+
+Hypergolic keeps up to eight native WebViews loaded. Opening a ninth can release
+the least recently focused background view with a confirmed checkpoint. The card
+keeps its position, instance ID and exact signed revision. Returning to the card
+opens the verified version and restores the checkpoint. The same policy can
+release eligible background views when the shell receives a system memory warning.
+
+The shell also checks for pending host work. A fresh guest request, an incoming
+delivery or renewed focus invalidates the native checkpoint. Views with unknown
+state stay loaded. When every view needs to stay open, opening a new published
+link offers **All napplets** immediately. An already loaded target remains
+available through the ordinary launch review.
+
+The first supported guest is Workspace Journal at signed event
+`54ae23083f1dccfaecf88e0df7281d6c9f1502dc31f288c127379169a36f53e2`.
+Its new-entry editor saves the unfinished title, body, links, active field and
+selection to private instance storage. **Save entry** stays under the user's
+control. An edit to an existing entry, an active input-method composition or a
+failed checkpoint keeps the editor in memory. Other releases stay loaded until
+their restoration behavior is supported.
+
+The shell tracks which checkpoint belongs to a suspended card for the current
+account session. Process termination and account switching end that association.
+Use **Save entry** for journal entries you want to keep across those transitions.

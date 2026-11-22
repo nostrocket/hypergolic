@@ -3,6 +3,8 @@ import {createLegacyImageMount} from './legacy-image-mount';
 import {injectLegacyImages} from './legacy-image-guest';
 import {injectReviewedPresentation} from './reviewed-presentation';
 import {injectCreatorUpload} from './reviewed-creator-upload';
+import {supportsWorkspaceJournalCheckpoint} from '../../src/napplets/workspace-journal-checkpoint';
+import {injectJournalCheckpoint} from './reviewed-workspace-journal';
 import {injectEmojiImages} from './reviewed-emoji-images';
 import {supportsMappletsTouchSelection} from './reviewed-mapplets-touch';
 import {validEnvelope, rejectEnvelope} from './guest-envelope';
@@ -59,7 +61,7 @@ const fixtureName = parameters.get('fixture') ?? '';
 const fixture = source === null && Object.prototype.hasOwnProperty.call(__BUNDLED_FIXTURES__, fixtureName) ? __BUNDLED_FIXTURES__[fixtureName] : undefined;
 type RuntimeMetadata = Readonly<{
   aggregateHash: string; appId: string; title: string;
-  domains: readonly string[]; appData?:AppDataPolicy; mesh?:NativeMeshContext; legacyReadOnly?:LegacyReadOnlyContext; publishTimeoutMs?: number; published: boolean;
+  journalCheckpoint?: boolean; domains: readonly string[]; appData?:AppDataPolicy; mesh?:NativeMeshContext; legacyReadOnly?:LegacyReadOnlyContext; publishTimeoutMs?: number; published: boolean;
 }>;
 let stopped = false;
 let cleanup: (() => void) | undefined;
@@ -313,7 +315,8 @@ function mount(artifact: RuntimeMetadata) {
   const keys = artifact.domains.includes('keys') ? createKeysSession(source, () =>
     live() && isRuntimeInputActive() && document.hasFocus() && document.activeElement === frame) : null;
   const closeCheck = installCloseCheck(source, live,
-    (id, state) => hostWindow.HypergolicHost?.postMessage(JSON.stringify({type: 'close-check.result', sessionId, id, state})));
+    (id, state) => hostWindow.HypergolicHost?.postMessage(JSON.stringify({type: 'close-check.result', sessionId, id, state})),
+    artifact.journalCheckpoint ? {idle: () => frame.inert && native.idleForCheckpoint()} : undefined);
   const deadline = window.setTimeout(() => fail('runtime-timeout'), 10_000);
 
   const receiveGuest = guestMessageReceiver(frame, source, {
@@ -370,7 +373,8 @@ function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
     frame.srcdoc = prefix + injectLegacyReadOnly(injectLegacyImages(injectAndroidGuestHelpers(injectResourceMediaGate(layout)), legacyNonce), legacyNonce);
     return;
   }
-  const presentation = injectReviewedPresentation(injectEmojiImages(withCsp, artifact), artifact);
+  const reviewed = artifact.journalCheckpoint ? injectJournalCheckpoint(withCsp) : withCsp;
+  const presentation = injectReviewedPresentation(injectEmojiImages(reviewed, artifact), artifact);
   const guest = injectAndroidGuestHelpers(injectResourceMediaGate(presentation, supportsMappletsTouchSelection(artifact)));
   const withDiagnostics = !artifact.published && fixtureName === 'nap-support' ? injectSupportReport(guest) : guest;
   const injected = injectNappletNamespacePrelude(injectCreatorUpload(withDiagnostics, artifact), {
@@ -394,7 +398,7 @@ async function start(): Promise<void> {
       const {html, metadata} = await readPublishedArtifact(hostWindow.HypergolicHost!, sessionId);
       const {appId, version: aggregateHash, domains, appData, mesh, legacyReadOnly, snapshot} = metadata;
       if (!stopped) renderGuest({aggregateHash, appId, title: snapshot?.title ?? appId, domains,...(appData?{appData:appData.policy}:{}), ...(mesh ? {mesh} : {}), ...(legacyReadOnly ? {legacyReadOnly} : {}),
-        published: true}, html);
+        journalCheckpoint: domains.includes('storage') && supportsWorkspaceJournalCheckpoint(metadata), published: true}, html);
       return;
     }
     if (source !== null || !fixture) { fail('fixture-integrity'); return; }

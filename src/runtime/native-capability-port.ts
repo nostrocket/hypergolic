@@ -3,6 +3,7 @@ import type { RuntimeNativePort } from './runtime-owner';
 
 interface CapabilityModule {
   newInstanceId(): string;
+  checkpointAvailable(generation: string, id: string, consume: boolean): boolean;
   takeSubscription(token:string):string|null;
   acceptSubscription(token:string):boolean;
   isSubscriptionActive(token:string):boolean;
@@ -16,7 +17,8 @@ interface CapabilityModule {
 }
 export function loadNativeCapabilityPort(): RuntimeNativePort {
   const module = requireNativeModule<CapabilityModule>('HypergolicNappletHost');
-  return Object.freeze({ subscriptions:Object.freeze({take:(token:string)=>module.takeSubscription(token),accept:(token:string)=>module.acceptSubscription(token),
+  return Object.freeze({ checkpointAvailable: (generation: string, id: string, consume: boolean) =>
+    module.checkpointAvailable(generation, id, consume), subscriptions:Object.freeze({take:(token:string)=>module.takeSubscription(token),accept:(token:string)=>module.acceptSubscription(token),
     isActive:(token:string)=>module.isSubscriptionActive(token),mayDeliver:(token:string)=>module.mayDeliverSubscription(token),
     canSend:(token:string)=>module.subscriptionCapacity(token),
     send:(token:string,response:string)=>{const result=module.sendSubscription(token,response);return result===0?'paused' as const:result===1;},close:(token:string)=>module.closeSubscription(token)}),newInstanceId: () => module.newInstanceId(), take: (token: string) => module.takeCapability(token),

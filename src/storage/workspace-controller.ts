@@ -1,3 +1,4 @@
+import { WorkspaceViews } from '../shell/workspace-views.ts';
 import { replacePublishedNapplet, restoreWorkspace, snapshotWorkspace, type Workspace, type WorkspaceSnapshot } from '../shell/workspace.ts';
 import { encodeSnapshot, snapshot } from './codec.ts';
 import type { WorkspaceRecord, WorkspaceStorage, WorkspaceUpdate } from './database.ts';
@@ -9,6 +10,9 @@ export interface WorkspaceState {
   readonly error: StorageCode | null;
 }
 export interface WorkspaceController {
+  readonly views: WorkspaceViews;
+  canLoadView(ids: readonly string[]): boolean;
+  admitView(id: string): boolean;
   getSnapshot(): WorkspaceState;
   subscribe(listener: () => void): () => void;
   change(workspace: Workspace): void;
@@ -44,13 +48,16 @@ export async function openWorkspaceController(
     record = loaded ?? await binding.port.save(snapshotWorkspace(initial), null);
   } catch (error) { binding.revoke(); throw sanitize(error); }
   let state: WorkspaceState = Object.freeze({ workspace: initial, saving: false, error: null });
+  const views = new WorkspaceViews(initial);
   let editable = true;
   let pending: WorkspaceSnapshot | null = null;
   let updating: Promise<void> | null = null;
   let flushing: Promise<void> | null = null;
   const listeners = new Set<() => void>();
   function publish(next: WorkspaceState): void {
+    const changed = state.workspace !== next.workspace;
     state = Object.freeze(next);
+    if (changed) views.update(next.workspace);
     for (const listener of listeners) listener();
   }
   function stop(code: StorageCode): void {
@@ -92,6 +99,9 @@ export async function openWorkspaceController(
     if (!state.error) publish({workspace: next, saving: false, error: null});
   }
   return Object.freeze({
+    views,
+    canLoadView: (ids: readonly string[]) => editable && !updating && !state.error && views.canLoadView(ids),
+    admitView: (id: string) => editable && !updating && !state.error && views.admitView(id),
     getSnapshot: () => state,
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     change: (workspace: Workspace) => {

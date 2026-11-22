@@ -1,5 +1,7 @@
 import {test,expect,type Page,type FrameLocator} from '@playwright/test';
 import {build} from 'vite';
+import {WorkspaceViews} from '../../src/shell/workspace-views';
+import {emptyWorkspace, openNapplet, focusNapplet, type NappletDescriptor} from '../../src/shell/workspace';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {finalizeEvent} from 'nostr-tools/pure';
@@ -13,6 +15,7 @@ const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCA
 const pngHash=hash(Buffer.from(png,'base64'));
 const fixtureDomains:Record<string,string[]>={
   'emoji-browser':['common','identity','inc','outbox','relay','resource','storage','theme'],
+  'workspace-journal':['identity','inc','relay','resource','storage','theme'],
   'mapplets':['inc','intent','outbox','resource'],'feed-builder':['identity','intent','outbox','relay','storage'],
   'emoji-pack-creator':['common','identity','inc','outbox','relay','resource','storage','theme','upload'],
 };
@@ -44,6 +47,7 @@ async function open(page:Page,appId:string,variant='exact',uploadMode='complete'
   await page.route('**/assets/runtime/host.js',route=>route.fulfill({contentType:'text/javascript',body:host}));
   await page.addInitScript(({generation,appId,pin,variant,html,htmlHash,aggregateHash,note,pack,png,savedFeed,domains,pngHash,uploadMode})=>{
     if(window!==window.top)return;
+    if (appId === 'workspace-journal') generation = new URL(location.href).searchParams.get('sessionId') ?? generation;
     const bytes=Uint8Array.from(atob(html),character=>character.charCodeAt(0));
     const listeners=new Set<(event:{data:string})=>void>(),held=new Map<string,any>();
     const state:any={requests:[],diagnostics:[],batches:0,chunks:0,releaseImages:false};
@@ -61,7 +65,7 @@ async function open(page:Page,appId:string,variant='exact',uploadMode='complete'
         if(envelope.type==='ready'||envelope.type==='error'){state.diagnostics.push(envelope);return;}
         if(envelope.type==='artifact.read'){
           const payload=bytes.slice(envelope.sequence*49152,(envelope.sequence+1)*49152);
-          emit({type:'artifact.chunk',sessionId:generation,sequence:envelope.sequence,publisher:'1'.repeat(64),
+          emit({type:'artifact.chunk',sessionId:generation,sequence:envelope.sequence,publisher:pin.publisher ?? '1'.repeat(64),
             appId:variant==='other-app'?'unreviewed-reader':appId,eventId:pin.eventId,version:aggregateHash,htmlHash,
             domains,
             base64:btoa(String.fromCharCode(...payload)),byteLength:payload.length,totalBytes:bytes.length,done:(envelope.sequence+1)*49152>=bytes.length});return;
@@ -79,7 +83,15 @@ async function open(page:Page,appId:string,variant='exact',uploadMode='complete'
         if(request.type==='identity.getPublicKey')response.pubkey=note.pubkey;
         else if(request.type==='identity.getFollows')response.pubkeys=[pack.pubkey];
         else if(request.type==='identity.getRelays')response.relays={'wss://relay.example.org':{read:true,write:false}};
-        else if(request.type==='storage.get')response.value=null;
+        else if(request.type==='storage.get')response.value=appId==='workspace-journal'?sessionStorage.getItem(request.scope+':'+request.key):null;
+        else if(request.type==='storage.set'&&appId==='workspace-journal') {
+          if (state.rejectStorage || (state.rejectJournalEntries && request.key === 'workspace-journal:v1')) response.error='quota exceeded';
+          else sessionStorage.setItem(request.scope+':'+request.key, request.value);
+          if (state.holdCheckpoint && request.scope === 'instance') {
+            state.confirmWrite = () => reply(envelope,response);
+            return;
+          }
+        }
         else if(request.type==='relay.query'||request.type==='outbox.query')response.events=events(request.filters).map(event=>({event}));
         else if(request.type==='outbox.publish'){response.ok=false;response.error='review cancelled';}
         else if(request.type==='relay.publish'){response.ok=false;response.error='review cancelled';}
@@ -115,7 +127,7 @@ async function open(page:Page,appId:string,variant='exact',uploadMode='complete'
   },{generation,appId,pin,variant,html:bytes.toString('base64'),htmlHash,aggregateHash,note,pack,png,savedFeed,domains,pngHash,uploadMode});
   await page.goto(`/assets/runtime/index.html?sessionId=${generation}&source=published`);
   const frame=page.frameLocator('#napplet');
-  await expect(frame.locator('#hypergolic-reviewed-presentation')).toHaveCount(variant==='exact'?1:0);
+  await expect(frame.locator('#hypergolic-reviewed-presentation')).toHaveCount(variant==='exact'&&appId!=='workspace-journal'?1:0);
   await expect(frame.locator('[data-hypergolic-emoji-images]')).toHaveCount(appId==='emoji-browser'&&variant==='exact'?1:0);
   await expect(frame.locator('[data-hypergolic-creator-upload]')).toHaveCount(appId==='emoji-pack-creator'&&variant==='exact'?1:0);
   await expect(frame.locator('body')).not.toHaveText('');
@@ -354,4 +366,184 @@ test('unpublished, wrong-app and future-version metadata retain byte-identical d
     expect(injectReviewedPresentation(html,metadata)).toBe(html);
     expect(injectCreatorUpload(html,{...metadata,domains:['upload']})).toBe(html);
   }}
+});
+
+async function journalControl(page: Page, id: string, state = 'clean') {
+  await page.evaluate(id => window.postMessage({type:'hypergolic.close-check.request', id}, '*'), id);
+  await expect.poll(() => page.evaluate(id => (window as any).__presentation.requests
+    .find((message: any) => message.type === 'close-check.result' && message.id === id)?.state, id)).toBe(state);
+}
+
+test('Workspace Journal restores an unfinished new entry and its interior caret on a ninth open', async ({page, context}) => {
+  const guest = await open(page, 'workspace-journal');
+  const pin = pins.find((entry: any) => entry.appId === 'workspace-journal');
+  const journal: NappletDescriptor = {id:'journal', title:'Workspace Journal', appId:pin.appId, publisher:pin.publisher,
+    version:pin.aggregateHash, eventId:pin.eventId, source:'published'};
+  let workspace = openNapplet(emptyWorkspace(), journal);
+  const views = new WorkspaceViews(workspace);
+  const title = 'Unfinished field notes';
+  const body = 'First observation 🌱\nThe next thought is still unfinished';
+  const cursor = body.indexOf('thought');
+  const links = 'wss://relay.example.org';
+  await guest.getByLabel('Entry title').fill(title);
+  await guest.getByLabel('Links to notes, people or relays').fill(links);
+  const editor = guest.getByLabel('Entry body');
+  await editor.fill(body);
+  await editor.evaluate((element: HTMLTextAreaElement, at) => element.setSelectionRange(at, at), cursor);
+  const original = page.frames().find(frame => frame !== page.mainFrame())!;
+  await page.evaluate(() => (window as any).__hypergolicMediaActive(false));
+  const receiptId = 'resume-12345678-1234-4234-8234-123456789abc';
+  await journalControl(page, receiptId);
+  // The mock native storage below commits through the granted instance lane only.
+  const journalWrite = await page.evaluate(() => (window as any).__presentation.requests
+    .filter((envelope: any) => envelope.type === 'capability').map((e: any) => JSON.parse(e.message))
+    .filter((message: any) => message.type === 'storage.set'));
+  expect(journalWrite).toHaveLength(1);
+  expect(journalWrite[0].scope).toBe('instance');
+  const secondCard = {...journal, id:'second-journal'};
+  const secondPage = await context.newPage();
+  const secondGuest = await open(secondPage, 'workspace-journal');
+  await secondGuest.getByLabel('Entry body').fill('Another instance, another draft');
+  await secondPage.evaluate(() => (window as any).__hypergolicMediaActive(false));
+  await journalControl(secondPage, 'resume-23456789-1234-4234-8234-123456789abc');
+  const confirmed = new Set([journal.id, secondCard.id]);
+  views.bind({canSuspend: card => confirmed.has(card.id), trySuspend: card => confirmed.delete(card.id)});
+  for (let number = 2; number <= 9; number++) {
+    const card = number === 2 ? secondCard : {...journal, id:`card-${number}`, appId:`fixture-${number}`};
+    expect(views.admitView(card.id)).toBe(true);
+    workspace = openNapplet(workspace, card);
+    views.update(workspace);
+  }
+  expect(workspace.sessions.map(card => card.id)).toContain(journal.id);
+  expect(views.getSnapshot().size).toBe(8);
+  expect(views.getSnapshot().has(journal.id)).toBe(false);
+  // Destroy both the guest iframe and its top-level host as WebView unmount does.
+  await page.goto('about:blank');
+  expect(original.isDetached()).toBe(true);
+  expect(confirmed.has(journal.id)).toBe(false);
+  workspace = focusNapplet(workspace, journal.id);
+  views.update(workspace);
+  expect(views.getSnapshot().has(journal.id)).toBe(true);
+  expect(workspace.sessions).toHaveLength(9);
+  expect(views.getSnapshot().has(secondCard.id)).toBe(false);
+  await secondPage.close();
+  await page.goto(`/assets/runtime/index.html?sessionId=23456789-1234-4234-8234-123456789abc&source=published`);
+  await expect(editor).toHaveValue('');
+  await page.evaluate(() => (window as any).__hypergolicMediaActive(false));
+  await journalControl(page, 'restore-wrong-receipt', 'unknown');
+  await expect(editor).toHaveValue('');
+  await journalControl(page, receiptId.replace('resume-', 'restore-'));
+  await expect(guest.getByLabel('Entry title')).toHaveValue(title);
+  await expect(guest.getByLabel('Links to notes, people or relays')).toHaveValue(links);
+  await expect(editor).toHaveValue(body);
+  const selection = () => editor.evaluate((control: HTMLTextAreaElement) => [control.selectionStart, control.selectionEnd]);
+  expect(await selection()).toEqual([cursor, cursor]);
+  await page.evaluate(() => (window as any).__hypergolicMediaActive(true));
+  await expect(editor).toBeFocused();
+  await page.keyboard.insertText('field ');
+  await expect(editor).toHaveValue(body.slice(0, cursor) + 'field ' + body.slice(cursor));
+  expect(await selection()).toEqual([cursor + 6, cursor + 6]);
+  await expect(guest.getByRole('button', {name:'Save entry', exact:true})).toBeVisible();
+});
+
+
+test('Workspace Journal keeps its live draft on a failed save and rejects an existing-entry edit', async ({page}) => {
+  const guest = await open(page, 'workspace-journal');
+  const editor = guest.getByLabel('Entry body');
+  const text = 'A draft that cannot checkpoint';
+  await editor.fill(text);
+  await page.evaluate(() => { (window as any).__presentation.rejectStorage = true; (window as any).__hypergolicMediaActive(false); });
+  await journalControl(page, 'resume-failed-write', 'unknown');
+  await expect(editor).toHaveValue(text);
+  await page.evaluate(() => { (window as any).__presentation.rejectStorage = false; (window as any).__hypergolicMediaActive(true); });
+  await guest.getByRole('button', {name:'Save entry', exact:true}).click();
+  await guest.getByRole('region', {name:'Journal entries'}).getByRole('button', {name:new RegExp(text)}).click();
+  await guest.getByRole('button', {name:'Edit', exact:true}).click();
+  await editor.fill('Unfinished changes to an existing entry');
+  await page.evaluate(() => (window as any).__hypergolicMediaActive(false));
+  await journalControl(page, 'resume-existing-entry', 'unknown');
+  await expect(editor).toHaveValue('Unfinished changes to an existing entry');
+});
+
+test('Workspace Journal reopens the new-entry composer over saved entries and restores a selected range', async ({page}) => {
+  const guest = await open(page, 'workspace-journal');
+  const editor = guest.getByLabel('Entry body');
+  await editor.fill('Already saved');
+  await guest.getByRole('button', {name:'Save entry', exact:true}).click();
+  await guest.getByRole('button', {name:'New entry', exact:true}).click();
+  await editor.fill('Select these words inside the unfinished entry.');
+  await editor.evaluate((control: HTMLTextAreaElement) => control.setSelectionRange(7, 18, 'backward'));
+  await page.evaluate(() => (window as any).__hypergolicMediaActive(false));
+  await journalControl(page, 'resume-selected-range');
+  await page.reload();
+  await expect(guest.getByRole('button', {name:'New entry', exact:true})).toBeVisible();
+  await expect(editor).toHaveCount(0);
+  await page.evaluate(() => (window as any).__hypergolicMediaActive(true));
+  await journalControl(page, 'restore-selected-range');
+  await expect(editor).toBeFocused();
+  expect(await editor.evaluate((control: HTMLTextAreaElement) =>
+    [control.selectionStart, control.selectionEnd, control.selectionDirection])).toEqual([7, 18, 'backward']);
+  await page.keyboard.insertText('only');
+  await expect(editor).toHaveValue('Select only inside the unfinished entry.');
+});
+
+
+test('Workspace Journal stays resident when an earlier entry write failed in shared storage', async ({page}) => {
+  const guest = await open(page, 'workspace-journal');
+  const editor = guest.getByLabel('Entry body');
+  await page.evaluate(() => { (window as any).__presentation.rejectJournalEntries = true; });
+  await editor.fill('An entry the original Journal displays but could not persist');
+  await guest.getByRole('button', {name:'Save entry', exact:true}).click();
+  await guest.getByRole('button', {name:'New entry', exact:true}).click();
+  await editor.fill('A second draft must remain live');
+  await page.evaluate(() => (window as any).__hypergolicMediaActive(false));
+  await journalControl(page, 'resume-unsaved-shared-state', 'unknown');
+  await expect(editor).toHaveValue('A second draft must remain live');
+});
+
+
+test('Workspace Journal rejects a late checkpoint acknowledgement after refocus and further input', async ({page}) => {
+  const guest = await open(page, 'workspace-journal');
+  const editor = guest.getByLabel('Entry body');
+  await editor.fill('Initial draft');
+  await page.evaluate(() => {
+    (window as any).__presentation.holdCheckpoint = true;
+    (window as any).__hypergolicMediaActive(false);
+    window.postMessage({type:'hypergolic.close-check.request', id:'resume-delayed'}, '*');
+  });
+  await expect.poll(() => page.evaluate(() => typeof (window as any).__presentation.confirmWrite)).toBe('function');
+  await page.evaluate(() => (window as any).__hypergolicMediaActive(true));
+  await editor.fill('Draft revised during the write');
+  await page.evaluate(() => (window as any).__presentation.confirmWrite());
+  await expect.poll(() => page.evaluate(() => (window as any).__presentation.requests
+    .find((message: any) => message.type === 'close-check.result' && message.id === 'resume-delayed')?.state)).toBe('unknown');
+  await expect(editor).toHaveValue('Draft revised during the write');
+});
+
+
+test('Workspace Journal restores keyboard focus after a late consent sheet and respects subsequent user input', async ({page}) => {
+  const guest = await open(page, 'workspace-journal');
+  const editor = guest.getByLabel('Entry body');
+  const title = guest.getByLabel('Entry title');
+  await editor.fill('unfinished field notes');
+  await editor.evaluate((control: HTMLTextAreaElement) => control.setSelectionRange(11, 11));
+  await page.evaluate(() => (window as any).__hypergolicMediaActive(false));
+  await journalControl(page, 'resume-late-sheet');
+  await page.reload();
+  await expect(editor).toHaveValue('');
+  await page.evaluate(() => (window as any).__hypergolicMediaActive(true));
+  await journalControl(page, 'restore-late-sheet');
+  await expect(editor).toBeFocused();
+  // Journal may ask for its INC topic after restore has focused the composer.
+  const allowInput = (allow: boolean) => page.evaluate(allow => (window as any).__hypergolicInputActive(allow), allow);
+  await allowInput(false);
+  await expect(editor).not.toBeFocused();
+  await allowInput(true);
+  await expect(editor).toBeFocused();
+  await page.keyboard.insertText('new ');
+  await expect(editor).toHaveValue('unfinished new field notes');
+  await title.fill('Continue here');
+  await allowInput(false);
+  await allowInput(true);
+  await expect(editor).not.toBeFocused();
 });
