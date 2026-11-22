@@ -358,6 +358,33 @@ test('exact Emoji Pack Creator desktop retains its original two-column metadata 
 for(const appId of ['emoji-browser','creator-signals','mapplets','feed-builder','emoji-pack-creator'])for(const variant of ['other-app','new-version','new-event']){
   test(`ordinary ${appId} ${variant} receives no presentation override`,async({page})=>{await open(page,appId,variant);});
 }
+for (const variant of ['exact', 'new-event']) {
+  test(`published Mapplets worker access for the ${variant} release`, async ({page}) => {
+    const frame = await open(page, 'mapplets', variant);
+    const outcome = await frame.locator('body').evaluate(async () => {
+      const url = URL.createObjectURL(new Blob(['postMessage(42)'], {type:'text/javascript'}));
+      let worker: Worker | undefined;
+      try {
+        return await new Promise<string>((resolve, reject) => {
+          try { worker = new Worker(url); }
+          catch (error) {
+            if (error instanceof DOMException && error.name === 'SecurityError') resolve('denied');
+            else reject(error);
+            return;
+          }
+          worker.onmessage = event => resolve(event.data === 42 ? 'computed' : 'unexpected');
+          worker.onerror = event => { event.preventDefault(); resolve('denied'); };
+        });
+      } finally {
+        worker?.terminate();
+        URL.revokeObjectURL(url);
+      }
+    });
+    expect(outcome).toBe(variant === 'exact' ? 'computed' : 'denied');
+    const csp = await frame.locator('meta[http-equiv="Content-Security-Policy" i]').first().getAttribute('content');
+    expect(csp).toContain(variant === 'exact' ? 'worker-src blob:' : "worker-src 'none'");
+  });
+}
 test('unpublished, wrong-app and future-version metadata retain byte-identical documents and CSP',()=>{
   const html='<head><meta http-equiv="Content-Security-Policy" content="default-src none"></head><body></body>';
   for(const pin of pins){for(const metadata of [{eventId:pin.eventId,published:false,appId:pin.appId,aggregateHash:pin.aggregateHash},

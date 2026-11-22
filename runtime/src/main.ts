@@ -6,6 +6,7 @@ import {injectCreatorUpload} from './reviewed-creator-upload';
 import {supportsWorkspaceJournalCheckpoint} from '../../src/napplets/workspace-journal-checkpoint';
 import {injectJournalCheckpoint} from './reviewed-workspace-journal';
 import {injectEmojiImages} from './reviewed-emoji-images';
+import {reviewedPresentationApp} from './reviewed-presentation-pin';
 import {supportsMappletsTouchSelection} from './reviewed-mapplets-touch';
 import {validEnvelope, rejectEnvelope} from './guest-envelope';
 import {commonFailure} from '../../src/common/common-contract';
@@ -92,7 +93,7 @@ function fail(code: FailureCode): void {
 const csp = [
   "default-src 'none'", "script-src 'unsafe-inline' 'wasm-unsafe-eval'",
   "style-src 'unsafe-inline'", 'img-src data: blob:', 'font-src data:',
-  "connect-src 'none'", "webrtc 'block'", "worker-src blob:", "child-src 'none'", "frame-src 'none'",
+  "connect-src 'none'", "webrtc 'block'", "worker-src 'none'", "child-src 'none'", "frame-src 'none'",
   "media-src 'none'", "object-src 'none'", "manifest-src 'none'", "base-uri 'none'",
   "form-action 'none'",
 ].join('; ');
@@ -226,8 +227,16 @@ function createGuestEndpoint(artifact: RuntimeMetadata, hooks: ShellAdapter) {
   const source = frame.contentWindow;
   if (!source) { bridge.destroy(); throw new Error('Frame unavailable'); }
   const media = bindResourceMedia(source, frame);
-  const policy = artifact.legacyReadOnly ? csp.replace("script-src 'unsafe-inline' 'wasm-unsafe-eval'", "script-src 'unsafe-inline' blob:").replace('worker-src blob:', "worker-src 'none'")
-    : artifact.domains.includes('resource') ? csp.replace("media-src 'none'", 'media-src blob:') : csp;
+  let policy = csp;
+  if (artifact.legacyReadOnly) {
+    policy = policy.replace("script-src 'unsafe-inline' 'wasm-unsafe-eval'", "script-src 'unsafe-inline' blob:");
+  } else {
+    const workerLab = !artifact.published && artifact.appId === 'ux-lab';
+    if (workerLab || reviewedPresentationApp(artifact) === 'mapplets') {
+      policy = policy.replace("worker-src 'none'", "worker-src blob:");
+    }
+    if (artifact.domains.includes('resource')) policy = policy.replace("media-src 'none'", 'media-src blob:');
+  }
   originRegistry.register(source, sessionId, identity);
   originRegistry.setEnvironment(source, environment);
   function destroyFrame(closeNative: () => void) {
