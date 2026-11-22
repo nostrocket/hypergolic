@@ -598,8 +598,24 @@ test('Keys dispatches real focused hardware shortcuts and scopes its action list
   await expect(editor).toHaveValue('p');
   expect(await actions()).toEqual(['pause', 'shoot']);
   await surface.focus();
+  await page.evaluate(() => {
+    const guestWindow = document.querySelector('iframe')!.contentWindow;
+    (window as any).keyForwards = [];
+    window.addEventListener('message', event => {
+      if (event.source === guestWindow && event.data?.type === 'keys.forward') (window as any).keyForwards.push(event.data);
+    });
+  });
+  await page.keyboard.press('Control+;');
+  await expect.poll(() => page.evaluate(() => (window as any).keyForwards)).toEqual([
+    {type: 'keys.forward', key: ';', code: 'Semicolon', ctrl: true, shift: false, alt: false, meta: false},
+  ]);
+  await editor.focus();
+  await page.keyboard.press('Control+;');
+  await surface.focus();
+  await page.keyboard.press('Control+l');
   await page.keyboard.press('Control+p');
   await page.keyboard.press('Escape');
+  expect(await page.evaluate(() => (window as any).keyForwards)).toHaveLength(1);
   expect(await actions()).toEqual(['pause', 'shoot']);
   if (browserName === 'chromium') {
     // DevTools emits a trusted Android/IME-style Process keydown (keyCode 229).

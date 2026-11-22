@@ -202,8 +202,8 @@ diff --git a/dist/index.js b/dist/index.js
 -      if (typeof keyEvent.key === "string" && modifierKeys.has(keyEvent.key)) return;
 -      if (isTextEntryTarget(keyEvent.target ?? documentLike?.activeElement)) return;
 +      if (!keysInputActive || !keyEvent.isTrusted || !documentLike?.hasFocus() || documentLike.hidden ||
-+          keyEvent.isComposing || keyEvent.keyCode === 229 || keyEvent.repeat || keyEvent.defaultPrevented ||
-+          keyEvent.ctrlKey || keyEvent.altKey || keyEvent.shiftKey || keyEvent.metaKey) return;
++          keyEvent.isComposing || keyEvent.keyCode === 229 || keyEvent.repeat || keyEvent.defaultPrevented) return;
++      if ((keyEvent.ctrlKey || keyEvent.metaKey) && ["a", "c", "f", "g", "j", "l", "n", "p", "r", "t", "v", "w", "x", "z"].includes(keyEvent.key.toLowerCase())) return;
 +      if (typeof keyEvent.key === "string" && (modifierKeys.has(keyEvent.key) || reservedKeyNames.has(keyEvent.key))) return;
 +      const path = apply(getPath, keyEvent, []);
 +      if (!isKeySurface(path[0])) return;

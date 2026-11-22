@@ -36,7 +36,9 @@ surfaces are a directly focused native canvas or button, and the document body
 when it is the ordinary focus fallback. A focused button retains native Space
 activation. It leaves focused custom elements and other DOM surfaces to the
 guest, including editors inside closed shadow roots. Text editing, composition,
-repeated events, modifier chords and reserved controls remain excluded.
+repeated events and reserved controls remain excluded. On eligible surfaces an
+unbound modifier chord is forwarded to the shell. The mobile shell currently has
+no global shortcut actions and leaves browser-reserved shortcuts to the platform.
 Bindings are local to that frame and expire with it.
 
 The selected SDK/core exports accept an unsigned `EventTemplate`. The NAP 0.31.1
