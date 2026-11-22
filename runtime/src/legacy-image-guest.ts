@@ -1,8 +1,6 @@
 /** Legacy img src properties/attributes use the private image lane; direct network stays CSP-blocked. */
-function installLegacyImages(session: string): void {
-  const parentWindow = window.parent, post = parentWindow.postMessage.bind(parentWindow), apply = Reflect.apply;
-  const sourceGetter = Object.getOwnPropertyDescriptor(MessageEvent.prototype, 'source')!.get!;
-  const dataGetter = Object.getOwnPropertyDescriptor(MessageEvent.prototype, 'data')!.get!;
+export function installLegacyImages(session: string, post: (value: object) => void) {
+  const apply = Reflect.apply;
   const connected = Object.getOwnPropertyDescriptor(Node.prototype, 'isConnected')!.get!;
   const descriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src')!;
   const setSource = descriptor.set!, createURL = URL.createObjectURL.bind(URL), revokeURL = URL.revokeObjectURL.bind(URL);
@@ -14,7 +12,7 @@ function installLegacyImages(session: string): void {
   const revisions = new WeakMap<HTMLImageElement, number>();
   let sequence = 0, inFlight = 0, dead = false;
   const send = (operation: string, work: ImageWork): void => post({type: 'legacy.image', session, operation, id: work.id,
-    ...(operation === 'bytes' ? {url: work.url} : {})}, '*');
+    ...(operation === 'bytes' ? {url: work.url} : {})});
   const attached = (work: ImageWork): boolean => apply(connected, work.image, []) && selected.get(work.image) === work;
   const release = (work: ImageWork): void => {
     if (images.get(work.id) !== work) return;
@@ -64,29 +62,21 @@ function installLegacyImages(session: string): void {
     }});
   const observer = new MutationObserver(pump);
   observer.observe(document, {childList: true, subtree: true});
-  window.addEventListener('message', event => {
-    if (dead || !event.isTrusted || apply(sourceGetter, event, []) !== parentWindow) return;
-    const value = apply(dataGetter, event, []);
-    if (value?.type !== 'legacy.image.result' || value.session !== session || typeof value.id !== 'string') return;
+  const receive = (value: Record<string, unknown>) => {
+    if (dead || value.type !== 'legacy.image.result' || value.session !== session || typeof value.id !== 'string') return;
     const work = images.get(value.id);
     if (!work || !work.started || work.done) return;
     inFlight--; work.done = true;
     if (!attached(work)) {release(work); pump(); return;}
     if (Object.keys(value).length !== 5 || !(value.blob instanceof NativeBlob) || value.blob.size > 10 * 1024 * 1024 ||
-      !['image/png', 'image/gif', 'image/jpeg', 'image/webp'].includes(value.mime) || value.blob.type !== value.mime) {
+      !['image/png', 'image/gif', 'image/jpeg', 'image/webp'].includes(String(value.mime)) || value.blob.type !== value.mime) {
       failure(work); pump(); return;
     }
     work.objectURL = createURL(value.blob); apply(setSource, work.image, [work.objectURL]); pump();
-  });
+  };
   window.addEventListener('pagehide', event => {
     if (!event.isTrusted) return;
     dead = true; observer.disconnect(); for (const work of images.values()) release(work);
   }, true);
-}
-export function injectLegacyImages(html: string, session: string): string {
-  if (!/^[a-zA-Z0-9-]{16,128}$/.test(session)) throw new Error('Invalid legacy image session');
-  const head = /<meta http-equiv="Content-Security-Policy" content="[^"]*">/;
-  if (!head.test(html)) throw new Error('Legacy images require host CSP');
-  const encoded = JSON.stringify(session).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026');
-  return html.replace(head, value => value + '<script>(' + installLegacyImages.toString() + ')(' + encoded + ');</script>');
+  return receive;
 }

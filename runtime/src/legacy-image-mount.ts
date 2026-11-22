@@ -31,7 +31,7 @@ export function createLegacyImageMount(frame: HTMLIFrameElement, source: Window,
   const deliver = (id: string): void => {
     const result = completions.take(id);
     if (!result || !alive() || !pending.delete(id)) return;
-    source.postMessage({type: 'legacy.image.result', session, id, ...result}, '*');
+    guard.send({type: 'legacy.image.result', session, id, ...result});
   };
   const complete = (id: string, reply: unknown): void => {
     if (!alive() || !pending.has(id)) return;
@@ -43,16 +43,15 @@ export function createLegacyImageMount(frame: HTMLIFrameElement, source: Window,
     guard.run(() => deliver(id), 128);
   };
   return Object.freeze({
-    receive(event: MessageEvent): boolean {
-      const value = event.data;
+    receive(value: Record<string, unknown>): boolean {
       if (value?.type !== 'legacy.image') return false;
-      if (!event.isTrusted || event.source !== source || !alive() || !guard.isActive() || value.session !== session ||
+      if (!alive() || !guard.isActive() || value.session !== session ||
         typeof value.id !== 'string' || !/^[a-zA-Z0-9-]{1,128}$/.test(value.id)) return true;
       if (value.operation === 'cancel' && Object.keys(value).length === 4) {cancel(value.id); return true;}
       if (value.operation !== 'bytes' || Object.keys(value).length !== 5 || typeof value.url !== 'string' ||
         new TextEncoder().encode(value.url).length > 8192 || pending.has(value.id)) return true;
       const id = value.id;
-      if (pending.size >= 4) {source.postMessage({type: 'legacy.image.result', session, id, error: 'quota-exceeded'}, '*'); return true;}
+      if (pending.size >= 4) {guard.send({type: 'legacy.image.result', session, id, error: 'quota-exceeded'}); return true;}
       pending.add(id);
       void adapter({message: {type: 'resource.bytes', id, url: value.url}, send: reply => complete(id, reply)});
       return true;

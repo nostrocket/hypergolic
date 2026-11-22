@@ -6,6 +6,7 @@ type Subscription = {nativeId: string; callerId: string; closed: boolean};
 type Socket = {relay: string; subscriptions: Map<string, Subscription>};
 export type LegacyReadOnlyOptions = Readonly<{
   frame: HTMLIFrameElement; source: Window; session: string; relays: readonly string[];
+  send(value: object): void;
   live(): boolean;
   subscribe(request: RelaySubscribeRequest, deliver: (message: RelaySubscriptionMessage) => void): void;
   close(request: RelayCloseRequest): void;
@@ -43,10 +44,8 @@ export function createLegacyReadOnlyReceiver(options: LegacyReadOnlyOptions) {
   const relays = new Set(options.relays);
   const sockets = new Map<string, Socket>();
   let closed = false, next = 0, count = 0, windowStart = performance.now();
-  const sourceGetter = Object.getOwnPropertyDescriptor(MessageEvent.prototype, 'source')?.get;
-  const dataGetter = Object.getOwnPropertyDescriptor(MessageEvent.prototype, 'data')?.get;
   const live = (): boolean => !closed && options.live() && frame.contentWindow === source;
-  const send = (socket: string, fields: object): void => {if (live()) source.postMessage({type: 'legacy.readonly.result', session, socket, ...fields}, '*');};
+  const send = (socket: string, fields: object): void => {if (live()) options.send({type: 'legacy.readonly.result', session, socket, ...fields});};
   const notice = (socket: string, message: string): void => {options.status(message); send(socket, {event: 'message', data: JSON.stringify(['NOTICE', message])});};
   function closeSubscription(socket: Socket, row: Subscription): void {
     if (row.closed) return;
@@ -91,11 +90,9 @@ export function createLegacyReadOnlyReceiver(options: LegacyReadOnlyOptions) {
     try {options.subscribe(request, message => deliver(id, socket, row, message));}
     catch {closeSubscription(socket, row); throw new Error('Legacy read unavailable');}
   }
-  function receive(event: MessageEvent): boolean {
-    if (!live() || !event.isTrusted || !sourceGetter || !dataGetter) return false;
+  function receive(value: Record<string, unknown>): boolean {
+    if (!live()) return false;
     try {
-      if (Reflect.apply(sourceGetter, event, []) !== source) return false;
-      const value = Reflect.apply(dataGetter, event, []) as Record<string, unknown>;
       if (value?.type !== 'legacy.readonly') return false;
       if (value.session !== session || typeof value.socket !== 'string' || !/^socket-[1-9][0-9]{0,3}$/.test(value.socket)) return true;
       if (performance.now() - windowStart > 1000) {count = 0; windowStart = performance.now();}

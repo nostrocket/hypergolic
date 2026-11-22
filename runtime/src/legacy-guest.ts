@@ -1,50 +1,42 @@
+import {installLegacyImages} from './legacy-image-guest';
+
 /** Host-supplied read-only compatibility prelude. It grants no ordinary NAP authority. */
-function createLegacyDocumentPort(session: string, closed: () => boolean) {
-  const parentWindow = window.parent, apply = Reflect.apply;
-  const sourceGetter = Object.getOwnPropertyDescriptor(MessageEvent.prototype, 'source')?.get;
-  const dataGetter = Object.getOwnPropertyDescriptor(MessageEvent.prototype, 'data')?.get;
-  const stop = Event.prototype.stopImmediatePropagation;
-  const portsGetter = Object.getOwnPropertyDescriptor(MessageEvent.prototype, 'ports')?.get;
-  const portPost = MessagePort.prototype.postMessage, portStart = MessagePort.prototype.start, portClose = MessagePort.prototype.close;
-  const portListen = EventTarget.prototype.addEventListener;
-  const query = Document.prototype.querySelector, click = HTMLElement.prototype.click;
-  let documentPort: MessagePort | null = null;
-  window.addEventListener('message', event => {
-    if (!event.isTrusted || !sourceGetter || !dataGetter || apply(sourceGetter, event, []) !== parentWindow) return;
-    const value = apply(dataGetter, event, []);
-    if (value?.type !== 'hypergolic.legacy.document.port' || value.session !== session) return;
-    apply(stop, event, []);
-    if (!portsGetter) return;
-    const ports = apply(portsGetter, event, []) as readonly MessagePort[];
-    if (documentPort || Object.keys(value).length !== 3 || typeof value.challenge !== 'string' || ports.length !== 1) {
-      for (const port of ports) apply(portClose, port, []); return;
+function createLegacyDocumentPort(session: string, closed: () => boolean, receive: (value: Record<string, unknown>) => void) {
+  const channel = new MessageChannel();
+  const port = channel.port1;
+  const send = port.postMessage.bind(port), close = port.close.bind(port);
+  const dataOf = Object.getOwnPropertyDescriptor(MessageEvent.prototype, 'data')!.get!;
+  const apply = Reflect.apply, query = Document.prototype.querySelector, click = HTMLElement.prototype.click;
+  port.addEventListener('message', event => {
+    if (!event.isTrusted || closed()) return;
+    const value = apply(dataOf, event, []);
+    if (typeof value?.challenge === 'string' && value.challenge.length <= 128 && Object.keys(value).length === 2) {
+      if (value.type === 'identify') send({type:'ready', session, challenge:value.challenge});
+      if (value.type === 'ping') send({type:'pong', challenge:value.challenge});
     }
-    documentPort = ports[0]!;
-    apply(portListen, documentPort, ['message', (event: MessageEvent) => {
-      if (!event.isTrusted || closed()) return;
-      const value = apply(dataGetter, event, []);
-      if (value?.type === 'ping' && typeof value.challenge === 'string' && value.challenge.length <= 128 && Object.keys(value).length === 2)
-        if (documentPort) apply(portPost, documentPort, [{type: 'pong', challenge: value.challenge}]);
-      if (value?.type === 'navigate' && typeof value.hash === 'string' && /^#\/post\/naddr1[0-9a-z]{1,1800}$/.test(value.hash) && Object.keys(value).length === 2)
-        location.hash = value.hash;
-      if (value?.type === 'recipe-feed' && Object.keys(value).length === 1) {
-        const feed = apply(query, document, ['button[data-view="feed"]']);
-        if (feed instanceof HTMLElement) apply(click, feed, []);
-      }
-    }]);
-    apply(portStart, documentPort, []); apply(portPost, documentPort, [{type: 'ready', challenge: value.challenge}]);
-  }, true);
-  return {revoke() {if (documentPort) {apply(portPost, documentPort, [{type: 'revoke'}]); apply(portClose, documentPort, []);} documentPort = null;}};
+    if (value?.type === 'navigate' && typeof value.hash === 'string' && /^#\/post\/naddr1[0-9a-z]{1,1800}$/.test(value.hash) && Object.keys(value).length === 2)
+      location.hash = value.hash;
+    if (value?.type === 'legacy.image.result' || value?.type === 'legacy.readonly.result') receive(value);
+    if (value?.type === 'recipe-feed' && Object.keys(value).length === 1) {
+      const feed = apply(query, document, ['button[data-view="feed"]']);
+      if (feed instanceof HTMLElement) apply(click, feed, []);
+    }
+  });
+  port.start();
+  window.parent.postMessage({type:'napplet.hello'}, '*', [channel.port2]);
+  return {send, revoke() {send({type:'revoke'}); close();}};
 }
-function installLegacyReadOnly(session: string, documentFactory: typeof createLegacyDocumentPort): void {
-  const parentWindow = window.parent, post = parentWindow.postMessage.bind(parentWindow);
-  const stringify = JSON.stringify.bind(JSON), parse = JSON.parse.bind(JSON), apply = Reflect.apply;
-  const sourceGetter = Object.getOwnPropertyDescriptor(MessageEvent.prototype, 'source')?.get;
-  const dataGetter = Object.getOwnPropertyDescriptor(MessageEvent.prototype, 'data')?.get;
-  const documentPort = documentFactory(session, () => dead);
+function installLegacyReadOnly(session: string, documentFactory: typeof createLegacyDocumentPort, imageFactory: typeof installLegacyImages): void {
+  const stringify = JSON.stringify.bind(JSON), parse = JSON.parse.bind(JSON);
   const sockets = new Map<string, ReadSocket>();
   let sequence = 0, dead = false;
-  const send = (operation: string, fields: object): void => post({type: 'legacy.readonly', session, operation, ...fields}, '*');
+  const documentPort = documentFactory(session, () => dead, row => {
+    if (row.session !== session || dead) return;
+    if (row.type === 'legacy.image.result') receiveImage(row);
+    else if (typeof row.socket === 'string') sockets.get(row.socket)?.deliver(row);
+  });
+  const receiveImage = imageFactory(session, documentPort.send);
+  const send = (operation: string, fields: object): void => documentPort.send({type:'legacy.readonly', session, operation, ...fields});
   class ReadSocket extends EventTarget {
     static readonly CONNECTING = 0; static readonly OPEN = 1; static readonly CLOSING = 2; static readonly CLOSED = 3;
     readonly CONNECTING = 0; readonly OPEN = 1; readonly CLOSING = 2; readonly CLOSED = 3;
@@ -89,15 +81,6 @@ function installLegacyReadOnly(session: string, documentFactory: typeof createLe
       this.emit(new CloseEvent('close', {code: 1000, wasClean: true}));
     }
   }
-  window.addEventListener('message', event => {
-    if (dead || !event.isTrusted || !sourceGetter || !dataGetter) return;
-    try {
-      if (apply(sourceGetter, event, []) !== parentWindow) return;
-      const row = apply(dataGetter, event, []) as Record<string, unknown>;
-      if (row?.type !== 'legacy.readonly.result' || row.session !== session || typeof row.socket !== 'string') return;
-      sockets.get(row.socket)?.deliver(row);
-    } catch { /* Invalid senders and replies have no destination. */ }
-  });
   window.addEventListener('pagehide', event => {
     if (!event.isTrusted) return;
     dead = true; documentPort.revoke();
@@ -105,14 +88,13 @@ function installLegacyReadOnly(session: string, documentFactory: typeof createLe
   }, true);
   // NIP-07 is deliberately absent. Publishing remains impossible even with a guest-created key.
   Object.defineProperty(window, 'WebSocket', {value: ReadSocket, writable: false, configurable: false});
-  post({type: 'hypergolic.legacy.document.ready', session}, '*');
 }
 
 /** Insert after the host CSP and before every signed-guest script; original bytes are verified first. */
 export function injectLegacyReadOnly(html: string, session: string): string {
   if (!/^[a-zA-Z0-9-]{16,128}$/.test(session)) throw new Error('Invalid legacy session');
   const encoded = JSON.stringify(session).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026');
-  const source = '(' + installLegacyReadOnly.toString() + ')(' + encoded + ',(' + createLegacyDocumentPort.toString() + '));';
+  const source = '(' + installLegacyReadOnly.toString() + ')(' + encoded + ',(' + createLegacyDocumentPort.toString() + '),(' + installLegacyImages.toString() + '));';
   const prelude = '<script>' + source.replaceAll('</script', '<\\/script') + '</script>';
   const cspEnd = html.indexOf('>', html.indexOf('<meta http-equiv="Content-Security-Policy"'));
   if (cspEnd < 0 || !html.includes('<meta http-equiv="Content-Security-Policy"')) throw new Error('Legacy prelude requires host CSP');

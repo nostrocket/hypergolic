@@ -28,6 +28,9 @@ logical sockets, four filters per request and 64 entries in bounded filter
 lists. Initial stored history is limited to 32 events; partial limits are
 reported, and a rejected or failed request never receives a false EOSE. Closing,
 account switching, stale replies and document replacement revoke delivery.
+Before publisher code runs, the reader transfers one port to the shell with
+`napplet.hello`. The shell verifies the document challenge on that connection.
+Public reads, image requests and their replies use the same port.
 Same-document hash navigation must answer a fresh challenge over a private
 document-bound port before queued reads or deliveries resume. The probe has a
 one-second deadline and a queue limit of 32 messages/256 KiB; failure clears it.

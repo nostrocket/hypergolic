@@ -1,12 +1,10 @@
-const READY = 'hypergolic.legacy.document.ready';
-const PORT = 'hypergolic.legacy.document.port';
 const MAX_QUEUED = 32, MAX_BYTES = 256 * 1024, TIMEOUT_MS = 1000, INITIAL_TIMEOUT_MS = 10_000;
 /** A private port belongs to the original Document, unlike its navigation-stable WindowProxy. */
 export function createLegacyDocumentGuard(frame: HTMLIFrameElement, source: Window, session: string,
   revoke: () => void, active: () => void) {
   let state: 'starting' | 'active' | 'checking' | 'closed' = 'starting';
   let port: MessagePort | null = null, challenge = '', loaded = false, probeAfterStart = false;
-  let bytes = 0;
+  let bytes = 0, operations = 0, started = performance.now();
   const queue: Array<() => void> = [];
   const sourceGetter = Object.getOwnPropertyDescriptor(MessageEvent.prototype, 'source')!.get!;
   const dataGetter = Object.getOwnPropertyDescriptor(MessageEvent.prototype, 'data')!.get!;
@@ -35,34 +33,46 @@ export function createLegacyDocumentGuard(frame: HTMLIFrameElement, source: Wind
     timer = window.setTimeout(fail, TIMEOUT_MS);
     try {port.postMessage({type: 'ping', challenge});} catch {fail();}
   }
-  function connect(): void {
-    if (port || state !== 'starting') return;
-    const channel = new MessageChannel(); port = channel.port1; challenge = crypto.randomUUID();
+  function connect(connection: MessagePort, dispatch: (value: Record<string, unknown>) => void): void {
+    port = connection; challenge = crypto.randomUUID();
+    port.onmessageerror = fail;
     port.onmessage = event => {
-      if (state === 'closed' || !event.isTrusted) return;
+      if (state === 'closed' || !event.isTrusted || event.origin !== '') return;
+      if (event.ports.length) {for (const unused of event.ports) unused.close(); return;}
       const value = event.data;
       if (value?.type === 'revoke' && Object.keys(value).length === 1) {fail(); return;}
-      if (!value || Object.keys(value).length !== 2 || value.challenge !== challenge ||
-          (state === 'starting' ? value.type !== 'ready' : state !== 'checking' || value.type !== 'pong')) return;
+      if ((value?.type === 'legacy.readonly' || value?.type === 'legacy.image') && value.session === session) {
+        const now = performance.now();
+        if (now - started > 1000) {started = now; operations = 0;}
+        if (++operations > 64) return;
+        let size: number;
+        try {size = new TextEncoder().encode(JSON.stringify(value)).length;} catch {fail(); return;}
+        run(() => dispatch(value), size);
+        return;
+      }
+      if (!value || value.challenge !== challenge) return;
+      if (state === 'starting') {
+        if (value.type !== 'ready' || value.session !== session || Object.keys(value).length !== 3) return;
+      } else if (state !== 'checking' || value.type !== 'pong' || Object.keys(value).length !== 2) return;
       if (state === 'starting' && probeAfterStart) {probe(); return;}
       resume();
     };
     port.start();
-    try {source.postMessage({type: PORT, session, challenge}, '*', [channel.port2]);} catch {channel.port2.close(); fail();}
+    try {port.postMessage({type:'identify', challenge});} catch {fail();}
   }
-  function receive(event: MessageEvent, dispatch: (event: MessageEvent) => void): void {
+  function receive(event: MessageEvent, dispatch: (value: Record<string, unknown>) => void): void {
     if (state === 'closed' || !event.isTrusted || frame.contentWindow !== source || Reflect.apply(sourceGetter, event, []) !== source) return;
     const value = Reflect.apply(dataGetter, event, []);
-    if (value?.type === READY) {
-      for (const incoming of event.ports) incoming.close();
-      if (value.session === session && Object.keys(value).length === 2) connect();
-      return;
+    if (event.origin === 'null' && state === 'starting' && !port && value?.type === 'napplet.hello' &&
+        Object.keys(value).length === 1 && event.ports.length === 1) {
+      connect(event.ports[0]!, dispatch);
+    } else {
+      for (const unused of event.ports) unused.close();
     }
-    let size: number;
-    try {size = new TextEncoder().encode(JSON.stringify(value)).length;} catch {fail(); return;}
-    run(() => dispatch(event), size);
   }
-  return Object.freeze({receive, run, destroy, isActive: () => state === 'active', navigate(hash: string) {
+  return Object.freeze({receive, run, destroy, send(value: object) {
+    if (state === 'active' && frame.contentWindow === source) port?.postMessage(value);
+  }, isActive: () => state === 'active', navigate(hash: string) {
     if (state !== 'active' || frame.contentWindow !== source || !port || !/^#\/post\/naddr1[0-9a-z]{1,1800}$/.test(hash)) throw new Error('Article reader is not active');
     port.postMessage({type: 'navigate', hash});
   }, refreshRecipeFeed() {

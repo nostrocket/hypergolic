@@ -31,15 +31,13 @@ export function createLoadHandler(frame: HTMLIFrameElement, source: Window,
 }
 
 export function bindFrameListeners(frame: HTMLIFrameElement, source: Window,
-  legacyGuard: ReturnType<typeof createLegacyDocumentGuard> | undefined,
   receiveGuest: (event: MessageEvent) => void, loaded: () => void, failed: () => void) {
   const receive = (event: MessageEvent): void => {
     if (event.isTrusted && (source.length > 0 || event.data?.type === 'hypergolic.nested-document')) {
       failed();
       return;
     }
-    if (legacyGuard) legacyGuard.receive(event, receiveGuest);
-    else receiveGuest(event);
+    receiveGuest(event);
   };
   window.addEventListener('message', receive);
   frame.addEventListener('load', loaded);

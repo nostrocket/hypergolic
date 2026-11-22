@@ -1,7 +1,6 @@
 import { bindFrameListeners, createGuestFrame, createLoadHandler } from './guest-frame';
 import { NAPPLET_LINK_LEASE_MS } from '../../src/links/link-contract';
 import {createLegacyImageMount} from './legacy-image-mount';
-import {injectLegacyImages} from './legacy-image-guest';
 import {injectReviewedPresentation} from './reviewed-presentation';
 import {injectCreatorUpload} from './reviewed-creator-upload';
 import {supportsWorkspaceJournalCheckpoint} from '../../src/napplets/workspace-journal-checkpoint';
@@ -319,9 +318,6 @@ function mount(artifact: RuntimeMetadata) {
     cvm,
     closed: () => stopped, live,
     dispatch(event) {
-      if (legacyImages?.receive(event)) return;
-      if (legacy?.receive(event)) return;
-      if (artifact.legacyReadOnly) return;
       if (mesh?.receive(event)) return;
       if (!validEnvelope(event.data)) {
         if (startup.isReady() && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId)) rejectEnvelope(event, source, artifact.domains);
@@ -334,7 +330,10 @@ function mount(artifact: RuntimeMetadata) {
   });
   const failed = () => fail('frame-navigation');
   const loaded = createLoadHandler(frame, source, media, legacyGuard, failed);
-  const unbind = bindFrameListeners(frame, source, legacyGuard, guestPort?.receive ?? receiveGuest, loaded, failed);
+  const receive = legacyMount ? (event: MessageEvent) => legacyMount.guard.receive(event, value => {
+    if (!legacyImages?.receive(value)) legacy?.receive(value);
+  }) : guestPort?.receive ?? receiveGuest;
+  const unbind = bindFrameListeners(frame, source, receive, loaded, failed);
   cleanup = (): void => {
     guestPort?.close();
     shellTheme.close();
@@ -360,7 +359,7 @@ function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
   if (legacyNonce) {
     const modules = artifact.appId === 'recipe-cards' ? injectLegacyRecipeModules(withCsp) : withCsp;
     const layout = artifact.appId === 'longform' ? injectLegacyLongformLayout(modules) : modules;
-    frame.srcdoc = prefix + injectLegacyReadOnly(injectLegacyImages(injectAndroidGuestHelpers(injectResourceMediaGate(layout)), legacyNonce), legacyNonce);
+    frame.srcdoc = prefix + injectLegacyReadOnly(injectAndroidGuestHelpers(injectResourceMediaGate(layout)), legacyNonce);
     return;
   }
   const reviewed = artifact.journalCheckpoint ? injectJournalCheckpoint(withCsp) : withCsp;
