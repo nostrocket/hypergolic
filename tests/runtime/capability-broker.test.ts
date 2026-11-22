@@ -12,6 +12,35 @@ function registration(patch: Partial<NativeRegistration> = {}): NativeRegistrati
     user: hex(1), publisher: hex(2), appId: 'state-lab', version: hex(3),
     instanceId: 'state-lab-1', fixture: 'state-lab', domains: ['theme', 'identity', 'storage'], ...patch };
 }
+test('24 independent guest reads validate the namespace once and detect concurrent external changes', async t => {
+  const { database, sqlite } = await setup(t), native = new NativeLeases(), config = registration();
+  const broker = createCapabilityBroker(database, native, {registration: config, assertActive() {}});
+  let id = 0;
+  async function invoke(request: object) {
+    const token = native.add(config, {...request, id: 'storage-' + ++id});
+    await broker.dispatch(token);
+    return native.results.get(token);
+  }
+  const read = {type: 'storage.get', key: 'a'};
+  await invoke({type: 'storage.set', key: 'a', value: 'x'});
+  const seed = database.bindStorage({...config, assertActive() {}});
+  await seed.port.set('other', 'y'.repeat(192 * 1024));
+  seed.revoke();
+  const start = sqlite.calls.length;
+  for (let i = 0; i < 24; i++) {
+    const result = await invoke(read);
+    assert.deepEqual(result, {type: 'storage.get.result', id: 'storage-' + id, value: 'x'});
+  }
+  assert.equal(sqlite.calls.slice(start).filter(({sql}) => sql.startsWith('SELECT key, value FROM saved_strings')).length, 1);
+  const foreign = sqlite.raw();
+  sqlite.onStep = sql => {
+    if (!sql.startsWith('SELECT value FROM saved_strings')) return;
+    sqlite.onStep = undefined;
+    foreign.prepare("UPDATE saved_strings SET value = x'0102' WHERE key = 'other'").run();
+  };
+  assert.deepEqual(await invoke(read), {type: 'storage.get.result', id: 'storage-' + id, error: 'storage unavailable'});
+});
+
 test('real SQLite write/read/remove/list preserve original IDs, literal strings and empty-vs-missing', async t => {
   const { database } = await setup(t), native = new NativeLeases(), config = registration();
   const broker = createCapabilityBroker(database, native, { registration: config, assertActive() {} });

@@ -176,7 +176,7 @@ function bindWorkspace(connection: StorageConnection, owner: TrustedUser): Bindi
     },
   }) });
 }
-function bindStorage(connection: StorageConnection, registration: TrustedRegistration): Binding<StringStorage> {
+function bindStorage(connection: StorageConnection, registration: TrustedRegistration, validated: Map<string, string>): Binding<StringStorage> {
   const { lease, transaction } = connection;
   const owner = appParams(registration), aggregate = version(registration.version), instance = identifier(registration.instanceId);
   const binding = lease(liveFunction(registration.assertActive));
@@ -188,21 +188,23 @@ function bindStorage(connection: StorageConnection, registration: TrustedRegistr
       return action(io, params, rows);
     }));
   }
-  // A SQLite data_version changes when another connection commits. This connection's
-  // own mutations run serially and validate the complete namespace before writing.
-  const validated = new Map<Scope, number>();
-  async function dataVersion(io: Access): Promise<number> {
-    const rows = await io.all<{data_version: number}>('PRAGMA data_version');
-    if (rows.length !== 1 || !safeCount(rows[0]!.data_version)) return fail('CORRUPT_STORAGE');
-    return rows[0]!.data_version;
+  // data_version tracks other connections. total_changes() also covers this
+  // connection's writes, including migrations and writes through other bindings.
+  async function dataVersion(io: Access): Promise<string> {
+    const rows = await io.all<{data_version: number; changes: number}>(
+      'SELECT data_version, total_changes() AS changes FROM pragma_data_version');
+    const row = rows[0];
+    if (rows.length !== 1 || !row || !safeCount(row.data_version) || !safeCount(row.changes)) return fail('CORRUPT_STORAGE');
+    return row.data_version + '/' + row.changes;
   }
   function read<T>(scope: Scope | undefined, options: RequestOptions | undefined, select: (io: Access, params: Params) => Promise<T>) {
     const selected = scopeValue(scope);
     const params = [...owner, aggregate, selected, selected === 'instance' ? instance : ''];
+    const namespaceKey = JSON.stringify(params);
     return binding.submit(options, async check => {
       const io = connection.access(check);
       const before = await dataVersion(io);
-      if (validated.get(selected) === before) {
+      if (validated.get(namespaceKey) === before) {
         const result = await select(io, params);
         if (await dataVersion(io) === before) return result;
       }
@@ -211,7 +213,8 @@ function bindStorage(connection: StorageConnection, registration: TrustedRegistr
         await namespace(locked, params);
         return {version: await dataVersion(locked), value: await select(locked, params)};
       });
-      validated.set(selected, fresh.version);
+      if (validated.size >= LIMITS.totalRequests && !validated.has(namespaceKey)) validated.clear();
+      validated.set(namespaceKey, fresh.version);
       return fresh.value;
     });
   }
@@ -406,10 +409,14 @@ export async function openShellDatabase(sqlite: SQLiteModule, platform: 'android
     await configure(db, platform);
     await connection.transaction(connection.assertOpen, async () => schema(db));
   } catch (error) { await connection.abort(); throw sanitize(error); }
+  const validated = new Map<string, string>();
   return Object.freeze({
-    bindWorkspace: (owner: TrustedUser) => bindWorkspace(connection, owner),
-    bindStorage: (owner: TrustedRegistration) => bindStorage(connection, owner),
+    bindWorkspace: (owner: TrustedUser) => {
+      validated.clear();
+      return bindWorkspace(connection, owner);
+    },
+    bindStorage: (owner: TrustedRegistration) => bindStorage(connection, owner, validated),
     bindApp: (owner: TrustedApp) => bindApp(connection, owner),
-    close: connection.close,
+    close: () => { validated.clear(); return connection.close(); },
   });
 }

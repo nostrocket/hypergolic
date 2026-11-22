@@ -39,6 +39,11 @@ immutable descriptor, generation and live membership. Get/set/remove/keys use
 prepared SQL and transactional quotas: 256 keys, 1 KiB/key, 256 KiB/value and
 512 KiB/namespace including keys/values. Internal storage work is also bounded
 to 16 requests/binding and 128 total; workspace encoding is at most 512 KiB.
+Separate guest requests can reuse a completed namespace validation on the same SQLite connection.
+The cache stores only namespace identifiers and SQLite change counters. Writes on the connection
+or commits by another connection invalidate a hit. The host checks the counters on both sides
+of an indexed read, captures a fresh transaction on a change and clears the cache on account
+workspace binding or database close. Each request still has its own revocable authority.
 Delimiter-like keys are data and cannot choose another namespace. Missing is
 null; empty strings are preserved; write success follows commit.
 
