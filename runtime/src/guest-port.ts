@@ -8,7 +8,7 @@ export type GuestBindingTransport = {send(value: object): void; listen(callback:
 /** One guest-created channel per verified frame generation. */
 export function createGuestPort(frame: HTMLIFrameElement, source: Window, bridge: ShellBridge,
   domains: readonly string[], account: () => string | undefined, consumeIntent: (receipt: unknown) => void,
-  routes: {keys: ReturnType<typeof createKeysSession> | null; media(value: unknown): boolean;
+  routes: {checkpoint: ((value: Record<string, unknown>) => void) | undefined; keys: ReturnType<typeof createKeysSession> | null; media(value: unknown): boolean;
     cvm: ((value: unknown) => void) | null; mesh: ((value: unknown) => boolean) | undefined}, ready: () => void, fail: () => void) {
   let port: MessagePort | undefined;
   let stopObserving: (() => void) | undefined;
@@ -48,6 +48,10 @@ export function createGuestPort(frame: HTMLIFrameElement, source: Window, bridge
         if (++operations > 64 && !cleanup) {
           const reply = quotaReply(value, domains, 'quota-exceeded', account());
           if (reply) send(reply);
+          return;
+        }
+        if (value?.type === 'hypergolic.checkpoint.result' || value?.type === 'hypergolic.restoreCheckpoint.result') {
+          routes.checkpoint?.(value);
           return;
         }
         if (isKeysMessage(value)) {

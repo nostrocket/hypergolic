@@ -4,7 +4,7 @@ import {createLegacyImageMount} from './legacy-image-mount';
 import {injectReviewedPresentation} from './reviewed-presentation';
 import {injectCreatorUpload} from './reviewed-creator-upload';
 import {supportsWorkspaceJournalCheckpoint} from '../../src/napplets/workspace-journal-checkpoint';
-import {injectJournalCheckpoint} from './reviewed-workspace-journal';
+import {journalBinding} from './reviewed-workspace-journal';
 import {injectEmojiImages} from './reviewed-emoji-images';
 import {reviewedPresentationApp} from './reviewed-presentation-pin';
 import {supportsMappletsTouchSelection} from './reviewed-mapplets-touch';
@@ -270,7 +270,7 @@ function nativeGuestServices(artifact: RuntimeMetadata, live: () => boolean, sen
 function mount(artifact: RuntimeMetadata) {
   let legacyGuard: ReturnType<typeof createLegacyDocumentGuard> | undefined;
   const live = () => !stopped && frame.contentWindow === source && (artifact.legacyReadOnly !== undefined ? legacyGuard?.isActive() === true : startup.isReady() && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) !== undefined);
-  const privatePort = !artifact.published || (artifact.manifestFormat === 'nip-5d' && !artifact.legacyReadOnly);
+  const privatePort = !artifact.published || artifact.journalCheckpoint === true || (artifact.manifestFormat === 'nip-5d' && !artifact.legacyReadOnly);
   const routing = createGuestRouting(artifact.domains, sessionId, live,
     () => { void native.routing({type: 'routing.__register'}).catch(() => {}); }, () => fail('runtime-bootstrap'),
     privatePort ? message => guestPort?.send(message) : undefined);
@@ -286,7 +286,7 @@ function mount(artifact: RuntimeMetadata) {
     return () => !stopped && entry !== undefined && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) === entry;
   }, artifact, account.read, shellTheme.theme, routing.setContext);
   const { bridge, frame, source, media, environment, policy, destroyFrame } = createGuestEndpoint(artifact, hooks,
-    privatePort && artifact.domains.includes('keys') ? sendGuest : undefined);
+    privatePort && (artifact.domains.includes('keys') || artifact.journalCheckpoint) ? sendGuest : undefined);
   const hasMedia = artifact.published && artifact.domains.includes('media');
   const startup = guestStartup();
   const legacyMount = createLegacyMount(artifact.legacyReadOnly, artifact.appId, frame, source, native, live,
@@ -302,10 +302,10 @@ function mount(artifact: RuntimeMetadata) {
     live() && isRuntimeInputActive() && document.hasFocus() && document.activeElement === frame) : null;
   const closeCheck = installCloseCheck(source, live,
     (id, state) => hostWindow.HypergolicHost?.postMessage(JSON.stringify({type: 'close-check.result', sessionId, id, state})),
-    artifact.journalCheckpoint ? {idle: () => frame.inert && native.idleForCheckpoint()} : undefined);
+    artifact.journalCheckpoint ? {idle: () => frame.inert && native.idleForCheckpoint(), send:sendGuest} : undefined);
   const markReady = () => {
     if (bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) && startup.complete()) {
-      if (keys && privatePort) media.refresh();
+      if ((keys || artifact.journalCheckpoint) && privatePort) media.refresh();
       keys?.refresh();
       if (artifact.domains.includes('notify')) void native.notify({type: 'notify.__register'}).catch(() => {});
       routing.ready();
@@ -313,7 +313,7 @@ function mount(artifact: RuntimeMetadata) {
   };
   const cvm = artifact.domains.includes('cvm') ? createCvmGuestReceiver(sendGuest,native.cvm,live) : null;
   const guestPort = privatePort ? createGuestPort(frame, source, bridge, artifact.domains, account.current, routing.consume,
-    {keys, cvm, mesh:mesh?.receiveValue, media:value => handleMediaRequest(value, hasMedia ? native.sendMedia : null, sendGuest)}, markReady, () => fail('runtime-bootstrap')) : null;
+    {keys, cvm, checkpoint:artifact.journalCheckpoint ? closeCheck.checkpointResult : undefined, mesh:mesh?.receiveValue, media:value => handleMediaRequest(value, hasMedia ? native.sendMedia : null, sendGuest)}, markReady, () => fail('runtime-bootstrap')) : null;
   const receiveGuest = guestMessageReceiver(frame, source, {
     domains: artifact.domains, routing, keys, account: account.current, sendMedia: hasMedia ? native.sendMedia : null,
     cvm,
@@ -338,7 +338,7 @@ function mount(artifact: RuntimeMetadata) {
   cleanup = (): void => {
     guestPort?.close();
     shellTheme.close();
-    closeCheck();
+    closeCheck.close();
     routing.close();
     mesh?.close();
     legacyImages?.close();
@@ -363,8 +363,7 @@ function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
     frame.srcdoc = prefix + injectLegacyReadOnly(injectAndroidGuestHelpers(injectResourceMediaGate(layout)), legacyNonce);
     return;
   }
-  const reviewed = artifact.journalCheckpoint ? injectJournalCheckpoint(withCsp) : withCsp;
-  const presentation = injectReviewedPresentation(injectEmojiImages(reviewed, artifact), artifact);
+  const presentation = injectReviewedPresentation(injectEmojiImages(withCsp, artifact), artifact);
   const guest = injectAndroidGuestHelpers(injectResourceMediaGate(presentation, supportsMappletsTouchSelection(artifact)));
   const withDiagnostics = !artifact.published && fixtureName === 'nap-support' ? injectSupportReport(guest) : guest;
   const hasMesh = artifact.published && artifact.domains.includes('mesh') && isNativeMeshContext(artifact.mesh, sessionId);
@@ -372,6 +371,7 @@ function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
     ...environment.capabilities, privatePort,
     guestBindings: [
       [installPortLiveness],
+      ...(artifact.journalCheckpoint ? [journalBinding] : []),
       ...(hasMesh ? [meshBinding] : []),
       ...(artifact.domains.includes('media') ? [[installMediaFacade] as const] : []),
       ...(artifact.domains.includes('cvm') ? [[installCvmFacade, secureUuidV4] as const] : []),

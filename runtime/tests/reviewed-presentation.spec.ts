@@ -1,5 +1,6 @@
 import {test,expect,type Page,type FrameLocator} from './published-wire';
 import {build} from 'vite';
+import {tracePort} from './port-trace';
 import {WorkspaceViews} from '../../src/shell/workspace-views';
 import {emptyWorkspace, openNapplet, focusNapplet, type NappletDescriptor} from '../../src/shell/workspace';
 import {readFileSync} from 'node:fs';
@@ -401,6 +402,7 @@ async function journalControl(page: Page, id: string, state = 'clean') {
 }
 
 test('Workspace Journal restores an unfinished new entry and its interior caret on a ninth open', async ({page, context}) => {
+  await tracePort(page, ['hypergolic.checkpoint', 'hypergolic.checkpoint.result', 'hypergolic.restoreCheckpoint', 'hypergolic.restoreCheckpoint.result']);
   const guest = await open(page, 'workspace-journal');
   const pin = pins.find((entry: any) => entry.appId === 'workspace-journal');
   const journal: NappletDescriptor = {id:'journal', title:'Workspace Journal', appId:pin.appId, publisher:pin.publisher,
@@ -420,6 +422,9 @@ test('Workspace Journal restores an unfinished new entry and its interior caret 
   await page.evaluate(() => (window as any).__hypergolicMediaActive(false));
   const receiptId = 'resume-12345678-1234-4234-8234-123456789abc';
   await journalControl(page, receiptId);
+  const wire = () => page.evaluate(() => (window as any).portTrace);
+  expect((await wire()).requests).toContainEqual({type:'hypergolic.checkpoint.result', id:receiptId, state:'saved'});
+  expect((await wire()).replies).toContainEqual({type:'hypergolic.checkpoint', id:receiptId});
   // The mock native storage below commits through the granted instance lane only.
   const journalWrite = await page.evaluate(() => (window as any).__presentation.requests
     .filter((envelope: any) => envelope.type === 'capability').map((e: any) => JSON.parse(e.message))
@@ -460,6 +465,8 @@ test('Workspace Journal restores an unfinished new entry and its interior caret 
   await expect(guest.locator('[data-hypergolic-restored-editor]')).toHaveCount(0);
   await expect(editor).toHaveValue('');
   await journalControl(page, receiptId.replace('resume-', 'restore-'));
+  expect((await wire()).requests).toContainEqual({type:'hypergolic.restoreCheckpoint.result', id:receiptId, state:'restored'});
+  expect((await wire()).replies).toContainEqual({type:'hypergolic.restoreCheckpoint', id:receiptId});
   await expect(guest.getByLabel('Entry title')).toHaveValue(title);
   await expect(guest.getByLabel('Links to notes, people or relays')).toHaveValue(links);
   await expect(editor).toHaveValue(body);
