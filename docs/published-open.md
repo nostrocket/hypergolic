@@ -21,6 +21,10 @@ The [pinned NIP-5D draft](https://github.com/dskvr/nips/blob/f60550c3409d6d81a87
 
 Use the open napplet’s workspace menu to pin it to Home. Shortcuts belong to the selected account. See [workspace storage](workspace-storage.md).
 
+## Guest transport
+
+A modern published release granted only Shell or Theme starts with the [NIP-5D port handoff](https://github.com/dskvr/nips/blob/f60550c3409d6d81a875088ec83e660571e10504/5D.md#transport). Its injected bootstrap creates the channel before publisher scripts run. The shell accepts the port from the registered frame, binds the verified publication and grants, and answers requests there. The guest can ask for its theme before requesting Shell environment details. Other capability combinations, legacy releases and bundled guests still use the earlier transport. [Migration issue](https://github.com/nostrocket/hypergolic/issues/98).
+
 ## Opening an older named release
 
 A release that signs a file listing can still open through legacy compatibility. The shell verifies its signature and HTML hash, identifies the older format in the launch review, and asks before opening it from an address. A saved capability grant alone cannot approve that choice. Reopening an exact saved pin can reuse its existing grant. A manual update identifies the older format in the version review. Automatic catalog refresh keeps the current release when an update would require legacy compatibility.

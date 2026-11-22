@@ -12,10 +12,11 @@ const identity = {
   publisher: '1'.repeat(64), appId: 'published-test', eventId: '2'.repeat(64), version, htmlHash,
 };
 
-type Mode = 'modern' | 'invalid-format' | 'unicode-full-chunk' | 'normal' | 'keys-domain' | 'bad-hash' | 'wrong-byte-length' | 'replayed-sequence' | 'unknown-domain' | 'relay-domain' | 'implied-wrappers' | 'attributed-head' | 'commented-head' | 'unsafe-head-comment' | 'upload-domain' | 'all-domains' | 'outbox-domain' | 'outbox-only' | 'published-approval' | 'intent-only' | 'soy-policy' | 'soy-policy-change'
+type Mode = 'early-theme' | 'modern' | 'invalid-format' | 'unicode-full-chunk' | 'normal' | 'keys-domain' | 'bad-hash' | 'wrong-byte-length' | 'replayed-sequence' | 'unknown-domain' | 'relay-domain' | 'implied-wrappers' | 'attributed-head' | 'commented-head' | 'unsafe-head-comment' | 'upload-domain' | 'all-domains' | 'outbox-domain' | 'outbox-only' | 'published-approval' | 'intent-only' | 'soy-policy' | 'soy-policy-change'
   | 'snapshot' | 'snapshot-mismatch' | 'snapshot-title-change' | 'snapshot-discovery';
 
 function artifactFor(mode: Mode): Buffer {
+  if (mode === 'early-theme') return Buffer.from('<!doctype html><html><head><script>window.napplet.theme.get().then(theme => document.body.textContent = theme.colors.primary)</script></head><body>Waiting</body></html>');
   if (mode === 'published-approval') return approvalHtml;
   if (mode === 'intent-only') return Buffer.from('<!doctype html><html><head><title>Intent</title></head><body><output id="deliveries"></output></body></html>');
   const source = html.toString();
@@ -96,7 +97,7 @@ async function openPublished(page: Page, mode: Mode = 'normal', extraQuery = '')
         type: 'artifact.chunk', sessionId: generation,
         sequence: mode === 'replayed-sequence' ? sequence + 1 : sequence,
         ...part, byteLength: mode === 'wrong-byte-length' ? part.byteLength + 1 : part.byteLength,
-        ...claims, ...snapshot, ...(mode === 'modern' || mode === 'implied-wrappers' || mode === 'snapshot' ? {manifestFormat:'nip-5d'} :
+        ...claims, ...snapshot, ...(mode === 'early-theme' || mode === 'modern' || mode === 'implied-wrappers' || mode === 'snapshot' ? {manifestFormat:'nip-5d'} :
           mode === 'invalid-format' ? {manifestFormat:'unknown'} : {}), ...((mode==='soy-policy'||mode==='soy-policy-change')?{appData:{sourceKind:35129,policy:{profile:'soy.app-data/1',scope:mode==='soy-policy-change'&&sequence>0?'f'.repeat(64):'b7890c0793a7fa9c2570c56500f403724b1a4c0e453a9194ec7200132c634f8b',maxContentBytes:3072,relays:['wss://relay.damus.io'],defaultRelays:['wss://relay.damus.io']}}}:{}),
         domains: mode==='soy-policy'||mode==='soy-policy-change'?['identity','outbox','theme']:mode === 'intent-only' ? ['intent'] : mode === 'published-approval' ? ['identity', 'relay', 'theme'] : mode === 'unknown-domain' ? ['future-domain'] : mode === 'outbox-domain' ? ['outbox', 'relay', 'theme'] : mode === 'outbox-only' ? ['outbox', 'theme'] : mode === 'relay-domain' ? ['relay', 'theme'] : mode === 'upload-domain' ? ['upload'] : mode === 'keys-domain' ? ['keys', 'theme'] : mode === 'all-domains' ? ['config', 'identity', 'inc', 'intent', 'link', 'notify', 'outbox', 'relay', 'resource', 'storage', 'theme', 'upload'] : ['theme'],
       };
@@ -170,6 +171,29 @@ for (const mode of ['modern','snapshot','normal'] as const) {
     });
   });
 }
+
+test('a modern Theme guest receives its first reply over the private port without shell.ready', async ({page}) => {
+  await page.addInitScript(() => {
+    if (window !== window.top) return;
+    const wire = {windowTypes:[] as string[], portTypes:[] as string[], transferred:0};
+    (window as any).themeTransport = wire;
+    window.addEventListener('message', event => {
+      if (event.source !== document.querySelector('iframe')?.contentWindow) return;
+      wire.windowTypes.push(event.data.type);
+      if (event.data.type !== 'napplet.hello') return;
+      wire.transferred += event.ports.length;
+      event.ports[0]?.addEventListener('message', request => {
+        wire.portTypes.push(request.data.type);
+        if (request.data.type === 'shell.ready') request.stopImmediatePropagation();
+      });
+    });
+  });
+  await openPublished(page, 'early-theme');
+  await expect(page.frameLocator('#napplet').locator('body')).toHaveText(/#(?:F5A04B|AA4708)/i);
+  expect(await page.evaluate(() => (window as any).themeTransport)).toEqual({
+    windowTypes:['napplet.hello'], transferred:1, portTypes:['shell.ready', 'theme.get'],
+  });
+});
 
 test('an unknown native manifest format is rejected before mounting', async ({page}) => {
   await openPublished(page, 'invalid-format');

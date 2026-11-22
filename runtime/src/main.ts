@@ -8,6 +8,7 @@ import {injectJournalCheckpoint} from './reviewed-workspace-journal';
 import {injectEmojiImages} from './reviewed-emoji-images';
 import {reviewedPresentationApp} from './reviewed-presentation-pin';
 import {supportsMappletsTouchSelection} from './reviewed-mapplets-touch';
+import {createGuestPort} from './guest-port';
 import {validEnvelope, rejectEnvelope} from './guest-envelope';
 import {commonFailure} from '../../src/common/common-contract';
 import {parseOutboxClose} from '../../src/outbox/subscription-contract';
@@ -61,7 +62,7 @@ const source = parameters.get('source');
 const fixtureName = parameters.get('fixture') ?? '';
 const fixture = source === null && Object.prototype.hasOwnProperty.call(__BUNDLED_FIXTURES__, fixtureName) ? __BUNDLED_FIXTURES__[fixtureName] : undefined;
 type RuntimeMetadata = Readonly<{
-  aggregateHash: string; identityHash?: string; eventId?: string; appId: string; title: string;
+  manifestFormat?: 'nip-5d'; aggregateHash: string; identityHash?: string; eventId?: string; appId: string; title: string;
   journalCheckpoint?: boolean; domains: readonly string[]; appData?:AppDataPolicy; mesh?:NativeMeshContext; legacyReadOnly?:LegacyReadOnlyContext; publishTimeoutMs?: number; published: boolean;
 }>;
 let stopped = false;
@@ -321,6 +322,19 @@ function mount(artifact: RuntimeMetadata) {
     artifact.journalCheckpoint ? {idle: () => frame.inert && native.idleForCheckpoint()} : undefined);
   const deadline = window.setTimeout(() => fail('runtime-timeout'), 10_000);
 
+  const markReady = () => {
+    if (!ready && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId)) {
+      ready = true;
+      window.clearTimeout(deadline);
+      diagnostic({ type: 'ready', sessionId });
+      keys?.refresh();
+      if (artifact.domains.includes('notify')) void native.notify({type: 'notify.__register'}).catch(() => {});
+      routing.ready();
+    }
+  };
+  const privatePort = artifact.manifestFormat === 'nip-5d' && !artifact.legacyReadOnly &&
+    artifact.domains.every(domain => domain === 'shell' || domain === 'theme');
+  const guestPort = privatePort ? createGuestPort(frame, source, bridge, artifact.domains, markReady, () => fail('runtime-bootstrap')) : null;
   const receiveGuest = guestMessageReceiver(frame, source, {
     domains: artifact.domains, routing, keys, account: account.current, sendMedia: hasMedia ? native.sendMedia : null,
     cvm:artifact.domains.includes('cvm')?createCvmGuestReceiver(source,native.cvm,live):null,
@@ -336,19 +350,13 @@ function mount(artifact: RuntimeMetadata) {
       }
       // Kehto performs session gating, frozen capability enforcement and theme dispatch.
       bridge.handleMessage(event);
-      if (!ready && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId)) {
-        ready = true;
-        window.clearTimeout(deadline);
-        diagnostic({ type: 'ready', sessionId });
-        keys?.refresh();
-        if (artifact.domains.includes('notify')) void native.notify({type: 'notify.__register'}).catch(() => {});
-        routing.ready();
-      }
+      markReady();
     },
   });
   const loaded = createLoadHandler(frame, source, media, legacyGuard, () => fail('frame-navigation'));
-  const unbind = bindFrameListeners(frame, source, legacyGuard, receiveGuest, loaded);
+  const unbind = bindFrameListeners(frame, source, legacyGuard, guestPort?.receive ?? receiveGuest, loaded);
   cleanup = (): void => {
+    guestPort?.close();
     shellTheme.close();
     closeCheck();
     routing.close();
@@ -361,12 +369,12 @@ function mount(artifact: RuntimeMetadata) {
     unbind();
     destroyFrame(() => native.destroy());
   };
-  return {frame, environment, policy, legacyNonce};
+  return {frame, environment, policy, legacyNonce, privatePort};
 }
 
 // Mount listeners receive metadata only, so they cannot retain the original HTML.
 function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
-  const {frame, environment, policy, legacyNonce} = mount(artifact);
+  const {frame, environment, policy, legacyNonce, privatePort} = mount(artifact);
   const [prefix, withCsp] = artifact.published
     ? publishedCspParts(rawHtml, policy) : ['', injectCsp(rawHtml, policy)] as const;
   if (legacyNonce) {
@@ -380,7 +388,7 @@ function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
   const guest = injectAndroidGuestHelpers(injectResourceMediaGate(presentation, supportsMappletsTouchSelection(artifact)));
   const withDiagnostics = !artifact.published && fixtureName === 'nap-support' ? injectSupportReport(guest) : guest;
   const injected = injectNappletNamespacePrelude(injectCreatorUpload(withDiagnostics, artifact), {
-    ...environment.capabilities,
+    ...environment.capabilities, privatePort,
     requestTimeoutsMs: approvalTimeouts(artifact),
   });
   const withMedia=artifact.published && artifact.domains.includes('media') ? injectMediaFacade(injected) : injected;
@@ -399,7 +407,7 @@ async function start(): Promise<void> {
       if (Array.from(parameters).length !== 2 || parameters.get('fixture') !== null) { fail('artifact-integrity'); return; }
       const {html, metadata, identityHash} = await readPublishedArtifact(hostWindow.HypergolicHost!, sessionId);
       const {appId, version: aggregateHash, domains, appData, mesh, legacyReadOnly, snapshot} = metadata;
-      if (!stopped) renderGuest({aggregateHash, identityHash, eventId: metadata.eventId, appId, title: snapshot?.title ?? appId, domains,...(appData?{appData:appData.policy}:{}), ...(mesh ? {mesh} : {}), ...(legacyReadOnly ? {legacyReadOnly} : {}),
+      if (!stopped) renderGuest({aggregateHash, identityHash, ...(metadata.manifestFormat && {manifestFormat:metadata.manifestFormat}), eventId: metadata.eventId, appId, title: snapshot?.title ?? appId, domains,...(appData?{appData:appData.policy}:{}), ...(mesh ? {mesh} : {}), ...(legacyReadOnly ? {legacyReadOnly} : {}),
         journalCheckpoint: domains.includes('storage') && supportsWorkspaceJournalCheckpoint(metadata), published: true}, html);
       return;
     }
