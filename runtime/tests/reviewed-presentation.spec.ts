@@ -67,6 +67,7 @@ async function open(page:Page,appId:string,variant='exact',uploadMode='complete'
         if(envelope.type==='artifact.read'){
           emit({type:'artifact.chunk',sessionId:generation,sequence:envelope.sequence,publisher:pin.publisher ?? '1'.repeat(64),
             appId:variant==='other-app'?'unreviewed-reader':appId,eventId:variant==='new-event'?'f'.repeat(64):pin.eventId,version:aggregateHash,htmlHash,
+            ...(appId === 'workspace-journal' && variant !== 'saved-without-format' && {manifestFormat:'nip-5d'}),
             domains,
             ...window.publishedPart(bytes,envelope.sequence)});return;
         }
@@ -499,8 +500,8 @@ test('Workspace Journal keeps its live draft on a failed save and rejects an exi
   await expect(editor).toHaveValue('Unfinished changes to an existing entry');
 });
 
-test('Workspace Journal reopens the new-entry composer over saved entries and restores a selected range', async ({page}) => {
-  const guest = await open(page, 'workspace-journal');
+test('Workspace Journal reopens an older saved pin and restores a selected range', async ({page}) => {
+  const guest = await open(page, 'workspace-journal', 'saved-without-format');
   const editor = guest.getByLabel('Entry body');
   await editor.fill('Already saved');
   await guest.getByRole('button', {name:'Save entry', exact:true}).click();
