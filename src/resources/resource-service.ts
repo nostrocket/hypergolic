@@ -47,6 +47,7 @@ try {
   const resolved = await mapResourceItems(request.requests, async item => {
     const {url} = item;
     active(controller.signal, authority);
+    if ('error' in item) return {url, ok:false, error:item.error} as const;
     try { return {url, ok:true, value:await bytes(item, controller.signal, authority)} as const; }
     catch(error) { active(controller.signal, authority); return {url, ok:false,
       error:error instanceof ResourceError ? error.code : 'network-error'} as const; }

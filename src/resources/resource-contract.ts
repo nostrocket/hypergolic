@@ -16,7 +16,7 @@ export class ResourceError extends Error {
 export type ResourceTarget = Readonly<{ url: string; servers?: readonly string[] }>;
 export type ResourceRequest = Readonly<{ type: 'resource.info'; id: string }> | Readonly<{ type: 'resource.cancel'; id: string }>
   | (Readonly<{ type: 'resource.bytes'; id: string }> & ResourceTarget)
-  | Readonly<{ type: 'resource.bytesMany'; id: string; requests: readonly ResourceTarget[] }>;
+  | Readonly<{ type: 'resource.bytesMany'; id: string; requests: readonly (ResourceTarget | Readonly<{url:string; error:ResourceErrorCode}>)[] }>;
 export type ResourceBytes = Readonly<{ bytes: Uint8Array<ArrayBuffer>; mime: string }>;
 export type ResourceURL = Readonly<{ scheme: 'https'; url: string }>
   | Readonly<{ scheme: 'blossom'; hash: string; servers?: readonly string[] }>
@@ -45,15 +45,20 @@ export function parseResourceRequest(value: unknown): ResourceRequest {
   if (data.type === 'resource.bytes') allowed.add('servers');
   if (keys.some(key => !Object.hasOwn(data, key)) || Object.keys(data).some(key => !allowed.has(key))) return fail();
   if (data.type === 'resource.info' || data.type === 'resource.cancel') return Object.freeze({ type: data.type, id: data.id });
-  if (data.type === 'resource.bytes') return Object.freeze({ type: data.type, id: data.id, ...resourceTarget(data) });
+  if (data.type === 'resource.bytes') return Object.freeze({ type: data.type, id: data.id, ...resourceTarget(data, urlText(data.url)) });
   if (data.type !== 'resource.bytesMany') return fail();
   const requests = Object.hasOwn(data, 'requests')
     ? boundedList(data.requests, RESOURCE_LIMITS.urls, value => {
       const item = record(value);
       if (!Object.hasOwn(item, 'url') || Object.keys(item).some(key => key !== 'url' && key !== 'servers')) return fail();
-      return resourceTarget(item);
+      if (typeof item.url !== 'string') return fail();
+      try { return resourceTarget(item, item.url); }
+      catch (error) {
+        if (!(error instanceof ResourceError) || error.code === 'invalid-request') throw error;
+        return Object.freeze({url:item.url, error:error.code});
+      }
     })
-    : boundedList(data.urls, RESOURCE_LIMITS.urls, url => Object.freeze({url: urlText(url)}));
+    : boundedList(data.urls, RESOURCE_LIMITS.urls, url => typeof url === 'string' ? Object.freeze({url}) : fail());
   if (requests.length === 0) return fail();
   return Object.freeze({type: data.type, id: data.id, requests});
 }
@@ -71,8 +76,7 @@ function boundedList<T>(value: unknown, max: number, parse: (item: unknown) => T
   return Object.freeze(items);
 }
 
-function resourceTarget(fields: Record<string, unknown>): ResourceTarget {
-  const url = urlText(fields.url);
+function resourceTarget(fields: Record<string, unknown>, url: string): ResourceTarget {
   if (!Object.hasOwn(fields, 'servers')) return Object.freeze({url});
   const servers = boundedList(fields.servers, RESOURCE_LIMITS.blossomHints, value => {
     const hint = urlText(value);

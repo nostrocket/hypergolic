@@ -15,7 +15,7 @@ export const rules = [
   ['config-user-choice', 'NAP-CONFIG', 'core-subset', 'Retain an explicitly saved setting across default changes'],
   ['identity-connected', 'NAP-IDENTITY', 'shell-behavior', 'Keep a transient owner failure distinct from sign-out', 102],
   ['intent-action', 'NAP-INTENT', 'wire-protocol', 'Require an explicit action in a normalized invocation', 103],
-  ['theme-reply', 'NAP-THEME', 'error-handling', 'Return the correlated Theme result on quota refusal', 105],
+  ['theme-reply', 'NAP-THEME', 'error-handling', 'Return the correlated Theme result on quota refusal'],
   ['cleartext-publication', 'NIP-5D', 'security-considerations', 'Refuse encrypted Relay and Outbox requests before review'],
   ...['chromium', 'webkit'].flatMap(engine => [
     [engine + '-environment', 'NAP-SHELL', 'api-surface', engine + ' exposes the granted Theme service through its shell environment'],
