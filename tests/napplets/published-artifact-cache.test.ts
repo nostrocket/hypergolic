@@ -177,3 +177,59 @@ test('reopen rejects an altered cache schema', async t => {
   await assert.rejects(openPublishedArtifactCache(sqlite, { owner, epoch: 1, currentEpoch: () => 1 }),
     error => (error as { code?: string }).code === 'CORRUPT_STORAGE');
 });
+
+test('opens v1 blobs and writes native-owned cache entries without selecting HTML into the shell', async t => {
+  const sqlite = new DiskSQLite(); t.after(() => sqlite.cleanup());
+  const owner = registration({user, publisher, appId: 'cached'});
+  const base = { owner, epoch: 1, currentEpoch: () => 1 };
+  const artifact = await makeArtifact();
+  const legacy = await openPublishedArtifactCache(sqlite, base);
+  await legacy.put(artifact);
+  await legacy.close();
+  const handles = new Map<string, {file: string; owner: string}>();
+  const tokens = new Set<string>();
+  let released = 0;
+  const bodies = {
+    createPublishedBodyToken() { const token = crypto.randomUUID(); tokens.add(token); return token; },
+    async publishedBodyDatabase(token: string, account: string, length: number) {
+      assert.ok(tokens.has(token)); assert.equal(length, artifact.htmlByteLength);
+      const existing = handles.get(token);
+      if (existing) { assert.equal(existing.owner, account); return existing.file; }
+      const file = sqlite.directory + '/' + token + '.db';
+      const database = new DatabaseSync(file);
+      database.exec('CREATE TABLE payload (id INTEGER PRIMARY KEY, body BLOB NOT NULL)');
+      database.close(); handles.set(token, {file, owner:account}); return file;
+    },
+    async verifyCachedPublishedBody(token: string, hash: string) {
+      const db = new DatabaseSync(handles.get(token)!.file);
+      try {
+        const bytes = db.prepare('SELECT body FROM payload').get()!.body as Uint8Array;
+        return await sha(bytes) === hash ? bytes.length : -2;
+      } finally { db.close(); }
+    },
+    stagePublishedBody: async () => null,
+    releasePublishedBody(token: string) { if (tokens.delete(token)) released++; handles.delete(token); },
+  };
+  sqlite.calls.length = 0;
+  const {releasePublishedArtifact, retainPublishedArtifact} = await import('../../src/napplets/verified-artifact.ts');
+  const cache = await openPublishedArtifactCache(sqlite, {...base, nativeBodies:bodies});
+  const read = await cache.get('cached', artifact.manifest.eventId);
+  assert.ok(read);
+  const sibling = retainPublishedArtifact(read);
+  releasePublishedArtifact(read);
+  assert.equal(released, 0);
+  assert.throws(() => read.htmlBytes);
+  await cache.put(sibling);
+  const second = await cache.get('cached', artifact.manifest.eventId);
+  assert.ok(second);
+  assert.ok(sqlite.calls.some(call => call.sql.includes('FROM body_store.payload')));
+  assert.ok(sqlite.calls.every(call => !/^SELECT.+signed_event, html,/s.test(call.sql) && !call.params.some(value => value instanceof Uint8Array)));
+  releasePublishedArtifact(sibling); releasePublishedArtifact(second);
+  assert.equal(released, 2);
+  const raw = sqlite.raw(PUBLISHED_ARTIFACT_CACHE_DATABASE);
+  raw.prepare('UPDATE verified_published_artifacts SET html = zeroblob(length(html))').run();
+  assert.equal(await cache.get('cached', artifact.manifest.eventId), null);
+  assert.equal(released, 3);
+  assert.equal(raw.prepare('SELECT count(*) AS n FROM verified_published_artifacts').get()!.n, 0);
+  await cache.close();
+});

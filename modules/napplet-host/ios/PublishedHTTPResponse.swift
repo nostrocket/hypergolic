@@ -7,6 +7,10 @@ struct PublishedHTTPResponse {
   static let maximumFramingBytes = 64 * 1024
   static let maximumBodyBytes = 2 * 1024 * 1024
   static let maximumArtifactBodyBytes = 20 * 1024 * 1024
+  // Charge a pending request at its ceiling and a completed request at its actual byte length.
+  static func admitsDownload(_ bytes: Int, reservations: [Int]) -> Bool {
+    reservations.count < 4 && reservations.reduce(bytes, +) <= 2 * maximumArtifactBodyBytes
+  }
   static let maximumUploadBodyBytes = 32 * 1024
   static let maximumResourceBodyBytes = 10 * 1024 * 1024
 

@@ -131,6 +131,8 @@ jobs:
       - run: pnpm run prebuild:android
         env:
           EXPO_NO_TELEMETRY: '1'
+      - name: Verify Android signed mirror reservations
+        run: python3 tests/native/android-published-https-bridge/runner.py
       - name: Build unsigned native runtime proof
         working-directory: android
         run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
@@ -216,10 +218,21 @@ jobs:
           cache-dependency-path: |
             pnpm-lock.yaml
             runtime/pnpm-lock.yaml
+            napplets/discovery/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
         working-directory: .
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium webkit
+      - name: Rebuild and verify the portable Discover catalog
+        working-directory: napplets/discovery
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run type-check
+          pnpm test
+          pnpm run build
+          node ../../scripts/import-discovery.mjs --check dist/index.html
+          pnpm run test:browser
+          pnpm audit --audit-level=high
       - run: pnpm verify
       - run: pnpm audit --audit-level=high
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -261,6 +274,10 @@ jobs:
         run: |
           test "$(xcodebuild -version | head -n 1)" = 'Xcode 27.1'
           test "$(xcrun --sdk iphoneos --show-sdk-version)" = '27.1'
+      - name: Verify native published body ownership and signed mirror reservations
+        run: |
+          python3 tests/native/published-body/run.py
+          python3 tests/native/published-https/run.py
       - name: Verify native CVM initialization correlation
         run: |
           xcrun swiftc -swift-version 6 -warnings-as-errors \

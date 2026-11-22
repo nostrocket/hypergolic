@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit;
 public final class PublishedHttpsRequestOwner {
   private static final int MAX_CONCURRENT_REQUESTS = 4;
   private static final int ARTIFACT_CHUNK_BYTES = 48 * 1024;
-  private static final int MAX_RESERVED_BODY_BYTES = 32 * 1024 * 1024;
+  private static final int MAX_RESERVED_BODY_BYTES = 40 * 1024 * 1024;
   private static final ScheduledThreadPoolExecutor expiry = new ScheduledThreadPoolExecutor(1, task -> {
     Thread thread = new Thread(task, "napplet-artifact-https-expiry");
     thread.setDaemon(true);
@@ -126,6 +126,19 @@ public final class PublishedHttpsRequestOwner {
         operation.clear();
       }
       return chunk;
+    }
+  }
+
+  byte[] takeArtifact(String operationId) throws IOException {
+    synchronized (lock) {
+      Operation operation = active.get(operationId);
+      if (!foreground || operation == null || operation.cancelled || operation.bytes == null || operation.cursor != 0)
+        throw new IOException("Published artifact is unavailable");
+      active.remove(operationId);
+      byte[] bytes = operation.bytes;
+      operation.bytes = null;
+      operation.clear();
+      return bytes;
     }
   }
 

@@ -35,7 +35,9 @@ export PATH="$(dirname "${NODE_BINARY:-node}"):$PATH"
 "${NODE_BINARY:-node}" scripts/build-runtime.mjs --check-ios',
     :execution_position => :before_compile
   }
-  s.source_files = '**/*.swift'
+  s.source_files = '**/*.swift', 'BodyVerifier/*.{cpp,h}'
+  s.public_header_files = 'BodyVerifier/*.h'
+  s.libraries = 'c++', 'sqlite3'
   s.resource_bundles = { 'HypergolicNappletHostAssets' => ['Resources/runtime/*', 'Resources/notices/*', 'Resources/shell-notices/*'] }
-  s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
+  s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'CLANG_CXX_LANGUAGE_STANDARD' => 'c++17' }
 end

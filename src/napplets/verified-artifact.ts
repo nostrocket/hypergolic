@@ -1,4 +1,5 @@
 import { getEventHash, verifyEvent } from 'nostr-tools/pure';
+import { isNativePublishedBody, type NativePublishedBody } from './native-published-body.ts';
 import { publishedHtmlHead } from './html-envelope.ts';
 import { MAX_HTML_BYTES } from './artifact-limits.ts';
 import { isNappletIdentifier, type NappletReference } from './resolve-link.ts';
@@ -304,6 +305,35 @@ function validateHtmlEnvelope(html: string): void {
     }
   }
   if (htmlCount !== 1 || headCount !== 1 || bodyCount !== 1 || stack.length !== 0) return fail();
+}
+
+const bodyOwners = new WeakMap<VerifiedNappletArtifact, NativePublishedBody>();
+export function nativeBodyOf(artifact: VerifiedNappletArtifact): NativePublishedBody | undefined { return bodyOwners.get(artifact); }
+
+function nativeArtifact(manifest: VerifiedNappletManifest, body: NativePublishedBody): VerifiedNappletArtifact {
+  if (!verifiedManifests.has(manifest) || !isNativePublishedBody(body) || body.hash !== manifest.expectedHtmlHash) return fail();
+  const artifact = Object.freeze({
+    manifest, htmlByteLength: body.byteLength, htmlHash: body.hash, aggregateHash: manifest.aggregateHash,
+    // Existing byte fixtures keep their copying accessor. Native artifacts stay outside the JS heap.
+    get htmlBytes(): Uint8Array { throw new Error('Native-owned publication body'); },
+  });
+  verifiedArtifacts.add(artifact);
+  bodyOwners.set(artifact, body);
+  return artifact;
+}
+
+export async function verifyPublishedBody(manifest: VerifiedNappletManifest, input: Uint8Array | NativePublishedBody) {
+  return isNativePublishedBody(input) ? nativeArtifact(manifest, input) : verifyArtifact(manifest, input);
+}
+
+export function retainPublishedArtifact(artifact: VerifiedNappletArtifact): VerifiedNappletArtifact {
+  assertVerifiedArtifact(artifact);
+  const body = bodyOwners.get(artifact);
+  return body ? nativeArtifact(artifact.manifest, body.retain()) : artifact;
+}
+
+export function releasePublishedArtifact(artifact: VerifiedNappletArtifact): void {
+  bodyOwners.get(artifact)?.dispose();
 }
 
 /** Verifies immutable original UTF-8 bytes; it does not prepare or execute HTML. */

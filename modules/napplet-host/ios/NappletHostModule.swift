@@ -12,10 +12,12 @@ public final class NappletHostModule: Module {
     ResourceHTTPSBridgeOwner.shared.revokeAll()
     publishedRelay.revokeAll()
     relayStreams.setForeground(false)
+    PublishedBodyStore.shared.clear()
     PublishedArtifactTransfer.shared.revokeAll()
   }
 
   public func definition() -> ModuleDefinition {
+    let publishedBodyQueue = DispatchQueue(label: "hypergolic.published-body", qos: .userInitiated)
     let publishedHTTPS = self.publishedHTTPS
     let publishedRelay = self.publishedRelay
     let relayStreams = self.relayStreams
@@ -32,6 +34,7 @@ public final class NappletHostModule: Module {
       RelaySubscriptionTransport.shared.observeLifecycle { snapshot in streamEmitter?.emit(event: "onRelayLifecycle", payload: ["snapshot": snapshot]) }
     }
     OnDestroy {
+      PublishedBodyStore.shared.clear()
       RoutingTransport.shared.observeLifecycle(nil)
       UploadTransport.observeProgress(nil)
       CapabilityTransport.foreground(false)
@@ -112,6 +115,20 @@ public final class NappletHostModule: Module {
     AsyncFunction("fetchPublishedArtifactHttps") { (operationId: String, url: String) async throws -> Int in
       try await publishedHTTPS.fetchArtifact(operationId: operationId, url: url)
     }
+    Function("createPublishedBodyToken") { () throws -> String in try PublishedBodyStore.shared.issue() }
+    AsyncFunction("publishedBodyDatabase") { (token: String, user: String, length: Int) throws -> String in
+      try PublishedBodyStore.shared.database(token, user: user, length: length)
+    }.runOnQueue(publishedBodyQueue)
+    AsyncFunction("retainDownloadedPublishedBody") { (operation: String, token: String, hash: String) throws -> Int in
+      try PublishedBodyStore.shared.retainDownload(token, hash: hash, data: publishedHTTPS.takeArtifact(operationId: operation))
+    }.runOnQueue(publishedBodyQueue)
+    AsyncFunction("verifyCachedPublishedBody") { (token: String, hash: String) throws -> Int in
+      try PublishedBodyStore.shared.verifyCached(token, hash: hash)
+    }.runOnQueue(publishedBodyQueue)
+    AsyncFunction("stagePublishedBody") { (token: String, claims: String) throws -> String? in
+      try PublishedBodyStore.shared.stage(token, json: claims)
+    }.runOnQueue(publishedBodyQueue)
+    Function("releasePublishedBody") { (token: String) in PublishedBodyStore.shared.release(token) }
     Function("readPublishedArtifactHttpsChunk") { (operationId: String, offset: Int) -> String? in
       try? publishedHTTPS.readArtifactChunk(operationId: operationId, offset: offset)
     }
@@ -218,7 +235,7 @@ public final class NappletHostModule: Module {
     Function("revokePublishedSession") { (sessionId: String) in
       PublishedArtifactTransfer.shared.revokePublishedSession(sessionId)
     }
-    Function("revokeAllPublishedArtifacts") { PublishedArtifactTransfer.shared.revokeAll() }
+    Function("revokeAllPublishedArtifacts") { PublishedBodyStore.shared.clear(); PublishedArtifactTransfer.shared.revokeAll() }
     View(NappletHostView.self) {
       Events("onHostEvent")
       Prop("zoomReset") { (view: NappletHostView, raw: String) in view.setZoomReset(raw) }

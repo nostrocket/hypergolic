@@ -11,5 +11,5 @@ export async function stageAdmittedPublishedArtifact(
     assertActive();
     assertVerifiedNappletAdmission(admission, artifact);
   };
-  return stageVerifiedArtifact(artifact, sessionId, port, signal, check, revokeSession);
+  return stageVerifiedArtifact(artifact, sessionId, port, signal, check, revokeSession, admission.user);
 }

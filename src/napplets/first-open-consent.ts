@@ -26,6 +26,7 @@ export type NappletConsentReview = Readonly<{
 }>;
 
 export type VerifiedNappletAdmission = Readonly<{
+  user: string;
   publisher: string;
   appId: string;
   eventId: string;
@@ -136,7 +137,7 @@ export async function requestFirstOpenConsent(
   }
 
   const assertAdmissionActive = (): void => active(signal, owner, identity, assertActive);
-  const admission = Object.freeze({ publisher, appId, eventId, ...accepted, assertActive: assertAdmissionActive });
+  const admission = Object.freeze({ user, publisher, appId, eventId, ...accepted, assertActive: assertAdmissionActive });
   admissions.add(admission);
   assertAdmissionActive();
   return admission;

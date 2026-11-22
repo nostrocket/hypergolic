@@ -17,6 +17,7 @@ import kotlinx.coroutines.withContext
 
 class NappletHostModule : Module() {
   private var workspaceFullscreen = false
+  private val publishedBodyIO = Dispatchers.IO.limitedParallelism(2)
 
   private fun updateWorkspaceBars() {
     val window = appContext.currentActivity?.window ?: return
@@ -35,6 +36,7 @@ class NappletHostModule : Module() {
     Name("HypergolicNappletHost")
     Events("onRelayStream", "onRelayLifecycle", "onUploadProgress", "onRoutingLifecycle")
     OnCreate {
+      appContext.runtime.reactContext?.cacheDir?.let(PublishedBodyStore::configure)
       appContext.runtime.reactContext?.cacheDir?.let(NativeFiniteVideo::removeAbandonedDownload)
       RoutingTransport.observeLifecycle { snapshot -> sendEvent("onRoutingLifecycle", mapOf("snapshot" to snapshot)) }
       UploadTransport.configureRecovery(appContext.runtime.reactContext?.noBackupFilesDir)
@@ -49,6 +51,7 @@ class NappletHostModule : Module() {
       NappletHostView.setMediaForeground(foreground)
       ApprovalTransport.foreground(foreground)
       RelaySubscriptionTransport.foreground(foreground)
+      PublishedBodyStore.foreground(foreground)
       PublishedHttpsRequestOwner.INSTANCE.setForeground(foreground)
       ResourceHttpsRequestOwner.INSTANCE.setForeground(foreground)
       PublishedRelayWssRequestOwner.INSTANCE.setForeground(foreground)
@@ -67,6 +70,7 @@ class NappletHostModule : Module() {
       NappletHostView.setMediaForeground(true)
       ApprovalTransport.foreground(true)
       RelaySubscriptionTransport.foreground(true)
+      PublishedBodyStore.foreground(true)
       PublishedHttpsRequestOwner.INSTANCE.setForeground(true)
       ResourceHttpsRequestOwner.INSTANCE.setForeground(true)
       PublishedRelayWssRequestOwner.INSTANCE.setForeground(true)
@@ -81,6 +85,7 @@ class NappletHostModule : Module() {
       NappletHostView.setMediaForeground(false)
       ApprovalTransport.foreground(false)
       RelaySubscriptionTransport.foreground(false)
+      PublishedBodyStore.foreground(false)
       PublishedHttpsRequestOwner.INSTANCE.setForeground(false)
       ResourceHttpsRequestOwner.INSTANCE.setForeground(false)
       PublishedRelayWssRequestOwner.INSTANCE.setForeground(false)
@@ -99,6 +104,7 @@ class NappletHostModule : Module() {
       NappletHostView.setMediaForeground(false)
       ApprovalTransport.foreground(false)
       RelaySubscriptionTransport.foreground(false)
+      PublishedBodyStore.foreground(false)
       PublishedHttpsRequestOwner.INSTANCE.setForeground(false)
       ResourceHttpsRequestOwner.INSTANCE.setForeground(false)
       PublishedRelayWssRequestOwner.INSTANCE.setForeground(false)
@@ -114,11 +120,13 @@ class NappletHostModule : Module() {
       CapabilityTransport.foreground(false)
       NappletHostView.setMediaForeground(false)
       RelaySubscriptionTransport.foreground(false)
+      PublishedBodyStore.foreground(false)
       PublishedHttpsRequestOwner.INSTANCE.setForeground(false)
       ResourceHttpsRequestOwner.INSTANCE.setForeground(false)
       PublishedRelayWssRequestOwner.INSTANCE.setForeground(false)
     }
     OnDestroy {
+      PublishedBodyStore.foreground(false)
       SelectedFilePicker.cancel()
       RoutingTransport.observeLifecycle(null)
       UploadTransport.observeProgress(null)
@@ -199,6 +207,20 @@ class NappletHostModule : Module() {
         PublishedHttpsRequestOwner.INSTANCE.fetchArtifact(operationId, url) { job?.isActive == true }
       }
     }
+    Function("createPublishedBodyToken") { PublishedBodyStore.issue() }
+    AsyncFunction("publishedBodyDatabase") Coroutine { token: String, user: String, length: Int ->
+      withContext(publishedBodyIO) { PublishedBodyStore.database(token, user, length) }
+    }
+    AsyncFunction("retainDownloadedPublishedBody") Coroutine { operation: String, token: String, hash: String ->
+      withContext(publishedBodyIO) { PublishedBodyStore.retainDownload(token, hash, PublishedHttpsRequestOwner.INSTANCE.takeArtifact(operation)) }
+    }
+    AsyncFunction("verifyCachedPublishedBody") Coroutine { token: String, hash: String ->
+      withContext(publishedBodyIO) { PublishedBodyStore.verifyCached(token, hash) }
+    }
+    AsyncFunction("stagePublishedBody") Coroutine { token: String, claims: String ->
+      withContext(publishedBodyIO) { PublishedBodyStore.stage(token, claims) }
+    }
+    Function("releasePublishedBody") { token: String -> PublishedBodyStore.release(token) }
     Function("readPublishedArtifactHttpsChunk") { operationId: String, offset: Int ->
       try { Base64.encodeToString(PublishedHttpsRequestOwner.INSTANCE.readArtifactChunk(operationId, offset), Base64.NO_WRAP) }
       catch (_: java.io.IOException) { null }
@@ -262,6 +284,7 @@ class NappletHostModule : Module() {
       PublishedArtifactTransfer.INSTANCE.revokePublishedSession(sessionId)
     }
     Function("revokeAllPublishedArtifacts") {
+      PublishedBodyStore.clear()
       PublishedArtifactTransfer.INSTANCE.revokeAllPublishedArtifacts()
     }
     Function("takeApproval") { token: String -> ApprovalTransport.leases.take(token) }

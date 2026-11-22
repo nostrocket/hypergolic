@@ -172,31 +172,31 @@ public final class PublishedHttpsRequestOwnerProof {
     pending.setDaemon(true);
     pending.start();
     check(started.await(2, TimeUnit.SECONDS));
-    throwsIo(() -> owner.fetchArtifact(second, target, () -> true));
-    equal(1, owner.fetch(NativeTransportTickets.issue(), target, () -> true).length);
+    equal(1, owner.fetchArtifact(second, target, () -> true)); // A silent first mirror leaves room for the signed hedge.
+    String waiting = NativeTransportTickets.issue();
+    throwsIo(() -> owner.fetchArtifact(waiting, target, () -> true)); // Full first reservation + ready second byte.
     check(owner.cancel(first));
     check(sawCancellation.await(2, TimeUnit.SECONDS));
-    throwsIo(() -> owner.fetchArtifact(second, target, () -> true));
-    equal(1, attempts.get());
+    throwsIo(() -> owner.fetchArtifact(waiting, target, () -> true));
+    equal(2, attempts.get());
     release.countDown();
     pending.join(2_000);
     check(!pending.isAlive());
-    equal(1, owner.fetchArtifact(second, target, () -> true));
-    equal(2, owner.readArtifactChunk(second, 0)[0]);
+    equal(1, owner.fetchArtifact(waiting, target, () -> true));
+    equal(2, owner.takeArtifact(second)[0]);
+    throwsIo(() -> owner.takeArtifact(second));
+    equal(2, owner.readArtifactChunk(waiting, 0)[0]);
 
-    int maximum = 20 * 1024 * 1024, remainder = 12 * 1024 * 1024;
-    String smallTarget = "https://napplets.example.org/" + "b".repeat(64);
-    PublishedHttpsRequestOwner retained = new PublishedHttpsRequestOwner((url, cancellation) ->
-        new byte[url.equals(smallTarget) ? remainder : maximum]);
+    int maximum = 20 * 1024 * 1024;
+    PublishedHttpsRequestOwner retained = new PublishedHttpsRequestOwner((url, cancellation) -> new byte[maximum]);
     retained.setForeground(true);
     String retainedFirst = NativeTransportTickets.issue(), retainedSecond = NativeTransportTickets.issue();
     String third = NativeTransportTickets.issue();
     equal(maximum, retained.fetchArtifact(retainedFirst, target, () -> true));
-    throwsIo(() -> retained.fetchArtifact(retainedSecond, smallTarget, () -> true));
+    equal(maximum, retained.fetchArtifact(retainedSecond, target, () -> true));
+    throwsIo(() -> retained.fetchArtifact(third, target, () -> true));
     check(retained.cancel(retainedFirst));
-    equal(remainder, retained.fetchArtifact(retainedSecond, smallTarget, () -> true));
     equal(maximum, retained.fetchArtifact(third, target, () -> true));
-    throwsIo(() -> retained.fetchArtifact(NativeTransportTickets.issue(), target, () -> true));
     retained.revokeAll();
     throwsIo(() -> retained.readArtifactChunk(retainedSecond, 0));
     throwsIo(() -> retained.readArtifactChunk(third, 0));

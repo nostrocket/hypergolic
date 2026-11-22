@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.18)
+project(hypergolic_body LANGUAGES CXX)
+add_library(hypergolic_body SHARED src/main/cpp/body_jni.cpp ../ios/BodyVerifier/PublishedBodyEnvelope.cpp)
+target_compile_features(hypergolic_body PRIVATE cxx_std_17)
+target_include_directories(hypergolic_body PRIVATE ../ios/BodyVerifier)
+target_link_options(hypergolic_body PRIVATE "-Wl,-z,max-page-size=16384")
