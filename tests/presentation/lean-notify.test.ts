@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {setup} from '../presentation/harness.ts';
-import {loadTrace, sends} from './trace.mts';
+import {loadTrace, sends} from '../reference-shell/trace.mts';
 
 test('Lean notify matches permission, visible card and click delivery', async t => {
   const {steps} = loadTrace('notify');

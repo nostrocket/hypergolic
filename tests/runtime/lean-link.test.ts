@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import {runtimeModule} from './runtime-module.mts';
+import {runtimeModule} from '../reference-shell/runtime-module.mts';
 import test from 'node:test';
-import {loadTrace, sends} from './trace.mts';
+import {loadTrace, sends} from '../reference-shell/trace.mts';
 
 for (const name of ['link', 'link-denied']) {
   test('Lean ' + name + ' preserves HTTPS handoff and decision at the guest adapter', async t => {

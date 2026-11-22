@@ -4,7 +4,7 @@ import {finalizeEvent, generateSecretKey} from 'nostr-tools/pure';
 import {createKeysSession} from '../../runtime/src/keys-adapter.ts';
 import {CvmEndpoint} from '../../src/cvm/cvm-session.ts';
 import {NappletHashMismatchError, verifyArtifact, verifyManifest} from '../../src/napplets/verified-artifact.ts';
-import {loadTrace, sends} from './trace.mts';
+import {loadTrace, sends} from '../reference-shell/trace.mts';
 
 test('Lean keys preserves registration and duplicate-action replies with an unbound shortcut', () => {
   const {steps} = loadTrace('keys');

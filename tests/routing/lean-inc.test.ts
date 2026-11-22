@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {setup, reviewReady} from '../routing/harness.ts';
-import {loadTrace, readableError, sends} from './trace.mts';
+import {loadTrace, readableError, sends} from '../reference-shell/trace.mts';
 
 for (const name of ['inc', 'inc-channel', 'inc-named']) {
   test('Lean ' + name + ' matches two registered routing endpoints', async t => {

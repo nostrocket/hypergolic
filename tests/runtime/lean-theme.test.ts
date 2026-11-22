@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {runtimeModule} from './runtime-module.mts';
-import {loadTrace, sends} from './trace.mts';
+import {runtimeModule} from '../reference-shell/runtime-module.mts';
+import {loadTrace, sends} from '../reference-shell/trace.mts';
 
 for (const name of ['theme', 'theme-full']) {
   test('Lean ' + name + ' matches active theme updates and reads', async t => {

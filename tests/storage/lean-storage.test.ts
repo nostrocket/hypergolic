@@ -6,7 +6,7 @@ import {openShellDatabase} from '../../src/storage/database.ts';
 import {LIMITS} from '../../src/storage/ports.ts';
 import {NativeLeases} from '../runtime/native-leases.ts';
 import {hex, setup} from '../storage/harness.ts';
-import {loadTrace, readableError, sends} from './trace.mts';
+import {loadTrace, readableError, sends} from '../reference-shell/trace.mts';
 
 for (const name of ['storage', 'storage-examples', 'restore', 'storage-quota']) {
   test('Lean ' + name + ' matches the SQLite storage broker', async t => {
