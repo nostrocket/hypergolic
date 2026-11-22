@@ -1,0 +1,30 @@
+import {execFileSync} from 'node:child_process';
+import { writeFile } from 'node:fs/promises';
+import { parseArgs } from 'node:util';
+import { observations } from './observations.mjs';
+import { observeHost } from './host.mjs';
+import { rules } from './rules.mjs';
+import { assess, gate, markdown } from './report.mjs';
+import specs from './specs.json' with {type:'json'};
+import {checkPublicationReview} from './publication-policy.mjs';
+
+const {values} = parseArgs({options:{strict:{type:'boolean'}, json:{type:'string'}, markdown:{type:'string'}}});
+const checks = {...observations, 'cleartext-publication':checkPublicationReview};
+for (const engine of ['chromium', 'webkit']) {
+  let snapshot;
+  const observe = () => snapshot ??= observeHost(engine);
+  checks[engine + '-environment'] = async () => (await observe()).exposesTheme;
+  checks[engine + '-sandbox'] = async () => (await observe()).sandbox === 'allow-scripts';
+  checks[engine + '-srcdoc'] = async () => (await observe()).srcdoc;
+  checks[engine + '-hello'] = async () => {
+    const messages = (await observe()).messages;
+    return messages.length === 1 && messages[0].type === 'napplet.hello' && messages[0].ports === 1;
+  };
+}
+const results = await assess(rules, checks, specs);
+const revision = execFileSync('git', ['rev-parse', 'HEAD'], {encoding:'utf8'}).trim();
+const report = markdown(results) + '\nImplementation commit: `' + revision + '`\n';
+process.stdout.write(report);
+if (values.json) await writeFile(values.json, JSON.stringify({version:1, revision, specs, results}, null, 2) + '\n');
+if (values.markdown) await writeFile(values.markdown, report);
+if (!gate(results, values.strict)) process.exitCode = 1;

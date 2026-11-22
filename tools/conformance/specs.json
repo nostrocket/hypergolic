@@ -1,0 +1,116 @@
+{
+  "NIP-5D": {
+    "repo": "dskvr/nips",
+    "ref": "nip/5d",
+    "revision": "f60550c3409d6d81a875088ec83e660571e10504",
+    "path": "5D.md"
+  },
+  "NAP-COMMON": {
+    "repo": "napplet/naps",
+    "ref": "nap-common",
+    "revision": "8cd0eae8550575771bb616a384e2dfbcade31673",
+    "path": "naps/NAP-COMMON.md"
+  },
+  "NAP-CONFIG": {
+    "repo": "napplet/naps",
+    "ref": "nub-config",
+    "revision": "448013e6d8cb8c75dce49576b3e7c0d46d960eac",
+    "path": "naps/NAP-CONFIG.md"
+  },
+  "NAP-CVM": {
+    "repo": "napplet/naps",
+    "ref": "nap-cvm",
+    "revision": "28cf1bdb5c6412bfbfcecb79a5a5121e18376f2f",
+    "path": "naps/NAP-CVM.md"
+  },
+  "NAP-IDENTITY": {
+    "repo": "napplet/naps",
+    "ref": "master",
+    "revision": "5ac0490461ca6fec2f0d2e45b4835cf9bc08de24",
+    "path": "naps/NAP-IDENTITY.md"
+  },
+  "NAP-INC": {
+    "repo": "napplet/naps",
+    "ref": "master",
+    "revision": "377bf939c6c906817084b43dd21d424de646dbc2",
+    "path": "naps/NAP-INC.md"
+  },
+  "NAP-INTENT": {
+    "repo": "napplet/naps",
+    "ref": "master",
+    "revision": "43cb3a4e855570ec4b90b9cc05f0c721e5ad0aab",
+    "path": "naps/NAP-INTENT.md"
+  },
+  "NAP-KEYS": {
+    "repo": "napplet/naps",
+    "ref": "nub-keys",
+    "revision": "8869a4cf77b023f4b049f47c546910a0280dc1a6",
+    "path": "naps/NAP-KEYS.md"
+  },
+  "NAP-LINK": {
+    "repo": "napplet/naps",
+    "ref": "nap-link",
+    "revision": "100e5c939ae6b1ea82cc58587c6da45a1cf8a760",
+    "path": "naps/NAP-LINK.md"
+  },
+  "NAP-LISTS": {
+    "repo": "napplet/naps",
+    "ref": "nap-lists",
+    "revision": "7cf00cdb7bca6bb59dc5ef082e9fe8ac9278fa46",
+    "path": "naps/NAP-LISTS.md"
+  },
+  "NAP-MEDIA": {
+    "repo": "napplet/naps",
+    "ref": "nap-media",
+    "revision": "7806f438530251fce5129f8e6239d6b642278759",
+    "path": "naps/NAP-MEDIA.md"
+  },
+  "NAP-NOTIFY": {
+    "repo": "napplet/naps",
+    "ref": "nub-notify",
+    "revision": "e14f5c9d6a6dd2a69ccf79668c4a3c1e955e1ac9",
+    "path": "naps/NAP-NOTIFY.md"
+  },
+  "NAP-OUTBOX": {
+    "repo": "napplet/naps",
+    "ref": "nap-outbox",
+    "revision": "8865f73d52a4864afee145f28d26520476273927",
+    "path": "naps/NAP-OUTBOX.md"
+  },
+  "NAP-RELAY": {
+    "repo": "napplet/naps",
+    "ref": "nub-relay",
+    "revision": "0be8abce18beb46ca37bd4ddd042f58d30b4eedc",
+    "path": "naps/NAP-RELAY.md"
+  },
+  "NAP-RESOURCE": {
+    "repo": "napplet/naps",
+    "ref": "nub-resource",
+    "revision": "8c0645d32ceb159bc3e8bcec1107a92862b7e86a",
+    "path": "naps/NAP-RESOURCE.md"
+  },
+  "NAP-SHELL": {
+    "repo": "napplet/naps",
+    "ref": "master",
+    "revision": "5ac0490461ca6fec2f0d2e45b4835cf9bc08de24",
+    "path": "naps/NAP-SHELL.md"
+  },
+  "NAP-STORAGE": {
+    "repo": "napplet/naps",
+    "ref": "nub-storage",
+    "revision": "f71e84ebca7474db260346cbfc2d88f41b4e421e",
+    "path": "naps/NAP-STORAGE.md"
+  },
+  "NAP-THEME": {
+    "repo": "napplet/naps",
+    "ref": "master",
+    "revision": "5ac0490461ca6fec2f0d2e45b4835cf9bc08de24",
+    "path": "naps/NAP-THEME.md"
+  },
+  "NAP-UPLOAD": {
+    "repo": "napplet/naps",
+    "ref": "nap-upload",
+    "revision": "a7cc17463cbf5d9cb87884b31071bc4fc826034c",
+    "path": "naps/NAP-UPLOAD.md"
+  }
+}

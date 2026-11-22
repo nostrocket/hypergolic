@@ -44,7 +44,7 @@ import {
 import type { ThemeService } from '@kehto/services';
 import { createShellTheme } from './shell-theme';
 import type { HostOperationContext, NappletMessage, ServiceRuntimeContext } from '@kehto/runtime';
-import { identityFailure, identityResult, parseCapabilityRequest } from '../../src/runtime/capability-protocol';
+import { identityAdapter } from './identity-adapter';
 import { createNativeClient, type NativeHost } from './native-client';
 import { publishedCspParts, readPublishedArtifact } from './published-artifact';
 import { ensureSecureRandomUuid } from './secure-random-compat';
@@ -135,16 +135,7 @@ function makeHooks(native: ReturnType<typeof createNativeClient>, captureRecipie
       });
     },
   };
-  const identity = { descriptor: { name: 'identity', version: '1.0.0' },
-    handleMessage(_windowId: string, message: NappletMessage, send: (message: NappletMessage) => void): void {
-      const live = captureRecipient();
-      void native.request(message).then(response => { if (live()) send(response); }).catch(() => {
-        if (!live()) return;
-        try { const request = parseCapabilityRequest(message);
-          send((request.type === 'identity.getPublicKey' ? identityResult(request, '') : identityFailure(request, 'identity request denied')) as NappletMessage);
-        } catch { /* Unknown operation. */ }
-      });
-    } };
+  const identity = identityAdapter(native, captureRecipient);
   return {
     relayPool: {
       getRelayPool: () => null, trackSubscription: unavailable,

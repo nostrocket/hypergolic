@@ -23,6 +23,8 @@
     "runtime:install": "pnpm --dir runtime install --frozen-lockfile",
     "runtime:build": "node scripts/build-runtime.mjs",
     "runtime:test": "pnpm --dir runtime verify",
+    "conformance": "node runtime/tools/build.mjs --development && node tools/conformance/check.mjs",
+    "conformance:drift": "node tools/conformance/drift.mjs",
     "test:napplets": "node --experimental-strip-types --test tests/napplets/*.test.ts",
     "test:cvm": "node --experimental-strip-types --test tests/cvm/*.test.ts",
     "test:mesh": "node --experimental-strip-types --test tests/mesh/*.test.ts",
