@@ -179,7 +179,7 @@ test('pre-ready traffic cannot establish a session and forged readiness carries 
   expect(await frame.evaluate(() => (window as any).napplet.shell.supports('relay'))).toBe(false);
 });
 
-test('malformed and privileged envelopes are ignored while valid requests still work', async ({ page }) => {
+test('a malformed Theme read receives a refusal and ungranted operations remain unavailable', async ({ page }) => {
   const frame = await open(page);
   await frame.evaluate(() => {
     for (const message of [null, [], 'shell.ready', { type: 'theme.get' },
@@ -192,7 +192,9 @@ test('malformed and privileged envelopes are ignored while valid requests still 
     parent.postMessage({ type: 'theme.get', id: 'valid-after-denials' }, '*');
   });
   await expect.poll(async () => (await messages(frame)).some((m: any) => m.id === 'valid-after-denials')).toBe(true);
-  expect((await messages(frame)).filter((m: any) => ['extra', 'sign', 'write', 'probe', 'upload-info', 'upload-forged'].includes(m.id))).toEqual([]);
+  const replies = await messages(frame);
+  expect(replies.filter((m: any) => m.id === 'extra')).toEqual([{type:'theme.get.result', id:'extra', error:'invalid-request'}]);
+  expect(replies.filter((m: any) => ['sign', 'write', 'probe', 'upload-info', 'upload-forged'].includes(m.id))).toEqual([]);
   expect(await diagnostics(page)).toHaveLength(1);
 });
 
