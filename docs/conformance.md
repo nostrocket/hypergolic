@@ -1,6 +1,6 @@
 # Shell protocol conformance
 
-Run `pnpm run conformance` from the repository root to compare Hypergolic with its pinned NIP-5D draft and NAP requirements. Each row links to its specification and any accepted issue. Chromium and WebKit exercise the built host with the bundled UX Lab guest. Component cases call the production handlers with local fixtures. One source-review rule tracks the signing policy.
+Run `pnpm run conformance` from the repository root to compare Hypergolic with its pinned NIP-5D draft and NAP requirements. Each row links to its specification and any accepted issue. Chromium and WebKit exercise the built host with the bundled UX Lab guest. Component cases call the production handlers with local fixtures.
 
 ## Run locally
 
@@ -21,13 +21,12 @@ Use `pnpm run conformance --strict` to return a failure while any measured or re
 |---|---|
 | Pass | The stated observation held for this build. |
 | Known gap | This individual check failed as recorded in its linked issue. |
-| Reviewed gap | The previously reviewed publication code still has the recorded kind-only guards and matches the reviewed source files. |
 | Regression or check error | CI fails. Inspect the observation, browser setup, missing case or changed review evidence. |
 | Retire baseline | A previously failing check passed. Remove its issue exception from that rule and keep the check. Other parts of the issue may still be open. |
 
 The rule catalog covers selected operations in all eighteen ordinary shell domains. For example, Config has separate cases for a default the user never touched and a value the user explicitly saved. Two browser results for the same defect count as one issue. Passing an individual rule gives evidence about that observation. Physical devices, operating-system signers and any untested operations retain their own acceptance requirements. [Rule catalog](../tools/conformance/rules.mjs) · [Component cases](../tools/conformance/component-cases.mjs) · [Device acceptance](testing.md)
 
-The signing rule for #106 checks the source examined in the issue. A change to a reviewed policy file fails CI for fresh review. Renew a fingerprint only after reviewing its effect on the full approval path. Closing the finding requires affirmative evidence at the signer and publication boundaries. [Signing issue](https://github.com/nostrocket/hypergolic/issues/106)
+The signing check submits encrypted requests through Relay and Outbox and checks that both refuse them before review. A cleartext request exercises the ordinary path. Physical signer and relay checks have their own acceptance requirements. [Signing issue](https://github.com/nostrocket/hypergolic/issues/106)
 
 ## Follow upstream changes
 

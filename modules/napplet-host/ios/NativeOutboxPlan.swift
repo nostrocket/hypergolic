@@ -145,7 +145,10 @@ final class NativeOutboxPlan: @unchecked Sendable {
   static func unsigned(_ value: [String: Any], strict: Bool = false) throws -> String {
     if strict { try fields(value, ["kind", "content", "tags", "created_at"]) }
     let kind = try integer(value["kind"], maximum: 65535), created = try integer(value["created_at"], maximum: 9_007_199_254_740_991)
-    guard let content = value["content"] as? String else { throw Failure.invalid }
+    guard let content = value["content"] as? String, ![4, 13, 1059].contains(kind),
+      content.range(of: #"^[A-Za-z0-9+/]+={0,2}\?iv=[A-Za-z0-9+/]{22}==$"#, options: .regularExpression) == nil else { throw Failure.invalid }
+    if content.utf8.count >= 132 && content.utf8.count.isMultiple(of: 4) &&
+      content.range(of: #"^A[g-v][A-Za-z0-9+/]*={0,2}$"#, options: .regularExpression) != nil { throw Failure.invalid }
     return "{\"kind\":\(kind),\"content\":\(quote(content)),\"tags\":\(try tags(value["tags"])),\"created_at\":\(created)}"
   }
   static func eventHash(_ value: [String: Any], identity: String) throws -> String {

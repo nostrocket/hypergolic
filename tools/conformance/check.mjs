@@ -6,10 +6,10 @@ import { observeHost } from './host.mjs';
 import { rules } from './rules.mjs';
 import { assess, gate, markdown } from './report.mjs';
 import specs from './specs.json' with {type:'json'};
-import {checkPublicationReview} from './publication-policy.mjs';
+import {runComponent} from './component-cases.mjs';
 
 const {values} = parseArgs({options:{strict:{type:'boolean'}, json:{type:'string'}, markdown:{type:'string'}}});
-const checks = {...observations, 'cleartext-publication':checkPublicationReview};
+const checks = {...observations, 'cleartext-publication':() => runComponent('security/approval', 'Relay and Outbox refuse encrypted guest content before review')};
 for (const engine of ['chromium', 'webkit']) {
   let snapshot;
   const observe = () => snapshot ??= observeHost(engine);
