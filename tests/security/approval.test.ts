@@ -1,3 +1,4 @@
+import {loadTrace, sends} from '../reference-shell/trace.mts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { finalizeEvent } from 'nostr-tools/pure';
@@ -344,4 +345,39 @@ test('plain Relay prepares and consumes an exact native primary publication', as
   const service = new ApprovalService(port, {assertActive() {}}, {sign:async snapshot => sign(snapshot)});
   const results = await service.approve(current(service, 'one'));
   assert.equal(results[0]?.status, 'accepted');
+});
+
+test('Lean relay-publish returns the approved event after the relay acknowledges it', async () => {
+  const [request, signedStep, ack] = loadTrace('relay-publish').steps.slice(4);
+  const {msg} = request.input;
+  const native = new Native();
+  const owner = origin('trace');
+  native.issue('trace', owner, msg.id, msg.event);
+  const expected = sends(ack)[0].msg;
+  assert.deepEqual(expected.event, signedStep.input.reply.event);
+  assert.equal(expected.eventId, expected.event.id);
+  const effects: string[] = [];
+  let signed: ReturnType<typeof sign>;
+  const service = make(native, {
+    async sign(snapshot) {
+      effects.push('sign');
+      assert.deepEqual(snapshot.event, msg.event);
+      signed = sign(snapshot);
+      return signed;
+    },
+    async publishEvent(event, destinations) {
+      effects.push('publish');
+      assert.deepEqual(event, signed);
+      return ack.input.reply.acks.map(([url, ok]: [string, boolean], index: number) => {
+        assert.equal(destinations[index], new URL(url).href);
+        return {relay: destinations[index], eventId: event.id, status: ok ? 'accepted' : 'rejected', reason: ''};
+      });
+    }
+  });
+  assert.ok(service.enqueue('trace', ack.input.reply.acks.map(([url]: string[]) => url)));
+  service.focus('trace');
+  assert.deepEqual(effects, []);
+  await service.approve(service.getSnapshot().current!.id);
+  assert.deepEqual(effects, ['sign', 'publish']);
+  assert.deepEqual(JSON.parse(native.responses[0]!), {...expected, event: signed, eventId: signed.id});
 });

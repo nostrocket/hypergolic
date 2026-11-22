@@ -1,3 +1,4 @@
+import {loadTrace, sends} from '../reference-shell/trace.mts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {setup, reviewReady} from './harness.ts';
@@ -90,4 +91,19 @@ test('identity/epoch transition cannot reuse old topic permission, channel ids o
  const h=await setup(t),id=await channel(h);await h.subscribeTarget();h.lifecycle({user:'05'.repeat(32),epoch:1,available:true,ownerAvailable:true});
  await h.dispatch(h.source,{type:'inc.emit',topic:'napplet:note/open',payload:'old identity'}).promise;await h.dispatch(h.target,{type:'inc.channel.emit',channelId:id,payload:'old channel'}).promise;assert.equal(h.sent.length,1);
  h.lifecycle({user:h.source.user,epoch:2,available:true,ownerAvailable:true});await h.dispatch(h.source,{type:'inc.channel.list',id:'old-list'}).promise;assert.equal(h.sent.length,1);
+});
+
+test('Lean intent returns no handler for the unregistered archetype', async t => {
+  const step = loadTrace('intent').steps[10];
+  const host = await setup(t);
+  const call = host.dispatch(host.source, step.input.msg);
+  await call.promise;
+  const {result, ...envelope} = call.reply();
+  const {archetype, action, convention, handled, ...required} = result;
+  const request = step.input.msg.request;
+  for (const [value, requested] of [[archetype, request.archetype], [action, request.action], [convention, request.convention], [handled, false]]) {
+    if (value !== undefined) assert.equal(value, requested);
+  }
+  assert.deepEqual([{...envelope, result: required}], sends(step).map(row => row.msg));
+  assert.deepEqual(host.activated, []);
 });
