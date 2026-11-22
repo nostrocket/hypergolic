@@ -402,3 +402,15 @@ test('late frames from a timed-out complete-relay attempt cannot become the list
   assert.deepEqual(result.events.map(row => row.event.content), ['retried']);
   assert.deepEqual(h.cancelled, [h.calls[0]!.id]);
 });
+
+test('public queries reject private kinds and omit encrypted matches before applying the limit', async () => {
+  for (const kind of [4, 13, 1059])
+    assert.throws(() => parseRelayQuery({type:'relay.query', id:'read', filters:[{kinds:[1, kind]}]}));
+  const dm = finalizeEvent({kind:4, content:'private', tags:[], created_at:120}, secret);
+  const note = signed('public', 100);
+  const {create} = harness(undefined, async (_relay, sub) => [
+    JSON.stringify(['EVENT',sub,dm]), JSON.stringify(['EVENT',sub,note]), JSON.stringify(['EOSE',sub]),
+  ]);
+  const result = await create().query([{authors:[note.pubkey], limit:1}], signal(), () => {}, true);
+  assert.deepEqual(result.map(row => row.event.id), [note.id]);
+});

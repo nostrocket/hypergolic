@@ -1,3 +1,4 @@
+import {encryptedEvent} from '../security/encrypted-event.ts';
 import {RequestHistory} from '../runtime/request-history.ts';
 import {captureLegacyReadOnly} from '../napplets/legacy-read-only.ts';
 import { OUTBOX_LIST_LIMITS } from '../outbox/relay-list.ts';
@@ -36,7 +37,7 @@ function receiveFrame(process:SessionProcess,callbacks:SessionCallbacks,subscrip
     const filters=subscription.planned?subscription.request.filters.map(filter=>({...filter,limit:32})):subscription.request.filters;
     const live = !subscription.planned && connection.state === 'eose';
     const event=verifyQueryEvent(message.event,filters,live?'live':'stored');
-    if(event.kind===4||event.kind===1059)throw new RelaySubscriptionError('encrypted subscriptions unsupported');
+    if (encryptedEvent(event.kind, event.content)) return;
     if(subscription.ids.has(event.id))return;
     if(subscription.legacy&&connection.state!=='eose'&&subscription.backfill>=32)throw new RelaySubscriptionError('legacy history limit');
     if(subscription.planned&&connection.state!=='eose'&&subscription.backfill>=subscription.backfillLimit)return;

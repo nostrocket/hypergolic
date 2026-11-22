@@ -70,7 +70,7 @@ function streamContinuity() {
     assert.ok(messages.some(m => m.result?.event.id === first.id), 'Public subscription control failed');
     receive(event(4, 'unused private-event fixture'));
     receive?.(last);
-    return messages.some(m => m.result?.event.id === last.id);
+    return messages.length === 2 && messages[0].result?.event.id === first.id && messages[1].result?.event.id === last.id;
   } finally { session.revoke(); }
 }
 

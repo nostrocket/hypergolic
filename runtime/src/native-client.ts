@@ -1,3 +1,4 @@
+import {encryptedEvent} from '../../src/security/encrypted-event';
 import {RequestHistory} from '../../src/runtime/request-history';
 import {createMeshNative, type NativeMeshContext} from './mesh-native.ts';
 import {createCvmNative} from './cvm-native';
@@ -54,8 +55,7 @@ function receiveStream(envelope:StreamEnvelope,streams:Map<number,StreamState>,s
         if(!value||Object.keys(value).length!==1||!Array.isArray(value.relayHints)||value.relayHints.length>16||new Set(value.relayHints).size!==value.relayHints.length)throw new Error('Invalid relay hints');
         sidecar=Object.freeze({relayHints:Object.freeze(value.relayHints.map(normalizeRelayUrl))});
       }
-      if(event.kind===4||event.kind===1059)throw new Error('Unsupported encrypted stream');
-      stream.deliver({type:stream.domain+'.event',subId:stream.subId,result:{event,...(sidecar?{sidecar}:{})}} as NappletMessage);
+      if (!encryptedEvent(event.kind, event.content)) stream.deliver({type:stream.domain+'.event',subId:stream.subId,result:{event,...(sidecar?{sidecar}:{})}} as NappletMessage);
     }else if(message.type==='relay.eose'&&Object.keys(message).length===2) {
       window.clearTimeout(stream.timer);stream.eose=true;if(stream.domain==='relay')stream.deliver(message);
     }else if(message.type===stream.domain+'.closed'&&Object.keys(message).every(key=>['type','subId','reason'].includes(key))&&

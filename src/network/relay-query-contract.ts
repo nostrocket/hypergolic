@@ -1,3 +1,4 @@
+import {encryptedEventKind} from '../security/encrypted-event.ts';
 import { getEventHash, verifyEvent, type NostrEvent } from 'nostr-tools/pure';
 import { text, utf8Bytes } from '../storage/codec.ts';
 
@@ -87,8 +88,10 @@ export function parseRelayQuery(value: unknown): RelayQueryRequest {
   if (data.type !== 'relay.query' || Object.keys(data).length !== 3 || !Object.prototype.hasOwnProperty.call(data, 'filters')) return fail();
   const filters = dense(data.filters, QUERY_LIMITS.filters);
   const share = Math.floor(QUERY_LIMITS.events / Math.max(1, filters.length));
-  return Object.freeze({ type: 'relay.query', id: text(data.id, 128),
-    filters: parseQueryFilters(filters, QUERY_LIMITS.events, QUERY_LIMITS.filters, false, share) });
+  const parsed = parseQueryFilters(filters, QUERY_LIMITS.events, QUERY_LIMITS.filters, false, share);
+  if (parsed.some(filter => Array.isArray(filter.kinds) && filter.kinds.some(encryptedEventKind)))
+    throw new RelayQueryError('encrypted queries unsupported');
+  return Object.freeze({ type: 'relay.query', id: text(data.id, 128), filters: parsed });
 }
 type QueryPhase = 'stored' | 'live';
 export function queryMatches(event: NostrEvent, filter: QueryFilter, phase: QueryPhase = 'stored'): boolean {

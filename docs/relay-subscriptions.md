@@ -14,7 +14,7 @@ filter starts matching live events only after its relay connection sends EOSE.
 The coordinator supplies that phase privately to the runtime because other relays
 may still be sending stored history. The runtime omits the phase from the guest
 reply. Fresh seven-field hash/signature/filter checks run at both boundaries.
-Encrypted kinds 4 and 1059 are explicitly unsupported.
+The public feed refuses explicit requests for encrypted kinds 4, 13 and 1059. On a broader subscription, it verifies and skips encrypted events and continues delivering public posts.
 
 ## Authority and bounds
 

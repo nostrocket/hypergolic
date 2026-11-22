@@ -1,3 +1,4 @@
+import {encryptedEvent} from '../security/encrypted-event.ts';
 import { RequestHistory } from './request-history.ts';
 import {CapabilityReadAdmission, CapabilityReadBusy} from './capability-read-admission.ts';
 import {readCommon} from '../common/common-service.ts';
@@ -59,8 +60,8 @@ async function operateStorage(database: ShellDatabase, registration: NativeRegis
 async function readQuery(request: Extract<CapabilityRequest, {type: 'relay.query'}>, queries: RelayQueryService | undefined, pending: CapabilityReadAdmission, active: () => void): Promise<CapabilityReply> {
   if (!queries) return queryFailure(request, 'relay query unavailable or busy')!;
   try {
-    const events = await pending.schedule(active, signal => queries.query(request.filters, signal, active));
-    return {type: 'relay.query.result', id: request.id, events};
+    const events = await pending.schedule(active, signal => queries.query(request.filters, signal, active, true));
+    return {type: 'relay.query.result', id: request.id, events: events.filter(({event}) => !encryptedEvent(event.kind, event.content))};
   }
   catch (error) { return queryFailure(request, error instanceof CapabilityReadBusy ? 'relay query unavailable or busy' : 'relay query failed')!; }
 }

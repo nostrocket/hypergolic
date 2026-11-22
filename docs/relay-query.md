@@ -16,6 +16,8 @@ failures contain the same type/id and `error`, with `events` absent. A complete,
 valid EOSE response with no events is successful empty retrieval. Connection or
 validation failure is never represented as an empty successful result.
 
+Public queries refuse filters that explicitly request encrypted messages, seals or gift wraps. Broader queries omit recognized encrypted content before applying the result limit.
+
 | Boundary | Selected limit/behavior |
 | --- | --- |
 | Filters | 1–4; ids/authors/kinds/since/until/limit and single-letter tag filters |
