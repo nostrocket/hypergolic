@@ -1,9 +1,11 @@
+import {observePortLifetime} from './port-lifetime';
 const MAX_QUEUED = 32, MAX_BYTES = 256 * 1024, TIMEOUT_MS = 1000, INITIAL_TIMEOUT_MS = 10_000;
 /** A private port belongs to the original Document, unlike its navigation-stable WindowProxy. */
 export function createLegacyDocumentGuard(frame: HTMLIFrameElement, source: Window, session: string,
   revoke: () => void, active: () => void) {
   let state: 'starting' | 'active' | 'checking' | 'closed' = 'starting';
   let port: MessagePort | null = null, challenge = '', loaded = false, probeAfterStart = false;
+  let stopObserving: (() => void) | undefined;
   let bytes = 0, operations = 0, started = performance.now();
   const queue: Array<() => void> = [];
   const sourceGetter = Object.getOwnPropertyDescriptor(MessageEvent.prototype, 'source')!.get!;
@@ -11,7 +13,15 @@ export function createLegacyDocumentGuard(frame: HTMLIFrameElement, source: Wind
   let timer = window.setTimeout(fail, INITIAL_TIMEOUT_MS);
   function destroy(): void {
     if (state === 'closed') return;
-    state = 'closed'; window.clearTimeout(timer); port?.close(); port = null; queue.length = 0; bytes = 0;
+    state = 'closed'; window.clearTimeout(timer);
+    if (port) {
+      stopObserving?.();
+      port.onmessage = null;
+      port.onmessageerror = null;
+      port.close();
+      port = null;
+    }
+    queue.length = 0; bytes = 0;
   }
   function fail(): void {if (state === 'closed') return; destroy(); revoke();}
   function run(action: () => void, size: number): void {
@@ -35,6 +45,7 @@ export function createLegacyDocumentGuard(frame: HTMLIFrameElement, source: Wind
   }
   function connect(connection: MessagePort, dispatch: (value: Record<string, unknown>) => void): void {
     port = connection; challenge = crypto.randomUUID();
+    stopObserving = observePortLifetime(port, fail);
     port.onmessageerror = fail;
     port.onmessage = event => {
       if (state === 'closed' || !event.isTrusted || event.origin !== '') return;
@@ -68,6 +79,7 @@ export function createLegacyDocumentGuard(frame: HTMLIFrameElement, source: Wind
       connect(event.ports[0]!, dispatch);
     } else {
       for (const unused of event.ports) unused.close();
+      if (port) fail();
     }
   }
   return Object.freeze({receive, run, destroy, send(value: object) {

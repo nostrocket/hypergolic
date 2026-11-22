@@ -1,4 +1,5 @@
 import { test, expect, type Page } from './published-wire';
+import {tracePort} from './port-trace';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 
@@ -199,6 +200,29 @@ test('a modern Theme guest receives its first reply over the private port withou
   expect(await page.evaluate(() => (window as any).themeTransport)).toEqual({
     windowTypes:['napplet.hello'], transferred:1, portTypes:['shell.ready', 'theme.get'],
   });
+});
+
+test('closing the guest channel retires its published frame', async ({page}) => {
+  test.setTimeout(50_000);
+  await tracePort(page, ['hypergolic.port.pong']);
+  await page.addInitScript(() => {
+    if (window === top) return;
+    window.MessageChannel = class extends MessageChannel {
+      constructor() {
+        super();
+        (window as any).finishSession = () => this.port1.close();
+      }
+    };
+  });
+  await openPublished(page, 'early-theme');
+  const body = page.frameLocator('#napplet').locator('body');
+  await expect(body).toHaveText(/#(?:F5A04B|AA4708)/i);
+  if (!await page.evaluate(() => 'onclose' in MessagePort.prototype)) {
+    await expect.poll(() => page.evaluate(() => (window as any).portTrace.requests.length), {timeout:15_000}).toBeGreaterThan(0);
+  }
+  await body.evaluate(() => (window as any).finishSession());
+  await expect(page.locator('#napplet')).toHaveCount(0, {timeout:25_000});
+  await expect(page.getByRole('alert')).toHaveText('The napplet could not be loaded.');
 });
 
 test('one private port serves multiple grants and delivers native account changes', async ({page}) => {

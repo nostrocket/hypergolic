@@ -9,6 +9,7 @@ import {injectEmojiImages} from './reviewed-emoji-images';
 import {reviewedPresentationApp} from './reviewed-presentation-pin';
 import {supportsMappletsTouchSelection} from './reviewed-mapplets-touch';
 import {createGuestPort} from './guest-port';
+import {installPortLiveness} from './port-lifetime';
 import {validEnvelope, rejectEnvelope} from './guest-envelope';
 import {commonFailure} from '../../src/common/common-contract';
 import {parseOutboxClose} from '../../src/outbox/subscription-contract';
@@ -370,6 +371,7 @@ function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
   const injected = injectNappletNamespacePrelude(injectCreatorUpload(withDiagnostics, artifact), {
     ...environment.capabilities, privatePort,
     guestBindings: [
+      [installPortLiveness],
       ...(hasMesh ? [meshBinding] : []),
       ...(artifact.domains.includes('media') ? [[installMediaFacade] as const] : []),
       ...(artifact.domains.includes('cvm') ? [[installCvmFacade, secureUuidV4] as const] : []),

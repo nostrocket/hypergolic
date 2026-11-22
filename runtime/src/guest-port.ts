@@ -1,6 +1,7 @@
 import {isKeysMessage, type createKeysSession} from './keys-adapter';
 import type {ShellBridge} from '@kehto/shell';
 import {quotaReply, validEnvelope, rejectEnvelope} from './guest-envelope';
+import {observePortLifetime} from './port-lifetime';
 
 export type GuestBindingTransport = {send(value: object): void; listen(callback: (value: unknown) => void): () => void};
 
@@ -10,6 +11,7 @@ export function createGuestPort(frame: HTMLIFrameElement, source: Window, bridge
   routes: {keys: ReturnType<typeof createKeysSession> | null; media(value: unknown): boolean;
     cvm: ((value: unknown) => void) | null; mesh: ((value: unknown) => boolean) | undefined}, ready: () => void, fail: () => void) {
   let port: MessagePort | undefined;
+  let stopObserving: (() => void) | undefined;
   let closed = false;
   let operations = 0;
   let started = performance.now();
@@ -26,6 +28,7 @@ export function createGuestPort(frame: HTMLIFrameElement, source: Window, bridge
       const connection = event.ports[0]!;
       port = connection;
       const dispatch = bridge.bindPort(source, event.origin, send);
+      stopObserving = observePortLifetime(connection, fail);
       connection.onmessageerror = fail;
       connection.onmessage = message => {
         if (!current() || !message.isTrusted || message.origin !== '') return;
@@ -36,6 +39,7 @@ export function createGuestPort(frame: HTMLIFrameElement, source: Window, bridge
         const now = performance.now();
         if (now - started > 1000) { started = now; operations = 0; }
         const value = message.data;
+        if (value?.type === 'hypergolic.port.pong') return;
         if (value?.type === 'hypergolic.intent.consumed') {
           if (Object.keys(value).length === 2) consumeIntent(value.receipt);
           return;
@@ -65,7 +69,12 @@ export function createGuestPort(frame: HTMLIFrameElement, source: Window, bridge
     },
     close() {
       closed = true;
-      if (port) { port.onmessage = null; port.onmessageerror = null; port.close(); }
+      if (port) {
+        stopObserving?.();
+        port.onmessage = null;
+        port.onmessageerror = null;
+        port.close();
+      }
     },
   };
 }

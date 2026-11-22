@@ -25,6 +25,8 @@ Use the open napplet’s workspace menu to pin it to Home. Shortcuts belong to t
 
 Bundled guests and modern published releases start with the [NIP-5D port handoff](https://github.com/dskvr/nips/blob/f60550c3409d6d81a875088ec83e660571e10504/5D.md#transport). Its injected bootstrap creates the channel before publisher scripts run. The shell accepts the port from the registered frame, binds the verified publication and grants, and answers requests there. The guest can ask for its theme before requesting Shell environment details. A granted Mesh service uses the same connection and keeps its native source checks. The two reviewed read-only releases use their port for public reads and images. Ordinary older-format releases retain their previous transport. [Migration issue](https://github.com/nostrocket/hypergolic/issues/98).
 
+When the private connection closes, the shell retires the guest. WebViews without a port-close event check the connection every ten seconds while visible. A missed reply on the next check ends the session. The shell starts a fresh check after visibility changes or a prolonged timer delay. A window message from either reviewed reader after handoff also ends its session.
+
 ## Opening an older named release
 
 A release that signs a file listing can still open through legacy compatibility. The shell verifies its signature and HTML hash, identifies the older format in the launch review, and asks before opening it from an address. A saved capability grant alone cannot approve that choice. Reopening an exact saved pin can reuse its existing grant. A manual update identifies the older format in the version review. Automatic catalog refresh keeps the current release when an update would require legacy compatibility.

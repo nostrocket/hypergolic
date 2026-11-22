@@ -10,6 +10,7 @@ function createLegacyDocumentPort(session: string, closed: () => boolean, receiv
   port.addEventListener('message', event => {
     if (!event.isTrusted || closed()) return;
     const value = apply(dataOf, event, []);
+    if (value?.type === 'hypergolic.port.ping' && typeof value.id === 'string') send({type:'hypergolic.port.pong', id:value.id});
     if (typeof value?.challenge === 'string' && value.challenge.length <= 128 && Object.keys(value).length === 2) {
       if (value.type === 'identify') send({type:'ready', session, challenge:value.challenge});
       if (value.type === 'ping') send({type:'pong', challenge:value.challenge});
