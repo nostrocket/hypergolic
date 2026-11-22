@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { assess, gate } from './report.mjs';
-import { compareSpecs } from './drift.mjs';
+import { compareSpecs, driftReport } from './drift.mjs';
 
 const one = '1'.repeat(40), two = '2'.repeat(40);
 const spec = {repo:'owner/repo', path:'spec.md', ref:'draft', revision:one};
@@ -29,6 +29,9 @@ test('drift compares document bytes, detects removal and fails on incomplete ups
   assert.deepEqual(await compareSpecs(catalog, request({sha:one})), []);
   const [changed] = await compareSpecs(catalog, request({sha:two}));
   assert.equal(changed.head, two);
+  const summary = driftReport([{...changed, name:'NAP-CONFIG'}]);
+  assert.match(summary, /config-default, config-user-choice/);
+  assert.match(summary, /#diff-[0-9a-f]{64}/);
   const [deleted] = await compareSpecs(catalog, request(null));
   assert.equal(deleted.removed, true);
   await assert.rejects(compareSpecs(catalog, request({})));

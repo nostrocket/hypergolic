@@ -1,3 +1,5 @@
+import {createHash} from 'node:crypto';
+import {rules} from './rules.mjs';
 import { execFileSync } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -39,9 +41,11 @@ export function driftReport(changes) {
   return ['The scheduled comparison found changes to the following pinned specification files.', '',
     ...changes.map(c => {
       const base = 'https://github.com/' + c.repo;
+      const fragment = '#diff-' + createHash('sha256').update(c.path).digest('hex');
+      const affected = rules.filter(rule => rule.spec === c.name).map(rule => rule.id);
       return '- **' + c.name + '** · [pinned text](' + base + '/blob/' + c.revision + '/' + c.path +
         ') · [' + (c.removed ? 'file removed at head' : 'upstream text') + '](' + base +
-        (c.removed ? '/tree/' + c.head : '/blob/' + c.head + '/' + c.path) + ') · [compare](' + base + '/compare/' + c.revision + '...' + c.head + ')';
+        (c.removed ? '/tree/' + c.head : '/blob/' + c.head + '/' + c.path) + ') · [compare](' + base + '/compare/' + c.revision + '...' + c.head + fragment + ') · rules: ' + affected.join(', ');
     }), '', 'Review the affected requirements and fixtures, then advance the relevant pins in a pull request.'].join('\n');
 }
 
