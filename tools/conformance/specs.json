@@ -61,7 +61,7 @@
   },
   "NAP-MEDIA": {
     "repo": "napplet/naps",
-    "ref": "nap-media",
+    "ref": "nub-media",
     "revision": "7806f438530251fce5129f8e6239d6b642278759",
     "path": "naps/NAP-MEDIA.md"
   },
