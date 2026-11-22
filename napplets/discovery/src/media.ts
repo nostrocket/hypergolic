@@ -6,6 +6,7 @@ import { canReadResource } from './host.ts';
 
 async function displayImage(blob: Blob, signal: AbortSignal, apply: (image: HTMLImageElement) => void): Promise<boolean> {
   const image = new Image();
+  let displayed = false;
   const url = URL.createObjectURL(blob);
   try {
     image.src = url;
@@ -13,14 +14,14 @@ async function displayImage(blob: Blob, signal: AbortSignal, apply: (image: HTML
     if (!signal.aborted && image.naturalWidth > 0 && image.naturalHeight > 0 &&
       image.naturalWidth <= MAX_DIMENSION && image.naturalHeight <= MAX_DIMENSION) {
       apply(image);
-      return true;
+      displayed = true;
     }
   } catch {
     // Invalid media falls through to the generic artwork.
   } finally {
     URL.revokeObjectURL(url);
   }
-  return false;
+  return displayed;
 }
 
 /** One viewport-scoped, bounded resource queue. No URL from a relay reaches an img element. */
