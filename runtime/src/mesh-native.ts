@@ -160,33 +160,36 @@ export function createMeshNative(native: NativeHost, generation: string, context
   return Object.freeze({available: lane.available, capture: lane.capture, request: lane.request, subscribe: lane.subscribe, close: lane.close, destroy: lane.destroy});
 }
 /** Parent-owned endpoint. Source identity plus live registration, never opaque origin text, binds each call/reply. */
-export function createMeshGuestReceiver(frame: HTMLIFrameElement, source: Window, native: MeshNative, live: () => boolean) {
+export function createMeshGuestReceiver(frame: HTMLIFrameElement, source: Window, native: MeshNative, live: () => boolean, deliver: (message: object) => void) {
   let closed = false;
   const sourceGetter = Object.getOwnPropertyDescriptor(MessageEvent.prototype, 'source')?.get;
   const dataGetter = Object.getOwnPropertyDescriptor(MessageEvent.prototype, 'data')?.get, apply = Reflect.apply;
   const current = () => !closed && live() && frame.contentWindow === source;
   const send = (message: MeshResult | MeshDelivery): void => {
-    if (current() && (native.available() || message.type === 'mesh.closed' || 'error' in message)) source.postMessage(message, '*');
+    if (current() && (native.available() || message.type === 'mesh.closed' || 'error' in message)) deliver(message);
   };
   const close = (): void => {if (closed) return; closed = true; observer.disconnect(); native.destroy('Mesh source closed');};
   const observer = new MutationObserver(() => {if (!frame.isConnected || frame.contentWindow !== source) close();});
   observer.observe(document, {childList: true, subtree: true});
+  function receiveValue(input: unknown): boolean {
+    const type = input && typeof input === 'object' ? Object.getOwnPropertyDescriptor(input, 'type')?.value : undefined;
+    if (typeof type !== 'string' || !type.startsWith('mesh.')) return false;
+    if (!current()) return true;
+    let request: MeshRequest | undefined;
+    try {request = native.capture(input);} catch {const failure = meshFailure(input, 'Invalid Mesh request'); if (failure) send(failure);}
+    if (!request) return true;
+    if (request.type === 'mesh.close') native.close(request);
+    else if (request.type === 'mesh.subscribe') native.subscribe(request, send);
+    else void native.request(request).then(send, () => {const failure = meshFailure(request, 'Mesh request unavailable or outcome unconfirmed'); if (failure) send(failure);});
+    return true;
+  }
   return Object.freeze({
     receive(event: MessageEvent): boolean {
       if (!event.isTrusted || !sourceGetter || !dataGetter) return false;
       let input: unknown;
       try {if (apply(sourceGetter, event, []) !== source || frame.contentWindow !== source) return false; input = apply(dataGetter, event, []);} catch {return false;}
-      const type = input && typeof input === 'object' ? Object.getOwnPropertyDescriptor(input, 'type')?.value : undefined;
-      if (typeof type !== 'string' || !type.startsWith('mesh.')) return false;
-      if (!current()) return true;
-      let request: MeshRequest | undefined;
-      try {request = native.capture(input);} catch {const failure = meshFailure(input, 'Invalid Mesh request'); if (failure) send(failure);}
-      if (!request) return true;
-      if (request.type === 'mesh.close') native.close(request);
-      else if (request.type === 'mesh.subscribe') native.subscribe(request, send);
-      else void native.request(request).then(send, () => {const failure = meshFailure(request, 'Mesh request unavailable or outcome unconfirmed'); if (failure) send(failure);});
-      return true;
+      return receiveValue(input);
     },
-    close,
+    receiveValue, close,
   });
 }

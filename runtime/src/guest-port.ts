@@ -6,8 +6,9 @@ export type GuestBindingTransport = {send(value: object): void; listen(callback:
 
 /** One guest-created channel per verified frame generation. */
 export function createGuestPort(frame: HTMLIFrameElement, source: Window, bridge: ShellBridge,
-  domains: readonly string[], account: () => string | undefined, consumeIntent: (receipt: unknown) => void, keys: ReturnType<typeof createKeysSession> | null,
-  receiveMedia: (value: unknown) => boolean, cvm: ((value: unknown) => void) | null, ready: () => void, fail: () => void) {
+  domains: readonly string[], account: () => string | undefined, consumeIntent: (receipt: unknown) => void,
+  routes: {keys: ReturnType<typeof createKeysSession> | null; media(value: unknown): boolean;
+    cvm: ((value: unknown) => void) | null; mesh: ((value: unknown) => boolean) | undefined}, ready: () => void, fail: () => void) {
   let port: MessagePort | undefined;
   let closed = false;
   let operations = 0;
@@ -46,12 +47,12 @@ export function createGuestPort(frame: HTMLIFrameElement, source: Window, bridge
           return;
         }
         if (isKeysMessage(value)) {
-          keys?.receive(value);
+          routes.keys?.receive(value);
           return;
         }
-        if (receiveMedia(value)) return;
+        if (routes.mesh?.(value) || routes.media(value)) return;
         if (typeof value?.type === 'string' && value.type.startsWith('cvm.')) {
-          cvm?.(value);
+          routes.cvm?.(value);
           return;
         }
         if (!validEnvelope(value)) {
