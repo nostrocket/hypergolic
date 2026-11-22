@@ -33,7 +33,12 @@ enum PublishedBodyProof {
     try check(try store.retainDownload(token, hash: hash, data: html) == html.count, "native 19.2 MB signed download")
     let path = try store.database(token, user: owner, length: html.count)
     try check(FileManager.default.fileExists(atPath: path), "private file is present while owned")
-    try check(try store.verifyCached(token, hash: hash) == html.count, "native cache bytes")
+    let reread = try store.issue()
+    let destination = try store.database(reread, user: owner, length: html.count)
+    let cached = temporary.appendingPathComponent("persistent-v1.db").path
+    try check(hg_proof_copy_cached_body(cached, path, destination) == 0, "Expo SQLite persists the original blob and reopens it offline")
+    try check(try store.verifyCached(reread, hash: hash) == html.count, "OS SQLite reads bytes copied from the Expo SQLite v1 cache")
+    store.release(reread)
     try check((try? store.database(token, user: publisher, length: html.count)) == nil, "different owner rejected")
     let registry = PublishedArtifactTransfer.shared.registry
     try check(registry.registerSession(session), "register")

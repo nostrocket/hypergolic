@@ -178,11 +178,19 @@ test('reopen rejects an altered cache schema', async t => {
     error => (error as { code?: string }).code === 'CORRUPT_STORAGE');
 });
 
-test('opens v1 blobs and writes native-owned cache entries without selecting HTML into the shell', async t => {
+async function savedSnapshot() {
+  const event = finalizeEvent({kind: 5129, created_at: 1_800_000_000, content: 'Published snapshot',
+    tags: [['x', await sha(html)], ['title', 'Pinned snapshot']]}, SECRET);
+  const reference = {kind: 5129 as const, pubkey: publisher, eventId: event.id};
+  return verifyArtifact(await verifyManifest(reference, JSON.parse(JSON.stringify(event))), html);
+}
+
+for (const kind of [35129, 5129]) test(`opens a saved v1 kind-${kind} blob and caches native bytes without selecting HTML into the shell`, async t => {
   const sqlite = new DiskSQLite(); t.after(() => sqlite.cleanup());
-  const owner = registration({user, publisher, appId: 'cached'});
+  const artifact = kind === 35129 ? await makeArtifact() : await savedSnapshot();
+  const appId = kind === 35129 ? 'cached' : ' 5129:' + artifact.manifest.eventId;
+  const owner = registration({user, publisher, appId});
   const base = { owner, epoch: 1, currentEpoch: () => 1 };
-  const artifact = await makeArtifact();
   const legacy = await openPublishedArtifactCache(sqlite, base);
   await legacy.put(artifact);
   await legacy.close();
@@ -213,14 +221,14 @@ test('opens v1 blobs and writes native-owned cache entries without selecting HTM
   sqlite.calls.length = 0;
   const {releasePublishedArtifact, retainPublishedArtifact} = await import('../../src/napplets/verified-artifact.ts');
   const cache = await openPublishedArtifactCache(sqlite, {...base, nativeBodies:bodies});
-  const read = await cache.get('cached', artifact.manifest.eventId);
+  const read = await cache.get(appId, artifact.manifest.eventId);
   assert.ok(read);
   const sibling = retainPublishedArtifact(read);
   releasePublishedArtifact(read);
   assert.equal(released, 0);
   assert.throws(() => read.htmlBytes);
   await cache.put(sibling);
-  const second = await cache.get('cached', artifact.manifest.eventId);
+  const second = await cache.get(appId, artifact.manifest.eventId);
   assert.ok(second);
   assert.ok(sqlite.calls.some(call => call.sql.includes('FROM body_store.payload')));
   assert.ok(sqlite.calls.every(call => !/^SELECT.+signed_event, html,/s.test(call.sql) && !call.params.some(value => value instanceof Uint8Array)));
@@ -228,7 +236,7 @@ test('opens v1 blobs and writes native-owned cache entries without selecting HTM
   assert.equal(released, 2);
   const raw = sqlite.raw(PUBLISHED_ARTIFACT_CACHE_DATABASE);
   raw.prepare('UPDATE verified_published_artifacts SET html = zeroblob(length(html))').run();
-  assert.equal(await cache.get('cached', artifact.manifest.eventId), null);
+  assert.equal(await cache.get(appId, artifact.manifest.eventId), null);
   assert.equal(released, 3);
   assert.equal(raw.prepare('SELECT count(*) AS n FROM verified_published_artifacts').get()!.n, 0);
   await cache.close();

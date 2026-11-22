@@ -274,10 +274,6 @@ jobs:
         run: |
           test "$(xcodebuild -version | head -n 1)" = 'Xcode 27.1'
           test "$(xcrun --sdk iphoneos --show-sdk-version)" = '27.1'
-      - name: Verify native published body ownership and signed mirror reservations
-        run: |
-          python3 tests/native/published-body/run.py
-          python3 tests/native/published-https/run.py
       - name: Verify native CVM initialization correlation
         run: |
           xcrun swiftc -swift-version 6 -warnings-as-errors \
@@ -293,6 +289,10 @@ jobs:
             -o "$RUNNER_TEMP/cvm-foreground-proof"
           "$RUNNER_TEMP/cvm-foreground-proof"
       - run: pnpm install --frozen-lockfile
+      - name: Verify native published body ownership and signed mirror reservations
+        run: |
+          python3 tests/native/published-body/run.py
+          python3 tests/native/published-https/run.py
       - run: pnpm run runtime:install
       - run: pnpm run prebuild:ios
       - run: pod install

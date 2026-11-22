@@ -10,9 +10,14 @@ with tempfile.TemporaryDirectory(prefix="published-body-proof-") as temporary:
     object_file = out / "envelope.o"
     subprocess.run(["clang++", "-std=c++17", "-O2", "-Wall", "-Wextra", "-Werror", "-c",
                     NATIVE / "BodyVerifier/PublishedBodyEnvelope.cpp", "-o", object_file], check=True)
+    vendor = ROOT / "node_modules/expo-sqlite/vendor/sqlite3"
+    expo_object, copy_object = out / "expo-sqlite.o", out / "cache-interop.o"
+    subprocess.run(["clang", "-O1", "-DSQLITE_THREADSAFE=1", "-DSQLITE_TEMP_STORE=2", "-c", vendor / "sqlite3.c", "-o", expo_object], check=True)
+    subprocess.run(["clang", "-Wall", "-Wextra", "-Werror", "-I", vendor, "-I", NATIVE / "BodyVerifier",
+                    "-c", Path(__file__).with_name("CacheInterop.c"), "-o", copy_object], check=True)
     binary = out / "proof"
     subprocess.run(["swiftc", "-O", "-swift-version", "6", "-warnings-as-errors", "-module-cache-path", out / "swift-modules",
-                    "-import-objc-header", NATIVE / "BodyVerifier/PublishedBodyEnvelope.h", "-lc++", "-lsqlite3",
+                    "-Xcc", "-I" + str(NATIVE / "BodyVerifier"), "-import-objc-header", Path(__file__).with_name("CacheInterop.h"), "-lc++", "-lsqlite3",
                     NATIVE / "PublishedArtifactRegistry.swift", NATIVE / "PublishedArtifactTransfer.swift", NATIVE / "PublishedBodyStore.swift",
-                    Path(__file__).with_name("PublishedBodyProof.swift"), object_file, "-o", binary], check=True)
+                    Path(__file__).with_name("PublishedBodyProof.swift"), object_file, expo_object, copy_object, "-o", binary], check=True)
     subprocess.run([binary], check=True)
