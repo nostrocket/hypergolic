@@ -131,6 +131,16 @@ export function identityResult(request: CapabilityRequest, user: string): Capabi
   }
 }
 
+export function refusedIdentityReply(value: unknown, user: string, error: string): CapabilityReply | null {
+  try {
+    const data = record(value);
+    const type = IDENTITY_OPERATIONS.find(operation => operation === data.type);
+    if (!type) return null;
+    const request = { type, id: text(data.id, 128) };
+    return type === 'identity.getPublicKey' ? identityResult(request, user) : identityFailure(request, error);
+  } catch { return null; }
+}
+
 /** Failed identity reads keep their required empty primary fields; public key has no error result. */
 export function identityFailure(request: CapabilityRequest, error: string): CapabilityReply {
   if (request.type === 'identity.getPublicKey' || !request.type.startsWith('identity.')) return invalid();
