@@ -1,0 +1,5 @@
+# Reference fixtures
+
+The NDJSON files are unmodified inputs and expected outputs from the independent Lean shell at commit `7fa21cd5bb54e4772879aeef08b0905d561c9016`. They are distributed under the Mozilla Public License 2.0. The test reader checks both upstream Git blob IDs before replay. [Upstream traces](https://github.com/nostrocket/Nostr-Applet-Protocol-Formal-Verification/tree/7fa21cd5bb54e4772879aeef08b0905d561c9016/lean/traces) · [License](https://github.com/nostrocket/Nostr-Applet-Protocol-Formal-Verification/blob/7fa21cd5bb54e4772879aeef08b0905d561c9016/LICENSE)
+
+When updating, compare the applicable draft files at both projects’ source pins. Copy both trace files from one reviewed model commit, record the blob IDs, and update the coverage table. CI requires a review when a recorded Hypergolic pin changes. Config retains its original fixture location. [Coverage and replay boundaries](../../../docs/reference-shell-traces.md) · [Draft revisions](drafts.json) · [Git blob IDs](blobs.json) · [Config fixtures](../../presentation/fixtures/lean-config/README.md)
