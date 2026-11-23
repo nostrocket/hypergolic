@@ -1,3 +1,4 @@
+import {loadTrace, sends} from '../reference-shell/trace.mts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {setup, reviewReady} from './harness.ts';
@@ -122,4 +123,19 @@ test('Topic sender IDs distinguish publishers and instances and expire on replac
   await open.promise;
   assert.equal(open.reply().peer, secondId);
   assert.equal(h.sent.at(-1)?.generation, second.generation);
+});
+
+test('Lean intent returns no handler for the unregistered archetype', async t => {
+  const step = loadTrace('intent').steps[10];
+  const host = await setup(t);
+  const call = host.dispatch(host.source, step.input.msg);
+  await call.promise;
+  const {result, ...envelope} = call.reply();
+  const {archetype, action, convention, handled, ...required} = result;
+  const request = step.input.msg.request;
+  for (const [value, requested] of [[archetype, request.archetype], [action, request.action], [convention, request.convention], [handled, false]]) {
+    if (value !== undefined) assert.equal(value, requested);
+  }
+  assert.deepEqual([{...envelope, result: required}], sends(step).map(row => row.msg));
+  assert.deepEqual(host.activated, []);
 });
