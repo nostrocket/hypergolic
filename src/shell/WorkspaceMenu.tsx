@@ -36,7 +36,7 @@ export function WorkspaceMenu({ title, publisher, disabled, gameControls, onGame
         </View>
         <ScrollView contentContainerStyle={styles.actions}>
           <Text selectable style={styles.actionText}>{publisher ? `Publisher · ${formatNpub(publisher)}` : 'Built into Hypergolic'}</Text>
-          {onDiagnostics && <ShellPressable accessibilityRole="button" disabled={disabled} onPress={onDiagnostics} style={styles.action}><Text style={styles.actionText}>Diagnostics</Text></ShellPressable>}
+          {publisher && onDiagnostics && <ShellPressable accessibilityRole="button" disabled={disabled} onPress={onDiagnostics} style={styles.action}><Text style={styles.actionText}>Diagnostics</Text></ShellPressable>}
           {onPin && <ShellPressable testID="shell-pin" accessibilityRole="button" disabled={disabled} onPress={onPin} style={styles.action}><Text style={styles.actionText}>{pinned ? 'Unpin from Home' : 'Pin to Home'}</Text></ShellPressable>}
           <View style={styles.action}>
             <Text accessible={false} style={styles.actionText}>Game controls</Text>

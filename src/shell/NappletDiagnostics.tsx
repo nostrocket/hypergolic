@@ -1,6 +1,6 @@
-import {useState} from 'react';
-import {setStringAsync} from 'expo-clipboard';
-import {FlatList, ScrollView, StyleSheet, Text, useWindowDimensions, View} from 'react-native';
+import {memo, useCallback, useState} from 'react';
+import {requireNativeModule} from 'expo';
+import {FlatList, ScrollView, StyleSheet, Text, useWindowDimensions, View, type ListRenderItemInfo} from 'react-native';
 import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
 import {redactedSummary, type DiagnosticEntry} from '../runtime/napplet-diagnostics';
 import {RelaySettings} from './RelaySettings';
@@ -23,9 +23,11 @@ export function NappletDiagnostics({session, rows, relays, close}: Props) {
   const [network, showNetwork] = useState(false);
   const [copyLabel, setCopyLabel] = useState('Copy redacted summary');
   const copy = async () => {
-    try { await setStringAsync(redactedSummary(rows)); setCopyLabel('Summary copied'); }
+    try { await requireNativeModule<{copyDiagnostics(text: string): Promise<void>}>('HypergolicNappletHost').copyDiagnostics(redactedSummary(rows)); setCopyLabel('Summary copied'); }
     catch { setCopyLabel('Copy failed · retry'); }
   };
+  const renderRow = useCallback(({item}: ListRenderItemInfo<DiagnosticEntry>) =>
+    <DiagnosticRow row={item} selected={item.id === selected?.id} select={select} />, [selected?.id]);
   const dismiss = () => network ? showNetwork(false) : close();
   return <ShellModal visible onRequestClose={dismiss}>
     <SafeAreaProvider><SafeAreaView style={styles.screen} onAccessibilityEscape={dismiss}>
@@ -37,10 +39,7 @@ export function NappletDiagnostics({session, rows, relays, close}: Props) {
       {network ? <ScrollView><RelaySettings service={relays ?? null} /></ScrollView> : <>
         <View style={[styles.panes, width > height && styles.wide]}>
           <View style={styles.timeline}><Text style={styles.label}>Host timeline</Text>
-            <FlatList data={rows} keyExtractor={row => String(row.id)} renderItem={({item: row}) => <ShellPressable accessibilityRole="button" accessibilityState={{selected: row.id === selected?.id}}
-              onPress={() => select(row)} style={[styles.row, row.id === selected?.id && styles.selected]}>
-              <Text style={styles.time}>+{(row.elapsed / 1000).toFixed(2)} s</Text><Text style={styles.text}>{row.title}</Text>
-            </ShellPressable>} /></View>
+            <FlatList data={rows} keyExtractor={row => String(row.id)} renderItem={renderRow} /></View>
           <ScrollView style={styles.detail} contentContainerStyle={styles.detailContent}>
             <Text style={styles.label}>Event detail</Text><Text style={styles.subtitle}>{selected?.title ?? 'No host events available'}</Text>
             <Text selectable style={styles.text}>{selected?.detail || 'This snapshot contains events from the current published document while its host is mounted.'}</Text>
@@ -57,6 +56,13 @@ export function NappletDiagnostics({session, rows, relays, close}: Props) {
     </SafeAreaView></SafeAreaProvider>
   </ShellModal>;
 }
+const DiagnosticRow = memo(function DiagnosticRow({row, selected, select}: {row: DiagnosticEntry; selected: boolean; select(row: DiagnosticEntry): void}) {
+  const {styles} = useShellStyles(createStyles);
+  return <ShellPressable accessibilityRole="button" accessibilityState={{selected: selected}}
+              onPress={() => select(row)} style={[styles.row, selected && styles.selected]}>
+              <Text style={styles.time}>+{(row.elapsed / 1000).toFixed(2)} s</Text><Text style={styles.text}>{row.title}</Text>
+            </ShellPressable>;
+});
 const createStyles = (c: ShellPalette, f: ShellFonts) => StyleSheet.create({
   screen: {flex: 1, paddingHorizontal: 16, backgroundColor: c.background},
   header: {flexDirection: 'row', alignItems: 'center', paddingVertical: 6},
