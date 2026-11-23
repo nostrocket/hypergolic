@@ -31,7 +31,7 @@ NIP-5D and six NAPs have identical commit pins in the model and shell. Those NAP
 | Upstream trace | Reason |
 | --- | --- |
 | `nip5d` | Assumes a working transferred MessagePort. The existing Chromium and WebKit transport checks track the open handshake gap. [Issue #98](https://github.com/nostrocket/hypergolic/issues/98) |
-| `shell`, `shell-check` | Exercise the proposed compatibility operation and the model’s enabled-domain list. Hypergolic pins an earlier Shell draft and exposes a different profile. |
+| `shell`, `shell-check` | Exercise the proposed compatibility operation and the model’s enabled-domain list. The selected Shell draft requires feature discovery before startup and omits the model’s proposed `shell.check` operation. Browser cases cover early discovery separately. |
 | `intent-launch`, `intent-launch-teardown` | Require the explicit launch amendment beyond the shell pin. |
 | `cvm-registry`, `media` | The model enables registry discovery and uses napplet-owned playback. The selected shell profiles implement other CVM operations and shell-owned playback. An identical draft pin can still have different enabled features. |
 | `upload`, `upload-info`, `upload-refused` | The fixture enables NIP-96 and uses model-specific limits and media. Hypergolic enables Blossom and advertises NIP-96 as disabled. |
