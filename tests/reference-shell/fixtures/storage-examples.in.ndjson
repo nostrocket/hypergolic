@@ -1,0 +1,8 @@
+{"config":{"display":{"devices":[{"id":"desk","width":800,"height":480,"type":"eink"}],"permitted":{"default":true}},"upload":{"rails":[{"rail":"nip96","server":"https://files.example.com/api/v2/media","returns":["https"]},{"rail":"blossom","server":"https://blossom.example.com","returns":["https","blossom"]}],"defaultRail":"nip96","maxBytes":104857600,"mimeTypes":["image/png","image/jpeg","application/pdf"]}},"host":{"hash":"test","sniff":"test"}}
+{"t":"create","w":1,"manifest":{"kind":35129,"pubkey":"0000000000000000000000000000000000000000000000000000000000000abc","content":"test napplet","tags":[["d","my-napplet"],["x","00000000000000000000000000000000000000000000000000000000000fbb62"]],"id":"0000000000000000000000000000000000000000000000000000000000000011"},"bytes":"bXktbmFwcGxldA==","inst":1}
+{"t":"load","w":1}
+{"t":"hello","w":1,"ports":[7]}
+{"t":"message","port":7,"msg":{"type":"storage.set","id":"b1","key":"theme","value":"dark"}}
+{"t":"message","port":7,"msg":{"type":"storage.get","id":"a1","key":"theme"}}
+{"t":"message","port":7,"msg":{"type":"storage.set","id":"b3","key":"language","value":"en"}}
+{"t":"message","port":7,"msg":{"type":"storage.keys","id":"d4"}}
