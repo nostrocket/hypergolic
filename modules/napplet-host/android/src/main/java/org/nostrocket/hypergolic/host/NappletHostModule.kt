@@ -35,6 +35,11 @@ class NappletHostModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("HypergolicNappletHost")
     Events("onRelayStream", "onRelayLifecycle", "onUploadProgress", "onRoutingLifecycle")
+    AsyncFunction("copyDiagnostics") { text: String ->
+      val activity = requireNotNull(appContext.currentActivity)
+      val clipboard = activity.getSystemService(android.content.ClipboardManager::class.java)
+      clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Napplet diagnostics", text))
+    }.runOnQueue(Queues.MAIN)
     OnCreate {
       appContext.runtime.reactContext?.cacheDir?.let(PublishedBodyStore::configure)
       appContext.runtime.reactContext?.cacheDir?.let(NativeFiniteVideo::removeAbandonedDownload)

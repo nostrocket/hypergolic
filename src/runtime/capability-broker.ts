@@ -27,6 +27,7 @@ export interface NativeCapabilityPort {
   finish(token: string, response: string | null): void;
 }
 export interface CapabilityOwner {
+  readonly diagnostics?: import('./napplet-diagnostics.ts').NappletDiagnostics;
   readonly registration: NativeRegistration;
   /** Must also check the selected identity epoch/revision and workspace session membership. */
   assertActive(): void;
