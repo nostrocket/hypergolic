@@ -10,16 +10,20 @@ for (const name of ['inc', 'inc-channel', 'inc-named']) {
     const aliases = new Map<string, string>();
     const sessions = new Map<number, typeof host.source>();
     const hosts = [host.source, host.target];
-    host.native.newChannelId = () => header.config.inc?.channelName[0][1] ?? 'c-0';
+    const allocateId = host.native.newChannelId;
     for (const step of steps) {
       const row = step.input;
       if (row.t === 'create' || row.t === 'load') continue;
       if (row.t === 'hello') {
         const endpoint = hosts[row.w - 1]!;
         const alias = header.config.endpointName?.find(([id]: [number, string]) => id === row.w)?.[1] ?? 'endpoint-' + row.w;
-        aliases.set(alias, endpoint.appId);
+        host.native.newChannelId = allocateId;
         sessions.set(row.ports[0], endpoint);
         await host.register(endpoint);
+        const peer = host.peerId(endpoint);
+        assert.ok(peer);
+        aliases.set(alias, peer);
+        host.native.newChannelId = () => header.config.inc?.channelName[0][1] ?? 'c-0';
         continue;
       }
       const expected = sends(step).map(({port, msg}) => {
