@@ -12,6 +12,7 @@ export async function observeResourceSvg() {
   const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNg+M/wHwAEAQH/cetH5QAAAABJRU5ErkJggg==';
   const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="red"/></svg>';
   const urls = ['data:image/svg+xml,' + encodeURIComponent(svg), 'data:application/octet-stream;base64,AP8=', 'data:image/png;base64,' + png];
+  urls.push('data:image/svg+xml,' + encodeURIComponent(svg.replace('width="2"', 'width="1025"')));
   const session = randomUUID();
   const registration = {sessionId:session, generation:session, instanceId:session, epoch:0,
     user:'1'.repeat(64), publisher:'2'.repeat(64), appId:'svg-check', version:'3'.repeat(64), fixture:'published', domains:['resource']};
@@ -42,7 +43,9 @@ export async function observeResourceSvg() {
     assert.equal(type, 'resource.bytesMany.result');
     assert.equal(id, 'mixed');
     assert.deepEqual(items.map(item => item.url), urls);
-    const [illustration, unsupported, raster] = items;
+    const [illustration, unsupported, raster, oversized] = items;
+    assert.equal(oversized.ok, false);
+    assert.equal(oversized.error, 'decode-failed');
     assert.equal(unsupported.ok, false);
     assert.equal(unsupported.error, 'decode-failed');
     assert.equal(raster.ok, true);
@@ -54,7 +57,7 @@ export async function observeResourceSvg() {
       assert.equal('blob' in illustration, false);
       return false;
     }
-    assert.ok(['image/png', 'image/webp'].includes(illustration.mime));
+    assert.equal(illustration.mime, 'image/png');
     assert.equal(illustration.blob.type, illustration.mime);
     const bytes = new Uint8Array(await illustration.blob.arrayBuffer());
     assert.equal(classifyResourceBytes(bytes), illustration.mime);
