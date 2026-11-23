@@ -1,13 +1,14 @@
 import {listHeader} from '../../src/lists/napplet-recommendations';
 import { outboxReadFailure } from '../../src/outbox/query-contract';
 import { resourceFailure } from '../../src/resources/resource-contract';
-import { queryFailure, storageFailure } from '../../src/runtime/capability-protocol';
+import { IDENTITY_OPERATIONS, identityFailure, queryFailure, storageFailure } from '../../src/runtime/capability-protocol';
 import {COMMON_OPERATIONS,parseCommonRequest,commonFailure} from '../../src/common/common-contract';
 import {parseOutboxSubscribe,parseOutboxClose} from '../../src/outbox/subscription-contract';
 import {parseConfigMessage} from '../../src/presentation/config-contract';
-import {captureNotifyRejection, parseNotifyMessage} from '../../src/presentation/notify-contract';
+import {parseNotifyMessage} from '../../src/presentation/notify-contract';
 import { parseRoutingMessage } from '../../src/routing/routing-contract';
-import { linkRequestId } from '../../src/links/link-contract';
+import {CVM_OPERATIONS} from '../../src/cvm/cvm-contract';
+import { linkDenied, linkRequestId } from '../../src/links/link-contract';
 import { parseUploadRequest, UploadError, UPLOAD_LIMITS } from '../../src/uploads/upload-contract';
 import { text } from '../../src/storage/codec';
 import { parseRelaySubscribe, parseRelayClose } from '../../src/network/relay-subscription-contract';
@@ -15,18 +16,18 @@ import { parseRelaySubscribe, parseRelayClose } from '../../src/network/relay-su
 const privilegedRequests = new Set([...COMMON_OPERATIONS,'identity.getPublicKey', 'identity.getRelays', 'identity.getProfile',
   'identity.getFollows', 'identity.getMutes', 'identity.getBlocked', 'identity.getList',
   'identity.getZaps', 'identity.getBadges', 'storage.get', 'storage.set', 'storage.remove', 'storage.keys', 'relay.query', 'outbox.query', 'outbox.getEvent', 'outbox.resolveRelays', 'outbox.publish', 'resource.info', 'resource.bytes', 'resource.bytesMany', 'resource.cancel']);
-const additionalCorrelatedRequests = new Set(['lists.supported','lists.add','lists.remove','relay.publish', 'theme.get', 'link.open', 'upload.info',
+const additionalCorrelatedRequests = new Set(['lists.supported','lists.add','lists.remove','relay.publish', 'relay.publishEncrypted', 'inc.subscribe', 'theme.get', 'link.open', 'upload.info',
   'upload.upload', 'upload.status', 'intent.invoke', 'intent.available', 'intent.handlers', 'inc.channel.open',
   'inc.channel.list', 'config.get', 'config.registerSchema', 'keys.registerAction', 'notify.send',
-  'notify.permission.request', 'media.session.create', 'cvm.discover', 'cvm.request', 'cvm.close']);
+  'notify.permission.request', 'media.session.create', ...CVM_OPERATIONS]);
 
 /** Project only small correlation headers. Over-limit payloads never reach capability adapters. */
-export function quotaReply(value: unknown, domains: readonly string[]): object | null {
+export function quotaReply(value: unknown, domains: readonly string[], error: 'quota-exceeded' | 'invalid-request' = 'quota-exceeded', account?: string): object | null {
   if (!value || typeof value !== 'object') return null;
   const {type, id, subId} = value as Record<string, unknown>;
   if (typeof type !== 'string' || type.length > 64 || !domains.includes(type.split('.')[0]!) ||
       typeof id !== 'string' || !id.length || id.length > 128 || new TextEncoder().encode(id).length > 128) return null;
-  const error = 'quota-exceeded';
+
   if (type === 'relay.subscribe' || type === 'outbox.subscribe') {
     if (typeof subId !== 'string' || !subId.length || subId.length > 128 || new TextEncoder().encode(subId).length > 128) return null;
     return {type: type === 'relay.subscribe' ? 'relay.closed' : 'outbox.closed', subId, reason: error};
@@ -35,13 +36,30 @@ export function quotaReply(value: unknown, domains: readonly string[]): object |
   if (type === 'resource.cancel') return null;
   const header = {type, id};
   const denial = commonFailure(header, error) ?? outboxReadFailure(header, error) ??
-    resourceFailure(header, 'quota-exceeded') ?? storageFailure(header, error) ?? queryFailure(header, error);
+    resourceFailure(header, error) ?? storageFailure(header, error) ?? queryFailure(header, error);
   if (denial) return denial;
+  const identity = IDENTITY_OPERATIONS.find(operation => operation === type);
+  if (identity === 'identity.getPublicKey') return account === undefined ? null : {type:type+'.result', id, pubkey:account};
+  if (identity) return identityFailure({type:identity, id}, error);
+  if (type === 'relay.publishEncrypted') return {type:type+'.result', id, ok:false, error:'publish denied'};
   if (type === 'relay.publish' || type === 'outbox.publish') return {type: type + '.result', id, ok: false, error};
   if (type.startsWith('lists.')) return {type:type+'.result',id,ok:false,error};
-  if (type.startsWith('cvm.') || type === 'media.session.create') return {type: type + '.result', id, error};
-  // The injected SDK accepts this error envelope even for operations with custom success fields.
-  return {type: type + '.error', id, error};
+  if (type.startsWith('cvm.')) return {type:type+'.result', id, error:error === 'quota-exceeded' ? 'policy denied' : 'invalid request'};
+  switch (type) {
+    case 'link.open': return linkDenied(id, error);
+    case 'notify.permission.request': return {type:'notify.permission.result', id, granted:false};
+    case 'config.get': return {type:'config.schemaError', code:'invalid-schema', error};
+    case 'config.registerSchema': return {type:type+'.result', id, ok:false, code:'invalid-schema', error};
+    case 'intent.invoke': return {type:type+'.result', id, result:{ok:false, handled:false, error}};
+    case 'intent.handlers': return {type:type+'.result', id, handlers:[], error};
+    case 'inc.channel.list': return {type:type+'.result', id, channels:[], error};
+    case 'keys.registerAction': {
+      const action = (value as {action?: {id?:unknown}}).action?.id;
+      const actionId = typeof action === 'string' && /^[A-Za-z0-9_.:/-]{1,96}$/.test(action) ? action : '';
+      return {type:type+'.result', id, actionId, error};
+    }
+    default: return {type:type+'.result', id, error};
+  }
 }
 export function validEnvelope(value: unknown): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -86,39 +104,38 @@ export function validEnvelope(value: unknown): boolean {
 }
 
 export function rejectEnvelope(event: MessageEvent, source: Window, domains: readonly string[]): void {
-      if (domains.includes('common')) {
-        const reply = commonFailure(event.data);
-        if (reply) {source.postMessage(reply,'*');return;}
-      }
-      if (domains.includes('relay') && event.data?.type === 'relay.publish') {
-        const id = event.data.id;
-        if (typeof id === 'string' && id.length > 0 && id.length <= 128 &&
-          new TextEncoder().encode(id).length <= 128) {
-          source.postMessage({type: 'relay.publish.result', id, ok: false, error: 'Invalid event template.'}, '*');
-        }
-        return;
-      }
-      const type = event.data?.type;
-      if (domains.includes('upload') && (type === 'upload.info' || type === 'upload.upload' || type === 'upload.status')) {
-        let id: string;
-        try { id = text(event.data.id, UPLOAD_LIMITS.idBytes); } catch { return; }
-        try { parseUploadRequest(event.data); } catch (error) {
-          source.postMessage({type: type + '.result', id, error: error instanceof UploadError ? error.code : 'invalid request'}, '*');
-        }
-        return;
-      }
-      if (domains.includes('notify')) {
-        const rejection = captureNotifyRejection(event.data);
-        if (rejection !== null) source.postMessage({...rejection}, '*');
-      }
-      // A denied subscribe acquires no Kehto/native authority. Reply only to the captured
-      // registered frame with an independently validated caller correlation identifier.
-      if ((event.data?.type === 'relay.subscribe' && domains.includes('relay')) ||
-          (event.data?.type === 'outbox.subscribe' && domains.includes('outbox'))) {
-        try {
-          const outbox=event.data.type==='outbox.subscribe';
-          const denied = outbox?parseOutboxClose({type:'outbox.close',id:event.data.id,subId:event.data.subId}):parseRelayClose({type:'relay.close',id:event.data.id,subId:event.data.subId});
-          source.postMessage({type:outbox?'outbox.closed':'relay.closed',subId:denied.subId,reason:'invalid or unsupported relay subscription'}, '*');
-        } catch { /* An invalid correlation identifier has no SDK recipient. */ }
-      }
+  if (domains.includes('common')) {
+    const reply = commonFailure(event.data);
+    if (reply) {source.postMessage(reply,'*');return;}
+  }
+  if (domains.includes('relay') && event.data?.type === 'relay.publish') {
+    const id = event.data.id;
+    if (typeof id === 'string' && id.length > 0 && id.length <= 128 &&
+      new TextEncoder().encode(id).length <= 128) {
+      source.postMessage({type: 'relay.publish.result', id, ok: false, error: 'Invalid event template.'}, '*');
+    }
+    return;
+  }
+  const type = event.data?.type;
+  if (domains.includes('upload') && (type === 'upload.info' || type === 'upload.upload' || type === 'upload.status')) {
+    let id: string;
+    try { id = text(event.data.id, UPLOAD_LIMITS.idBytes); } catch { return; }
+    try { parseUploadRequest(event.data); } catch (error) {
+      source.postMessage({type: type + '.result', id, error: error instanceof UploadError ? error.code : 'invalid request'}, '*');
+    }
+    return;
+  }
+  // A denied subscribe acquires no Kehto/native authority. Reply only to the captured
+  // registered frame with an independently validated caller correlation identifier.
+  if ((event.data?.type === 'relay.subscribe' && domains.includes('relay')) ||
+      (event.data?.type === 'outbox.subscribe' && domains.includes('outbox'))) {
+    try {
+      const outbox=event.data.type==='outbox.subscribe';
+      const denied = outbox?parseOutboxClose({type:'outbox.close',id:event.data.id,subId:event.data.subId}):parseRelayClose({type:'relay.close',id:event.data.id,subId:event.data.subId});
+      source.postMessage({type:outbox?'outbox.closed':'relay.closed',subId:denied.subId,reason:'invalid or unsupported relay subscription'}, '*');
+    } catch { /* An invalid correlation identifier has no SDK recipient. */ }
+    return;
+  }
+  const reply = quotaReply(event.data, domains, 'invalid-request');
+  if (reply) source.postMessage(reply, '*');
 }

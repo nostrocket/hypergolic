@@ -73,6 +73,22 @@ test('every identity read has the selected owning shape and no SQL or signer acc
   assert.equal(sqlite.calls.length, before);
 });
 
+test('public-key replies preserve the registered account on malformed and repeated requests', async t => {
+  const { database } = await setup(t);
+  const native = new NativeLeases();
+  for (const domains of [['identity'], ['storage']]) {
+    const config = registration({domains});
+    const broker = createCapabilityBroker(database, native, {registration:config, assertActive() {}});
+    const request = {type:'identity.getPublicKey', id:'account'};
+    for (const payload of [request, request, {...request, user:hex(9)}]) {
+      const token = native.add(config, payload);
+      await broker.dispatch(token);
+      assert.deepEqual(native.results.get(token), domains.includes('identity')
+        ? {type:'identity.getPublicKey.result', id:request.id, pubkey:config.user} : null);
+    }
+  }
+});
+
 test('native-bound user, publisher, app, version and instance namespaces remain separate after reopen', async t => {
   const { database, sqlite } = await setup(t), native = new NativeLeases();
   async function invoke(config: NativeRegistration, request: unknown, db = database) {

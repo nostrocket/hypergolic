@@ -45,6 +45,8 @@ never add a dummy signature to satisfy the type.
 
 ## Message shapes
 
+For a recognized two-way request, a refusal carries the original bounded request ID and the response type defined by that capability. A rate-limited subscription receives a closure for its subscription ID. One-way operations and unknown message types have no reply. A resource batch returns a result for each URL in input order, including failures, while malformed batch containers and oversized batches receive a single request error.
+
 Requests flow guest → host; results return to the original live source. A nonempty
 correlation ID of at most 128 UTF-8 bytes is not authority. Reject unregistered senders, forged results or
 pushes, malformed envelopes and ungranted domains before dispatch. Identity,

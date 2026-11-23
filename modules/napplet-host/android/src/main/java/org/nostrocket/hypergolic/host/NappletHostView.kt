@@ -183,6 +183,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
               .put("eventId", claims.eventId).put("version", claims.version)
               .put("htmlHash", claims.htmlHash).put("domains", JSONArray(configuration?.grantedDomains ?: listOf("theme")))
               .put("done", chunk.done)
+            claims.manifestFormat?.let { result.put("manifestFormat", it) }
             claims.snapshot?.let { result.put("snapshot", it.toWire()) }
             configuration?.legacyReadOnly?.let { result.put("legacyReadOnly", JSONObject(it.metadata)) }
             configuration?.appData?.let { result.put("appData", JSONObject(it)) }
@@ -259,7 +260,15 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
           if (text.toByteArray(Charsets.UTF_8).size > 2048) return@addWebMessageListener
           when (data.optString("type")) {
             "close-check.result" -> receiveCloseCheck(data)
-            "ready" -> if (data.length() == 2 && !ready) { ready = true; RoutingTransport.ready(generation); emit("ready") }
+            "ready" -> if (data.length() == 2 && !ready) {
+              ready = true
+              RoutingTransport.ready(generation)
+              configuration?.takeIf { "identity" in it.grantedDomains }?.let { config ->
+                reply.postMessage(JSONObject().put("type", "identity.snapshot").put("sessionId", generation)
+                  .put("pubkey", config.user).toString())
+              }
+              emit("ready")
+            }
             "error" -> if (data.length() == 3 && data.optString("code").matches(Regex("[a-z-]{1,80}"))) fail(data.getString("code"))
           }
         } catch (_: Exception) {
@@ -485,7 +494,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
 
   private data class PublishedClaims(
     val sessionId: String, val publisher: String, val appId: String, val eventId: String,
-    val version: String, val htmlHash: String, val handle: String,
+    val version: String, val htmlHash: String, val handle: String, val manifestFormat: String?,
     val snapshot: PublishedArtifactRegistry.Snapshot?, val configuration: CapabilityConfiguration?
   )
 
@@ -535,7 +544,7 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
       val data = JSONObject(raw)
       val required = setOf("sessionId", "publisher", "appId", "eventId", "version", "htmlHash", "handle")
       val names = data.keys().asSequence().toSet()
-      if (!names.containsAll(required) || (names - required - setOf("configuration", "snapshot")).isNotEmpty()) return null
+      if (!names.containsAll(required) || (names - required - setOf("configuration", "snapshot", "manifestFormat")).isNotEmpty()) return null
       val values = listOf("sessionId", "publisher", "appId", "eventId", "version", "htmlHash", "handle")
         .map { data.get(it) as? String ?: return null }
       val session = values[0]
@@ -554,7 +563,11 @@ class NappletHostView(context: Context, appContext: AppContext) : ExpoView(conte
         parsed
       } else null
       if (snapshot != null && config == null) return null
-      PublishedClaims(session, values[1], values[2], values[3], values[4], values[5], values[6], snapshot, config)
+      val manifestFormat = if ("manifestFormat" in names) {
+        if (data.get("manifestFormat") != "nip-5d") return null
+        "nip-5d"
+      } else null
+      PublishedClaims(session, values[1], values[2], values[3], values[4], values[5], values[6], manifestFormat, snapshot, config)
     } catch (_: Exception) { null }
   }
 

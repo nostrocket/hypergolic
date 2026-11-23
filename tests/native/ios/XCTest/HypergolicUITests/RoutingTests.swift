@@ -53,23 +53,31 @@ final class RoutingTests: XCTestCase {
   let candidates=availability["candidates"] as! [[String:Any]];XCTAssertEqual(candidates.count,1);XCTAssertEqual(candidates[0]["dTag"] as? String,"signed-routing-peer-lab");passed("verified-handler-availability")
   review();button("routing-cancel");wait("Dispatch declined.");let denied=readJSON("\"handled\":false","ROUTING_DENIED:") as! [String:Any];XCTAssertEqual(denied["ok"] as? Bool,false);passed("dispatch-cancel-original-sdk-result")
   review();button("routing-approve");wait("Received topic message.")
-  let events=readJSON("\"sender\":\"signed-routing-caller-lab\"","ROUTING_EVENTS:") as! [[String:Any]];XCTAssertEqual(events.count,1)
+  let events=readJSON("\"sender\":\"peer-","ROUTING_EVENTS:") as! [[String:Any]];XCTAssertEqual(events.count,1)
+  let callerId=events[0]["sender"] as! String
   XCTAssertEqual(events[0]["payload"] as? NSDictionary,["text":"routing tracer + ⚡","nested":[NSNull(),false,3]] as NSDictionary);passed("approved-dispatch-real-target-exact-payload")
   button("handle-right");button("Open signed-routing-caller-lab");wait("Dispatch accepted.")
   let result=readJSON("\"handled\":true","ROUTING_RESULT:") as! [String:Any];XCTAssertEqual(result["ok"] as? Bool,true);XCTAssertEqual(result["handler"] as? String,"signed-routing-peer-lab");XCTAssertEqual(result["convention"] as? String,"napplet:note/open");XCTAssertNotNil(result["windowId"]);passed("original-caller-structured-sdk-result")
   func focus(_ role:String){button("handle-right");button("Open signed-routing-"+role+"-lab");XCTAssertEqual(app.staticTexts["focused-napplet-name"].label,"signed-routing-"+role+"-lab")}
   guest("Subscribe to topic");wait("Allow this topic?");button("routing-approve");guest("Emit topic payload");focus("peer")
-  let topicPeer=readJSON("\"sender\":\"signed-routing-caller-lab\"","ROUTING_TOPIC_PEER:") as! [[String:Any]];XCTAssertEqual(topicPeer.count,2);passed("foreground-topic-switch-exact-sender-no-echo")
-  guest("Emit topic payload");focus("caller");let topicCaller=readJSON("\"sender\":\"signed-routing-peer-lab\"","ROUTING_TOPIC_CALLER:") as! [[String:Any]];XCTAssertEqual(topicCaller.count,1);passed("symmetric-topic-payload")
+  let topicPeer=readJSON("\"sender\":\"peer-","ROUTING_TOPIC_PEER:") as! [[String:Any]];XCTAssertEqual(topicPeer.count,2);XCTAssertEqual(topicPeer.last?["sender"] as? String,callerId);passed("foreground-topic-switch-exact-sender-no-echo")
+  guest("Emit topic payload");focus("caller");let topicCaller=readJSON("\"sender\":\"peer-","ROUTING_TOPIC_CALLER:") as! [[String:Any]];XCTAssertEqual(topicCaller.count,1);passed("symmetric-topic-payload")
+  let peerId=topicCaller[0]["sender"] as! String
+  XCTAssertNotEqual(peerId,callerId)
+  let peerField=host().textFields["Peer dTag"]
+  for _ in 0..<16 where !peerField.isHittable {host().swipeUp()}
+  XCTAssertTrue(peerField.isHittable);peerField.tap()
+  if let old=peerField.value as? String {peerField.typeText(String(repeating:XCUIKeyboardKey.delete.rawValue,count:old.count))}
+  peerField.typeText(peerId+"\n");XCTAssertEqual(peerField.value as? String,peerId)
   func openChannel()->String {
    guest("Open channel");wait("Open this channel?");wait("signed-routing-caller-lab");wait("signed-routing-peer-lab");capture("channel-review");button("routing-approve");wait("Channel opened.")
-   let info=readJSON("\"peer\":\"signed-routing-peer-lab\"","ROUTING_CHANNEL:") as! [String:Any];XCTAssertEqual(info["peer"] as? String,"signed-routing-peer-lab");return info["id"] as! String
+   let info=readJSON("\"peer\":\"" + peerId + "\"","ROUTING_CHANNEL:") as! [String:Any];XCTAssertEqual(info["peer"] as? String,peerId);return info["id"] as! String
   }
   var channel=openChannel();passed("new-channel-trusted-endpoint-review");focus("peer")
-  let info=readJSON("\"peer\":\"signed-routing-caller-lab\"","ROUTING_INBOUND:") as! [String:Any];XCTAssertEqual(info["id"] as? String,channel);passed("target-original-sdk-inbound-handle")
+  let info=readJSON("\"peer\":\"" + callerId + "\"","ROUTING_INBOUND:") as! [String:Any];XCTAssertEqual(info["id"] as? String,channel);passed("target-original-sdk-inbound-handle")
   guest("Emit channel payload");focus("caller");let channelEvents=readJSON("\"channelId\"","ROUTING_CHANNEL_EVENTS:") as! [[String:Any]]
-  XCTAssertEqual(channelEvents.count,1);XCTAssertEqual(channelEvents[0]["sender"] as? String,"signed-routing-peer-lab");XCTAssertEqual(channelEvents[0]["channelId"] as? String,channel);XCTAssertEqual(channelEvents[0]["payload"] as? NSDictionary,["text":"routing tracer + ⚡","nested":[NSNull(),false,3]] as NSDictionary);passed("peer-channel-message-exact-payload")
-  guest("Broadcast channel payload");focus("peer");let broadcast=readJSON("\"channelId\"","ROUTING_BROADCAST:") as! [[String:Any]];XCTAssertEqual(broadcast.count,1);XCTAssertEqual(broadcast[0]["sender"] as? String,"signed-routing-caller-lab");passed("symmetric-channel-broadcast")
+  XCTAssertEqual(channelEvents.count,1);XCTAssertEqual(channelEvents[0]["sender"] as? String,peerId);XCTAssertEqual(channelEvents[0]["channelId"] as? String,channel);XCTAssertEqual(channelEvents[0]["payload"] as? NSDictionary,["text":"routing tracer + ⚡","nested":[NSNull(),false,3]] as NSDictionary);passed("peer-channel-message-exact-payload")
+  guest("Broadcast channel payload");focus("peer");let broadcast=readJSON("\"channelId\"","ROUTING_BROADCAST:") as! [[String:Any]];XCTAssertEqual(broadcast.count,1);XCTAssertEqual(broadcast[0]["sender"] as? String,callerId);passed("symmetric-channel-broadcast")
   guest("Close channel");wait("Channel closed.");let localClosed="{\"channelId\":\""+channel+"\"}";let closed=readJSON(localClosed,"ROUTING_CLOSED:") as! [String:Any];XCTAssertEqual(closed["channelId"] as? String,channel)
   guest("Attach late close handler");XCTAssertEqual(app.staticTexts.matching(NSPredicate(format:"label == %@",localClosed)).count,2);passed("original-sdk-late-terminal-record")
   focus("caller");wait("Channel closed.");let symmetric=readJSON("\"reason\":\"closed\"","ROUTING_SYMMETRIC_CLOSED:") as! [String:Any];XCTAssertEqual(symmetric["channelId"] as? String,channel);guest("List channels");wait("[]");passed("symmetric-close-empty-list")
@@ -79,7 +87,7 @@ final class RoutingTests: XCTestCase {
   while Date()<expiry && app.otherElements["routing-review"].exists {usleep(200000)}
   XCTAssertFalse(app.otherElements["routing-review"].exists,app.debugDescription)
   let failed=app.staticTexts.matching(NSPredicate(format:"label BEGINSWITH %@","Request failed:")).firstMatch;XCTAssertTrue(failed.waitForExistence(timeout:10),app.debugDescription);passed("native-deadline-revokes-unanswered-dispatch")
-  focus("peer");let afterExpired=readJSON("\"sender\":\"signed-routing-caller-lab\"","ROUTING_AFTER_EXPIRY:") as! [[String:Any]];XCTAssertEqual(afterExpired.count,2);passed("expired-review-delivers-no-payload");focus("caller")
+  focus("peer");let afterExpired=readJSON("\"sender\":\"peer-","ROUTING_AFTER_EXPIRY:") as! [[String:Any]];XCTAssertEqual(afterExpired.count,2);passed("expired-review-delivers-no-payload");focus("caller")
   channel=openChannel();guest("Request channel review flood");let floodDeadline=Date().addingTimeInterval(35)
   while Date()<floodDeadline {
    if app.buttons["routing-cancel"].exists {app.buttons["routing-cancel"].tap()}
@@ -88,7 +96,7 @@ final class RoutingTests: XCTestCase {
   }
   let flood=readJSON("[{\"ok\":false","ROUTING_FLOOD:") as! [[String:Any]];XCTAssertEqual(flood.count,8);XCTAssertTrue(flood.allSatisfy{$0["ok"] as? Bool==false});passed("native-review-flood-has-no-approved-channel")
   openSigned("second-peer");guest("Send malformed guest requests");wait("Malformed guest requests sent.");focus("peer")
-  let afterForged=readJSON("\"sender\":\"signed-routing-caller-lab\"","ROUTING_AFTER_FORGED:") as! [[String:Any]];XCTAssertEqual(afterForged.count,2);passed("native-guest-forged-sender-and-control-denied")
+  let afterForged=readJSON("\"sender\":\"peer-","ROUTING_AFTER_FORGED:") as! [[String:Any]];XCTAssertEqual(afterForged.count,2);passed("native-guest-forged-sender-and-control-denied")
   focus("second-peer");let foreign=host().textFields["Observed foreign channel"]
   for direction in [true,false] {for _ in 0..<20 {if foreign.isHittable{break}
    let view=host(),high=view.coordinate(withNormalizedOffset:CGVector(dx:0.5,dy:0.15)),low=view.coordinate(withNormalizedOffset:CGVector(dx:0.5,dy:0.5))
@@ -96,7 +104,7 @@ final class RoutingTests: XCTestCase {
   XCTAssertTrue(foreign.isHittable,app.debugDescription);foreign.tap()
   if let old=foreign.value as? String {foreign.typeText(String(repeating:XCUIKeyboardKey.delete.rawValue,count:old.count))};foreign.typeText(channel+"\n");guest("Send foreign channel payload");wait("Foreign channel request sent.");focus("peer")
   let afterForeign=readJSON("\"channelId\"","ROUTING_AFTER_FOREIGN:") as! [[String:Any]];XCTAssertEqual(afterForeign.count,1);passed("native-third-view-cannot-use-active-channel-id")
-  focus("second-peer");guest("Emit topic payload");focus("peer");let positive=readJSON("\"sender\":\"signed-routing-second-peer-lab\"","ROUTING_POSITIVE_PING:") as! [[String:Any]];XCTAssertEqual(positive.count,3);passed("native-negative-controls-have-live-positive-ping")
+  focus("second-peer");guest("Emit topic payload");focus("peer");let positive=readJSON("\"sender\":\"peer-","ROUTING_POSITIVE_PING:") as! [[String:Any]];XCTAssertEqual(positive.count,3);XCTAssertNotEqual(positive.last?["sender"] as? String,callerId);XCTAssertNotEqual(positive.last?["sender"] as? String,peerId);passed("native-negative-controls-have-live-positive-ping")
   focus("caller");button("handle-right");button("Close signed-routing-peer-lab");button("close-confirm");button("Open signed-routing-caller-lab");wait("Channel closed.")
   let peerClosed=readJSON("\"reason\":\"peer destroyed\"","ROUTING_PEER_CLOSED:") as! [String:Any];XCTAssertEqual(peerClosed["channelId"] as? String,channel);passed("native-peer-close-revokes-channel")
  }
@@ -147,7 +155,7 @@ final class RoutingTests: XCTestCase {
   guest("Open channel");wait("Request failed: peer unavailable");XCTAssertFalse(app.buttons["routing-approve"].exists);guest("List channels");wait("[]");passed("native-absent-peer-original-sdk-denial")
   openSigned("peer");guest("Subscribe to topic");wait("Allow this topic?");button("routing-approve")
   button("handle-right");button("Open signed-routing-caller-lab");guest("Emit topic payload");button("handle-right");button("Open signed-routing-peer-lab")
-  let events=readJSON("\"sender\":\"signed-routing-caller-lab\"","ROUTING_PROTOCOL:") as! [[String:Any]];XCTAssertEqual(events.count,1);XCTAssertEqual(events[0]["payload"] as? NSDictionary,["text":"routing tracer + ⚡","nested":[NSNull(),false,3]] as NSDictionary);passed("native-protocol-negative-controls-positive-delivery")
+  let events=readJSON("\"sender\":\"peer-","ROUTING_PROTOCOL:") as! [[String:Any]];XCTAssertEqual(events.count,1);XCTAssertEqual(events[0]["payload"] as? NSDictionary,["text":"routing tracer + ⚡","nested":[NSNull(),false,3]] as NSDictionary);passed("native-protocol-negative-controls-positive-delivery")
   openSigned("collision-peer");button("handle-right");button("Open signed-routing-caller-lab")
   let field=host().textFields["Handler preference"]
   func revealField(){
@@ -221,7 +229,7 @@ final class RoutingTests: XCTestCase {
   closePeer();guest("Check availability");let closed=readJSON("\"hasDefault\":true","ROUTING_SETTINGS:") as! [String:Any];XCTAssertEqual(closed["available"] as? Bool,true);passed("closed-handler-remains-discoverable")
   app.terminate();app.launch();wait("SDK ready for routing.");guest("Check availability");let cold=readJSON("\"hasDefault\":true","ROUTING_SETTINGS:") as! [String:Any];XCTAssertEqual(cold["available"] as? Bool,true);passed("cold-process-default-persistence")
   guest("Invoke handler");wait("Open with this napplet?");XCTAssertTrue(app.descendants(matching:.any)["routing-candidate-"+publisher+"-signed-routing-auto-peer-lab"].waitForExistence(timeout:5),app.debugDescription);capture("cold-selected-handler-review");button("routing-approve");topic();wait("Received topic message.")
-  let events=readJSON("\"sender\":\"signed-routing-caller-lab\"","ROUTING_SETTINGS:") as! [[String:Any]];XCTAssertEqual(events.count,1);XCTAssertEqual(events[0]["payload"] as? NSDictionary,["text":"routing tracer + ⚡","nested":[NSNull(),false,3]] as NSDictionary);passed("cold-handler-fresh-topic-before-exact-delivery")
+  let events=readJSON("\"sender\":\"peer-","ROUTING_SETTINGS:") as! [[String:Any]];XCTAssertEqual(events.count,1);XCTAssertEqual(events[0]["payload"] as? NSDictionary,["text":"routing tracer + ⚡","nested":[NSNull(),false,3]] as NSDictionary);passed("cold-handler-fresh-topic-before-exact-delivery")
   focus("caller");wait("Dispatch accepted.");let result=readJSON("\"handled\":true","ROUTING_SETTINGS:") as! [String:Any];XCTAssertEqual(result["ok"] as? Bool,true);passed("cold-original-caller-sdk-result")
   focus("auto-peer");guest("Save routing data");wait("Routing data saved.");passed("original-sdk-data-written")
   focus("caller");button("shell-settings");settingsButton("routing-remove-"+key);wait("Registration removed. Saved data remains.");capture("trusted-remove-registration");button("settings-done");passed("trusted-registration-removal")

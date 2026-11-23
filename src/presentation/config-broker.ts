@@ -5,11 +5,11 @@ import type {RoutingNativePort} from '../routing/routing-port.ts';
 import {routingPayload, routingRecord, routingText} from '../routing/routing-contract.ts';
 import {ShellStorageError, type TrustedRegistration} from '../storage/ports.ts';
 import {parseConfigMessage, type ConfigMessage} from './config-contract.ts';
-import {ConfigKeyInputError, containsPrivateKeyInput, captureConfigSchema, configSecretFields, configValueValid, configValuesConform, resolveConfigValues, ConfigSchemaError, type ConfigSchema, type ConfigValues, type ConfigValue} from './config-schema.ts';
+import {ConfigKeyInputError, containsPrivateKeyInput, captureConfigSchema, configSecretFields, configValueValid, configValuesConform, savedConfigValues, resolveConfigValues, ConfigSchemaError, type ConfigSchema, type ConfigValues, type ConfigValue} from './config-schema.ts';
 import type {ConfigRecord, ConfigStore} from './config-store.ts';
 import type {ReviewSlot} from '../shell/review-slot.ts';
 type Endpoint = {origin: NativeRegistration; assertActive(): void; seen: RequestHistory; tail: Promise<unknown>; schema: ConfigSchema | null; menu?: ConfigMenuTarget; version?: number; subscription: object | null; window: number; opens: number};
-export type ConfigReview = Readonly<{id: string; origin: NativeRegistration; schema: ConfigSchema; reviewRevision: number; ordinary: ConfigValues; secretPresent: Readonly<Record<string, boolean>>; section?: string}>;
+export type ConfigReview = Readonly<{id: string; origin: NativeRegistration; schema: ConfigSchema; reviewRevision: number; ordinary: ConfigValues; saved: ConfigValues; secretPresent: Readonly<Record<string, boolean>>; section?: string}>;
 export type ConfigMenuTarget = Readonly<{origin: NativeRegistration}>;
 export type ConfigSnapshot = Readonly<{review: ConfigReview | null; menu: readonly ConfigMenuTarget[]}>;
 type Opening = {generation: string; assertActive(): void; focusChanged?: () => void};
@@ -38,7 +38,7 @@ function resolved(schema: ConfigSchema, record: ConfigRecord): ConfigValues {
 function cleaned(schema: ConfigSchema, record: ConfigRecord): ConfigRecord {
   const secrets: Record<string, ConfigValue> = {};
   for (const field of configSecretFields(schema)) {const key = JSON.stringify(field.path), value = record.secrets[key]; if (configValueValid(field.schema, value)) secrets[key] = value!;}
-  return Object.freeze({format: 1, ordinary: ordinary(schema, resolved(schema, {...record, secrets})), secrets: Object.freeze(secrets)});
+  return Object.freeze({format: 1, ordinary: ordinary(schema, savedConfigValues(schema, record.ordinary)), secrets: Object.freeze(secrets)});
 }
 function sections(schema: ConfigSchema): readonly string[] {
   const own = typeof schema['x-napplet-section'] === 'string' ? [schema['x-napplet-section']] : [];
@@ -182,7 +182,7 @@ export class ConfigBroker {
       if (this.slot && !this.slot.reserve('config', {id, origin: endpoint.origin})) return false;
       reservedId = id;
       opening.assertActive();
-      this.publish(Object.freeze({id, origin: endpoint.origin, schema, reviewRevision, ordinary: ordinary(schema, values), secretPresent: Object.freeze(present), ...(section && sections(schema).includes(section) ? {section} : {})}));
+      this.publish(Object.freeze({id, origin: endpoint.origin, schema, reviewRevision, ordinary: ordinary(schema, values), saved: cleaned(schema, record).ordinary, secretPresent: Object.freeze(present), ...(section && sections(schema).includes(section) ? {section} : {})}));
       return this.getSnapshot().review?.id === id;
     } finally {
       menuSignal?.removeEventListener('abort', cancel);
@@ -215,7 +215,7 @@ export class ConfigBroker {
       if (!configValueValid(review.schema, merged, false)) throw new ConfigSchemaError('invalid-schema');
       const next = resolved(review.schema, {format: 1, ordinary: values as ConfigValues, secrets});
       if (!configValuesConform(review.schema, next)) throw new ConfigSchemaError('invalid-schema');
-      return {format: 1, ordinary: ordinary(review.schema, next), secrets};
+      return {format: 1, ordinary: ordinary(review.schema, values), secrets};
     });
     check(); await this.broadcast(endpoint, revision); check(); this.publish(null);
   }

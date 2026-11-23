@@ -21,7 +21,7 @@ The reviewed catalogue is `src/runtime/bundled-catalog.ts`; artifacts are staged
 
 Approval Lab captures original content/timestamp/sequence, supports one note, three separate notes or a five-second delayed note, bounds active requests to four and never retries. Unsubmitted timers cancel on identity/pagehide; issued stale completions are ignored. Its kind10002 editor freezes exact read/write tags and empty content, disables batching and permits one pending list. This is explicit list publication, never automatic list creation or routing authority.
 
-Routing Peer has distinct `routing-lab-peer` dTag/session with matching HTML. The bundled caller can use that field for a channel pair; this alone registers no verified intent handler. Signed auto-peer/storage/theme-only/publisher-collision variants exercise readiness, required grants and ambiguity through ordinary admission. Upload photo recipes use generated public metadata, never personal originals. Native byte seals and independent receiver/event checks remain required.
+Routing Peer has distinct `routing-lab-peer` dTag/session with matching HTML. To open a channel, subscribe to a topic, have Routing Peer emit on it, and paste the sender ID into the caller’s peer field. Older signed fixtures label this field “Peer dTag”. Signed auto-peer/storage/theme-only/publisher-collision variants exercise readiness, required grants and ambiguity through ordinary admission. Upload photo recipes use generated public metadata, never personal originals. Native byte seals and independent receiver/event checks remain required.
 
 ## Tooling and reference provenance
 

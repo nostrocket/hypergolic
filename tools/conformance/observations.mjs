@@ -10,7 +10,6 @@ import {componentCases, runComponent} from './component-cases.mjs';
 import { verifiedLaunchMetadata } from '../../src/napplets/verified-launch-metadata.ts';
 import { verifyManifest, verifyArtifact, NappletVerificationError } from '../../src/napplets/verified-artifact.ts';
 import { createRelaySubscriptions } from '../../src/network/relay-subscriptions.ts';
-import { RoutingChannels } from '../../src/routing/routing-channels.ts';
 import { parseRoutingMessage, RoutingRequestError } from '../../src/routing/routing-contract.ts';
 import { setup as configHarness } from '../../tests/presentation/config-harness.ts';
 
@@ -51,18 +50,6 @@ async function configuration(save) {
   }
 }
 
-function channelPeer() {
-  const endpoint = (appId, instanceId) => ({registration:{appId, publisher:'2'.repeat(64), generation:instanceId, instanceId, sessionId:instanceId}});
-  const channels = new RoutingChannels({newChannelId:randomUUID, state:() => ({available:true}), send:() => true}, () => {});
-  try {
-    const controller = endpoint('controller', 'controller');
-    const first = channels.open(controller, endpoint('player', 'first'), 1);
-    const second = channels.open(controller, endpoint('player', 'second'), 1);
-    assert.ok(first?.peer && second?.peer, 'Two ordinary channel fixtures must open');
-    return first.peer !== second.peer;
-  } finally { channels.stop(); }
-}
-
 function streamContinuity() {
   let receive;
   const port = {newInstanceId:randomUUID, open(_id, _url, _wire, sub, deliver) {
@@ -83,7 +70,7 @@ function streamContinuity() {
     assert.ok(messages.some(m => m.result?.event.id === first.id), 'Public subscription control failed');
     receive(event(4, 'unused private-event fixture'));
     receive?.(last);
-    return messages.some(m => m.result?.event.id === last.id);
+    return messages.length === 2 && messages[0].result?.event.id === first.id && messages[1].result?.event.id === last.id;
   } finally { session.revoke(); }
 }
 
@@ -120,7 +107,7 @@ export const observations = {
     const artifact = await verifyArtifact(await manifest([['x', hash], ['icon', hash, 'image/gif']], 'A fixture'), html);
     return verifiedLaunchMetadata(artifact).icon === undefined;
   },
-  'inc-peer': channelPeer,
+  'inc-peer': () => runComponent('routing/inc', 'Topic sender IDs distinguish publishers and instances and expire on replacement'),
   'relay-continuity': streamContinuity,
   'config-default': async () => await configuration(false) === 'light',
   'config-user-choice': async () => await configuration(true) === 'dark',

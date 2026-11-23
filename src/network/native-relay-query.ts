@@ -1,3 +1,4 @@
+import {encryptedEvent} from '../security/encrypted-event.ts';
 import type { QueryBatchVerifier } from './native-event-verifier.ts';
 import type { NostrEvent } from 'nostr-tools/pure';
 import type { NativePublishedRelayPort } from '../napplets/native-published-relay.ts';
@@ -8,11 +9,11 @@ import { OUTBOX_QUERY_COUNTS, parseQueryFilters, QUERY_LIMITS, RelayQueryBusyErr
 
 export interface RelayQueryService {
   readonly destinations?: () => readonly string[];
-  query(filters: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void): Promise<readonly Readonly<{ event: NostrEvent }>[]>;
+  query(filters: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void, publicOnly?: boolean): Promise<readonly Readonly<{ event: NostrEvent }>[]>;
   queryDetailed?(filters: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void, options?: DetailedQueryOptions): Promise<RelayQueryResult>;
 }
 export type RelayQueryResult = Readonly<{ events: readonly Readonly<{ event: NostrEvent }>[]; incomplete: boolean; relayHints?: Readonly<Record<string, readonly string[]>>; failedRelays?: readonly string[]; reachableRelays?: readonly string[] }>;
-type DetailedQueryOptions = Readonly<{maximumFilters?: number; timeoutMs?: number; allowPartialOnLimit?: boolean; allowSearch?: boolean; completeRelays?: true}>;
+type DetailedQueryOptions = Readonly<{publicOnly?: boolean; maximumFilters?: number; timeoutMs?: number; allowPartialOnLimit?: boolean; allowSearch?: boolean; completeRelays?: true}>;
 export interface DetailedRelayQueryService extends RelayQueryService {
   queryDetailed(filters: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void, options?: DetailedQueryOptions): Promise<RelayQueryResult>;
 }
@@ -288,7 +289,7 @@ export function createNativeRelayQuery(port: NativeQueryPort,
               collection.failed(relay, !knownTransportFailure(error));
               return error instanceof RelayQueryDataError ? 'invalid' : 'failed';
             }
-            collection.accept(relay, batch);
+            collection.accept(relay, detailed?.publicOnly ? batch.filter(event => !encryptedEvent(event.kind, event.content)) : batch);
             return 'complete';
         };
         const work = async () => {
@@ -312,8 +313,8 @@ export function createNativeRelayQuery(port: NativeQueryPort,
   return Object.freeze({
     destinations: configuredRelays,
     queryDetailed(input: readonly QueryFilter[], signal: AbortSignal, active: () => void, detailed?: DetailedQueryOptions) {return runQuery(input, signal, active, true, detailed);},
-    async query(filters: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void) {
-      return (await runQuery(filters, signal, assertActive, false)).events;
+    async query(filters: readonly QueryFilter[], signal: AbortSignal, assertActive: () => void, publicOnly = false) {
+      return (await runQuery(filters, signal, assertActive, false, {publicOnly})).events;
     },
   });
 }

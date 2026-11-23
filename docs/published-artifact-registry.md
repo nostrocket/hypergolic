@@ -7,6 +7,18 @@ independently check byte integrity and host ownership. Signature verification,
 publisher trust and consent belong to the trusted shell.
 See [published admission](published-network.md#published-admission-and-updates).
 
+For modern publications, the verifier identifies the signed manifest format to
+the native host. The web runtime hashes the assembled HTML, checks it against
+the signed `x` value and uses the computed digest for Kehto registration. A
+named publication uses its signed `d` value. A snapshot has no signed `d`;
+Kehto uses the existing event-scoped snapshot identifier internally. Root
+publications have no launch path yet. [Root support](https://github.com/nostrocket/hypergolic/issues/113)
+
+The same verified bytes determine the historical version key, the SHA-256 of
+`<HTML digest> /index.html` followed by one newline. Existing pins, storage
+and grant checks continue to use their original keys and account boundaries.
+Legacy path publications keep that version key for Kehto registration as well.
+
 The Android and iOS registries implement the following core contract. The Expo
 modules stage verified bytes through a bounded app-only transfer. Each native
 host view can claim a staged handle once and own the bytes for that generation.

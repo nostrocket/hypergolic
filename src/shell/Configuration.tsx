@@ -6,7 +6,7 @@ import { ShellPressable as Pressable } from './ShellPressable';
 import { ShellTextInput as TextInput } from './ShellTextInput';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import type {ConfigBroker, ConfigReview} from '../presentation/config-broker';
-import {CONFIG_LIMITS, ConfigKeyInputError, configSecretFields, type ConfigSchema, type ConfigValue} from '../presentation/config-schema';
+import {CONFIG_LIMITS, ConfigKeyInputError, configSecretFields, resolveConfigValues, type ConfigSchema, type ConfigValue} from '../presentation/config-schema';
 import {ShellStorageError} from '../storage/ports';
 import {compactPublisher, formatNpub} from '../security/public-identity';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
@@ -40,7 +40,7 @@ function Editor({service, review}: {service: ConfigBroker; review: ConfigReview}
     return group || (left.schema['x-napplet-order'] ?? Infinity) - (right.schema['x-napplet-order'] ?? Infinity) || fieldId(left.path).localeCompare(fieldId(right.path));
   });
   const [draft, setDraft] = useState<Record<string, string>>(() => rows.reduce<Record<string, string>>((initial, field) => {
-    const key = fieldKey(field.path), value = read(review.ordinary, field.path);
+    const key = fieldKey(field.path), value = read(review.saved, field.path);
     if (!secretPaths.has(key) && value !== undefined) initial[key] = typeof value === 'string' ? value : JSON.stringify(value);
     return initial;
   }, {})), [secrets, setSecrets] = useState<Record<string, string | null>>({}), [status, setStatus] = useState({busy: false, error: ''});
@@ -63,8 +63,11 @@ function Editor({service, review}: {service: ConfigBroker; review: ConfigReview}
       setStatus({busy: false, error: message}); AccessibilityInfo.announceForAccessibility(message);
     }
   };
+  const defaults = resolveConfigValues(review.schema, {});
   const renderField = ({item: field, index}: {item: Field; index: number}) => {
-      const key = fieldKey(field.path), id = fieldId(field.path), secret = secretPaths.has(key), value = secret ? secrets[key] ?? '' : draft[key] ?? '', label = boundedPublishedTitle(field.schema.title ?? field.path.join('.')) || 'Field';
+      const fallback = read(defaults, field.path);
+      const defaultText = typeof fallback === 'string' ? fallback : JSON.stringify(fallback) ?? '';
+      const key = fieldKey(field.path), id = fieldId(field.path), secret = secretPaths.has(key), value = secret ? secrets[key] ?? '' : draft[key] ?? defaultText, label = boundedPublishedTitle(field.schema.title ?? field.path.join('.')) || 'Field';
       return <View key={key} style={styles.field}>
         {field.section !== '' && (index === 0 || rows[index - 1]!.section !== field.section) && <Text accessibilityRole="header" style={styles.title}>{boundedPublishedTitle(field.section)}</Text>}
         <Text style={styles.title}>{label}</Text>

@@ -25,7 +25,7 @@ test('unfocused modern dispatch rejects a cold pin without preparing it and reus
     prepareInstalled: async () => assert.fail('cold focus:false must not prepare a session'),
   } as unknown as RuntimeOwner;
   const targets = createRoutingTargets(identity, () => runtime, h.reviews, h.native);
-  const activate = () => targets.activate(handler!, {archetype: 'napptest', action: 'open', behavior: {focus: false}},
+  const activate = () => targets.activate(handler!, {archetype: 'napptest', action: 'open', convention:'napplet:napptest/open', behavior: {focus: false}},
     new AbortController().signal, () => {}, h.source, h.native.state().revision);
   assert.equal(await activate(), null);
   workspace = openNapplet(workspace, first);

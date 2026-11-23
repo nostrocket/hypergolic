@@ -463,7 +463,7 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
       input.claims.publisher == "b902388aa1e557a54b91081dfaf431fffd22739c1eac2502f3bdc9b3e6522278" &&
       input.claims.eventId == "54ae23083f1dccfaecf88e0df7281d6c9f1502dc31f288c127379169a36f53e2" &&
       input.claims.aggregateHash == "4b916fa338865a96e18ff1c4d9468eb6de8040a2bae4d2b90b65fccaa3819573"
-    publishedReader = PublishedArtifactReadOwner(claimed: claimed, domains: publishedConfiguration?.domains ?? ["theme"], appData: publishedConfiguration?.appData, legacyReadOnly: publishedConfiguration?.legacyReadOnly?.metadata)
+    publishedReader = PublishedArtifactReadOwner(claimed: claimed, domains: publishedConfiguration?.domains ?? ["theme"], manifestFormat: input.manifestFormat, appData: publishedConfiguration?.appData, legacyReadOnly: publishedConfiguration?.legacyReadOnly?.metadata)
     publishedSource = raw
     // Loaded verified read views survive suspension. Native stream/approval/transfer
     // owners independently stop network work and sensitive authority on inactivity.
@@ -727,7 +727,12 @@ final class RestrictedNappletHost: UIView, WKNavigationDelegate, WKUIDelegate {
       ready = true
       RoutingTransport.shared.ready(generation)
       deadline?.cancel()
-      reply(nil, nil)
+      if let configuration, configuration.domains.contains("identity"),
+        let bytes = try? JSONSerialization.data(withJSONObject: ["type":"identity.snapshot", "sessionId":generation, "pubkey":configuration.user]) {
+        reply(String(decoding: bytes, as: UTF8.self), nil)
+      } else {
+        reply(nil, nil)
+      }
       emit("ready")
     case "error" where value.count == 3:
       guard let code = value["code"] as? String,

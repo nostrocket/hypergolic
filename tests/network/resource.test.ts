@@ -162,10 +162,17 @@ test('Blossom aliases share verified bytes by hash within one realm and respect 
 test('bulk keeps order and siblings while local data is classified by bytes', async () => {
   const h=setup(), session=h.bind();
   const result=await session.execute(parseResourceRequest({type:'resource.bytesMany',id:'bulk',urls:[
-    'data:application/false,%7B%22a%22%3A1%7D','htree://root','https://assets.example.com/a','data:text/plain,%3Csvg%2F%3E']})) as {items:{url:string;ok:boolean;error?:string;value?:{mime:string}}[]};
-  assert.deepEqual(result.items.map(x=>x.ok),[true,false,true,false]);
+    'data:application/false,%7B%22a%22%3A1%7D','htree://root','https://assets.example.com/a','data:text/plain,%3Csvg%2F%3E','','data:,tail']})) as {items:{url:string;ok:boolean;error?:string;value?:{mime:string}}[]};
+  assert.deepEqual(result.items.map(x=>x.ok),[true,false,true,false,false,true]);
   assert.equal(result.items[0]!.value!.mime,'application/json');assert.equal(result.items[1]!.error,'unsupported-scheme');
-  assert.equal(result.items[3]!.error,'decode-failed');h.service.revokeAll();
+  assert.equal(result.items[4]!.error,'invalid-request');
+  assert.equal(result.items[3]!.error,'decode-failed');
+  const hints = await session.execute(parseResourceRequest({type:'resource.bytesMany',id:'hints',requests:[
+    {url:'blossom:'+'1'.repeat(64), servers:['https://127.0.0.1']}, {url:'data:,tail'},
+  ]})) as {items: {ok:boolean; error?:string}[]};
+  assert.equal(hints.items[0]!.error, 'blocked-by-policy');
+  assert.equal(hints.items[1]!.ok, true);
+  h.service.revokeAll();
 });
 test('Blossom verifies bytes on fallback and does not let hints choose servers', async () => {
   const body=text('verified'), digest=hash(body);let attempts=0;

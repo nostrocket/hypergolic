@@ -12,7 +12,7 @@ const identity = {
   publisher: '1'.repeat(64), appId: 'published-test', eventId: '2'.repeat(64), version, htmlHash,
 };
 
-type Mode = 'unicode-full-chunk' | 'normal' | 'keys-domain' | 'bad-hash' | 'wrong-byte-length' | 'replayed-sequence' | 'unknown-domain' | 'relay-domain' | 'attributed-head' | 'commented-head' | 'unsafe-head-comment' | 'upload-domain' | 'all-domains' | 'outbox-domain' | 'outbox-only' | 'published-approval' | 'intent-only' | 'soy-policy' | 'soy-policy-change'
+type Mode = 'modern' | 'invalid-format' | 'unicode-full-chunk' | 'normal' | 'keys-domain' | 'bad-hash' | 'wrong-byte-length' | 'replayed-sequence' | 'unknown-domain' | 'relay-domain' | 'attributed-head' | 'commented-head' | 'unsafe-head-comment' | 'upload-domain' | 'all-domains' | 'outbox-domain' | 'outbox-only' | 'published-approval' | 'intent-only' | 'soy-policy' | 'soy-policy-change'
   | 'snapshot' | 'snapshot-mismatch' | 'snapshot-title-change' | 'snapshot-discovery';
 
 function artifactFor(mode: Mode): Buffer {
@@ -86,7 +86,8 @@ async function openPublished(page: Page, mode: Mode = 'normal', extraQuery = '')
         type: 'artifact.chunk', sessionId: generation,
         sequence: mode === 'replayed-sequence' ? sequence + 1 : sequence,
         ...part, byteLength: mode === 'wrong-byte-length' ? part.byteLength + 1 : part.byteLength,
-        ...claims, ...snapshot, ...((mode==='soy-policy'||mode==='soy-policy-change')?{appData:{sourceKind:35129,policy:{profile:'soy.app-data/1',scope:mode==='soy-policy-change'&&sequence>0?'f'.repeat(64):'b7890c0793a7fa9c2570c56500f403724b1a4c0e453a9194ec7200132c634f8b',maxContentBytes:3072,relays:['wss://relay.damus.io'],defaultRelays:['wss://relay.damus.io']}}}:{}),
+        ...claims, ...snapshot, ...(mode === 'modern' || mode === 'snapshot' ? {manifestFormat:'nip-5d'} :
+          mode === 'invalid-format' ? {manifestFormat:'unknown'} : {}), ...((mode==='soy-policy'||mode==='soy-policy-change')?{appData:{sourceKind:35129,policy:{profile:'soy.app-data/1',scope:mode==='soy-policy-change'&&sequence>0?'f'.repeat(64):'b7890c0793a7fa9c2570c56500f403724b1a4c0e453a9194ec7200132c634f8b',maxContentBytes:3072,relays:['wss://relay.damus.io'],defaultRelays:['wss://relay.damus.io']}}}:{}),
         domains: mode==='soy-policy'||mode==='soy-policy-change'?['identity','outbox','theme']:mode === 'intent-only' ? ['intent'] : mode === 'published-approval' ? ['identity', 'relay', 'theme'] : mode === 'unknown-domain' ? ['future-domain'] : mode === 'outbox-domain' ? ['outbox', 'relay', 'theme'] : mode === 'outbox-only' ? ['outbox', 'theme'] : mode === 'relay-domain' ? ['relay', 'theme'] : mode === 'upload-domain' ? ['upload'] : mode === 'keys-domain' ? ['keys', 'theme'] : mode === 'all-domains' ? ['config', 'identity', 'inc', 'intent', 'link', 'notify', 'outbox', 'relay', 'resource', 'storage', 'theme', 'upload'] : ['theme'],
       };
       const wire = window.nativeMessage(envelope);
@@ -137,6 +138,34 @@ async function publishedGuest(page: Page) {
 
 // Calculated in Node to keep browser fixture setup simple and deterministic.
 const awaitHashVersionPlaceholder = digest(`${'f'.repeat(64)} /index.html\n`);
+
+for (const mode of ['modern','snapshot','normal'] as const) {
+  test(`Kehto registers the verified document identity for ${mode}`, async ({page}) => {
+    // Observe Kehto's trusted registry write without adding a diagnostic to the shipped host.
+    await page.addInitScript(() => {
+      if (window !== window.top) return;
+      const set = Map.prototype.set;
+      Map.prototype.set = function(key, value) {
+        if (value?.provenance === 'nip-5d' && value.type === 'nip5d') {
+          (window as any).registeredDocument = {id:value.dTag, hash:value.aggregateHash};
+        }
+        return set.call(this, key, value);
+      };
+    });
+    await openPublished(page, mode);
+    await publishedGuest(page);
+    expect(await page.evaluate(() => (window as any).registeredDocument)).toEqual({
+      id:mode === 'snapshot' ? ' 5129:'+identity.eventId : identity.appId,
+      hash:mode === 'normal' ? version : htmlHash,
+    });
+  });
+}
+
+test('an unknown native manifest format is rejected before mounting', async ({page}) => {
+  await openPublished(page, 'invalid-format');
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.locator('iframe')).toHaveCount(0);
+});
 
 test('a full-size artifact preserves Unicode scalars and raw newlines across chunks', async ({page}) => {
   await openPublished(page, 'unicode-full-chunk');

@@ -1,4 +1,4 @@
-import {isAuthenticationEventKind} from '../security/authentication-event.ts';
+import {deniedNappletPublication} from '../security/publication-policy.ts';
 import { Relay, type RelayOptions } from 'applesauce-relay';
 import { captureEventSnapshot } from '../security/event-snapshot.ts';
 import { validateSignedEvent, type VerifiedSignedEvent } from '../security/signed-event.ts';
@@ -28,7 +28,7 @@ function wireRecord(value: unknown): Record<string, unknown> {
 function prepare(event: unknown, destinations: readonly string[]): { event: VerifiedSignedEvent; destinations: readonly string[] } {
   try {
     const wire = wireRecord(event);
-    if (isAuthenticationEventKind(wire.kind)) return fail();
+    if (deniedNappletPublication(wire.kind, wire.content)) return fail();
     const snapshot = captureEventSnapshot({ kind: wire.kind, content: wire.content, tags: wire.tags, created_at: wire.created_at }, wire.pubkey, destinations);
     const verified = validateSignedEvent(snapshot, wire);
     return { event: verified, destinations: snapshot.destinations };

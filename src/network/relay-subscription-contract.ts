@@ -1,3 +1,4 @@
+import {encryptedEventKind} from '../security/encrypted-event.ts';
 import type { NostrEvent } from 'nostr-tools/pure';
 import { parseQueryFilters, type QueryFilter, QUERY_LIMITS } from './relay-query-contract.ts';
 import { utf8Bytes } from '../storage/codec.ts';
@@ -29,7 +30,7 @@ export function parseRelaySubscribe(input:unknown):RelaySubscribeRequest {
   const data=record(input);
   if(data.type!=='relay.subscribe'||Object.keys(data).some(key=>!['type','id','subId','filters','relay'].includes(key)))return fail();
   const id=identifier(data.id),subId=identifier(data.subId),filters=parseQueryFilters(data.filters);
-  if(filters.some(filter=>Array.isArray(filter.kinds)&&filter.kinds.some(kind=>kind===4||kind===1059)))throw new RelaySubscriptionError('encrypted subscriptions unsupported');
+  if(filters.some(filter=>Array.isArray(filter.kinds)&&filter.kinds.some(encryptedEventKind)))throw new RelaySubscriptionError('encrypted subscriptions unsupported');
   const relay=data.relay===undefined?undefined:normalizeRelayUrl(identifierRelay(data.relay));
   const request=Object.freeze({type:'relay.subscribe' as const,id,subId,filters,...(relay===undefined?{}:{relay})});
   if(utf8Bytes(JSON.stringify(request))>SUBSCRIPTION_LIMITS.requestBytes)return fail();

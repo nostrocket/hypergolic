@@ -60,6 +60,10 @@ export function observeIdentity() {
       if (window !== window.top) return;
       const listeners = new Set();
       window.identityAvailable = true;
+      window.reportAccount = (sessionId, pubkey) => {
+        const data = JSON.stringify({type:'identity.snapshot', sessionId, pubkey});
+        for (const notify of listeners) notify({data});
+      };
       window.HypergolicHost = {
         addEventListener: (_type, listener) => listeners.add(listener),
         removeEventListener: (_type, listener) => listeners.delete(listener),
@@ -82,6 +86,28 @@ export function observeIdentity() {
     const account = await read();
     if (account !== '1'.repeat(64)) throw new Error('Connected account control failed');
     await page.evaluate(() => { window.identityAvailable = false; });
-    return await read() === account;
+    if (await read() !== account) return false;
+    const raw = await identity.evaluate(() => new Promise(resolve => {
+      const listener = event => {
+        if (event.source !== parent || event.data?.id !== 'extra-fields') return;
+        window.removeEventListener('message', listener);
+        resolve(event.data);
+      };
+      window.addEventListener('message', listener);
+      parent.postMessage({type:'identity.getPublicKey', id:'extra-fields', user:'forged'}, '*');
+    }), undefined, {timeout:5000});
+    if (raw.pubkey !== account || Object.hasOwn(raw, 'error')) return false;
+    await identity.evaluate(() => {
+      window.accountChanges = [];
+      window.napplet.identity.onChanged(key => window.accountChanges.push(key));
+    });
+    await page.evaluate(() => {
+      window.reportAccount('stale-generation', '');
+      window.reportAccount('conformance', 'invalid');
+      window.reportAccount('conformance', '');
+      window.reportAccount('conformance', '');
+    });
+    await browsers.expect.poll(() => identity.evaluate(() => window.accountChanges)).toEqual(['']);
+    return await read() === '';
   });
 }

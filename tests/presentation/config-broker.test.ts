@@ -8,11 +8,38 @@ import {Integrated, pubkey} from '../security/harness.ts';
 import {setup as workspaceStore} from '../storage/harness.ts';
 import {initialTestWorkspace, assertBundledWorkspace} from '../../src/shell/fixtures.ts';
 test('schema ACK and immediate subscription wait for persisted/defaulted registration; source scope is captured',async t=>{
- const h=await setup(t);h.gate();const registered=h.dispatch({type:'config.registerSchema',id:'r',schema}),subscribed=h.dispatch({type:'config.subscribe'}),get=h.dispatch({type:'config.get',id:'g'});await tick();assert.equal(registered.reply(),undefined);assert.equal(h.sent.length,0);h.unlock();await Promise.all([registered.promise,subscribed.promise,get.promise]);assert.deepEqual(registered.reply(),{type:'config.registerSchema.result',id:'r',ok:true});assert.deepEqual(get.reply().values,{theme:'dark',nested:{level:2}});assert.deepEqual(h.sent.map(row=>row.message),[{type:'config.values',values:{theme:'dark',nested:{level:2}}}]);assert.equal(h.sent[0]!.generation,h.source.generation);
+ const h=await setup(t);const read=h.pauseRead();const registered=h.dispatch({type:'config.registerSchema',id:'r',schema}),subscribed=h.dispatch({type:'config.subscribe'}),get=h.dispatch({type:'config.get',id:'g'});await tick();assert.equal(registered.reply(),undefined);assert.equal(h.sent.length,0);read.release();await Promise.all([registered.promise,subscribed.promise,get.promise]);assert.deepEqual(registered.reply(),{type:'config.registerSchema.result',id:'r',ok:true});assert.deepEqual(get.reply().values,{theme:'dark',nested:{level:2}});assert.deepEqual(h.sent.map(row=>row.message),[{type:'config.values',values:{theme:'dark',nested:{level:2}}}]);assert.equal(h.sent[0]!.generation,h.source.generation);
 });
 test('no-schema produces error without fake values; invalid schemas give canonical negative ACK and preserve previous schema',async t=>{
  const h=await setup(t),before=h.dispatch({type:'config.get',id:'before'});await before.promise;assert.equal(before.reply(),null);assert.equal(h.sent[0]!.message.code,'no-schema');await h.register();
  const bad=h.dispatch({type:'config.registerSchema',id:'bad',schema:{type:'object',properties:{token:{type:'string','x-napplet-secret':true,default:'forbidden'}}}});await bad.promise;assert.equal(bad.reply().ok,false);assert.equal(bad.reply().code,'secret-with-default');assert.deepEqual(await h.get(),{theme:'dark',nested:{level:2}});
+});
+test('untouched defaults follow the schema while a user choice equal to a default survives', async t => {
+ const h = await setup(t);
+ const nextSchema = {...schema, properties:{...schema.properties, theme:{...schema.properties.theme, default:'light'}}};
+ await h.register();
+ assert.equal(h.records.size, 0);
+ await h.register(nextSchema, 2);
+ assert.equal((await h.get()).theme, 'light');
+ await h.broker.open(h.source.generation);
+ const review = h.broker.getSnapshot().review!;
+ assert.deepEqual(review.saved, {});
+ await h.broker.commit(review.id, {theme:'light'}, {});
+ const [stored] = h.records.values();
+ assert.deepEqual(JSON.parse(stored!).ordinary, {theme:'light'});
+ await h.register(schema, 3);
+ assert.equal((await h.get()).theme, 'light');
+ await h.broker.open(h.source.generation);
+ await h.broker.commit(h.broker.getSnapshot().review!.id, {}, {});
+ assert.equal((await h.get()).theme, 'dark');
+});
+test('an existing store keeps historical values whose origin is unknown', async t => {
+ const h = await setup(t);
+ h.setStoredRecord(JSON.stringify({format:1, ordinary:{theme:'dark'}, secrets:{}}));
+ await h.register({...schema, properties:{...schema.properties, theme:{type:'string', default:'light'}}});
+ assert.equal((await h.get()).theme, 'dark');
+ await h.broker.open(h.source.generation);
+ assert.deepEqual(h.broker.getSnapshot().review!.saved, {theme:'dark'});
 });
 test('only focused trusted commit writes; secrets remain absent from UI and deliver only after explicit save',async t=>{
  const h=await setup(t);await h.register();await h.dispatch({type:'config.subscribe'}).promise;await h.broker.open(h.source.generation);const review=h.broker.getSnapshot().review!;assert.deepEqual(review.ordinary,{theme:'dark',nested:{level:2}});assert.equal(review.secretPresent['["token"]'],false);
@@ -148,11 +175,10 @@ for (const fault of ['background', 'identity', 'close', 'stop'] as const) {
 }
 
 test('failed protected storage read releases editor ownership and preserves a later valid open',async t=>{
- const h=await setup(t);await h.register();const before=new Map(h.records);
- for(const key of h.records.keys())h.records.set(key,'malformed-config-record');
+ const h=await setup(t);await h.register();const restore=h.setStoredRecord('malformed-config-record');
  await assert.rejects(h.broker.open(h.source.generation),{code:'CORRUPT_STORAGE'});
  assert.equal(h.broker.getSnapshot().review,null);
- for(const [key,value] of before)h.records.set(key,value);
+ restore();
  await h.broker.open(h.source.generation);const review=h.broker.getSnapshot().review!;
  assert.deepEqual(review.ordinary,{theme:'dark',nested:{level:2}});
  await h.broker.commit(review.id,{theme:'light',nested:{level:3}},{});
@@ -204,10 +230,9 @@ test('expired get cannot push a schema error after its pending validation read',
 });
 
 test('a failed subscribe read does not install a subscription after storage recovers',async t=>{
- const h=await setup(t);await h.register();const before=new Map(h.records);
- for(const key of h.records.keys())h.records.set(key,'malformed-config-record');
+ const h=await setup(t);await h.register();const restore=h.setStoredRecord('malformed-config-record');
  const failed=h.dispatch({type:'config.subscribe'});await failed.promise;assert.equal(failed.reply(),null);
- for(const [key,value] of before)h.records.set(key,value);
+ restore();
  await h.broker.open(h.source.generation);await h.broker.commit(h.broker.getSnapshot().review!.id,{theme:'light',nested:{level:3}},{});
  assert.equal(h.sent.length,0);assert.deepEqual(await h.get(),{theme:'light',nested:{level:3}});
 });
@@ -221,12 +246,12 @@ test('an expired repeated subscribe preserves only the previously admitted subsc
  assert.deepEqual(h.sent.map(row=>row.message.values),[{theme:'light',nested:{level:3}}]);
 });
 
-test('expired schema registration cannot push values after its completed scoped write',async t=>{
+test('expired schema registration cannot push values after its scoped read',async t=>{
  const h=await setup(t);await h.register();await h.dispatch({type:'config.subscribe'}).promise;h.sent.length=0;
- const gate=h.pauseRead(2),request=h.dispatch({type:'config.registerSchema',id:'next-schema',schema:{type:'object',properties:{theme:{type:'string',default:'light'}}},version:2});
+ const gate=h.pauseRead(1),request=h.dispatch({type:'config.registerSchema',id:'next-schema',schema:{type:'object',properties:{theme:{type:'string',default:'light'}}},version:2});
  try{await gate.entered;h.expire(request.token);}finally{gate.release();}
  await request.promise;assert.equal(request.reply(),null);assert.equal(h.sent.length,0);
- assert.deepEqual(await h.get(),{theme:'dark'});
+ assert.deepEqual(await h.get(),{theme:'light'});
  await h.broker.open(h.source.generation);await h.broker.commit(h.broker.getSnapshot().review!.id,{theme:'light'},{});
  assert.deepEqual(h.sent.map(row=>row.message.values),[{theme:'light'}]);
 });
@@ -239,9 +264,9 @@ test('a live subscription before schema registration receives later admitted sch
 
 test('a failed repeated subscribe leaves its previously admitted subscription intact',async t=>{
  const h=await setup(t);await h.register();await h.dispatch({type:'config.subscribe'}).promise;h.sent.length=0;
- const before=new Map(h.records);for(const key of h.records.keys())h.records.set(key,'malformed-config-record');
+ const restore=h.setStoredRecord('malformed-config-record');
  const failed=h.dispatch({type:'config.subscribe'});await failed.promise;assert.equal(failed.reply(),null);
- for(const [key,value] of before)h.records.set(key,value);
+ restore();
  await h.broker.open(h.source.generation);await h.broker.commit(h.broker.getSnapshot().review!.id,{theme:'light',nested:{level:3}},{});
  assert.deepEqual(h.sent.map(row=>row.message.values),[{theme:'light',nested:{level:3}}]);
 });

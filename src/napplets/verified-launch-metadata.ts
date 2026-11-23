@@ -2,7 +2,7 @@ import { naddrEncode, neventEncode } from 'nostr-tools/nip19';
 import { assertVerifiedArtifact, type VerifiedNappletArtifact } from './verified-artifact.ts';
 import { verifiedPublicationIdentity } from './verified-publication-identity.ts';
 
-const IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+export const isLaunchIconMime = (mime: string) => ['image/png', 'image/jpeg', 'image/webp'].includes(mime);
 const DISPLAY_CONTROLS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u00ad\u061c\u200b\u200e\u200f\u202a-\u202e\u2060\u2066-\u206f]/gu;
 
 export type PublishedLaunchIcon = Readonly<{ hash: string; mime: string; serverHints: readonly string[] }>;
@@ -28,7 +28,7 @@ export function verifiedLaunchMetadata(artifact: VerifiedNappletArtifact): Verif
     .replace(DISPLAY_CONTROLS, '').trim().slice(0, 8192);
   const icons = manifest.tags.filter(tag => tag[0] === 'icon');
   const [icon] = icons;
-  const artwork = icons.length === 1 && icon?.length === 3 && /^[0-9a-f]{64}$/.test(icon[1]!) && IMAGE_MIME_TYPES.has(icon[2]!)
+  const artwork = icons.length === 1 && icon?.length === 3 && /^[0-9a-f]{64}$/.test(icon[1]!) && isLaunchIconMime(icon[2]!)
     ? Object.freeze({ hash: icon[1]!, mime: icon[2]!, serverHints: manifest.serverHints }) : undefined;
   return Object.freeze({ title, description, ...(artwork && { icon: artwork }), reference, version, htmlHash });
 }

@@ -72,17 +72,14 @@ export function transposeConvention(uri: string, explicitPayload: boolean): Read
 export type IntentContract = Readonly<{ convention: string; params: readonly string[] }>;
 export const namedIntentId = (publisher: string, appId: string): string => `35129:${publisher}:${appId}`;
 export type IntentBehavior = Readonly<{ focus?: boolean; newWindow?: boolean; reuse?: boolean }>;
-export type IntentRequest = Readonly<{ archetype: string; action: string; convention?: string; payload?: JsonValue; handler?: string; behavior?: IntentBehavior }>;
+export type IntentRequest = Readonly<{ archetype: string; action: string; convention: string; payload?: JsonValue; handler?: string; behavior?: IntentBehavior }>;
 export function parseIntentRequest(value: unknown): IntentRequest {
-  const request = routingRecord(value, ['archetype'], ['action', 'convention', 'payload', 'handler', 'behavior']);
-  const result: { archetype: string; action: string; convention?: string; payload?: JsonValue; handler?: string; behavior?: IntentBehavior } = { archetype: routingRole(request.archetype), action: request.action === undefined ? 'open' : routingRole(request.action) };
-  const hasPayload = owns(request, 'payload');
-  if (hasPayload) result.payload = routingPayload(request.payload);
-  if (owns(request, 'convention')) {
-    const transposed = transposeConvention(routingText(request.convention, ROUTING_LIMITS.convention), hasPayload);
-    result.convention = transposed.convention;
-    if (owns(transposed, 'payload')) result.payload = transposed.payload!;
-  }
+  const request = routingRecord(value, ['archetype', 'action', 'convention'], ['payload', 'handler', 'behavior']);
+  const archetype = routingRole(request.archetype), action = routingRole(request.action);
+  const convention = stableConvention(request.convention);
+  if (convention !== `napplet:${archetype}/${action}`) return invalid();
+  const result: { archetype: string; action: string; convention: string; payload?: JsonValue; handler?: string; behavior?: IntentBehavior } = {archetype, action, convention};
+  if (owns(request, 'payload')) result.payload = routingPayload(request.payload);
   if (owns(request, 'handler')) result.handler = routingText(request.handler, ROUTING_LIMITS.handler);
   if (owns(request, 'behavior')) {
     const behavior = routingRecord(request.behavior, [], ['focus', 'newWindow', 'reuse']);

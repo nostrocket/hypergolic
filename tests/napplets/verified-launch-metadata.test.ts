@@ -38,7 +38,7 @@ test('launch metadata comes from the exact signed modern event and accepts only 
   assert.throws(() => verifiedLaunchMetadata({ ...artifact }));
   const ambiguous = await release(35129, [...tags, ['icon', hash(png), 'image/png']], 'Duplicate artwork');
   assert.equal(verifiedLaunchMetadata(ambiguous.artifact).icon, undefined);
-  const unsupported = await release(35129, [['x', hash(html)], ['icon', hash(png), 'image/svg+xml']], 'Unsupported artwork');
+  const unsupported = await release(35129, [['x', hash(html)], ['icon', hash(png), 'image/gif']], 'Unsupported artwork');
   assert.equal(verifiedLaunchMetadata(unsupported.artifact).icon, undefined);
 });
 
@@ -58,12 +58,14 @@ test('launch artwork reuses bounded verified Blossom bytes and rejects mismatche
     { async readHtml(hash, mirrors, maxBytes, signal) {
       requests.push({ hash, mirrors, maxBytes, signal });
       return png;
-    } }, () => [server, fallback]);
+    } });
   const controller = new AbortController();
   const icon = { hash: hash(png), serverHints: [server], mime: 'image/png' };
   assert.equal(await media.readIcon(icon, controller.signal), 'data:image/png;base64,' + png.toString('base64'));
-  assert.equal(await media.readIcon({...icon, serverHints: []}, controller.signal), 'data:image/png;base64,' + png.toString('base64'));
-  assert.deepEqual(requests, [{ hash: hash(png), mirrors: [server, fallback], maxBytes: 768 * 1024, signal: controller.signal }]);
+  assert.equal(await media.readIcon(icon, controller.signal), 'data:image/png;base64,' + png.toString('base64'));
+  await assert.rejects(media.readIcon({...icon, serverHints: []}, controller.signal));
+  await media.readIcon({...icon, serverHints: [fallback]}, controller.signal);
+  assert.deepEqual(requests, [server, fallback].map(origin => ({ hash: hash(png), mirrors: [origin], maxBytes: 768 * 1024, signal: controller.signal })));
   await assert.rejects(media.readIcon({ ...icon, mime: 'image/jpeg' }, controller.signal));
   controller.abort();
   await assert.rejects(media.readIcon(icon, controller.signal));

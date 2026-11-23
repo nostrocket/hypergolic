@@ -1,3 +1,4 @@
+import {encryptedEventKind} from '../security/encrypted-event.ts';
 import {QUERY_LIMITS} from '../network/relay-query-contract.ts';
 import {text, utf8Bytes} from '../storage/codec.ts';
 import {parseOutboxQuery, outboxRecord, OutboxQueryError, type OutboxQueryRequest} from './query-contract.ts';
@@ -18,7 +19,7 @@ export function parseOutboxSubscribe(input:unknown):OutboxSubscribeRequest {
     if(source.type!=='outbox.subscribe'||Object.keys(source).some(key=>!['type','id','subId','filters','options'].includes(key)))throw new OutboxQueryError();
     const subId=correlation(source.subId),id=correlation(source.id);
     const query=parseOutboxQuery({type:'outbox.query',id,filters:source.filters,...(Object.hasOwn(source,'options')?{options:source.options}:{})},QUERY_LIMITS.filters,false);
-    if(query.filters.some(filter=>Array.isArray(filter.kinds)&&filter.kinds.some(kind=>kind===4||kind===1059)))throw new OutboxQueryError('policy denied');
+    if(query.filters.some(filter=>Array.isArray(filter.kinds)&&filter.kinds.some(encryptedEventKind)))throw new OutboxQueryError('policy denied');
     const result=Object.freeze({...query,type:'outbox.subscribe' as const,subId});
     if(utf8Bytes(JSON.stringify(result))>16*1024)throw new OutboxQueryError();
     return result;

@@ -1,3 +1,4 @@
+import {encryptedEvent} from '../security/encrypted-event.ts';
 import { RequestHistory } from './request-history.ts';
 import {CapabilityReadAdmission, CapabilityReadBusy} from './capability-read-admission.ts';
 import {readCommon} from '../common/common-service.ts';
@@ -14,7 +15,7 @@ import type { ShellDatabase } from '../storage/database.ts';
 import { ShellStorageError, type StringStorage } from '../storage/ports.ts';
 import { utf8Bytes } from '../storage/codec.ts';
 import { CAPABILITY_LIMITS, DEFERRED_IDENTITY_OPERATIONS, decodeNativeRegistration, decodeNativeRequest, identityResult,
-  parseCapabilityRequest, storageFailure, queryFailure, type CapabilityReply, type CapabilityRequest,
+  parseCapabilityRequest, refusedIdentityReply, storageFailure, queryFailure, type CapabilityReply, type CapabilityRequest,
   type NativeRegistration } from './capability-protocol.ts';
 
 /** Native module only. take is single-use and returns a native-held immutable snapshot.
@@ -59,8 +60,8 @@ async function operateStorage(database: ShellDatabase, registration: NativeRegis
 async function readQuery(request: Extract<CapabilityRequest, {type: 'relay.query'}>, queries: RelayQueryService | undefined, pending: CapabilityReadAdmission, active: () => void): Promise<CapabilityReply> {
   if (!queries) return queryFailure(request, 'relay query unavailable or busy')!;
   try {
-    const events = await pending.schedule(active, signal => queries.query(request.filters, signal, active));
-    return {type: 'relay.query.result', id: request.id, events};
+    const events = await pending.schedule(active, signal => queries.query(request.filters, signal, active, true));
+    return {type: 'relay.query.result', id: request.id, events: events.filter(({event}) => !encryptedEvent(event.kind, event.content))};
   }
   catch (error) { return queryFailure(request, error instanceof CapabilityReadBusy ? 'relay query unavailable or busy' : 'relay query failed')!; }
 }
@@ -95,12 +96,12 @@ async function readIdentity(request: IdentityRequest, service: IdentityDataPort 
   try {return await (deferred ? pending.schedule(active, read) : pending.run(active, read));}
   catch (error) {return identityFailure(request, error instanceof CapabilityReadBusy ? 'identity data busy' : 'identity data unavailable');}
 }
-function invalidRequestReply(payload: unknown, domains: readonly string[]): CapabilityReply | null {
+function invalidRequestReply(payload: unknown, {domains, user}: NativeRegistration): CapabilityReply | null {
   const common = domains.includes('common') ? commonFailure(payload) : null;
   const relay = domains.includes('relay') ? queryFailure(payload, 'invalid relay query') : null;
   const storage = domains.includes('storage') ? storageFailure(payload, 'invalid storage request') : null;
   const outbox = domains.includes('outbox') ? outboxReadFailure(payload, 'invalid filter') : null;
-  return common ?? relay ?? storage ?? outbox;
+  return common ?? relay ?? storage ?? outbox ?? (domains.includes('identity') ? refusedIdentityReply(payload, user, 'invalid identity request') : null);
 }
 
 function finishCapability(native: NativeCapabilityPort, token: string, response: string | null, active: () => void): void {
@@ -161,14 +162,14 @@ export function createCapabilityBroker(database: ShellDatabase, native: NativeCa
         let request: CapabilityRequest;
         try { request = parseCapabilityRequest(payload); }
         catch {
-          const failure = invalidRequestReply(payload, registration.domains);
+          const failure = invalidRequestReply(payload, registration);
           if (failure) response = JSON.stringify(failure);
           return;
         }
         const domain = request.type.split('.')[0]!;
         if (!registration.domains.includes(domain)) return;
         if (seen.claim(request.id, request.type)) {
-          const failure = commonFailure(request) ?? outboxReadFailure(request, 'policy denied') ?? queryFailure(request, 'request already used or session limit reached') ?? storageFailure(request, 'request already used or session limit reached');
+          const failure = refusedIdentityReply(request, registration.user, 'request already used or session limit reached') ?? commonFailure(request) ?? outboxReadFailure(request, 'policy denied') ?? queryFailure(request, 'request already used or session limit reached') ?? storageFailure(request, 'request already used or session limit reached');
           if (failure) response = JSON.stringify(failure);
           return;
         }

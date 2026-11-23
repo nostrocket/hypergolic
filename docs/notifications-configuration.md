@@ -70,7 +70,11 @@ selected resolution rules. Invalid values are withheld; an invalid registration
 keeps the previous valid schema. A rejected registration returns a negative ACK
 and pushes one `config.schemaError` to its captured live requester. The native
 reply fallback likewise reports both outcomes, without delivery after revocation.
-Schema changes purge removed or invalid secrets.
+Schema changes purge removed or invalid secrets. Untouched fields follow the
+current default. Saving an explicit choice preserves it even when it equals
+the default. Resetting a field and saving makes it follow future defaults.
+Older records did not track which values were chosen, so valid stored values
+are treated as prior choices until the user resets them.
 
 Configuration persistence is scoped to identity, publisher, application and the
 verified aggregate artifact hash. Instance IDs do not alter persistence. A
@@ -102,9 +106,10 @@ The identity-list permission interception also recognizes this routing boundary.
 
 The selected draft mentions a preferred manifest schema without defining its
 encoding. Hypergolic uses public runtime `config.registerSchema`; it does not
-invent a manifest encoding. The installed SDK's `config.onSchemaError` returns a
-teardown function, while the selected draft describes a subscription close
-operation. The fixture calls the installed teardown function. Negative schema
+invent a manifest encoding. Configuration listeners share one wire subscription per view. Each receives its
+own initial values. Closing the last listener releases the subscription and its
+cached values. Schema-error listeners support both `.close()` and the existing
+callable teardown. Negative schema
 registration ACKs preserve the draft error code on the wire; the SDK displays its
 error string without inventing a code prefix.
 

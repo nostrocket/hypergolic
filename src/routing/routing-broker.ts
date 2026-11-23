@@ -10,7 +10,7 @@ import { RoutingChannels } from './routing-channels.ts';
 import { RoutingReviewService } from './routing-review.ts';
 import {routingAppLabel,snapshotEventId} from '../napplets/published-identity.ts';
 export type RoutingTargetPort = Readonly<{ activate(handler: CatalogHandler, request: IntentRequest, signal: AbortSignal, assertActive: () => void, origin: NativeRegistration, revision: number): Promise<string | null> }>;
-type Endpoint = { registration: NativeRegistration; assertActive(): void; seen: RequestHistory; topics: Set<string> };
+type Endpoint = { peerId: string; registration: NativeRegistration; assertActive(): void; seen: RequestHistory; topics: Set<string> };
 const revoked = (): never => { throw new ShellStorageError('REVOKED'); };
 const sameHandler = (a: Readonly<{ publisher: string; appId: string; eventId: string }>, b: Readonly<{ publisher: string; appId: string; eventId: string }>) => a.publisher === b.publisher && a.appId === b.appId && a.eventId === b.eventId;
 const actions = (handler: CatalogHandler, role: string): readonly string[] => {
@@ -20,9 +20,7 @@ const actions = (handler: CatalogHandler, role: string): readonly string[] => {
 function compatible(handler: CatalogHandler, request: IntentRequest): boolean {
   const role = handler.roles.find(value => value.archetype === request.archetype);
   if (!role || !actions(handler, request.archetype).includes(request.action)) return false;
-  if (!role.contracts) return request.convention === undefined || role.conventions.length === 0 || role.conventions.includes(request.convention);
-  const convention = `napplet:${request.archetype}/${request.action}`;
-  return (request.convention === undefined || request.convention === convention) && role.conventions.includes(convention);
+  return role.conventions.includes(request.convention);
 }
 const publishedIntentId = (publisher: string, appId: string): string =>
   snapshotEventId(appId) ? routingAppLabel(appId) : namedIntentId(publisher,appId);
@@ -130,11 +128,11 @@ export class RoutingBroker {
     const sender = source.fixture === 'published' ? publishedIntentId(source.publisher, source.appId) : `bundled:${source.appId}`;
     const message = modern
       ? {type: 'intent.deliver', delivery: {sender, archetype: request.archetype, action: request.action, convention, ...payload}}
-      : {type: 'inc.event', topic: convention, sender: routingAppLabel(source.appId), ...payload};
+      : {type: 'inc.event', topic: convention, sender: endpoint.peerId, ...payload};
     return this.native.send(target.registration.generation, revision, message);
   }
   private async invoke(endpoint: Endpoint, revision: number, request: IntentRequest, active: () => void, signal: AbortSignal): Promise<Readonly<Record<string, unknown>>> {
-    const base = { archetype: request.archetype, action: request.action, ...(request.convention === undefined ? {} : { convention: request.convention }) };
+    const base = { archetype: request.archetype, action: request.action, convention:request.convention };
     const failure = (error: string) => Object.freeze({ ...base, ok: false, handled: false, error });
     try {
       const mayReview = () => this.native.mayReview(endpoint.registration.generation, revision);
@@ -160,8 +158,7 @@ export class RoutingBroker {
       if (!actions(handler, request.archetype).includes(request.action)) return failure('unsupported action');
       const role = handler.roles.find(value => value.archetype === request.archetype);
       if (!role) return failure('no handler');
-      const conventions = role.conventions;
-      const convention = request.convention ?? conventions.find(value => value.endsWith('/' + request.action)) ?? `napplet:${request.archetype}/${request.action}`;
+      const convention = request.convention;
       if (!compatible(handler, request)) return failure('unsupported convention');
       if (decision.remember) { const owner = this.owner(endpoint, revision, 'intent'); await this.catalog.prefer(owner, request.archetype, handler, { signal }); active(); await this.catalogChanged(owner, [request.archetype]); active(); }
       const sessionId = await this.targets.activate(handler, request, signal, active, endpoint.registration, revision); active();
@@ -185,12 +182,12 @@ export class RoutingBroker {
     this.channels.flush(revision);
     if (message.type === 'inc.emit') {
       for (const target of this.endpoints.values()) if (target !== endpoint && target.topics.has(message.topic!)) {
-        try {active(); this.active(target, revision, 'inc'); this.native.send(target.registration.generation, revision, {type: 'inc.event', topic: message.topic, sender: routingAppLabel(endpoint.registration.appId), ...(Object.prototype.hasOwnProperty.call(message, 'payload') ? {payload: message.payload} : {})});} catch { /* Revoked recipients have no destination; topics have no backlog or receipt. */ }
+        try {active(); this.active(target, revision, 'inc'); this.native.send(target.registration.generation, revision, {type: 'inc.event', topic: message.topic, sender: endpoint.peerId, ...(Object.prototype.hasOwnProperty.call(message, 'payload') ? {payload: message.payload} : {})});} catch { /* Revoked recipients have no destination; topics have no backlog or receipt. */ }
       }
       return null;
     }
     if (message.type === 'inc.channel.open') {
-      const peers = [...this.endpoints.values()].filter(peer => peer !== endpoint && routingAppLabel(peer.registration.appId) === message.target && peer.registration.user === endpoint.registration.user && peer.registration.epoch === endpoint.registration.epoch && peer.registration.domains.includes('inc') && this.native.mayDeliver(peer.registration.generation, revision, 'inc'));
+      const peers = [...this.endpoints.values()].filter(peer => peer !== endpoint && peer.peerId === message.target && peer.registration.user === endpoint.registration.user && peer.registration.epoch === endpoint.registration.epoch && peer.registration.domains.includes('inc') && this.native.mayDeliver(peer.registration.generation, revision, 'inc'));
       const failure = {type: 'inc.channel.open.result', id: message.id, error: 'peer unavailable'};
       if (peers.length !== 1) return failure;
       const peer = peers[0]!; this.active(peer, revision, 'inc');
@@ -227,13 +224,15 @@ export class RoutingBroker {
       if (wrapper.type !== 'routing.call') return;
       const id = routingText(wrapper.id, 128), revision = wrapper.revision;
       if (!Number.isSafeInteger(revision) || (revision as number) < 0 || this.refresh() !== revision) return;
-      const control = routingRecord(wrapper.message, ['type'], ['id', 'request', 'archetype', 'topic', 'payload', 'target', 'channelId']);
+      const rawMessage = wrapper.message;
+      const invoke = rawMessage !== null && typeof rawMessage === 'object' && 'type' in rawMessage && rawMessage.type === 'intent.invoke';
+      const control = invoke ? {type:'intent.invoke'} : routingRecord(rawMessage, ['type'], ['id', 'request', 'archetype', 'topic', 'payload', 'target', 'channelId']);
       const domain = control.type === 'routing.__register' ? expected.domains.includes('intent') ? 'intent' : 'inc' : typeof control.type === 'string' && control.type.startsWith('intent.') ? 'intent' : 'inc';
       const generation = expected.generation;
       let endpoint = this.endpoints.get(generation);
       if (!endpoint) {
         if (this.endpoints.size >= ROUTING_LIMITS.endpoints) return;
-        endpoint = { registration: expected, assertActive: owner.assertActive, seen: new RequestHistory(CAPABILITY_LIMITS.sessionRequests), topics: new Set() };
+        endpoint = { peerId: 'peer-' + this.native.newChannelId(), registration: expected, assertActive: owner.assertActive, seen: new RequestHistory(CAPABILITY_LIMITS.sessionRequests), topics: new Set() };
         this.endpoints.set(generation, endpoint);
       } else if (JSON.stringify(endpoint.registration) !== JSON.stringify(expected)) return;
       const selected = endpoint, capturedRevision = revision as number;
@@ -244,7 +243,16 @@ export class RoutingBroker {
       let result: Readonly<Record<string, unknown>> | null;
       if (control.type === 'routing.__register') { routingRecord(wrapper.message, ['type']); result = null; }
       else {
-        const message = parseRoutingMessage(wrapper.message);
+        let message: RoutingMessage;
+        try { message = parseRoutingMessage(rawMessage); }
+        catch (error) {
+          if (!invoke || !('id' in rawMessage)) throw error;
+          const requestId = routingText(rawMessage.id, ROUTING_LIMITS.id);
+          active();
+          response = JSON.stringify({type:'routing.call.result', id, response:{type:'intent.invoke.result', id:requestId,
+            result:{ok:false, handled:false, error:'invalid convention'}}});
+          return;
+        }
         try { result = await this.operate(selected, capturedRevision, message, active, controller.signal); }
         catch (error) { active(); result = routingFailure(message, error instanceof ReviewBusyError ? error.message : undefined); }
         if (result !== null && new TextEncoder().encode(JSON.stringify(result)).length > ROUTING_LIMITS.payloadBytes) result = routingFailure(message);

@@ -141,3 +141,11 @@ test('independent Node processes preserve strings and explicit-empty workspace u
   assert.equal(read.status, 0, read.stderr);
   assert.deepEqual(JSON.parse(read.stdout), { workspace: { revision: 0, snapshot: { schema: 1, sessions: [], lastActiveId: null } }, value: 'persisted across actual Node processes' });
 });
+
+test('an old GIF icon falls back to generic artwork and preserves the saved application', () => {
+  const pin = descriptor('saved');
+  const icon = {hash: hex(1), mime: 'image/gif', serverHints: ['https://cdn.example.org']};
+  const record = {schema: 1, sessions: [{...pin, icon}], lastActiveId: pin.id};
+  assert.deepEqual(snapshot(record).sessions, [pin]);
+  assert.deepEqual(restoreWorkspace(record).sessions, [pin]);
+});

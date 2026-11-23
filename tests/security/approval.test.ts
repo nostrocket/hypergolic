@@ -1,5 +1,6 @@
 import {loadTrace, sends} from '../reference-shell/trace.mts';
 import test from 'node:test';
+import {parseOutboxPublish, OutboxPublicationError} from '../../src/outbox/publication-contract.ts';
 import assert from 'node:assert/strict';
 import { finalizeEvent } from 'nostr-tools/pure';
 import { updateApprovalAppState } from '../../src/shell/approval-lifecycle.ts';
@@ -345,6 +346,27 @@ test('plain Relay prepares and consumes an exact native primary publication', as
   const service = new ApprovalService(port, {assertActive() {}}, {sign:async snapshot => sign(snapshot)});
   const results = await service.approve(current(service, 'one'));
   assert.equal(results[0]?.status, 'accepted');
+});
+
+test('Relay and Outbox refuse encrypted guest content before review', () => {
+  const native = new Native();
+  const service = make(native);
+  const iv = Buffer.alloc(16).toString('base64');
+  const v2 = Buffer.alloc(99);
+  v2[0] = 2;
+  const blocked = [event(4), event(13), event(1059),
+    {...event(), content: iv + '?iv=' + iv}, {...event(), content: v2.toString('base64')}];
+  const user = origin('policy').user;
+  for (const [index, request] of blocked.entries()) {
+    const token = 'encrypted-' + index;
+    native.issue(token, origin(token), token, request);
+    assert.equal(service.enqueue(token, [relay]), false);
+    assert.throws(() => parseOutboxPublish({type:'outbox.publish', id:token, event:request}, user),
+      (error: unknown) => error instanceof OutboxPublicationError && error.message === 'policy denied');
+  }
+  native.issue('cleartext');
+  assert.equal(service.enqueue('cleartext', [relay]), true);
+  assert.equal(parseOutboxPublish({type:'outbox.publish', id:'plain', event:event()}, user).event.content, 'approved');
 });
 
 test('Lean relay-publish returns the approved event after the relay acknowledges it', async () => {

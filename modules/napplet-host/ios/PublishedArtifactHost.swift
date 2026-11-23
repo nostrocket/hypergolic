@@ -4,13 +4,15 @@ import Foundation
 struct PublishedArtifactHostInput {
   let claims: PublishedArtifactRegistry.Claims
   let handle: String
+  let manifestFormat: String?
   let configuration: String?
 
   init?(_ raw: String) {
     guard raw.utf8.count <= 12 * 1024, let data = raw.data(using: .utf8),
       let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
       Set(["sessionId", "publisher", "appId", "eventId", "version", "htmlHash", "handle"]).isSubset(of: Set(value.keys)),
-      Set(value.keys).subtracting(["sessionId", "publisher", "appId", "eventId", "version", "htmlHash", "handle", "configuration", "snapshot"]).isEmpty,
+      Set(value.keys).subtracting(["sessionId", "publisher", "appId", "eventId", "version", "htmlHash", "handle", "configuration", "snapshot", "manifestFormat"]).isEmpty,
+      value["manifestFormat"] == nil || value["manifestFormat"] as? String == "nip-5d",
       let sessionId = value["sessionId"] as? String,
       let publisher = value["publisher"] as? String,
       let appId = value["appId"] as? String,
@@ -26,6 +28,7 @@ struct PublishedArtifactHostInput {
     let claims = PublishedArtifactRegistry.Claims(sessionId: sessionId, publisher: publisher, identifier: appId,
       eventId: eventId, aggregateHash: version, htmlHash: htmlHash, snapshot: snapshot)
     guard PublishedArtifactRegistry.valid(claims) else { return nil }
+    manifestFormat = value["manifestFormat"] as? String
     self.claims = claims
     self.handle = handle
     configuration = value["configuration"] as? String
@@ -40,16 +43,18 @@ final class PublishedArtifactReadOwner {
   private let generation: String
   private let totalBytes: Int
   private let domains: [String]
+  private let manifestFormat: String?
   private let appData: String?
   private let legacyReadOnly: String?
   private var bytes: Data?
   private var offset = 0
   private var nextSequence = 0
 
-  init(claimed: PublishedArtifactRegistry.ClaimedArtifact, domains: Set<String>, appData: String? = nil, legacyReadOnly: String? = nil) {
+  init(claimed: PublishedArtifactRegistry.ClaimedArtifact, domains: Set<String>, manifestFormat: String? = nil, appData: String? = nil, legacyReadOnly: String? = nil) {
     claims = claimed.claims
     generation = claimed.viewGeneration
     totalBytes = claimed.htmlBytes.count
+    self.manifestFormat = manifestFormat
     self.domains = domains.sorted()
     self.appData = appData
     self.legacyReadOnly = legacyReadOnly
@@ -72,6 +77,7 @@ final class PublishedArtifactReadOwner {
       "version": claims.aggregateHash, "htmlHash": claims.htmlHash, "done": done,
       "domains": domains
     ]
+    if let manifestFormat { response["manifestFormat"] = manifestFormat }
     if let snapshot = claims.snapshot { response["snapshot"] = snapshot.wire }
     if let legacyReadOnly, let data = legacyReadOnly.data(using: .utf8), let value = try? JSONSerialization.jsonObject(with: data) { response["legacyReadOnly"] = value }
     if let appData, let data = appData.data(using: .utf8), let value = try? JSONSerialization.jsonObject(with:data) { response["appData"] = value }

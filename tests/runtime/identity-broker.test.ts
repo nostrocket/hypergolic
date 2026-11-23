@@ -30,9 +30,14 @@ for(const cause of ['native','broker','identity']) test(`pending profile ${cause
 test('forged ownership and missing identity grant never invoke the data resolver',async t=>{
   const {database}=await setup(t),native=new NativeLeases();let calls=0;
   const service={async read(){calls++;throw Error('unexpected');}};
-  for(const [owner,captured,request] of [[config,{...config,generation:'foreign'},wire],[{...config,domains:['storage']},{...config,domains:['storage']},wire],[config,config,{...wire,user:hex(9)}]] as const){
+  const ungranted = {...config, domains:['storage']};
+  for(const [owner,captured,request,expected] of [
+    [config,{...config,generation:'foreign'},wire,null],
+    [ungranted,ungranted,wire,null],
+    [config,config,{...wire,user:hex(9)},{type:'identity.getProfile.result', id:wire.id, profile:null, error:'invalid identity request'}],
+  ] as const){
     const broker=createCapabilityBroker(database,native,{registration:owner,assertActive(){}},undefined,undefined,undefined,service);
-    const token=native.add(captured,request);await broker.dispatch(token);assert.equal(native.results.get(token),null);
+    const token=native.add(captured,request);await broker.dispatch(token);assert.deepEqual(native.results.get(token),expected);
   }
   assert.equal(calls,0);
 });

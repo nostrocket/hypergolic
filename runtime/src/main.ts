@@ -44,7 +44,7 @@ import {
 import type { ThemeService } from '@kehto/services';
 import { createShellTheme } from './shell-theme';
 import type { HostOperationContext, NappletMessage, ServiceRuntimeContext } from '@kehto/runtime';
-import { identityFailure, identityResult, parseCapabilityRequest } from '../../src/runtime/capability-protocol';
+import { createIdentityAdapter, createSessionAccount } from './identity-adapter';
 import { createNativeClient, type NativeHost } from './native-client';
 import { publishedCspParts, readPublishedArtifact } from './published-artifact';
 import { ensureSecureRandomUuid } from './secure-random-compat';
@@ -60,7 +60,7 @@ const source = parameters.get('source');
 const fixtureName = parameters.get('fixture') ?? '';
 const fixture = source === null && Object.prototype.hasOwnProperty.call(__BUNDLED_FIXTURES__, fixtureName) ? __BUNDLED_FIXTURES__[fixtureName] : undefined;
 type RuntimeMetadata = Readonly<{
-  aggregateHash: string; appId: string; title: string;
+  aggregateHash: string; identityHash?: string; appId: string; title: string;
   journalCheckpoint?: boolean; domains: readonly string[]; appData?:AppDataPolicy; mesh?:NativeMeshContext; legacyReadOnly?:LegacyReadOnlyContext; publishTimeoutMs?: number; published: boolean;
 }>;
 let stopped = false;
@@ -110,7 +110,7 @@ async function digest(value: string): Promise<string> {
 }
 
 function makeHooks(native: ReturnType<typeof createNativeClient>, captureRecipient: () => () => boolean,
-  artifact: RuntimeMetadata, theme: ThemeService, registerRouting: (context: ServiceRuntimeContext | null) => void): ShellAdapter {
+  artifact: RuntimeMetadata, readAccount: (id: string) => Promise<string | undefined>, theme: ThemeService, registerRouting: (context: ServiceRuntimeContext | null) => void): ShellAdapter {
   const unavailable = (): never => { throw new Error('Capability unavailable'); };
   const supported = new Set(artifact.domains.filter(domain => domain !== 'mesh' || artifact.published && isNativeMeshContext(artifact.mesh, sessionId)));
   const routing = createRoutingAdapter(native, captureRecipient);
@@ -135,16 +135,7 @@ function makeHooks(native: ReturnType<typeof createNativeClient>, captureRecipie
       });
     },
   };
-  const identity = { descriptor: { name: 'identity', version: '1.0.0' },
-    handleMessage(_windowId: string, message: NappletMessage, send: (message: NappletMessage) => void): void {
-      const live = captureRecipient();
-      void native.request(message).then(response => { if (live()) send(response); }).catch(() => {
-        if (!live()) return;
-        try { const request = parseCapabilityRequest(message);
-          send((request.type === 'identity.getPublicKey' ? identityResult(request, '') : identityFailure(request, 'identity request denied')) as NappletMessage);
-        } catch { /* Unknown operation. */ }
-      });
-    } };
+  const identity = createIdentityAdapter(native, captureRecipient, readAccount);
   return {
     relayPool: {
       getRelayPool: () => null, trackSubscription: unavailable,
@@ -224,7 +215,7 @@ function approvalTimeouts(artifact: RuntimeMetadata): Readonly<Record<string, nu
 
 function createGuestEndpoint(artifact: RuntimeMetadata, hooks: ShellAdapter) {
   const bridge = createShellBridge(hooks);
-  const identity = Object.freeze({ dTag: artifact.appId, aggregateHash: artifact.aggregateHash });
+  const identity = Object.freeze({ dTag: artifact.appId, aggregateHash: artifact.identityHash ?? artifact.aggregateHash });
   const resolved = resolveShellEnvironment(hooks, identity);
   // Mesh uses the private native lane, outside the SDK's fixed domain catalogue.
   const nativeMesh = artifact.published && artifact.domains.includes('mesh') && isNativeMeshContext(artifact.mesh, sessionId);
@@ -289,15 +280,17 @@ function mount(artifact: RuntimeMetadata) {
   const live = () => !stopped && frame.contentWindow === source && (artifact.legacyReadOnly !== undefined ? legacyGuard?.isActive() === true : ready && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) !== undefined);
   const routing = createGuestRouting(artifact.domains, sessionId, live,
     () => { void native.routing({type: 'routing.__register'}).catch(() => {}); }, () => fail('runtime-bootstrap'));
+  const account = createSessionAccount(message => native.request(message), live,
+    pubkey => source.postMessage({type:'identity.changed', pubkey}, '*'));
   const native = createNativeClient(hostWindow.HypergolicHost!, sessionId,
-    {requestTimeoutsMs: approvalTimeouts(artifact), ...(artifact.published && artifact.mesh ? {mesh: artifact.mesh} : {}), onRouting: routing.deliver, onMedia: message => {
+    {...(artifact.domains.includes('identity') ? {onIdentity:account.update} : {}), requestTimeoutsMs: approvalTimeouts(artifact), ...(artifact.published && artifact.mesh ? {mesh: artifact.mesh} : {}), onRouting: routing.deliver, onMedia: message => {
       if (hasMedia && live()) source.postMessage(message, '*');
     },onCvm:message=>{if(artifact.domains.includes('cvm')&&live())source.postMessage(message,'*');}});
   const shellTheme = createShellTheme(theme => bridge.publishTheme(theme));
   const hooks = makeHooks(native, () => {
     const entry = bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId);
     return () => !stopped && entry !== undefined && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) === entry;
-  }, artifact, shellTheme.theme, routing.setContext);
+  }, artifact, account.read, shellTheme.theme, routing.setContext);
   const { bridge, frame, source, media, environment, policy, destroyFrame } = createGuestEndpoint(artifact, hooks);
   const hasMedia = artifact.published && artifact.domains.includes('media');
   let ready = false;
@@ -320,7 +313,7 @@ function mount(artifact: RuntimeMetadata) {
   const deadline = window.setTimeout(() => fail('runtime-timeout'), 10_000);
 
   const receiveGuest = guestMessageReceiver(frame, source, {
-    domains: artifact.domains, routing, keys, sendMedia: hasMedia ? native.sendMedia : null,
+    domains: artifact.domains, routing, keys, account: account.current, sendMedia: hasMedia ? native.sendMedia : null,
     cvm:artifact.domains.includes('cvm')?createCvmGuestReceiver(source,native.cvm,live):null,
     closed: () => stopped, live,
     dispatch(event) {
@@ -395,9 +388,9 @@ async function start(): Promise<void> {
     ensureSecureRandomUuid();
     if (source === 'published') {
       if (Array.from(parameters).length !== 2 || parameters.get('fixture') !== null) { fail('artifact-integrity'); return; }
-      const {html, metadata} = await readPublishedArtifact(hostWindow.HypergolicHost!, sessionId);
+      const {html, metadata, identityHash} = await readPublishedArtifact(hostWindow.HypergolicHost!, sessionId);
       const {appId, version: aggregateHash, domains, appData, mesh, legacyReadOnly, snapshot} = metadata;
-      if (!stopped) renderGuest({aggregateHash, appId, title: snapshot?.title ?? appId, domains,...(appData?{appData:appData.policy}:{}), ...(mesh ? {mesh} : {}), ...(legacyReadOnly ? {legacyReadOnly} : {}),
+      if (!stopped) renderGuest({aggregateHash, identityHash, appId, title: snapshot?.title ?? appId, domains,...(appData?{appData:appData.policy}:{}), ...(mesh ? {mesh} : {}), ...(legacyReadOnly ? {legacyReadOnly} : {}),
         journalCheckpoint: domains.includes('storage') && supportsWorkspaceJournalCheckpoint(metadata), published: true}, html);
       return;
     }

@@ -12,10 +12,10 @@ const HEX64 = /^[0-9a-f]{64}$/;
 
 export type PublishedMetadata = Readonly<{
   publisher: string; appId: string; eventId: string; version: string; htmlHash: string;
-  snapshot?: SnapshotIdentity;
+  manifestFormat?: 'nip-5d'; snapshot?: SnapshotIdentity;
   domains: readonly string[]; appData?: AppDataContext; mesh?: NativeMeshContext; legacyReadOnly?: LegacyReadOnlyContext;
 }>;
-export type PublishedDocument = Readonly<{ metadata: PublishedMetadata; html: string }>;
+export type PublishedDocument = Readonly<{ metadata: PublishedMetadata; identityHash: string; html: string }>;
 
 function record(value: unknown): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('Invalid artifact reply');
@@ -33,13 +33,14 @@ function metadata(value: Record<string, unknown>, generation: string): Published
       !Array.isArray(domains) || domains.length > ARTIFACT_DOMAINS.size + (mesh ? 1 : 0) ||
       domains.some(domain => typeof domain !== 'string' || !(ARTIFACT_DOMAINS.has(domain) || domain === 'mesh' && mesh !== undefined)) ||
       domains.some((domain, index) => index > 0 && domains[index - 1] >= domain)) throw new Error('Invalid artifact metadata');
+  if (value.manifestFormat !== undefined && value.manifestFormat !== 'nip-5d') throw new Error('Invalid artifact format');
   const snapshot = captureSnapshotIdentity(value.snapshot,appId);
   if (snapshot ? snapshot.eventId !== eventId || value.legacyReadOnly !== undefined || value.appData !== undefined
     : appId !== appId.trim()) throw new Error('Invalid artifact source metadata');
   if (mesh && !domains.includes('mesh')) throw new Error('Mesh context without actual grant');
   const legacyReadOnly=value.legacyReadOnly === undefined ? undefined : captureLegacyReadOnly(value.legacyReadOnly, {publisher,appId,eventId,version,htmlHash}, domains as string[]);
   const appData=value.appData===undefined?null:captureAppDataContext(value.appData,{publisher,appId,fixture:'published',domains});
-  return Object.freeze({ ...(snapshot?{snapshot}:{}),...(legacyReadOnly ? {legacyReadOnly} : {}), ...(mesh ? {mesh} : {}), ...(appData?{appData}:{}),publisher, appId, eventId, version, htmlHash, domains: Object.freeze([...domains]) });
+  return Object.freeze({ ...(value.manifestFormat === 'nip-5d' ? {manifestFormat:'nip-5d' as const} : {}), ...(snapshot?{snapshot}:{}),...(legacyReadOnly ? {legacyReadOnly} : {}), ...(mesh ? {mesh} : {}), ...(appData?{appData}:{}),publisher, appId, eventId, version, htmlHash, domains: Object.freeze([...domains]) });
 }
 async function sha256(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
   const hash = await crypto.subtle.digest('SHA-256', bytes);
@@ -92,7 +93,7 @@ export async function readPublishedArtifact(native: NativeHost, generation: stri
       const remainingTime = 15_000 - (performance.now() - started);
       if (remainingTime <= 0) throw new Error('Artifact read timed out');
       const value = await receiveChunk(native, generation, sequence, Math.min(2500, remainingTime));
-      if (Object.keys(value).length !== (13 + (value.snapshot === undefined ? 0 : 1) + (value.appData === undefined ? 0 : 1) + (value.mesh === undefined ? 0 : 1) + (value.legacyReadOnly === undefined ? 0 : 1)) || typeof value.totalBytes !== 'number' || !Number.isSafeInteger(value.totalBytes) ||
+      if (Object.keys(value).length !== (13 + (value.manifestFormat === undefined ? 0 : 1) + (value.snapshot === undefined ? 0 : 1) + (value.appData === undefined ? 0 : 1) + (value.mesh === undefined ? 0 : 1) + (value.legacyReadOnly === undefined ? 0 : 1)) || typeof value.totalBytes !== 'number' || !Number.isSafeInteger(value.totalBytes) ||
           value.totalBytes < 1 || value.totalBytes > MAX_HTML_BYTES ||
           typeof value.byteLength !== 'number' || typeof value.done !== 'boolean') throw new Error('Invalid artifact reply');
       const nextClaims = metadata(value, generation);
@@ -115,7 +116,7 @@ export async function readPublishedArtifact(native: NativeHost, generation: stri
         const version = await sha256(new TextEncoder().encode(`${htmlHash} /index.html\n`));
         if (htmlHash !== claims.htmlHash || version !== claims.version) throw new Error('Artifact hash mismatch');
         const html = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-        return Object.freeze({ metadata: claims, html });
+        return Object.freeze({ metadata: claims, identityHash:claims.manifestFormat === 'nip-5d' ? htmlHash : version, html });
       }
     }
     throw new Error('Artifact exceeded chunk limit');

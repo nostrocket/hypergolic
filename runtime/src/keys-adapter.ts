@@ -55,7 +55,7 @@ export function createKeysSession(source: Window, active: () => boolean) {
     const size = Object.keys(message).length;
     switch (message.type) {
       case 'keys.registerAction': {
-        if (!id(message.id)) return;
+        if (typeof message.id !== 'string' || !message.id.length || message.id.length > 128 || new TextEncoder().encode(message.id).length > 128) return;
         const action = size === 3 ? parseAction(message.action) : null;
         const reply = {type: 'keys.registerAction.result', id: message.id, actionId: action?.id ?? ''};
         if (!action || actions.has(action.id) || actions.size >= MAX_ACTIONS) {

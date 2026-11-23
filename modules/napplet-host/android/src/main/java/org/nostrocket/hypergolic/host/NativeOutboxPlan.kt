@@ -95,10 +95,15 @@ internal class NativeOutboxPlan private constructor(
     private fun tags(value: JSONArray): String = (0 until value.length()).joinToString(",", "[", "]") {
       val row = strings(value.getJSONArray(it)); require(row.isNotEmpty()); row.joinToString(",", "[", "]", transform = ::quote)
     }
+    private val nip04Envelope = Regex("""[A-Za-z0-9+/]+={0,2}\?iv=[A-Za-z0-9+/]{22}==""")
+    private val nip44Envelope = Regex("""A[g-v][A-Za-z0-9+/]*={0,2}""")
     private fun unsigned(value: JSONObject, strict: Boolean = false): String {
       if (strict) fields(value, setOf("kind", "created_at", "tags", "content"))
       val kind = integer(value.get("kind"), 65535); val created = integer(value.get("created_at"), 9_007_199_254_740_991L)
-      return "{\"kind\":$kind,\"content\":${quote(string(value, "content"))},\"tags\":${tags(value.getJSONArray("tags"))},\"created_at\":$created}"
+      val content = string(value, "content")
+      require(kind !in setOf(4L, 13L, 1059L) && !nip04Envelope.matches(content))
+      require(content.length < 132 || content.length % 4 != 0 || !nip44Envelope.matches(content))
+      return "{\"kind\":$kind,\"content\":${quote(content)},\"tags\":${tags(value.getJSONArray("tags"))},\"created_at\":$created}"
     }
     private fun eventHash(value: JSONObject, identity: String): String {
       val canonical = "[0,${quote(identity)},${integer(value.get("created_at"), 9_007_199_254_740_991L)},${integer(value.get("kind"), 65535)},${tags(value.getJSONArray("tags"))},${quote(string(value, "content"))}]"

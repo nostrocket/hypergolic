@@ -118,7 +118,8 @@ export function restoreWorkspace(value: unknown): Workspace {
         !supportsLegacyReadOnly({publisher: item.publisher, appId: item.appId, eventId: item.eventId as string, version: item.version}))) throw new Error('Invalid legacy read-only pin');
     if (item.legacyReadOnlyUser !== undefined && item.legacyReadOnly !== true) throw new Error('Unbound legacy user');
     ids.add(item.id);
-    return Object.freeze({ ...(item.icon === undefined ? {} : {icon: pinArtwork(item.icon)}), id: item.id, title: item.title, publisher: item.publisher, appId: item.appId, version: item.version, source: item.source,
+    const icon = item.icon === undefined ? undefined : pinArtwork(item.icon);
+    return Object.freeze({ ...(icon && {icon}), id: item.id, title: item.title, publisher: item.publisher, appId: item.appId, version: item.version, source: item.source,
       ...(item.source === 'published' ? { eventId: item.eventId as string } : {}), ...(item.legacyReadOnly === true ? {legacyReadOnly: true as const, legacyReadOnlyUser: item.legacyReadOnlyUser as string} : {}) });
   });
   if (snapshot.lastActiveId !== null && (typeof snapshot.lastActiveId !== 'string' || !ids.has(snapshot.lastActiveId))) throw new Error('Invalid focus');
