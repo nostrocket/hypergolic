@@ -2,7 +2,7 @@ import {componentCases} from './component-cases.mjs';
 
 // Stable IDs identify individual observations. An issue may cover additional requirements.
 export const rules = [
-  ...componentCases.map(([id, domain, , name]) => [id, 'NAP-' + domain, '', name]),
+  ...componentCases.map(([id, domain, , name]) => [id, domain === 'NIP-5D' ? domain : 'NAP-' + domain, '', name]),
   ['resource-svg-output', 'NAP-RESOURCE', 'default-resource-policy', 'Return raster image bytes for an SVG illustration in a mixed batch'],
   ['keys-registration', 'NAP-KEYS', 'wire-protocol', 'Acknowledge a registered keyboard action'],
   ['media-destroy', 'NAP-MEDIA', 'wire-protocol', 'Preserve the target session when requesting playback teardown'],
