@@ -754,3 +754,26 @@ for (const [theme, width] of [['light', 320], ['dark', 390]] as const) {
     await expect(open).toBeFocused();
   });
 }
+
+test('details finds the first usable signed screenshot after unavailable, mismatched and undecodable entries', async ({page}) => {
+  const app = manifest({title: 'Screenshot gallery', extra: [
+    ['server', 'https://media.example.org'],
+    ...Array.from({length: 20}, (_, i) => ['screenshot', 'x ' + i.toString(16).padStart(64, '0')]),
+    ['screenshot', 'x ' + imageHash, 'm video/mp4', 'alt Incorrect declaration'],
+    ['screenshot', 'x ' + imageHash, 'alt Decode fails'],
+    ['screenshot', 'x ' + imageHash, 'm image/png', 'alt First usable screenshot'],
+    ['screenshot', 'x ' + imageHash, 'alt Later screenshot'],
+  ]});
+  await boot(page, {direct: true}, [app]);
+  await page.evaluate(() => {
+    const decode = HTMLImageElement.prototype.decode;
+    HTMLImageElement.prototype.decode = function () {
+      HTMLImageElement.prototype.decode = decode;
+      return Promise.reject(new Error('Undecodable screenshot'));
+    };
+  });
+  await page.getByRole('button', {name: 'Details for Screenshot gallery'}).click();
+  await expect(page.getByRole('img', {name: 'First usable screenshot'})).toBeVisible();
+  await expect(page.locator('.detail-art img')).toHaveCount(1);
+  await expect(page.getByRole('button', {name: 'Open Napplet', exact: true})).toBeVisible();
+});

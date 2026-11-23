@@ -295,6 +295,13 @@ test('unsupported requested capabilities warn without granting unsupported domai
   assert.deepEqual(JSON.parse(JSON.parse(opened.hostInput).configuration).domains, ['cvm']);
   assert(calls.includes('finish'));
   opened.revoke();
+  const staged = [...calls];
+  await assert.rejects(service.openLink(link, new AbortController().signal, async review => {
+    assert.equal(review.metadata.legacyManifest, true);
+    assert.equal(review.eventId, event.id);
+    return false;
+  }), {code:'PUBLISHED_SESSION_FAILED'});
+  assert.deepEqual(calls, staged);
   const reopened = await service.reopenPinned(opened.descriptor, new AbortController().signal, async () => {
     assert.fail('unchanged support warning is remembered across reopen');
   });
@@ -448,7 +455,7 @@ test('verified update is inert until explicit review and cannot roll back to an 
   const oldPin = {...opened.descriptor, title: appId};
   latest = newEvent;
   await assert.rejects(service.prepareUpdate(oldPin, new AbortController().signal,
-    async request => { assert.equal(request.nextEventId, newEvent.id); return false; }, async () => true));
+    async request => { assert.equal(request.legacyManifest, true); assert.equal(request.nextEventId, newEvent.id); return false; }, async () => true));
   assert.equal(calls.length, count);
   const cancelled = new AbortController();
   await assert.rejects(service.prepareUpdate(opened.descriptor, cancelled.signal,

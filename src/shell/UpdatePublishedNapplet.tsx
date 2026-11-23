@@ -1,3 +1,5 @@
+import { LEGACY_MANIFEST_NOTICE } from './launch-access-copy';
+import { publishedOpenFailureText } from './published-settings-actions';
 import { PublishedLoadError } from '../napplets/loader';
 import { MEDIA_ACCESS_DETAIL } from '../runtime/support-report';
 import { useEffect, useRef, useState } from 'react';
@@ -62,9 +64,14 @@ export function UpdatePublishedNapplet({ session, check }: {
       request => requestDecision({ kind: 'access', request }, controller))
       .then(updated => { if (!controller.signal.aborted && !updated) setStatus('This is the latest verified version available from your Lookup relays.'); })
       .catch(error => {
-        if (!controller.signal.aborted) setStatus(error instanceof PublishedLoadError && error.code === 'PUBLISHED_NOT_FOUND'
-          ? 'The saved revision is unavailable. To choose a replacement, close this card, remove its Home pin and reopen the publication.'
-          : 'Update cancelled or unavailable. The current version remains open.');
+        if (controller.signal.aborted) return;
+        if (error instanceof PublishedLoadError && error.code === 'PUBLISHED_NOT_FOUND') {
+          setStatus('The saved revision is unavailable. To choose a replacement, close this card, remove its Home pin and reopen the publication.');
+        } else if (error instanceof PublishedLoadError && error.code === 'PUBLISHED_NO_DOWNLOAD_SERVER') {
+          setStatus(publishedOpenFailureText(error));
+        } else {
+          setStatus('Update cancelled or unavailable. The current version remains open.');
+        }
       })
       .finally(() => {
         if (pending.current === controller) pending.current = null;
@@ -91,6 +98,7 @@ function UpdateVersionReview({sessionId, request, decide}: {
   const updateSupport = publishedCapabilityCompatibility(request.domains, request.optionalDomains);
   return <View style={styles.card} testID={`published-update-review-${sessionId}`}>
     <Text accessibilityRole="header" style={styles.title}>Use this verified update?</Text>
+    {request.legacyManifest && <Text style={styles.detail}>{LEGACY_MANIFEST_NOTICE}</Text>}
     <Text style={styles.detail}>Publisher</Text><Text selectable style={styles.claim}>{request.publisher}</Text>
     <Text style={styles.detail}>Napplet</Text><Text selectable style={styles.claim}>{request.appId}</Text>
     <Text style={styles.detail}>Current event</Text><Text selectable style={styles.claim}>{request.previousEventId}</Text>

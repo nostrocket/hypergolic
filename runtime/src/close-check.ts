@@ -1,7 +1,7 @@
 import { CLOSE_CHECK_SERVICE, CLOSE_CHECK_TIMEOUT_MS, type CloseState } from '../../src/shell/close-check';
 
 /** Handles only a fixed trusted-host control and replies from its captured live guest. */
-export function installCloseCheck(source: Window, live: () => boolean, report: (id: string, state: CloseState) => void, checkpoint?: Readonly<{idle(): boolean}>): () => void {
+export function installCloseCheck(source: Window, live: () => boolean, report: (id: string, state: CloseState) => void, checkpoint?: Readonly<{idle(): boolean; send(message: object): void}>) {
   let pending: {id: string; deadline: number; timer: number} | null = null;
   const clear = () => { if (pending) window.clearTimeout(pending.timer); pending = null; };
   const finish = (state: CloseState) => {
@@ -20,24 +20,35 @@ export function installCloseCheck(source: Window, live: () => boolean, report: (
       const timeout = restore ? 15_000 : save ? 1_500 : CLOSE_CHECK_TIMEOUT_MS;
       pending = {id: value.id, deadline: performance.now() + timeout,
         timer: window.setTimeout(() => finish('unknown'), timeout)};
-      // The sandbox has an opaque origin; only this WindowProxy is a recipient.
-      if ((save || restore) && !checkpoint || save && !checkpoint?.idle()) {finish('unknown'); return;}
-      source.postMessage({type: restore ? 'hypergolic.restoreCheckpoint' : save ? 'hypergolic.checkpoint' : 'hypergolic.closeCheck',
-        id: restore ? value.id.replace('restore-', 'resume-') : value.id}, '*');
-    } else if (event.source === source && pending && pending.id.startsWith('resume-')) {
-      if (value.type === 'hypergolic.checkpoint.result' && value.id === pending.id) {
-        finish(Object.keys(value).length === 3 && value.state === 'saved' && checkpoint?.idle() ? 'clean' : 'unknown');
-      }
-    } else if (event.source === source && pending && pending.id.startsWith('restore-')) {
-      if (value.type === 'hypergolic.restoreCheckpoint.result' && value.id === pending.id.replace('restore-', 'resume-')) {
-        finish(Object.keys(value).length === 3 && value.state === 'restored' ? 'clean' : 'unknown');
-      }
-    } else if (event.source === source && pending && value.type === 'hypergolic.closeCheck.result' && value.id === pending.id) {
-      finish(Object.keys(value).length === 3 && ['clean', 'dirty', 'unknown'].includes(value.state) ? value.state : 'unknown');
+      if (save || restore) {
+        if (!checkpoint || (save && !checkpoint.idle())) {finish('unknown'); return;}
+        checkpoint.send({type: restore ? 'hypergolic.restoreCheckpoint' : 'hypergolic.checkpoint',
+          id: restore ? value.id.replace('restore-', 'resume-') : value.id});
+      } else source.postMessage({type:'hypergolic.closeCheck', id:value.id}, '*');
     }
   };
   window.addEventListener('message', receive);
-  return () => { clear(); window.removeEventListener('message', receive); };
+  return {
+    windowReply(event: MessageEvent): boolean {
+      if (!event.isTrusted || event.source !== source || event.origin !== 'null' || !live() || !pending ||
+          pending.id.startsWith('resume-') || pending.id.startsWith('restore-')) return false;
+      const value = event.data;
+      if (value?.type !== 'hypergolic.closeCheck.result' || value.id !== pending.id) return false;
+      const valid = event.ports.length === 0 && Object.keys(value).length === 3 &&
+        ['clean', 'dirty', 'unknown'].includes(value.state) && performance.now() < pending.deadline;
+      finish(valid ? value.state : 'unknown');
+      return valid;
+    },
+    checkpointResult(value: Record<string, unknown>) {
+      if (!live() || !pending || !checkpoint) return;
+      const exact = Object.keys(value).length === 3;
+      if (pending.id.startsWith('resume-') && value.type === 'hypergolic.checkpoint.result' && value.id === pending.id) {
+        finish(exact && value.state === 'saved' && checkpoint.idle() ? 'clean' : 'unknown');
+      } else if (pending.id.startsWith('restore-') && value.type === 'hypergolic.restoreCheckpoint.result' &&
+          value.id === pending.id.replace('restore-', 'resume-')) finish(exact && value.state === 'restored' ? 'clean' : 'unknown');
+    },
+    close() { clear(); window.removeEventListener('message', receive); },
+  };
 }
 
 export { CLOSE_CHECK_SERVICE };

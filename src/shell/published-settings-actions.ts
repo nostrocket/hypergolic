@@ -15,6 +15,7 @@ export function publishedOpenFailureText(error: unknown): string {
         case 'PUBLISHED_UNSUPPORTED_MANIFEST': return 'The signed napplet manifest uses an unsupported format.';
         case 'PUBLISHED_PIN_CONFLICT': return 'A different revision of this napplet is open or pinned. Open that card and check for an update.';
         case 'PUBLISHED_REVISION_CONFLICT': return 'Lookup returned conflicting signed revisions. Try again later.';
+        case 'PUBLISHED_NO_DOWNLOAD_SERVER': return 'The signed publication lists no download server for its HTML file.';
         case 'PUBLISHED_DOWNLOAD_UNAVAILABLE': return 'Hypergolic found the signed publication but could not download the napplet file. Try again.';
         case 'PUBLISHED_HASH_MISMATCH': return 'The downloaded file does not match the hash in the signed publication.';
         case 'PUBLISHED_INVALID_HTML': return 'The downloaded file is not in a supported napplet HTML format.';

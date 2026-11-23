@@ -29,12 +29,23 @@ export function observeHost(engine) {
   return withHost(engine, async (page, url) => {
     await page.addInitScript(() => {
       if (window !== window.top) return;
-      const messages = [];
+      const messages = [], requests = new Set();
       window.conformanceMessages = messages;
+      window.portThemeReply = false;
       window.HypergolicHost = {postMessage() {}};
       window.addEventListener('message', event => {
         if (event.source === document.querySelector('#napplet')?.contentWindow) {
           messages.push({type: event.data?.type, ports: event.ports.length});
+          if (event.data?.type !== 'napplet.hello' || event.ports.length !== 1) return;
+          const port = event.ports[0];
+          port.addEventListener('message', request => {
+            if (request.data?.type === 'theme.get') requests.add(request.data.id);
+          });
+          const send = port.postMessage.bind(port);
+          port.postMessage = value => {
+            if (value?.type === 'theme.get.result' && value.theme?.colors && requests.has(value.id)) window.portThemeReply = true;
+            send(value);
+          };
         }
       });
     });
@@ -49,8 +60,37 @@ export function observeHost(engine) {
       exposesTheme,
       sandbox: document.querySelector('#napplet').getAttribute('sandbox'),
       srcdoc: document.querySelector('#napplet').hasAttribute('srcdoc'),
-      messages: window.conformanceMessages,
+      messages: window.conformanceMessages, portThemeReply: window.portThemeReply,
     }), exposesTheme);
+  });
+}
+
+// Hold the optional environment exchange while the guest uses its public API.
+export function observeFirstThemeRequest(engine) {
+  return withHost(engine, async (page, url) => {
+    await page.addInitScript(() => {
+      if (window !== window.top) return;
+      window.HypergolicHost = {postMessage() {}};
+      window.addEventListener('message', event => {
+        if (event.source !== document.querySelector('#napplet')?.contentWindow) return;
+        if (event.data?.type !== 'napplet.hello' || event.ports.length !== 1) return;
+        event.ports[0].addEventListener('message', request => {
+          if (request.data?.type === 'shell.ready') {
+            request.stopImmediatePropagation();
+            window.heldReadiness = true;
+          }
+        });
+      });
+    });
+    await page.goto(url + 'ux-lab');
+    await page.waitForFunction(() => window.heldReadiness === true, undefined, {timeout:5000});
+    return page.frameLocator('#napplet').locator('body').evaluate(async () => {
+      const api = window.napplet;
+      const beforeShellInit = Boolean(api.theme) && api.shell.supports('theme') &&
+        !api.shell.supports('relay') && !api.shell.supports('unknown') && api.shell.services.length === 0;
+      const theme = await api.theme.get();
+      return {beforeShellInit, first: Boolean(theme?.colors) && api.shell.services.length === 0};
+    }, undefined, {timeout:5000});
   });
 }
 
@@ -87,16 +127,6 @@ export function observeIdentity() {
     if (account !== '1'.repeat(64)) throw new Error('Connected account control failed');
     await page.evaluate(() => { window.identityAvailable = false; });
     if (await read() !== account) return false;
-    const raw = await identity.evaluate(() => new Promise(resolve => {
-      const listener = event => {
-        if (event.source !== parent || event.data?.id !== 'extra-fields') return;
-        window.removeEventListener('message', listener);
-        resolve(event.data);
-      };
-      window.addEventListener('message', listener);
-      parent.postMessage({type:'identity.getPublicKey', id:'extra-fields', user:'forged'}, '*');
-    }), undefined, {timeout:5000});
-    if (raw.pubkey !== account || Object.hasOwn(raw, 'error')) return false;
     await identity.evaluate(() => {
       window.accountChanges = [];
       window.napplet.identity.onChanged(key => window.accountChanges.push(key));

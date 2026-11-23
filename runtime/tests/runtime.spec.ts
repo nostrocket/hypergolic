@@ -1,3 +1,5 @@
+import {tracePort} from './port-trace';
+import {holdShellReadiness} from './published-wire';
 import { test, expect, type Page, type Frame } from '@playwright/test';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -5,24 +7,23 @@ import { createHash } from 'node:crypto';
 // Browser-only diagnostic sink. It is installed on the top document only and
 // does not claim to emulate Android's origin-scoped WebMessageListener security.
 async function instrument(page: Page, holdReady = false) {
-  await page.addInitScript(({ holdReady }) => {
+  await tracePort(page,['shell.ready','shell.init','theme.get','theme.get.result']);
+  if (holdReady) await holdShellReadiness(page);
+  await page.addInitScript(() => {
     const state = window as any;
     state.__received = [];
     window.addEventListener('message', event => {
       state.__received.push(event.data);
-      if (window === window.top && state.__holdReady && event.data?.type === 'shell.ready' && Object.keys(event.data).length === 1) {
-        event.stopImmediatePropagation();
-      }
+
     });
     if (window !== window.top) return;
-    state.__holdReady = holdReady;
     state.__diagnostics = [];
     Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('Storage disabled', 'SecurityError'); } });
     Object.defineProperty(window, 'sessionStorage', { get() { throw new DOMException('Storage disabled', 'SecurityError'); } });
     Object.defineProperty(window, 'HypergolicHost', { value: {
       postMessage: (value: string) => state.__diagnostics.push(JSON.parse(value)),
     } });
-  }, { holdReady });
+  });
 }
 const diagnostics = (page: Page) => page.evaluate(() => (window as any).__diagnostics);
 async function open(page: Page, sessionId = 'test-session', holdReady = false): Promise<Frame> {
@@ -153,33 +154,27 @@ test('real Kehto handshake and theme work with top-document DOM storage disabled
   });
   expect(result).toEqual({ environment: { capabilities: { domains: ['theme'] }, services: ['theme', 'hypergolic.close-check.v1'] },
     services: ['theme', 'hypergolic.close-check.v1'], theme: true, relay: false, upload: false, unknown: false, calls: 1, domains: ['shell', 'theme'] });
-  expect((await messages(frame)).filter((m: any) => m.type === 'shell.init')).toHaveLength(1);
-  await frame.evaluate(() => {
-    parent.postMessage({ type: 'shell.ready' }, '*');
-    parent.postMessage({ type: 'shell.ready' }, '*');
-    parent.postMessage({ type: 'theme.get', id: 'barrier' }, '*');
-  });
-  await expect.poll(async () => (await messages(frame)).some((m: any) => m.id === 'barrier')).toBe(true);
-  expect((await messages(frame)).filter((m: any) => m.type === 'shell.init')).toHaveLength(1);
+  const initCount = () => page.evaluate(() => (window as any).portTrace.replies.filter((m:any) => m.type === 'shell.init').length);
+  expect(await initCount()).toBe(1);
+  await frame.evaluate(async () => {await (window as any).napplet.shell.ready(); await (window as any).napplet.theme.get();});
+  expect(await initCount()).toBe(1);
+  expect((await messages(frame)).some((m:any) => m.type === 'shell.init')).toBe(false);
   expect(await diagnostics(page)).toEqual([{ type: 'ready', sessionId: 'test-session' }]);
 });
 
-test('pre-ready traffic cannot establish a session and forged readiness carries no authority', async ({ page }) => {
-  const frame = await open(page, 'held-session', true);
-  await frame.evaluate(() => {
-    parent.postMessage({ type: 'theme.get', id: 'before-ready' }, '*');
-    parent.postMessage({ type: 'shell.ready', dTag: 'forged', capabilities: ['relay'] }, '*');
+test('verified bundled guest reads its granted Theme while optional Shell readiness is withheld', async ({page}) => {
+  const frame = await open(page,'held-session',true);
+  const observed = await frame.evaluate(async () => {
+    const api = (window as any).napplet;
+    return {colors:(await api.theme.get()).colors,services:api.shell.services,relay:api.shell.supports('relay')};
   });
-  await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 150)));
-  expect(await diagnostics(page)).toEqual([]);
-  expect((await messages(frame)).filter((m: any) => m.type === 'shell.init' || m.id === 'before-ready')).toEqual([]);
-  await page.evaluate(() => { (window as any).__holdReady = false; });
-  await frame.evaluate(() => parent.postMessage({ type: 'shell.ready' }, '*'));
-  await expect.poll(() => diagnostics(page)).toEqual([{ type: 'ready', sessionId: 'held-session' }]);
-  expect(await frame.evaluate(() => (window as any).napplet.shell.supports('relay'))).toBe(false);
+  expect(observed.services).toEqual([]);
+  expect(observed.relay).toBe(false);
+  expect(observed.colors.primary).toBeTruthy();
+  expect(await diagnostics(page)).toEqual([{type:'ready',sessionId:'held-session'}]);
 });
 
-test('a malformed Theme read receives a refusal and ungranted operations remain unavailable', async ({ page }) => {
+test('window requests stay unanswered and ungranted operations remain unavailable', async ({ page }) => {
   const frame = await open(page);
   await frame.evaluate(() => {
     for (const message of [null, [], 'shell.ready', { type: 'theme.get' },
@@ -191,9 +186,9 @@ test('a malformed Theme read receives a refusal and ungranted operations remain 
       { type: 'shell.supports', id: 'probe' }]) parent.postMessage(message, '*');
     parent.postMessage({ type: 'theme.get', id: 'valid-after-denials' }, '*');
   });
-  await expect.poll(async () => (await messages(frame)).some((m: any) => m.id === 'valid-after-denials')).toBe(true);
+  await frame.evaluate(() => (window as any).napplet.theme.get());
   const replies = await messages(frame);
-  expect(replies.filter((m: any) => m.id === 'extra')).toEqual([{type:'theme.get.result', id:'extra', error:'invalid-request'}]);
+  expect(replies.filter((m: any) => m.id === 'extra' || m.id === 'valid-after-denials')).toEqual([]);
   expect(replies.filter((m: any) => ['sign', 'write', 'probe', 'upload-info', 'upload-forged'].includes(m.id))).toEqual([]);
   expect(await diagnostics(page)).toHaveLength(1);
 });
@@ -208,8 +203,7 @@ test('unregistered sibling and forged synthetic source cannot obtain capabilitie
     const source = document.querySelector<HTMLIFrameElement>('#napplet')!.contentWindow;
     window.dispatchEvent(new MessageEvent('message', { source, data: { type: 'theme.get', id: 'synthetic' } }));
   });
-  await frame.evaluate(() => parent.postMessage({ type: 'theme.get', id: 'after-sibling' }, '*'));
-  await expect.poll(async () => (await messages(frame)).some((m: any) => m.id === 'after-sibling')).toBe(true);
+  await frame.evaluate(() => (window as any).napplet.theme.get());
   const intruder = page.frames().find(f => f.parentFrame() === page.mainFrame() && f !== frame)!;
   expect(await intruder.evaluate(() => (window as any).results)).toEqual([]);
   expect((await messages(frame)).some((m: any) => m.id === 'synthetic')).toBe(false);
@@ -356,13 +350,13 @@ test('Kehto request IDs use secure random bytes when randomUUID is unavailable',
   });
   expect(result.lengths).toEqual([16]);
   expect(['#F5A04B', '#AA4708']).toContain(result.theme.colors.primary);
-  const requests = await page.evaluate(() => (window as any).__received.filter((value: any) => value?.type === 'theme.get'));
+  const requests = await page.evaluate(() => (window as any).portTrace.requests.filter((value: any) => value?.type === 'theme.get'));
   expect(requests.at(-1).id).toMatch(/^hg-[1-9][0-9]*-[0-9a-f]{32}$/);
 });
 
 test('Kehto refuses to emit a request when secure randomness is unavailable', async ({ page }) => {
   const frame = await open(page, 'no-secure-randomness');
-  const count = () => page.evaluate(() => (window as any).__received.filter((value: any) => value?.type === 'theme.get').length);
+  const count = () => page.evaluate(() => (window as any).portTrace.requests.filter((value: any) => value?.type === 'theme.get').length);
   const before = await count();
   const result = await frame.evaluate(async () => {
     Object.defineProperty(crypto, 'randomUUID', { value: undefined, configurable: true });

@@ -28,7 +28,7 @@ export function createLegacyMount(context: LegacyReadOnlyContext | undefined, ap
     guard.navigate('#/post/' + article.address);
   }, recipe ? () => selectRecipe(null) : undefined);
   document.body.insertBefore(address.element, frame);
-  const receiver = createLegacyReadOnlyReceiver({frame, source, session: nonce, live, relays: context.relays,
+  const receiver = createLegacyReadOnlyReceiver({frame, source, session: nonce, live, send: guard.send, relays: context.relays,
     subscribe: (request, deliver) => native.legacySubscribe(request, message => guard.run(() => deliver(message), new TextEncoder().encode(JSON.stringify(message)).length)),
     close: request => native.legacyClose(request),
     article: () => address.delivered(),

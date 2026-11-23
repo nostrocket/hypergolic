@@ -6,6 +6,7 @@ import type { NostrFilter } from '@napplet/sdk';
 
 const HEX64 = /^[0-9a-f]{64}$/;
 const DOMAIN = /^[a-z][a-z0-9-]{0,63}$/;
+const MEDIA_TYPE = /^([a-z0-9!#$%&'*+.^_`|~-]+\/[a-z0-9!#$%&'*+.^_`|~-]+)(?:[ \t]*;[ \t]*[a-z0-9!#$%&'*+.^_`|~-]+=(?:[a-z0-9!#$%&'*+.^_`|~-]+|"(?:[^"\\\r\n]|\\[^\r\n])*"))*$/i;
 const MAX_EVENT_BYTES = 64 * 1024;
 const encoder = new TextEncoder();
 export const KIND = 35129;
@@ -117,9 +118,10 @@ function screenshotTag(tag: string[]): Media | undefined {
   const singleton = (key: string) => fields.get(key)?.length === 1 ? fields.get(key)?.[0] : undefined;
   const hash = singleton('x');
   if (!hash || !HEX64.test(hash)) return;
-  const mime = singleton('m');
-  if (mime && /^image\/[a-z0-9.+-]+$/i.test(mime) && !isImageMime(mime)) return;
-  return { hash, mime: mime && isImageMime(mime) ? mime : undefined, alt: displayText(singleton('alt') ?? '', 240) };
+  // Ignore malformed optional fields. A valid declaration must agree with the decoded raster.
+  const declared = MEDIA_TYPE.exec(singleton('m') ?? '')?.[1]?.toLowerCase();
+  if (declared && !isImageMime(declared)) return;
+  return { hash, mime: declared && isImageMime(declared) ? declared : undefined, alt: displayText(singleton('alt') ?? '', 240) };
 }
 
 function validServerHints(tags: string[][]): boolean {
@@ -199,7 +201,6 @@ export function parsePublication(signed: VerifiedEvent): Publication | undefined
     for (const tag of tags('screenshot')) {
       const descriptor = screenshotTag(tag);
       if (descriptor) screenshots.push(descriptor);
-      if (screenshots.length === 4) break;
     }
   }
   // Only validated origins from this signed publication accompany its artwork.

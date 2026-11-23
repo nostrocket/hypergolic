@@ -69,6 +69,18 @@ test('only the selected configured catalog receives automatic version review', a
   await createDiscoveryController(other.ports).refresh(); assert.equal(other.updates(), 0);
 });
 
+test('automatic catalog refresh keeps the saved release when a candidate uses a legacy manifest', async () => {
+  const env = setup(address);
+  env.set(published('1'));
+  env.ports.updatePublished = async (_session, _signal, reviewVersion) => {
+    assert.equal(await reviewVersion({...update, legacyManifest:true}), false);
+    return null;
+  };
+  await createDiscoveryController(env.ports).refresh();
+  assert.deepEqual(env.state().sessions, [published('1')]);
+  assert.deepEqual(env.discarded, []);
+});
+
 test('changed access is still sent to the trusted review and denial keeps the old pin', async () => {
   const env = setup(address); env.set(published('1')); let reviews = 0;
   env.ports.review = async request => { reviews++; assert.deepEqual(request.optionalDomains, ['upload']); return false; };

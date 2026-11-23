@@ -9,7 +9,7 @@ import {loadTrace, sends} from '../reference-shell/trace.mts';
 test('Lean keys preserves registration and duplicate-action replies with an unbound shortcut', () => {
   const {steps} = loadTrace('keys');
   const messages: object[] = [];
-  const host = createKeysSession({postMessage: (message: object) => messages.push(message)} as unknown as Window, () => true);
+  const host = createKeysSession(message => messages.push(message), () => true);
   try {
     const first = steps[3];
     host.receive(first.input.msg);

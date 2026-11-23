@@ -92,7 +92,7 @@
   "NAP-SHELL": {
     "repo": "napplet/naps",
     "ref": "master",
-    "revision": "5ac0490461ca6fec2f0d2e45b4835cf9bc08de24",
+    "revision": "377bf939c6c906817084b43dd21d424de646dbc2",
     "path": "naps/NAP-SHELL.md"
   },
   "NAP-STORAGE": {

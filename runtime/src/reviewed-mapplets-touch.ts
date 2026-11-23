@@ -1,7 +1,6 @@
-const mappletsVersion = '3a5eeb98b3251a48a3ff1e32cb92ce76b7488b721dd492ae1659e90eeffe76f5';
-type PublishedPin = Readonly<{published: boolean; appId: string; aggregateHash: string}>;
-export function supportsMappletsTouchSelection(pin: PublishedPin): boolean {
-  return pin.published && pin.appId === 'mapplets' && pin.aggregateHash === mappletsVersion;
+import {reviewedPresentationApp, type PresentationPin} from './reviewed-presentation-pin';
+export function supportsMappletsTouchSelection(pin: PresentationPin): boolean {
+  return reviewedPresentationApp(pin) === 'mapplets';
 }
 export const mappletsTouchStyle = '<style>html body #map .maplibregl-canvas.is-selecting{touch-action:none}</style>';
 

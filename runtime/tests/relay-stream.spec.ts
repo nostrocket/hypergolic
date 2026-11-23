@@ -1,16 +1,18 @@
+import {tracePort} from './port-trace';
 import { test, expect, type Page } from '@playwright/test';
 import { finalizeEvent } from 'nostr-tools/pure';
 import { readFileSync } from 'node:fs';
 const event=JSON.parse(readFileSync(new URL('../../tests/native/feed-query/events.json',import.meta.url),'utf8'))[0];
 // Native-port double: genuine SDK/Kehto, signed validation and captured recipient only.
 async function open(page:Page, initialLimit = 2) {
+  await tracePort(page,['relay.close','relay.event','relay.closed']);
   await page.clock.install();
   await page.addInitScript(()=> {
     if(window!==window.top)return;
     const listeners=new Set<(event:{data:string})=>void>();
     const deliveries=new Map<string,number>();let controlRevision=0;
     const root=window as any;
-    root.streamTest={requests:[],guestClose:null,pushControl(envelope:any,active:boolean){
+    root.streamTest={requests:[],pushControl(envelope:any,active:boolean){
       const data=JSON.stringify({type:'capability.stream-control',sessionId:envelope.sessionId,sequence:envelope.sequence,active,revision:++controlRevision});
       for(const listener of listeners)listener({data});
     },push(envelope:any,response:any){
@@ -18,7 +20,6 @@ async function open(page:Page, initialLimit = 2) {
       const data=JSON.stringify({type:'capability.stream',sessionId:envelope.sessionId,sequence:envelope.sequence,delivery,response:JSON.stringify(response)});
       for(const listener of listeners)listener({data});
     }};
-    window.addEventListener('message',event=>{if(event.data?.type==='relay.close')root.streamTest.guestClose=event.data;});
     root.HypergolicHost={addEventListener:(_:string,listener:any)=>listeners.add(listener),removeEventListener:(_:string,listener:any)=>listeners.delete(listener),
       postMessage(raw:string){const envelope=JSON.parse(raw);root.streamTest.requests.push(envelope);
         if(envelope.type==='capability'&&JSON.parse(envelope.message).type==='relay.query')for(const listener of listeners)listener({data:JSON.stringify({type:'capability.result',sessionId:envelope.sessionId,sequence:envelope.sequence,response:JSON.stringify({type:'relay.query.result',id:JSON.parse(envelope.message).id,events:[]})})});
@@ -43,10 +44,10 @@ test('canonical stream survives EOSE and ordinary lease duration, shares native 
   await page.evaluate(({envelope,subId,event})=>(window as any).streamTest.push(envelope,{type:'relay.event',subId,result:{event}}),{envelope:h.envelope,subId:h.subId,event});
   await expect.poll(()=>h.frame.evaluate(()=>(window as any).events)).toEqual([event.id,event.id]);
   await h.frame.evaluate(()=>(window as any).handle.close());
-  await expect.poll(()=>page.evaluate(()=>(window as any).streamTest.guestClose!==null)).toBe(true);
+  await expect.poll(()=>page.evaluate(()=>(window as any).portTrace.requests.length > 0)).toBe(true);
   const captured=await page.evaluate(()=>(window as any).streamTest.requests.filter((e:any)=>['relay-stream','capability'].includes(e.type)));
   expect(captured.map((e:any)=>e.sequence)).toEqual([1,4,6]);
-  expect(JSON.parse(captured[2].message)).toEqual(await page.evaluate(()=>(window as any).streamTest.guestClose));
+  expect(JSON.parse(captured[2].message)).toEqual(await page.evaluate(()=>(window as any).portTrace.requests.at(-1)));
   await page.evaluate(({envelope,subId,event})=>(window as any).streamTest.push(envelope,{type:'relay.event',subId,result:{event}}),{envelope:h.envelope,subId:h.subId,event});
   await h.frame.evaluate(async()=>await (window as any).napplet.theme.get());
   expect(await h.frame.evaluate(()=>(window as any).events)).toEqual([event.id,event.id]);
@@ -86,11 +87,6 @@ test('trusted peer-live delivery works before aggregate EOSE and keeps private m
   const {frame, envelope, subId} = await open(page, 0);
   const response = {type: 'relay.event', subId, live: true, result: {event}};
   await frame.evaluate(({envelope, response}) => {
-    const root = window as any;
-    root.relayMessages = [];
-    window.addEventListener('message', event => {
-      if (event.source === parent && event.data?.type === 'relay.event') root.relayMessages.push(event.data);
-    });
     parent.postMessage({type: 'hypergolic.native-response', message: JSON.stringify({
       type: 'capability.stream', sessionId: envelope.sessionId, sequence: envelope.sequence, delivery: 1,
       response: JSON.stringify(response),
@@ -100,7 +96,7 @@ test('trusted peer-live delivery works before aggregate EOSE and keeps private m
   expect(await frame.evaluate(() => (window as any).events)).toEqual([]);
   await page.evaluate(({envelope, response}) => (window as any).streamTest.push(envelope, response), {envelope, response});
   await expect.poll(() => frame.evaluate(() => (window as any).events)).toEqual([event.id]);
-  expect(await frame.evaluate(() => (window as any).relayMessages)).toEqual([{type: 'relay.event', subId, result: {event}}]);
+  expect(await page.evaluate(() => (window as any).portTrace.replies.filter((value:any) => value.type === 'relay.event'))).toEqual([{type: 'relay.event', subId, result: {event}}]);
   expect(await frame.evaluate(() => (window as any).eose)).toBe(0);
 });
 
@@ -116,14 +112,8 @@ test('aggregate EOSE cannot authorize a zero-only event without its peer-live ma
   expect(await frame.evaluate(() => (window as any).events)).toEqual([]);
 });
 
-async function observeQuotaDenials(frame: Awaited<ReturnType<typeof open>>['frame']) {
-  await frame.evaluate(() => {
-    const root = window as any;
-    root.quotaDenials = 0;
-    window.addEventListener('message', event => {
-      if (event.source === parent && event.data?.type === 'relay.closed') root.quotaDenials++;
-    });
-  });
+function closedReplies(page: Page) {
+  return page.evaluate(() => (window as any).portTrace.replies.filter((reply:any) => reply.type === 'relay.closed').length);
 }
 function admittedTypes(page: Page) {
   return page.evaluate(() => (window as any).streamTest.requests
@@ -133,13 +123,12 @@ function admittedTypes(page: Page) {
 
 test('three raw SDK streams reach native, the fourth closes, and an explicit close restores capacity', async ({page}) => {
   const {frame} = await open(page);
-  await observeQuotaDenials(frame);
   await frame.evaluate(() => {
     const root = window as any;
     for (let index = 0; index < 3; index++) root.napplet.relay.subscribe({kinds: [1], limit: 2}, () => {}, () => {});
   });
   await expect.poll(() => admittedTypes(page)).toEqual(['relay.subscribe', 'relay.subscribe', 'relay.subscribe']);
-  await expect.poll(() => frame.evaluate(() => (window as any).quotaDenials)).toBe(1);
+  await expect.poll(() => closedReplies(page)).toBe(1);
   await frame.evaluate(() => {
     const root = window as any;
     root.handle.close();
@@ -151,7 +140,6 @@ test('three raw SDK streams reach native, the fourth closes, and an explicit clo
 for (const outboxFirst of [false, true]) {
   test(`mixed SDK streams stay at two when ${outboxFirst ? 'Outbox' : 'raw Relay'} arrives first`, async ({page}) => {
     const {frame} = await open(page);
-    await observeQuotaDenials(frame);
     await frame.evaluate(outboxFirst => {
       const root = window as any;
       if (outboxFirst) root.handle.close();
@@ -159,7 +147,7 @@ for (const outboxFirst of [false, true]) {
       if (outboxFirst) root.napplet.relay.subscribe({kinds: [1], limit: 2}, () => {}, () => {});
       root.napplet.relay.subscribe({kinds: [1], limit: 2}, () => {}, () => {});
     }, outboxFirst);
-    await expect.poll(() => frame.evaluate(() => (window as any).quotaDenials)).toBe(1);
+    await expect.poll(() => closedReplies(page)).toBe(1);
     const expected = outboxFirst ? ['outbox.subscribe', 'relay.subscribe'] : ['relay.subscribe', 'outbox.subscribe'];
     expect((await admittedTypes(page)).slice(outboxFirst ? 1 : 0)).toEqual(expected);
   });
@@ -183,19 +171,18 @@ for(const mode of ['signature','subId'])test(`invalid ${mode} is terminal withou
 
 test('native suspension preserves initial subscription timeout and foreground resumes its deadline',async({page})=> {
   const h=await open(page);
-  await h.frame.evaluate(()=>{(window as any).closedCount=0;window.addEventListener('message',event=>{if(event.source===parent&&event.data?.type==='relay.closed')(window as any).closedCount++;});});
   await page.evaluate(({envelope})=>(window as any).streamTest.pushControl(envelope,false),{envelope:h.envelope});
   await page.clock.fastForward(60_000);
   expect(await page.evaluate(()=>(window as any).streamTest.requests.filter((e:any)=>e.type==='capability').length)).toBe(0);
   await page.evaluate(({envelope})=>(window as any).streamTest.pushControl(envelope,true),{envelope:h.envelope});
   await page.clock.fastForward(27_000);
-  await expect.poll(()=>h.frame.evaluate(()=>(window as any).closedCount)).toBe(1);
+  await expect.poll(()=>closedReplies(page)).toBe(1);
   expect(await page.evaluate(()=>(window as any).streamTest.requests.filter((e:any)=>e.type==='capability'&&JSON.parse(e.message).type==='relay.close').length)).toBe(1);
 });
 test('unsupported encrypted SDK subscription is explicitly closed before native admission',async({page})=> {
   const h=await open(page);
-  await h.frame.evaluate(()=>{(window as any).closedCount=0;window.addEventListener('message',event=>{if(event.source===parent&&event.data?.type==='relay.closed')(window as any).closedCount++;});(window as any).napplet.relay.subscribe({kinds:[4]},()=>{},()=>{});});
-  await expect.poll(()=>h.frame.evaluate(()=>(window as any).closedCount)).toBe(1);
+  await h.frame.evaluate(()=>{(window as any).napplet.relay.subscribe({kinds:[4]},()=>{},()=>{});});
+  await expect.poll(()=>closedReplies(page)).toBe(1);
   expect(await page.evaluate(()=>(window as any).streamTest.requests.filter((e:any)=>e.type==='relay-stream').length)).toBe(1);
 });
 
@@ -211,7 +198,6 @@ function finishScoped(page: Page, envelope: {message: string}, sessionId?: strin
 }
 async function scopedBurst(page: Page, count: number) {
   const {frame} = await open(page);
-  await observeQuotaDenials(frame);
   await frame.evaluate(count => {
     const root = window as any;
     root.handle.close();
@@ -225,7 +211,7 @@ async function scopedBurst(page: Page, count: number) {
 
 test('scoped burst reserves at most three starts and drains only after the exact terminal ACK', async ({page}) => {
   const frame = await scopedBurst(page,7);
-  await expect.poll(() => frame.evaluate(() => (window as any).quotaDenials)).toBe(1);
+  await expect.poll(() => closedReplies(page)).toBe(1);
   const [first] = await scopedStarts(page);
   await frame.evaluate(envelope => parent.postMessage({type:'hypergolic.native-response',message:JSON.stringify({
     type:'capability.stream', sessionId:envelope.sessionId, sequence:envelope.sequence, delivery:1,
@@ -262,7 +248,7 @@ test('queued publisher close, active close, and expired starts cannot dispatch s
   await expect.poll(async () => (await scopedStarts(page)).length).toBe(4);
   expect(JSON.parse((await scopedStarts(page)).at(-1).message).relay).toBe('wss://peer-4.nostr.net');
   await page.clock.fastForward(1001);
-  await expect.poll(() => frame.evaluate(() => (window as any).quotaDenials)).toBe(2);
+  await expect.poll(() => closedReplies(page)).toBe(2);
   await finishScoped(page,third);
   expect(await scopedStarts(page)).toHaveLength(4);
 });

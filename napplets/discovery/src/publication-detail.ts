@@ -100,7 +100,7 @@ export function renderPublicationDetail(detail: HTMLElement, entry: CatalogEntry
   explanation.hidden = !explanation.textContent;
   actions.append(announcement);
   const preview = node('div', 'detail-art');
-  screenshot(preview, app.screenshots[0], media, false);
+  screenshot(preview, app.screenshots, media);
   const about = node('div', 'detail-intro');
   about.append(node('p', 'description', app.description || 'The publisher did not provide a description.'));
   const timestamp = publicationTimestamp(app.signed.event.created_at);

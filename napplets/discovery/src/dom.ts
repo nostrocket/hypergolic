@@ -94,11 +94,10 @@ function labelImage(result: HTMLImageElement, alt: string, width: number, height
   return result;
 }
 
-export function screenshot(anchor: HTMLElement, descriptor: Media | undefined, media: ViewMedia, decorate: boolean): void {
-  if (!descriptor) return;
-  media.show(anchor, descriptor, img => {
+export function screenshot(anchor: HTMLElement, candidates: readonly Media[], media: ViewMedia): void {
+  media.showFirstScreenshot(anchor, candidates, (img, descriptor) => {
     const frame = node('figure', 'preview');
-    frame.append(labelImage(img, decorate ? '' : descriptor.alt || '', 800, 300));
+    frame.append(labelImage(img, descriptor.alt || '', 800, 300));
     anchor.replaceChildren(frame);
   });
 }

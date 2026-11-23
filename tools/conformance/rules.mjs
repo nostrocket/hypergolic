@@ -3,9 +3,11 @@ import {componentCases} from './component-cases.mjs';
 // Stable IDs identify individual observations. An issue may cover additional requirements.
 export const rules = [
   ...componentCases.map(([id, domain, , name]) => [id, domain === 'NIP-5D' ? domain : 'NAP-' + domain, '', name]),
+  ['resource-svg-output', 'NAP-RESOURCE', 'default-resource-policy', 'Return raster image bytes for an SVG illustration in a mixed batch'],
   ['keys-registration', 'NAP-KEYS', 'wire-protocol', 'Acknowledge a registered keyboard action'],
   ['media-destroy', 'NAP-MEDIA', 'wire-protocol', 'Preserve the target session when requesting playback teardown'],
   ['modern-manifest', 'NIP-5D', 'identity', 'Open a signed single-hash manifest'],
+  ['implied-html-wrappers', 'NIP-5D', 'manifest', 'Verify signed HTML with an implied root, head and body'],
   ['artifact-integrity', 'NIP-5D', 'identity', 'Reject changed artifact bytes'],
   ['legacy-manifest', 'NIP-5D', 'manifest', 'Require the x tag on a legacy-shaped named manifest', 104],
   ['launch-icon-format', 'NIP-5D', 'icon', 'Use generic launch artwork for an unsupported GIF icon'],
@@ -18,9 +20,11 @@ export const rules = [
   ['theme-reply', 'NAP-THEME', 'error-handling', 'Return the correlated Theme result on quota refusal'],
   ['cleartext-publication', 'NIP-5D', 'security-considerations', 'Refuse encrypted Relay and Outbox requests before review'],
   ...['chromium', 'webkit'].flatMap(engine => [
+    [engine + '-first-domain-call', 'NAP-SHELL', 'shell-behavior', engine + ' answers a granted Theme request before Shell readiness'],
+    [engine + '-early-discovery', 'NAP-SHELL', 'schemas', engine + ' reports exposed domains before receiving the Shell environment'],
     [engine + '-environment', 'NAP-SHELL', 'api-surface', engine + ' exposes the granted Theme service through its shell environment'],
     [engine + '-sandbox', 'NIP-5D', 'transport', engine + ' uses the scripts-only iframe sandbox'],
     [engine + '-srcdoc', 'NIP-5D', 'identity', engine + ' mounts the fixture with srcdoc'],
-    [engine + '-hello', 'NIP-5D', 'transport', engine + ' transfers one port and carries startup NAP traffic off the window', 98],
+    [engine + '-hello', 'NIP-5D', 'transport', engine + ' transfers one port and carries startup NAP traffic off the window'],
   ]),
 ].map(([id, spec, section, title, issue]) => ({id, spec, section, title, issue}));

@@ -1,6 +1,8 @@
 import {publishedAppLabel} from '../napplets/published-identity.ts';
 import { MEDIA_ACCESS_DETAIL } from '../runtime/support-report.ts';
 
+export const LEGACY_MANIFEST_NOTICE = 'This release uses an older publication format. Hypergolic verified its signature and checked its HTML against the hash in the signed file listing. Opening it uses legacy compatibility.';
+
 const capabilityCopy = new Map<string, readonly [string, string]>([
   ['shell', ['Shell connection', 'Connect to Hypergolic and check which capabilities are available.']],
   ['lists', ['Public recommendations', 'Ask to add an app to your public recommendations. You review the app and relays before publishing.']],

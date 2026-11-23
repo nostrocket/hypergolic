@@ -1,6 +1,6 @@
 # Intent and inter-napplet communication
 
-Verified named and snapshot NIP-5D handlers use [NAP-INTENT at 43cb3a4](https://github.com/napplet/naps/blob/43cb3a4e855570ec4b90b9cc05f0c721e5ad0aab/naps/NAP-INTENT.md) with the existing Kehto window-message binding. Legacy handlers retain their [a040914 Intent](https://github.com/napplet/naps/blob/a040914b4bbd3a5cd8a14b0f316a723c968ebfb2/naps/NAP-INTENT.md) delivery over an INC topic. The modern browser API is checked against the [SDK at efd5aa1](https://github.com/napplet/web/blob/efd5aa103359f1b150dfbb8870fa23e90fbc5540/packages/nap/src/intent/shim.ts).
+Verified named and snapshot NIP-5D handlers use [NAP-INTENT at 43cb3a4](https://github.com/napplet/naps/blob/43cb3a4e855570ec4b90b9cc05f0c721e5ad0aab/naps/NAP-INTENT.md) over the [private connection](published-open.md#guest-transport) established at launch. Legacy handlers retain their [a040914 Intent](https://github.com/napplet/naps/blob/a040914b4bbd3a5cd8a14b0f316a723c968ebfb2/naps/NAP-INTENT.md) delivery over an INC topic. The modern browser API is checked against the [SDK at efd5aa1](https://github.com/napplet/web/blob/efd5aa103359f1b150dfbb8870fa23e90fbc5540/packages/nap/src/intent/shim.ts).
 
 ## Handler selection and review
 

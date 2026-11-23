@@ -81,7 +81,7 @@ verified title, manifest kind, full event ID and publisher from the native
 registration. A named publication with a literal `5129:<eventId>` identifier
 retains its own identity and review label.
 
-The host claims the handle internally and delivers ordered UTF-8 text fragments of up to 256 KiB only to its exact top-level packaged document and native generation. Each message carries a bounded JSON header followed by a newline and the original text. Fragment boundaries preserve Unicode scalars. The runtime rechecks original bytes/aggregate, inserts leading CSP before publisher markup, and mounts an opaque sandboxed guest with only exact admitted grants. The verifier requires leading doctype, html and head so no publisher content precedes CSP. Each domain still needs its owning native operation policy. The theme-only signed host fixture is a narrower QA composition, not the current published-domain limit.
+The host claims the handle internally and delivers ordered UTF-8 text fragments of up to 256 KiB only to its exact top-level packaged document and native generation. Each message carries a bounded JSON header followed by a newline and the original text. Fragment boundaries preserve Unicode scalars. The runtime rechecks original bytes/aggregate, inserts leading CSP before publisher markup, and mounts an opaque sandboxed guest with only exact admitted grants. The verifier requires a leading HTML doctype. The runtime places its policy at the start of the explicit or implied head. [Supported document forms](published-network.md#published-html) Each domain still needs its owning native operation policy. The theme-only signed host fixture is a narrower QA composition, not the current published-domain limit.
 
 ## Testing
 

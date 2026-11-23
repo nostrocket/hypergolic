@@ -34,13 +34,12 @@ for (const [name, hash, recipe] of [['recipe-cards', '9067048a9ce80d7e79ea76b960
     expect(await page.evaluate(() => (window as any).__legacy.requests.every((r: any) => r.type === 'relay.subscribe' && r.filters.every((f: any) => f.limit <= 32)))).toBe(true);
   });
 }
-test('guest and forged raw writes never dispatch; caller IDs are rewritten and stale replies rejected', async ({page}) => {
+test('guest writes never dispatch; caller IDs are rewritten and stale replies rejected', async ({page}) => {
   const frame = await setup(page, demo); await expect.poll(() => frame.locator('body').evaluate(() => (window as any).opened)).toBe(true);
   await frame.locator('body').evaluate(() => {
     const state = window as any;
     for (const operation of ['EVENT', 'AUTH', 'signEvent', 'exportPrivateKey', 'upload']) {
       try {state.ws.send(JSON.stringify([operation, 'x', {}]));} catch (error) {state.errors.push(String(error));}
-      parent.postMessage({type:'legacy.readonly',session:'12345678-1234-4234-8234-123456789abc',operation:'send',socket:'socket-1',data:JSON.stringify([operation,'x',{}])},'*');
     }
     state.ws.send(JSON.stringify(['REQ','caller',{kinds:[30023],limit:200}]));
   });
@@ -57,10 +56,13 @@ test('guest and forged raw writes never dispatch; caller IDs are rewritten and s
 test('sibling frames, synthetic events, wrong session and oversized author lists acquire no authority', async ({page}) => {
   const frame = await setup(page, demo); await expect.poll(() => frame.locator('body').evaluate(() => (window as any).opened)).toBe(true);
   await page.evaluate(() => {const s=(window as any).__legacy; const message={type:'legacy.readonly',session:s.session,operation:'send',socket:'socket-1',data:JSON.stringify(['REQ','hostile',{kinds:[1]}])}; s.receiver.receive(new MessageEvent('message',{source:document.querySelector('iframe')!.contentWindow,data:message})); const sibling=document.createElement('iframe'); sibling.srcdoc='<script>parent.postMessage('+JSON.stringify(message)+',"*")<\/script>'; document.body.append(sibling);});
-  await frame.locator('body').evaluate(() => {parent.postMessage({type:'legacy.readonly',session:'wrong-session',operation:'send',socket:'socket-1',data:JSON.stringify(['REQ','wrong',{kinds:[1]}])},'*'); (window as any).ws.send(JSON.stringify(['REQ','oversize',{authors:Array(65).fill('a'.repeat(64))}]));});
+  await frame.locator('body').evaluate(() => {(window as any).ws.send(JSON.stringify(['REQ','oversize',{authors:Array(65).fill('a'.repeat(64))}]));});
   await expect.poll(() => page.evaluate(() => (window as any).__legacy.status.length)).toBeGreaterThan(0);
   expect(await page.evaluate(() => (window as any).__legacy.requests)).toEqual([]);
   await expect.poll(() => frame.locator('body').evaluate(() => (window as any).messages.some((m: any) => m[0] === 'CLOSED' && m[1] === 'oversize'))).toBe(true);
+  await frame.locator('body').evaluate(() => {parent.postMessage({type:'legacy.readonly',session:'wrong-session',operation:'send',socket:'socket-1',data:JSON.stringify(['REQ','wrong',{kinds:[1]}])},'*');});
+  await expect.poll(() => page.evaluate(() => (window as any).__legacy.revoked)).toBe(1);
+  expect(await page.evaluate(() => (window as any).__legacy.requests)).toEqual([]);
 });
 
 test('three native reads remain bounded, limits are disclosed and CLOSE releases a slot', async ({page}) => {

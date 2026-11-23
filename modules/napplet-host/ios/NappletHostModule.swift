@@ -83,6 +83,7 @@ public final class NappletHostModule: Module {
     Function("cancelUpload") { (token: String) in UploadTransport.cancel(token) }
     Function("finishUpload") { (token: String, result: String) in UploadTransport.finish(token, raw: result) }
     AsyncFunction("putUpload") { (token: String, credential: String) async -> String in await UploadTransport.put(token, credential: credential) }
+    AsyncFunction("rasterizeResourceSvg") { (encoded: String) async -> String? in await ResourceSvg.render(encoded) }
     AsyncFunction("fetchResourceHttps") { (token: String, operationId: String, url: String) async -> String in
       var result: [String: Any]
       do {

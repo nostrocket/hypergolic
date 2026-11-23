@@ -1,9 +1,10 @@
+import type {GuestBindingTransport} from './guest-port';
 import {secureUuidV4} from './secure-random-compat';
 
 /** The namespace is installed only for a newly reviewed effective CVM grant. Parent validates every operation. */
-function installCvmFacade(newUuid: () => string):void{
+export function installCvmFacade(wire: GuestBindingTransport | undefined, newUuid: () => string):void{
   const guest=window as Window&{napplet?:{shell?:{ready():Promise<unknown>};cvm?:object}};
-  const parent=window.parent,post=parent.postMessage.bind(parent),pending=new Map<string,{type:string;resolve:(reply:Record<string,unknown>)=>void;reject:(error:Error)=>void;timer:number;provider?:string}>();
+  const parent=window.parent,post=wire?.send ?? ((value:object)=>parent.postMessage(value,'*')),pending=new Map<string,{type:string;resolve:(reply:Record<string,unknown>)=>void;reject:(error:Error)=>void;timer:number;provider?:string}>();
   const closedProviders=new Set<string>();
   const handlers=new Set<((event:unknown)=>void)|((server:unknown,message:unknown)=>void)>();let closed=false;
   function call(type:string,fields:object={},timeout=30000):Promise<Record<string,unknown>>{
@@ -13,12 +14,12 @@ function installCvmFacade(newUuid: () => string):void{
       const timer=window.setTimeout(()=>{pending.delete(id);reject(new Error('relay timeout'));},Math.min(120000,Math.max(1,timeout))+2000);
       const server=(fields as {server?:{pubkey?:unknown}}).server,provider=typeof server?.pubkey==='string'?server.pubkey:undefined;
       pending.set(id,{type,resolve,reject,timer,...(provider===undefined?{}:{provider})});
-      void Promise.resolve().then(()=>guest.napplet?.shell?.ready()).then(()=>{if(pending.has(id))post({...fields,type,id},'*');},()=>{const row=pending.get(id);if(row){pending.delete(id);clearTimeout(timer);reject(new Error('CVM unavailable'));}});
+      void Promise.resolve().then(()=>wire ? undefined : guest.napplet?.shell?.ready()).then(()=>{if(pending.has(id))post({...fields,type,id});},()=>{const row=pending.get(id);if(row){pending.delete(id);clearTimeout(timer);reject(new Error('CVM unavailable'));}});
     });
   }
-  const receive=(event:MessageEvent)=>{
-    if(closed||!event.isTrusted||event.source!==parent||!event.data||typeof event.data!=='object')return;
-    const reply=event.data as Record<string,unknown>;
+  const receive=(raw:unknown)=>{
+    if(closed||!raw||typeof raw!=='object')return;
+    const reply=raw as Record<string,unknown>;
     if(reply.type==='cvm.event'){
       if(closedProviders.has((reply.server as {pubkey?:string}|undefined)?.pubkey??''))return;
       const value=Object.freeze({server:reply.server,message:reply.message});for(const handler of handlers)try{if(handler.length>=2)(handler as (server:unknown,message:unknown)=>void)(reply.server,reply.message);else(handler as (event:unknown)=>void)(value);}catch{/* Guest callbacks do not alter transport. */}return;
@@ -26,7 +27,10 @@ function installCvmFacade(newUuid: () => string):void{
     if(typeof reply.id!=='string')return;const row=pending.get(reply.id);if(!row||reply.type!==row.type+'.result')return;
     pending.delete(reply.id);clearTimeout(row.timer);if(typeof reply.error==='string')row.reject(new Error(reply.error));else row.resolve(reply);
   };
-  window.addEventListener('message',receive);window.addEventListener('pagehide',()=>{closed=true;window.removeEventListener('message',receive);for(const row of pending.values()){clearTimeout(row.timer);row.reject(new Error('session closed'));}pending.clear();handlers.clear();},{once:true});
+  const receiveWindow = (event:MessageEvent) => {if (event.isTrusted && event.source === parent) receive(event.data);};
+  const detach = wire ? wire.listen(receive) : () => window.removeEventListener('message',receiveWindow);
+  if (!wire) window.addEventListener('message',receiveWindow);
+  window.addEventListener('pagehide',()=>{closed=true;detach();for(const row of pending.values()){clearTimeout(row.timer);row.reject(new Error('session closed'));}pending.clear();handlers.clear();},{once:true});
   type Options={timeoutMs?:number;initialize?:boolean;payment?:'deny'|'prompt'|'allow'};
   async function request(server:unknown,message:unknown,options?:Options):Promise<Record<string,unknown>|null>{
     const provider=(server as {pubkey?:unknown}|undefined)?.pubkey;if(typeof provider==='string')closedProviders.delete(provider);
@@ -62,5 +66,5 @@ function installCvmFacade(newUuid: () => string):void{
 export function injectCvmFacade(html:string):string{
   const head=/<meta http-equiv="Content-Security-Policy" content="[^"]*">/;
   if(!head.test(html))throw new Error('CVM binding requires host CSP');
-  return html.replace(head,value=>`${value}<script>(${installCvmFacade.toString()})(${secureUuidV4.toString()});</script>`);
+  return html.replace(head,value=>`${value}<script>(${installCvmFacade.toString()})(undefined,${secureUuidV4.toString()});</script>`);
 }

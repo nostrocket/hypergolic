@@ -1,3 +1,4 @@
+import {tracePort} from './port-trace';
 import {test, expect, type Page} from './published-wire';
 import {build} from 'vite';
 import {readFileSync} from 'node:fs';
@@ -88,6 +89,16 @@ async function open(page:Page,appId:keyof typeof pins,mode:Mode='legacy',event=a
   return page.locator('#napplet').contentFrame();
 }
 for(const appId of ['recipe-cards','longform'] as const)test(`actual main reads unchanged ${appId} through native artifact chunks and dedicated read wire`,async({page})=>{
+  await tracePort(page,['legacy.readonly','legacy.image','legacy.readonly.result','legacy.image.result']);
+  await page.addInitScript(() => {
+    const traffic: {type:string;ports:number}[] = [];
+    (window as any).readerWindowTraffic = traffic;
+    window.addEventListener('message', event => {
+      if (window === top ? event.source === document.querySelector('iframe')?.contentWindow : event.source === parent) {
+        traffic.push({type:event.data?.type,ports:event.ports.length});
+      }
+    });
+  });
   const remotes:string[]=[];page.on('request',request=>{if(request.url().startsWith('https://assets.example.com/'))remotes.push(request.url());});
   const frame=await open(page,appId);
   await expect.poll(()=>page.evaluate(()=>(window as any).__legacyMain.diagnostics.some((m:any)=>m.type==='ready'))).toBe(true);
@@ -98,6 +109,13 @@ for(const appId of ['recipe-cards','longform'] as const)test(`actual main reads 
   expect(await frame.locator('img').first().getAttribute('src')).toMatch(/^blob:/);expect(remotes).toEqual([]);
   await expect(page.locator('body > [role=status]')).toContainText('Read-only compatibility');
   expect(await frame.locator('body').evaluate(()=>({nostr:typeof(window as any).nostr,napplet:typeof(window as any).napplet}))).toEqual({nostr:'undefined',napplet:'undefined'});
+  expect(await page.evaluate(() => (window as any).readerWindowTraffic)).toEqual([{type:'napplet.hello',ports:1}]);
+  expect(await frame.locator('body').evaluate(() => (window as any).readerWindowTraffic.filter((row:any) => row.ports || row.type?.startsWith('legacy.')))).toEqual([]);
+  const types = await page.evaluate(() => {
+    const {requests,replies} = (window as any).portTrace;
+    return [...new Set([...requests,...replies].map(message => message.type))].sort();
+  });
+  expect(types).toEqual(['legacy.image','legacy.image.result','legacy.readonly','legacy.readonly.result']);
   const state=await page.evaluate(()=>({wire:(window as any).__legacyMain.wire,chunks:(window as any).__legacyMain.chunks}));
   expect(state.chunks).toEqual([0]);expect(state.wire.filter((m:any)=>m.type==='relay-stream').length).toBeGreaterThan(0);
   expect(state.wire.filter((m:any)=>m.type==='relay-stream').every((m:any)=>JSON.parse(m.message).type==='legacy.subscribe')).toBe(true);

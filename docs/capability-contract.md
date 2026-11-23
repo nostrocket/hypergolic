@@ -12,7 +12,8 @@ revision before changing wire behavior:
 
 | Surface | Selected authority | Profile |
 | --- | --- | --- |
-| SHELL, THEME, IDENTITY | [NAPs 5ac0490](https://github.com/napplet/naps/tree/5ac0490461ca6fec2f0d2e45b4835cf9bc08de24/naps) | Handshake/theme and read-only identity |
+| SHELL | [NAP-SHELL 377bf93](https://github.com/napplet/naps/blob/377bf939c6c906817084b43dd21d424de646dbc2/naps/NAP-SHELL.md) | Synchronous feature discovery reflects the installed guest objects. Services arrive with the Shell environment. Independent first-request dispatch is tracked in [#108](https://github.com/nostrocket/hypergolic/issues/108). |
+| THEME, IDENTITY | [NAPs 5ac0490](https://github.com/napplet/naps/tree/5ac0490461ca6fec2f0d2e45b4835cf9bc08de24/naps) | Theme and read-only identity |
 | STORAGE | [f71e84e](https://github.com/napplet/naps/blob/f71e84ebca7474db260346cbfc2d88f41b4e421e/naps/NAP-STORAGE.md) | get/set/remove/keys |
 | RELAY | [0be8abc](https://github.com/napplet/naps/blob/0be8abce18beb46ca37bd4ddd042f58d30b4eedc/naps/NAP-RELAY.md) | Bounded query/subscribe/close and individually approved publish |
 | RESOURCE | [8c0645d](https://github.com/napplet/naps/blob/8c0645d32ceb159bc3e8bcec1107a92862b7e86a/naps/NAP-RESOURCE.md) | Bounded info/bytes/bytesMany/cancel; [limits](resource-access.md) |
@@ -36,7 +37,9 @@ surfaces are a directly focused native canvas or button, and the document body
 when it is the ordinary focus fallback. A focused button retains native Space
 activation. It leaves focused custom elements and other DOM surfaces to the
 guest, including editors inside closed shadow roots. Text editing, composition,
-repeated events, modifier chords and reserved controls remain excluded.
+repeated events and reserved controls remain excluded. On eligible surfaces an
+unbound modifier chord is forwarded to the shell. The mobile shell currently has
+no global shortcut actions and leaves browser-reserved shortcuts to the platform.
 Bindings are local to that frame and expire with it.
 
 The selected SDK/core exports accept an unsigned `EventTemplate`. The NAP 0.31.1

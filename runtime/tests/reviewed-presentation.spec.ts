@@ -1,5 +1,6 @@
 import {test,expect,type Page,type FrameLocator} from './published-wire';
 import {build} from 'vite';
+import {tracePort} from './port-trace';
 import {WorkspaceViews} from '../../src/shell/workspace-views';
 import {emptyWorkspace, openNapplet, focusNapplet, type NappletDescriptor} from '../../src/shell/workspace';
 import {readFileSync} from 'node:fs';
@@ -65,7 +66,8 @@ async function open(page:Page,appId:string,variant='exact',uploadMode='complete'
         if(envelope.type==='ready'||envelope.type==='error'){state.diagnostics.push(envelope);return;}
         if(envelope.type==='artifact.read'){
           emit({type:'artifact.chunk',sessionId:generation,sequence:envelope.sequence,publisher:pin.publisher ?? '1'.repeat(64),
-            appId:variant==='other-app'?'unreviewed-reader':appId,eventId:pin.eventId,version:aggregateHash,htmlHash,
+            appId:variant==='other-app'?'unreviewed-reader':appId,eventId:variant==='new-event'?'f'.repeat(64):pin.eventId,version:aggregateHash,htmlHash,
+            ...(appId === 'workspace-journal' && variant !== 'saved-without-format' && {manifestFormat:'nip-5d'}),
             domains,
             ...window.publishedPart(bytes,envelope.sequence)});return;
         }
@@ -126,10 +128,10 @@ async function open(page:Page,appId:string,variant='exact',uploadMode='complete'
   },{generation,appId,pin,variant,html:bytes.toString('base64'),htmlHash,aggregateHash,note,pack,png,savedFeed,domains,pngHash,uploadMode});
   await page.goto(`/assets/runtime/index.html?sessionId=${generation}&source=published`);
   const frame=page.frameLocator('#napplet');
+  await expect(frame.locator('body')).not.toHaveText('');
   await expect(frame.locator('#hypergolic-reviewed-presentation')).toHaveCount(variant==='exact'&&appId!=='workspace-journal'?1:0);
   await expect(frame.locator('[data-hypergolic-emoji-images]')).toHaveCount(appId==='emoji-browser'&&variant==='exact'?1:0);
   await expect(frame.locator('[data-hypergolic-creator-upload]')).toHaveCount(appId==='emoji-pack-creator'&&variant==='exact'?1:0);
-  await expect(frame.locator('body')).not.toHaveText('');
   return frame;
 }
 async function fits(locator:ReturnType<FrameLocator['locator']>) {
@@ -355,13 +357,40 @@ test('exact Emoji Pack Creator desktop retains its original two-column metadata 
   const columns=await frame.locator('.meta').evaluate(element=>getComputedStyle(element).gridTemplateColumns.split(' '));
   expect(columns).toHaveLength(2);expect((await frame.locator('main').boundingBox())!.height).toBe(740);
 });
-for(const appId of ['emoji-browser','creator-signals','mapplets','feed-builder','emoji-pack-creator'])for(const variant of ['other-app','new-version']){
+for(const appId of ['emoji-browser','creator-signals','mapplets','feed-builder','emoji-pack-creator'])for(const variant of ['other-app','new-version','new-event']){
   test(`ordinary ${appId} ${variant} receives no presentation override`,async({page})=>{await open(page,appId,variant);});
+}
+for (const variant of ['exact', 'new-event']) {
+  test(`published Mapplets worker access for the ${variant} release`, async ({page}) => {
+    const frame = await open(page, 'mapplets', variant);
+    const outcome = await frame.locator('body').evaluate(async () => {
+      const url = URL.createObjectURL(new Blob(['postMessage(42)'], {type:'text/javascript'}));
+      let worker: Worker | undefined;
+      try {
+        return await new Promise<string>((resolve, reject) => {
+          try { worker = new Worker(url); }
+          catch (error) {
+            if (error instanceof DOMException && error.name === 'SecurityError') resolve('denied');
+            else reject(error);
+            return;
+          }
+          worker.onmessage = event => resolve(event.data === 42 ? 'computed' : 'unexpected');
+          worker.onerror = event => { event.preventDefault(); resolve('denied'); };
+        });
+      } finally {
+        worker?.terminate();
+        URL.revokeObjectURL(url);
+      }
+    });
+    expect(outcome).toBe(variant === 'exact' ? 'computed' : 'denied');
+    const csp = await frame.locator('meta[http-equiv="Content-Security-Policy" i]').first().getAttribute('content');
+    expect(csp).toContain(variant === 'exact' ? 'worker-src blob:' : "worker-src 'none'");
+  });
 }
 test('unpublished, wrong-app and future-version metadata retain byte-identical documents and CSP',()=>{
   const html='<head><meta http-equiv="Content-Security-Policy" content="default-src none"></head><body></body>';
-  for(const pin of pins){for(const metadata of [{published:false,appId:pin.appId,aggregateHash:pin.aggregateHash},
-    {published:true,appId:'other',aggregateHash:pin.aggregateHash},{published:true,appId:pin.appId,aggregateHash:'f'.repeat(64)}]){
+  for(const pin of pins){for(const metadata of [{eventId:pin.eventId,published:false,appId:pin.appId,aggregateHash:pin.aggregateHash},
+    {eventId:pin.eventId,published:true,appId:'other',aggregateHash:pin.aggregateHash},{eventId:pin.eventId,published:true,appId:pin.appId,aggregateHash:'f'.repeat(64)}]){
     expect(injectReviewedPresentation(html,metadata)).toBe(html);
     expect(injectCreatorUpload(html,{...metadata,domains:['upload']})).toBe(html);
   }}
@@ -374,6 +403,7 @@ async function journalControl(page: Page, id: string, state = 'clean') {
 }
 
 test('Workspace Journal restores an unfinished new entry and its interior caret on a ninth open', async ({page, context}) => {
+  await tracePort(page, ['hypergolic.checkpoint', 'hypergolic.checkpoint.result', 'hypergolic.restoreCheckpoint', 'hypergolic.restoreCheckpoint.result']);
   const guest = await open(page, 'workspace-journal');
   const pin = pins.find((entry: any) => entry.appId === 'workspace-journal');
   const journal: NappletDescriptor = {id:'journal', title:'Workspace Journal', appId:pin.appId, publisher:pin.publisher,
@@ -393,6 +423,9 @@ test('Workspace Journal restores an unfinished new entry and its interior caret 
   await page.evaluate(() => (window as any).__hypergolicMediaActive(false));
   const receiptId = 'resume-12345678-1234-4234-8234-123456789abc';
   await journalControl(page, receiptId);
+  const wire = () => page.evaluate(() => (window as any).portTrace);
+  expect((await wire()).requests).toContainEqual({type:'hypergolic.checkpoint.result', id:receiptId, state:'saved'});
+  expect((await wire()).replies).toContainEqual({type:'hypergolic.checkpoint', id:receiptId});
   // The mock native storage below commits through the granted instance lane only.
   const journalWrite = await page.evaluate(() => (window as any).__presentation.requests
     .filter((envelope: any) => envelope.type === 'capability').map((e: any) => JSON.parse(e.message))
@@ -433,6 +466,8 @@ test('Workspace Journal restores an unfinished new entry and its interior caret 
   await expect(guest.locator('[data-hypergolic-restored-editor]')).toHaveCount(0);
   await expect(editor).toHaveValue('');
   await journalControl(page, receiptId.replace('resume-', 'restore-'));
+  expect((await wire()).requests).toContainEqual({type:'hypergolic.restoreCheckpoint.result', id:receiptId, state:'restored'});
+  expect((await wire()).replies).toContainEqual({type:'hypergolic.restoreCheckpoint', id:receiptId});
   await expect(guest.getByLabel('Entry title')).toHaveValue(title);
   await expect(guest.getByLabel('Links to notes, people or relays')).toHaveValue(links);
   await expect(editor).toHaveValue(body);
@@ -465,8 +500,8 @@ test('Workspace Journal keeps its live draft on a failed save and rejects an exi
   await expect(editor).toHaveValue('Unfinished changes to an existing entry');
 });
 
-test('Workspace Journal reopens the new-entry composer over saved entries and restores a selected range', async ({page}) => {
-  const guest = await open(page, 'workspace-journal');
+test('Workspace Journal reopens an older saved pin and restores a selected range', async ({page}) => {
+  const guest = await open(page, 'workspace-journal', 'saved-without-format');
   const editor = guest.getByLabel('Entry body');
   await editor.fill('Already saved');
   await guest.getByRole('button', {name:'Save entry', exact:true}).click();

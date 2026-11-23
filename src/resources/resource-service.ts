@@ -6,7 +6,7 @@ import type { NativeRegistration } from '../runtime/capability-protocol.ts';
 import type { RelayQueryService } from '../network/native-relay-query.ts';
 import { parseQueryFilters, verifyQueryEvent } from '../network/relay-query-contract.ts';
 import { decodeNativePublishedBody } from '../napplets/native-published-https.ts';
-import { classifyResourceBytes } from './resource-mime.ts';
+import {prepareResourceBytes} from './resource-image.ts';
 import { ResourceError, RESOURCE_LIMITS, parseResourceURL, resourceServerOrigin, resourceInfo,
   type ResourceRequest, type ResourceTarget, type ResourceURL, type ResourceBytes, type ResourceErrorCode } from './resource-contract.ts';
 
@@ -14,6 +14,7 @@ export type ResourceAuthority = Readonly<{ nativeToken: string; assertActive(): 
 export interface ResourceResolvers {
   /** App-only native port: DNS/pinned TLS/body bound and captured native lease are mandatory. */
   https(url: string, signal: AbortSignal, assertActive: () => void, nativeToken: string): Promise<Uint8Array<ArrayBuffer>>;
+  rasterizeSvg?(svg: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>>;
   servers(): readonly string[];
   query?: RelayQueryService;
   sha256(bytes: Uint8Array<ArrayBuffer>): Promise<string>;
@@ -117,7 +118,7 @@ async function resolve(resolvers: ResourceResolvers, active: Active, target: Res
   throw new ResourceError(failure);
 }
 async function readReservedResource(signal: AbortSignal, authority: ResourceAuthority, active: Active, release: () => void,
-  read: (signal: AbortSignal) => Promise<Uint8Array<ArrayBuffer>>, publish: (body: Uint8Array<ArrayBuffer>) => ResourceBytes): Promise<ResourceBytes> {
+  read: (signal: AbortSignal) => Promise<ResourceBytes>, publish: (value: ResourceBytes) => ResourceBytes): Promise<ResourceBytes> {
   const scoped = new AbortController();
   const cancelURL = () => scoped.abort();
   signal.addEventListener('abort', cancelURL, { once: true });
@@ -208,13 +209,16 @@ function bindResourceSession(resolvers: ResourceResolvers, process: ResourceProc
           }
         } catch (error) { release(); throw error; }
         return readReservedResource(signal, authority, active, release,
-          scoped => resolve(resolvers, active, target, {configured, hints: request.servers}, scoped, authority), body => {
-          if (!(body instanceof Uint8Array) || body.byteLength > RESOURCE_LIMITS.fileBytes) throw new ResourceError('too-large');
-          const value = Object.freeze({ bytes: new Uint8Array(body), mime: classifyResourceBytes(body) });
+          async scoped => {
+            const bytes = await resolve(resolvers, active, target, {configured, hints: request.servers}, scoped, authority);
+            active(scoped, authority);
+            return prepareResourceBytes(bytes, resolvers.rasterizeSvg);
+          }, prepared => {
+          const value = Object.freeze({bytes:new Uint8Array(prepared.bytes), mime:prepared.mime});
           const result = charge(value);
           const previous = cache.get(key);
           if (previous) { cacheBytes -= previous.value.bytes.length; process.cacheBytes -= previous.value.bytes.length; cache.delete(key); }
-          cache.set(key, { value, used: ++process.revision }); cacheBytes += body.byteLength; process.cacheBytes += body.byteLength;
+          cache.set(key, { value, used: ++process.revision }); cacheBytes += value.bytes.byteLength; process.cacheBytes += value.bytes.byteLength;
           while (cacheBytes > RESOURCE_LIMITS.sessionCacheBytes || cache.size > RESOURCE_LIMITS.cacheEntries) process.cacheBytes -= evict();
           evictProcess(process); return result;
         });

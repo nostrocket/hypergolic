@@ -1,9 +1,4 @@
-type PresentationMetadata = Readonly<{published: boolean; appId: string; aggregateHash: string}>;
-const emojiVersion = '24b16ab3eb550d50eff01a3c42c6e56c3a81da4cf6914b11dc766d8575767381';
-const signalsVersion = 'a3320b9d78a3506bca07cb3ffcc09c2db3f36e5493574834c3cb14fc96ebac58';
-const mappletsVersion = '3a5eeb98b3251a48a3ff1e32cb92ce76b7488b721dd492ae1659e90eeffe76f5';
-const feedVersion = 'a45d5c2ad7316386e9604f0502c7b053be7d2a0b2f1ca8a941e74a1dd72c7754';
-const creatorVersion = '1533e892517b313b316b6137759580cbae0a82ca1c9d1de23f6b2f0f2dea6dea';
+import {reviewedPresentationApp, type PresentationPin} from './reviewed-presentation-pin';
 const emojiCss = `@media(max-width:720px){
 html body main.svelte-1n46o8q{grid-template-columns:minmax(0,1fr)}
 html body .topbar.svelte-1n46o8q,html body .toolbar.svelte-1n46o8q{flex-wrap:wrap;min-inline-size:0}
@@ -59,15 +54,19 @@ html body .code.svelte-1n46o8q{min-inline-size:0;overflow-wrap:anywhere}
 html body .remove.svelte-1n46o8q{flex:none}
 }`;
 
+const styles = {
+  'emoji-browser': emojiCss,
+  'creator-signals': signalsCss,
+  mapplets: mappletsCss,
+  'feed-builder': feedCss,
+  'emoji-pack-creator': creatorCss,
+};
+
 /** Host presentation only, after original artifact verification. Future versions receive no override. */
-export function injectReviewedPresentation(html: string, metadata: PresentationMetadata): string {
-  if (!metadata.published) return html;
-  const css = metadata.appId === 'emoji-browser' && metadata.aggregateHash === emojiVersion ? emojiCss
-    : metadata.appId === 'creator-signals' && metadata.aggregateHash === signalsVersion ? signalsCss
-    : metadata.appId === 'mapplets' && metadata.aggregateHash === mappletsVersion ? mappletsCss
-    : metadata.appId === 'feed-builder' && metadata.aggregateHash === feedVersion ? feedCss
-    : metadata.appId === 'emoji-pack-creator' && metadata.aggregateHash === creatorVersion ? creatorCss : null;
-  if (css === null) return html;
+export function injectReviewedPresentation(html: string, metadata: PresentationPin): string {
+  const app = reviewedPresentationApp(metadata);
+  if (!app) return html;
+  const css = styles[app];
   const csp = /<meta http-equiv="Content-Security-Policy" content="[^"]*">/;
   if (!csp.test(html)) throw new Error('Reviewed presentation requires host CSP');
   return html.replace(csp, value => value + '<style id="hypergolic-reviewed-presentation">' + css + '</style>');

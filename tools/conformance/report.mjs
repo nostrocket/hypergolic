@@ -36,6 +36,6 @@ export function markdown(results) {
   const summary = results.filter(r => r.status === 'pass').length + ' passing checks · ' + tracked.size + ' distinct tracked issues';
   const rows = results.map(r => '| ' + [r.status, r.id, '[' + r.title + '](' + r.source + ')',
     r.issue ? '[#' + r.issue + '](' + issueRoot + r.issue + ')' : '—'].join(' | ') + ' |');
-  return ['## Shell conformance', '', summary, '', '| Result | Rule | Requirement | Issue |', '|---|---|---|---|',
+  return ['## Strict draft requirements', '', summary, '', '| Result | Rule | Requirement | Issue |', '|---|---|---|---|',
     ...rows, '', ...results.filter(r => r.detail).map(r => '- ' + r.id + ' — ' + r.detail.replaceAll('\n', ' ')), ''].join('\n');
 }

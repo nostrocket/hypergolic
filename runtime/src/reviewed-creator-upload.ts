@@ -1,7 +1,5 @@
+import {reviewedPresentationApp, type PresentationPin} from './reviewed-presentation-pin';
 import type {UploadResult} from '../../src/uploads/upload-contract';
-
-type CreatorMetadata = Readonly<{published: boolean; appId: string; aggregateHash: string; domains: readonly string[]}>;
-const creatorVersion = '1533e892517b313b316b6137759580cbae0a82ca1c9d1de23f6b2f0f2dea6dea';
 
 /** Runs after the host's Kehto prelude and before the verified publisher script. */
 function installCreatorUpload(): void {
@@ -65,9 +63,8 @@ function installCreatorUpload(): void {
   };
 }
 
-export function injectCreatorUpload(html: string, metadata: CreatorMetadata): string {
-  if (!metadata.published || metadata.appId !== 'emoji-pack-creator' || metadata.aggregateHash !== creatorVersion ||
-      !metadata.domains.includes('upload')) return html;
+export function injectCreatorUpload(html: string, metadata: PresentationPin & Readonly<{domains: readonly string[]}>): string {
+  if (reviewedPresentationApp(metadata) !== 'emoji-pack-creator' || !metadata.domains.includes('upload')) return html;
   const csp = /<meta http-equiv="Content-Security-Policy" content="[^"]*">/;
   if (!csp.test(html)) throw new Error('Creator upload compatibility requires host CSP');
   return html.replace(csp, value => `${value}<script data-hypergolic-creator-upload>(${installCreatorUpload.toString()})();</script>`);

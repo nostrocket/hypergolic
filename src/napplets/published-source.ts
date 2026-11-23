@@ -4,7 +4,7 @@ import { RelayGroup } from 'applesauce-relay';
 import type { GroupRequestOptions, RelayPool } from 'applesauce-relay';
 import type { Filter } from 'applesauce-core/helpers/filter';
 import { MAX_RELAYS_PER_ROLE, normalizeRelayUrl } from '../network/relay-settings.ts';
-import type { NappletLookupCoordinate, PublishedArtifactSource } from './loader.ts';
+import { PublishedLoadError, type NappletLookupCoordinate, type PublishedArtifactSource } from './loader.ts';
 import type { NativePublishedRelayLookup } from './native-published-relay.ts';
 import { authenticateManifestEvent, MAX_HTML_BYTES, MAX_MANIFEST_BYTES, NappletHashMismatchError } from './verified-artifact.ts';
 import {publishedRelayFilter} from './published-relay-request.ts';
@@ -267,6 +267,7 @@ function queryManifests(poolFactory: BoundedRelayPoolFactory, relayTimeoutMs: nu
 function signedMirrorUrls(expectedHash: string, serverHints: readonly string[], maxBytes: number): string[] {
   if (!HEX64.test(expectedHash) || !Array.isArray(serverHints) || !Number.isSafeInteger(maxBytes) ||
       maxBytes < 1 || maxBytes > MAX_HTML_BYTES) return fail();
+  if (serverHints.length === 0) throw new PublishedLoadError('PUBLISHED_NO_DOWNLOAD_SERVER');
   const urls = new Set<string>();
   for (const hint of serverHints.slice(0, MAX_BLOSSOM_SERVERS)) {
     try {

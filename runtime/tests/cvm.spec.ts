@@ -1,23 +1,42 @@
-import {createHash} from 'node:crypto';import {expect,test,type Page} from './published-wire';
+import {createHash} from 'node:crypto';import {expect,test,holdShellReadiness,type Page} from './published-wire';
 const generation='8487e847-a1e9-4ad5-ac5d-42c3a5e104d9',pubkey='4'.repeat(64);
-async function open(page:Page,granted=true){
+async function open(page:Page,granted=true,modern=false){
  const digest=(text:string)=>createHash('sha256').update(text).digest('hex');
  const html='<!doctype html><html><head><title>CVM fixture</title></head><body><p>CVM fixture</p></body></html>',hash=createHash('sha256').update(html).digest('hex');
- await page.addInitScript(({generation,pubkey,html,hash,version,granted})=>{
+ await page.addInitScript(({generation,pubkey,html,hash,version,granted,modern})=>{
   if(window!==window.top)return;const listeners=new Set<(e:{data:string})=>void>(),requests:any[]=[],held:any[]=[];
   const send=(value:object)=>{for(const listener of listeners)listener({data:window.nativeMessage(value)});};
   const reply=(captured:any,message:object)=>send({type:'cvm.response',sessionId:generation,sequence:captured.sequence,response:JSON.stringify(message)});
   (window as any).__cvm={requests,held,finish(){const captured=held.shift();if(!captured)throw Error('No held request');const row=JSON.parse(captured.message),mcp=JSON.parse(row.message);reply(captured,{type:'cvm.request.result',id:row.id,message:{jsonrpc:'2.0',id:mcp.id,result:{accepted:true}}});},event(){send({type:'cvm.event',sessionId:generation,message:JSON.stringify({type:'cvm.event',server:{pubkey},message:{jsonrpc:'2.0',method:'notifications/progress',params:{progressToken:'stream',progress:1}}})});}};
   Object.defineProperty(window,'HypergolicHost',{value:{addEventListener(_t:string,h:(e:{data:string})=>void){listeners.add(h);},removeEventListener(_t:string,h:(e:{data:string})=>void){listeners.delete(h);},postMessage(raw:string){const value=JSON.parse(raw);
-   if(value.type==='artifact.read'){send({type:'artifact.chunk',sessionId:generation,sequence:0,text:html,byteLength:html.length,totalBytes:html.length,publisher:pubkey,appId:'owned-cvm',eventId:'2'.repeat(64),htmlHash:hash,version,domains:granted?['cvm','media']:['theme'],done:true});return;}
+   if(value.type==='artifact.read'){send({type:'artifact.chunk',sessionId:generation,sequence:0,text:html,byteLength:html.length,totalBytes:html.length,publisher:pubkey,appId:'owned-cvm',eventId:'2'.repeat(64),htmlHash:hash,version,...(modern && {manifestFormat:'nip-5d'}),domains:granted?['cvm','media']:['theme'],done:true});return;}
    if(value.type!=='cvm')return;requests.push(value);const row=JSON.parse(value.message);
    if(row.type==='cvm.request'){const mcp=JSON.parse(row.message);if(mcp.method==='hold'){held.push(value);return;}const result=mcp.method==='resources/read'?{contents:[{uri:'a',text:'one'},{uri:'b',mimeType:'text/plain',blob:'dHdv'}]}:mcp.method==='tools/list'?{tools:[{name:'owned'}]}:{accepted:true};reply(value,{type:'cvm.request.result',id:row.id,...(mcp.method!==undefined&&mcp.id!==undefined?{message:{jsonrpc:'2.0',id:mcp.id,result}}:{})});}
    else reply(value,{type:row.type+'.result',id:row.id,...(row.type==='cvm.registry.has'?{has:false}:row.type==='cvm.close'?{}:{error:'unsupported method'})});
   }}});
- },{generation,pubkey,html,hash,version:digest(hash+' /index.html\n'),granted});
+ },{generation,pubkey,html,hash,version:digest(hash+' /index.html\n'),granted,modern});
  await page.goto(`/assets/runtime/index.html?source=published&sessionId=${generation}`);await expect(page.frameLocator('#napplet').getByText('CVM fixture')).toBeVisible();
- const guest=await(await page.locator('#napplet').elementHandle())!.contentFrame();if(!guest)throw Error('missing guest');await guest.evaluate(async()=>{await(window as any).napplet.shell.ready();});return guest;
+ const guest=await(await page.locator('#napplet').elementHandle())!.contentFrame();if(!guest)throw Error('missing guest');if (!modern) await guest.evaluate(async()=>{await(window as any).napplet.shell.ready();});return guest;
 }
+test('modern CVM shares the Media port and receives native replies and events before Shell readiness', async ({page}) => {
+ const readWire = await holdShellReadiness(page);
+ const guest = await open(page,true,true);
+ const result = await guest.evaluate(async pubkey => {
+   const {cvm,media} = (window as any).napplet;
+   cvm.onEvent(({server}: {server:{pubkey:string}}) => {document.body.dataset.provider = server.pubkey;});
+   const tools = await cvm.listTools({pubkey});
+   const invalid = await media.createSession({owner:'shell',source:{}});
+   await cvm.close({pubkey});
+   return {tools,invalid};
+ },pubkey);
+ expect(result).toEqual({tools:[{name:'owned'}],invalid:{error:'Unsupported media request.'}});
+ await guest.evaluate(async pubkey => (window as any).napplet.cvm.listTools({pubkey}), pubkey);
+ await page.evaluate(() => (window as any).__cvm.event());
+ await expect(guest.locator('body')).toHaveAttribute('data-provider',pubkey);
+ expect(await readWire()).toEqual({
+   transfers:1,windowTypes:['napplet.hello'],portTypes:['shell.ready','cvm.request','media.session.create','cvm.close','cvm.request'],
+ });
+});
 test('injected CVM wrappers preserve MCP bytes/typed IDs and all Resource contents in private native lane',async({page})=>{
  const guest=await open(page);const result=await guest.evaluate(async pubkey=>{
   const api=(window as any).napplet.cvm,server={pubkey};

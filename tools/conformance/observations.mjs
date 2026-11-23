@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import { finalizeEvent, generateSecretKey } from 'nostr-tools/pure';
+import {observeResourceSvg} from './resource-svg.mjs';
 import {observeIdentity} from './host.mjs';
 import {createKeysSession} from '../../runtime/src/keys-adapter.ts';
 import {projectMediaRequest} from '../../runtime/src/media-wire.ts';
@@ -74,24 +75,23 @@ function streamContinuity() {
   } finally { session.revoke(); }
 }
 
-async function themeQuotaReply() {
+async function checkEnvelope(observe) {
   // Use the host's own bundler to resolve the same TypeScript entry point as the shipped runtime.
   const runtime = new URL('../../runtime/', import.meta.url);
   const vite = await import(createRequire(new URL('package.json', runtime)).resolve('vite'));
   const server = await vite.createServer({root:fileURLToPath(runtime), configFile:false, logLevel:'error',
     server:{middlewareMode:true, hmr:false, watch:null}, optimizeDeps:{noDiscovery:true}});
   try {
-    const {quotaReply} = await server.ssrLoadModule('/src/guest-envelope.ts');
-    const reply = quotaReply({type:'theme.get', id:d}, ['theme']);
-    return reply?.type === 'theme.get.result' && reply.id === d && typeof reply.error === 'string';
+    return observe(await server.ssrLoadModule('/src/guest-envelope.ts'));
   } finally { await server.close(); }
 }
 
 export const observations = {
   ...Object.fromEntries(componentCases.map(([id, , file, name]) => [id, () => runComponent(file, name)])),
+  'resource-svg-output': observeResourceSvg,
   'keys-registration': () => {
     const sent = [];
-    const session = createKeysSession({postMessage:message => sent.push(message)}, () => true);
+    const session = createKeysSession(message => sent.push(message), () => true);
     session.receive({type:'keys.registerAction', id:'request', action:{id:'search', label:'Search'}});
     return sent.some(m => m.type === 'keys.registerAction.result' && m.id === 'request' && m.actionId === 'search' && !m.error);
   },
@@ -101,6 +101,7 @@ export const observations = {
     return result?.type === 'media.session.destroy' && result.sessionId === sessionId;
   },
   'modern-manifest': async () => (await verifyArtifact(await manifest([['x', hash]], 'A fixture'), html)).htmlHash === hash,
+  'implied-html-wrappers': () => runComponent('napplets/loading', 'an implied root, head and body preserve the signed HTML and its digest'),
   'artifact-integrity': () => rejectsVerification(async () => verifyArtifact(await manifest([['x', hash]], 'A fixture'), new Uint8Array([0]))),
   'legacy-manifest': () => rejectsVerification(() => manifest([['path', '/index.html', hash]], 'A fixture')),
   'launch-icon-format': async () => {
@@ -111,7 +112,12 @@ export const observations = {
   'relay-continuity': streamContinuity,
   'config-default': async () => await configuration(false) === 'light',
   'config-user-choice': async () => await configuration(true) === 'dark',
-  'identity-connected': observeIdentity,
+  'identity-connected': async () => await observeIdentity() && await checkEnvelope(({rejectEnvelope}) => {
+    const pubkey = '1'.repeat(64), replies = [];
+    rejectEnvelope({data:{type:'identity.getPublicKey',id:d,extra:true}},
+      {postMessage:reply => replies.push(reply)}, ['identity'], pubkey);
+    return replies.length === 1 && replies[0].pubkey === pubkey && replies[0].id === d && !Object.hasOwn(replies[0],'error');
+  }),
   'intent-action': () => {
     const request = {archetype:'feed', convention:'napplet:feed/open'};
     const wire = fields => ({type:'intent.invoke', id:d, request:fields});
@@ -120,5 +126,8 @@ export const observations = {
     catch (error) { if (error instanceof RoutingRequestError) return true; throw error; }
     return false;
   },
-  'theme-reply': themeQuotaReply,
+  'theme-reply': () => checkEnvelope(({quotaReply}) => {
+    const reply = quotaReply({type:'theme.get', id:d}, ['theme']);
+    return reply?.type === 'theme.get.result' && reply.id === d && typeof reply.error === 'string';
+  }),
 };

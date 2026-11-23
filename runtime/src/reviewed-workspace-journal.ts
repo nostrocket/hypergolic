@@ -1,3 +1,4 @@
+import type {GuestBindingTransport} from './guest-port';
 type Control = HTMLTextAreaElement | HTMLInputElement;
 type Cursor = {field: number; start: number; end: number; direction: 'forward' | 'backward' | 'none'};
 type Draft = {values: string[]; cursor: Cursor; scroll: number};
@@ -118,7 +119,7 @@ function waitForJournalEditor(form: ReturnType<typeof journalEditor>, revision: 
 }
 
 // Runs inside the reviewed guest. No draft content crosses the control channel.
-function installJournalCheckpoint(createEditor: typeof journalEditor, trackWrites: typeof journalSharedWrites,
+function installJournalCheckpoint(wire: GuestBindingTransport, createEditor: typeof journalEditor, trackWrites: typeof journalSharedWrites,
   validDraft: typeof validJournalDraft, waitForEditor: typeof waitForJournalEditor): void {
   const key = 'hypergolic.workspace-journal.new-entry.v1';
   const storage = (window as Window & {napplet?: {storage?: Storage & {instance: Storage}}}).napplet?.storage;
@@ -146,12 +147,13 @@ function installJournalCheckpoint(createEditor: typeof journalEditor, trackWrite
     lastRestored = id;
     return true;
   }
-  window.addEventListener('message', async event => {
-    if (!event.isTrusted || event.source !== parent || !event.data) return;
-    const {type, id} = event.data;
-    if (type === 'hypergolic.private.media-active') form.setInputAllowed(event.data.inputBlocked === false);
+  wire.listen(async value => {
+    if (!value || typeof value !== 'object' || !('type' in value)) return;
+    if (value.type === 'hypergolic.private.media-active') form.setInputAllowed('inputBlocked' in value && value.inputBlocked === false);
+    if (!('id' in value)) return;
+    const {type, id} = value;
     if ((type !== 'hypergolic.checkpoint' && type !== 'hypergolic.restoreCheckpoint') ||
-        Object.keys(event.data).length !== 2 || typeof id !== 'string' || !/^resume-[A-Za-z0-9_-]{1,72}$/.test(id)) return;
+        Object.keys(value).length !== 2 || typeof id !== 'string' || !/^resume-[A-Za-z0-9_-]{1,72}$/.test(id)) return;
     let state = 'unknown';
     if (!busy) {
       busy = true;
@@ -161,13 +163,14 @@ function installJournalCheckpoint(createEditor: typeof journalEditor, trackWrite
       } catch { /* A failed storage operation leaves the card live. */ }
       finally { busy = false; }
     }
-    parent.postMessage({type: type + '.result', id, state}, '*');
+    wire.send({type: type + '.result', id, state});
   });
 }
 
-export function injectJournalCheckpoint(html: string): string {
-  const csp = /<meta http-equiv="Content-Security-Policy" content="[^"]*">/;
-  if (!csp.test(html)) throw new Error('Workspace Journal checkpoint requires host CSP');
-  const helpers = [journalEditor, journalSharedWrites, validJournalDraft, waitForJournalEditor].map(fn => fn.toString());
-  return html.replace(csp, value => `${value}<script>(${installJournalCheckpoint.toString()})(${helpers.join(',')});</script>`);
+// The namespace is installed by the rest of the same parser-inserted bootstrap script.
+function startJournal(wire: GuestBindingTransport, install: typeof installJournalCheckpoint,
+  editor: typeof journalEditor, writes: typeof journalSharedWrites, valid: typeof validJournalDraft, wait: typeof waitForJournalEditor) {
+  queueMicrotask(() => install(wire, editor, writes, valid, wait));
 }
+
+export const journalBinding = [startJournal, installJournalCheckpoint, journalEditor, journalSharedWrites, validJournalDraft, waitForJournalEditor] as const;

@@ -1,3 +1,5 @@
+import type {GuestBindingTransport} from './guest-port';
+
 type MeshMessage = Record<string, unknown>;
 type MeshHandler = (value: unknown) => void;
 type MeshTopic = 'event' | 'eose' | 'closed';
@@ -80,10 +82,10 @@ function createMeshValues(codec: ReturnType<typeof createMeshCodec>) {
   }
   return {options, signedEvent, publishResult};
 }
-function createMeshWire(timeoutMs: number, codec: ReturnType<typeof createMeshCodec>) {
+function createMeshWire(timeoutMs: number, codec: ReturnType<typeof createMeshCodec>, transport?: GuestBindingTransport) {
   const {capture, record, error} = codec;
   const guest = window as Window & {napplet?: {shell?: {ready(): Promise<unknown>}; mesh?: object}};
-  const parentWindow = window.parent, post = parentWindow.postMessage.bind(parentWindow), apply = Reflect.apply;
+  const parentWindow = window.parent, post = transport?.send ?? ((value:object) => parentWindow.postMessage(value, '*')), apply = Reflect.apply;
   const sourceGetter = Object.getOwnPropertyDescriptor(MessageEvent.prototype, 'source')?.get;
   const dataGetter = Object.getOwnPropertyDescriptor(MessageEvent.prototype, 'data')?.get;
   const schedule = window.setTimeout.bind(window), unschedule = window.clearTimeout.bind(window), pending = new Map<string, MeshPending>();
@@ -106,22 +108,27 @@ function createMeshWire(timeoutMs: number, codec: ReturnType<typeof createMeshCo
     }, timeoutMs), ...(subscription ? {subscription} : {})};
     if (subscription) subscription.requestId = id; pending.set(id, row);
     void Promise.resolve().then(() => {
+      if (transport) return;
       const shell = guest.napplet?.shell; if (!shell || typeof shell.ready !== 'function') return error('Mesh bootstrap unavailable');
       return shell.ready();
     }).then(() => {
       if (closed || pending.get(id) !== row || subscription?.closed) return;
       if (subscription) subscription.posted = true;
-      try {post(message, '*');} catch {remove(id); reject(new Error('Mesh page closed'));}
+      try {post(message);} catch {remove(id); reject(new Error('Mesh page closed'));}
     }, () => {if (remove(id)) reject(new Error('Mesh bootstrap unavailable'));});
   }
   const request = (type: string, fields: MeshMessage): Promise<MeshMessage> => new Promise((resolve, reject) => {
     try {enqueue(type, fields, {resolve, reject});} catch {reject(new Error('Invalid Mesh request'));}
   });
+  function readValue(raw: unknown): MeshMessage | null {
+    if (closed) return null;
+    try {return record(capture(raw, 16384), ['type'], ['id', 'subId', 'ok', 'error', 'online', 'peers', 'limits', 'event', 'eventId', 'ttl', 'blobs', 'result', 'reason']);}
+    catch {return null;}
+  }
   function read(event: MessageEvent): MeshMessage | null {
-    if (closed || !event.isTrusted || !sourceGetter || !dataGetter) return null;
-    try {if (apply(sourceGetter, event, []) !== parentWindow) return null;
-      return record(capture(apply(dataGetter, event, []), 16384), ['type'], ['id', 'subId', 'ok', 'error', 'online', 'peers', 'limits', 'event', 'eventId', 'ttl', 'blobs', 'result', 'reason']);
-    } catch {return null;}
+    if (!event.isTrusted || !sourceGetter || !dataGetter) return null;
+    try {return apply(sourceGetter, event, []) === parentWindow ? readValue(apply(dataGetter, event, [])) : null;}
+    catch {return null;}
   }
   function settle(reply: MeshMessage): void {
     if (typeof reply.id !== 'string') return; const row = pending.get(reply.id);
@@ -129,7 +136,7 @@ function createMeshWire(timeoutMs: number, codec: ReturnType<typeof createMeshCo
   }
   const beginClose = (): boolean => {if (closed) return false; closed = true; return true;};
   const rejectAll = (): void => {for (const row of pending.values()) {unschedule(row.timer); row.reject(new Error('Mesh page closed'));} pending.clear();};
-  return {guest, post, identifier, remove, enqueue, request, read, settle, beginClose, rejectAll, isClosed: () => closed};
+  return {guest, post, identifier, remove, enqueue, request, read, readValue, settle, beginClose, rejectAll, isClosed: () => closed};
 }
 function createMeshStreams(wire: ReturnType<typeof createMeshWire>, codec: ReturnType<typeof createMeshCodec>, values: ReturnType<typeof createMeshValues>) {
   const {record, reasonText, whole, notify, error} = codec, rows = new Map<string, MeshSubscription>();
@@ -137,7 +144,7 @@ function createMeshStreams(wire: ReturnType<typeof createMeshWire>, codec: Retur
     if (row.closed) return; row.closed = true; if (reason !== undefined) row.reason = reason;
     wire.remove(row.requestId); rows.delete(row.subId);
     const handlers = Array.from(row.handlers.get('closed') ?? []); row.handlers.clear();
-    if (tellParent && row.posted) try {wire.post({type: 'mesh.close', subId: row.subId}, '*');} catch { /* Native source lifetime owns teardown. */ }
+    if (tellParent && row.posted) try {wire.post({type: 'mesh.close', subId: row.subId});} catch { /* Native source lifetime owns teardown. */ }
     for (const handler of handlers) notify(handler, reason);
   }
   function receive(reply: MeshMessage): boolean {
@@ -211,22 +218,28 @@ function createMeshFacade(wire: ReturnType<typeof createMeshWire>, streams: Retu
     },
   });
 }
-function installMeshFacade(timeoutMs: number, factories: readonly [typeof createMeshCodec, typeof createMeshValues, typeof createMeshWire, typeof createMeshStreams, typeof createMeshFacade]): void {
-  const [codecFactory, valueFactory, wireFactory, streamFactory, facadeFactory] = factories;
-  const codec = codecFactory(), values = valueFactory(codec), wire = wireFactory(timeoutMs, codec), streams = streamFactory(wire, codec, values);
-  const receive = (event: MessageEvent): void => {const reply = wire.read(event); if (reply && !streams.receive(reply)) wire.settle(reply);};
-  window.addEventListener('message', receive);
+function installMeshFacade(transport: GuestBindingTransport | undefined, codecFactory: typeof createMeshCodec,
+  valueFactory: typeof createMeshValues, wireFactory: typeof createMeshWire, streamFactory: typeof createMeshStreams,
+  facadeFactory: typeof createMeshFacade, timeoutMs = 17000): void {
+  const codec = codecFactory(), values = valueFactory(codec), wire = wireFactory(timeoutMs, codec, transport), streams = streamFactory(wire, codec, values);
+  const receive = (reply: MeshMessage | null) => {if (reply && !streams.receive(reply)) wire.settle(reply);};
+  const windowMessage = (event: MessageEvent) => receive(wire.read(event));
+  const detach = transport ? transport.listen(value => receive(wire.readValue(value))) :
+    () => window.removeEventListener('message', windowMessage);
+  if (!transport) window.addEventListener('message', windowMessage);
   window.addEventListener('pagehide', () => {
-    if (!wire.beginClose()) return; window.removeEventListener('message', receive); streams.close(); wire.rejectAll();
+    if (!wire.beginClose()) return; detach(); streams.close(); wire.rejectAll();
   }, {once: true});
   wire.guest.napplet = {...wire.guest.napplet, mesh: facadeFactory(wire, streams, codec, values)};
 }
+export const meshBinding = [installMeshFacade, createMeshCodec, createMeshValues, createMeshWire, createMeshStreams, createMeshFacade] as const;
+
 /** This helper alone advertises nothing; a reviewed-grant caller must opt into insertion. */
 export function injectMeshFacade(html: string, options: Readonly<{timeoutMs?: number}> = {}): string {
   const timeout = options.timeoutMs ?? 17000;
   if (!Number.isSafeInteger(timeout) || timeout < 1 || timeout > 17000) throw new Error('Invalid Mesh local timeout');
   const head = /<meta http-equiv="Content-Security-Policy" content="[^"]*">/;
   if (!head.test(html)) throw new Error('Mesh binding requires host CSP');
-  const factories = [createMeshCodec, createMeshValues, createMeshWire, createMeshStreams, createMeshFacade].map(factory => `(${factory.toString()})`).join(',');
-  return html.replace(head, value => `${value}<script>(${installMeshFacade.toString()})(${timeout},[${factories}]);</script>`);
+  const factories = meshBinding.slice(1).map(factory => `(${factory.toString()})`).join(',');
+  return html.replace(head, value => `${value}<script>(${installMeshFacade.toString()})(undefined,${factories},${timeout});</script>`);
 }

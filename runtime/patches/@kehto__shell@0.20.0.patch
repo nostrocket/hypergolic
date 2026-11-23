@@ -1,7 +1,27 @@
 diff --git a/dist/index.js b/dist/index.js
+index 523bcf1..593043e 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -312,6 +312,7 @@
+@@ -12,10 +12,17 @@ function hexToBytes(hex) {
+   }
+   return bytes;
+ }
++// A frame registered for port transport never falls back to window delivery.
++var portSenders = new WeakMap();
++function sendToFrame(win, message) {
++  const send = portSenders.get(win);
++  if (send) send(message);
++  else win.postMessage(message, "*");
++}
+ function createSendToNapplet(originRegistry2) {
+   return (windowId, msg) => {
+     const win = originRegistry2.getIframeWindow(windowId);
+-    if (win) win.postMessage(msg, "*");
++    if (win) sendToFrame(win, msg);
+   };
+ }
+ function createRelayPoolAdapter(shellHooks, originRegistry2) {
+@@ -312,6 +319,7 @@ function adaptHooks(shellHooks, deps) {
      onAclCheck: shellHooks.onAclCheck,
      onHashMismatch: shellHooks.onHashMismatch,
      services: shellHooks.services,
@@ -9,7 +29,7 @@ diff --git a/dist/index.js b/dist/index.js
      getConfigOverrides: shellHooks.getConfigOverrides
    };
  }
-@@ -397,7 +398,8 @@
+@@ -397,7 +405,8 @@ var originRegistry = {
      const entry = registry.get(win);
      if (!entry) return;
      entry.environment = Object.freeze({
@@ -19,7 +39,16 @@ diff --git a/dist/index.js b/dist/index.js
        services: Object.freeze([...environment.services])
      });
    },
-@@ -1002,13 +1004,30 @@
+@@ -930,7 +939,7 @@ var audioManager = {
+         id: `audio-mute-${windowId}-${Date.now()}`,
+         sig: ""
+       };
+-      iframeWindow.postMessage(["EVENT", "__shell__", muteEvent], "*");
++      sendToFrame(iframeWindow, ["EVENT", "__shell__", muteEvent]);
+     }
+   },
+   /**
+@@ -1002,13 +1011,30 @@ var SERVICE_ONLY_DOMAINS = [
    "count",
    "fs"
  ];
@@ -51,7 +80,7 @@ diff --git a/dist/index.js b/dist/index.js
  }
  function resolveShellEnvironment(hooks, identity) {
    const capabilities = buildShellCapabilities(hooks);
-@@ -1021,7 +1040,8 @@
+@@ -1021,7 +1047,8 @@ function resolveShellEnvironment(hooks, identity) {
    const granted = hooks.capabilities?.resolveEnvironment?.(identity, available) ?? available;
    return Object.freeze({
      capabilities: Object.freeze({
@@ -61,7 +90,7 @@ diff --git a/dist/index.js b/dist/index.js
      }),
      services: freezeList(intersectInOrder(available.services, granted.services))
    });
-@@ -1032,6 +1052,7 @@
+@@ -1032,6 +1059,7 @@ function isServiceDomainLive(hooks, domain) {
      case "outbox":
        return Boolean(hooks.relayPool);
      case "upload":
@@ -69,7 +98,65 @@ diff --git a/dist/index.js b/dist/index.js
        return hooks.upload?.getUploader() !== null && hooks.upload?.getUploader() !== void 0;
      case "intent":
        return hooks.intent?.isAvailable() === true;
-@@ -1265,7 +1286,15 @@
+@@ -1091,7 +1119,8 @@ function handleShellReady({
+   state,
+   sourceRegistrationId,
+   sourceWindow,
+-  windowId
++  windowId,
++  initializeOnly = false
+ }) {
+   if (state.initSent.get(sourceWindow) === sourceRegistrationId) {
+     return;
+@@ -1101,6 +1130,7 @@ function handleShellReady({
+   registerNip5dSessionIfNeeded({ origin, runtime, state, sourceRegistrationId, windowId, identity });
+   const environment = originRegistry.getEnvironment(sourceWindow) ?? resolveShellEnvironment(hooks, identity);
+   state.environments.set(windowId, environment);
++  if (initializeOnly) return;
+   postShellInit(sourceWindow, environment);
+   state.initSent.set(sourceWindow, sourceRegistrationId);
+ }
+@@ -1158,5 +1188,5 @@ function postShellInit(win, environment) {
+     capabilities: environment.capabilities,
+     services: environment.services
+   };
+-  win.postMessage(initMsg, "*");
++  sendToFrame(win, initMsg);
+ }
+@@ -1191,10 +1221,23 @@ function createShellBridge(hooks) {
+       if (!runtime.aclState.check(entry.pubkey, entry.dTag, entry.aggregateHash, capability)) continue;
+       const win = originRegistry.getIframeWindow(entry.windowId);
+       if (!win) continue;
+-      win.postMessage(envelope, "*");
++      sendToFrame(win, envelope);
+     }
+   }
+   return {
++    bindPort(sourceWindow, origin, send) {
++      const windowId = originRegistry.getWindowId(sourceWindow);
++      const sourceRegistrationId = originRegistry.getRegistrationId(sourceWindow);
++      if (!windowId || !sourceRegistrationId || portSenders.has(sourceWindow)) throw new Error("Invalid port registration");
++      portSenders.set(sourceWindow, send);
++      const registration = {hooks, origin, runtime, state:shellReadyState, sourceRegistrationId, sourceWindow, windowId};
++      handleShellReady({...registration, initializeOnly:true});
++      return message => {
++        if (originRegistry.getRegistrationId(sourceWindow) !== sourceRegistrationId) return;
++        if (message.type === "shell.ready") handleShellReady(registration);
++        else runtime.handleMessage(windowId, message);
++      };
++    },
+     handleMessage(event) {
+       const sourceWindow = event.source;
+       if (!sourceWindow) {
+@@ -1206,6 +1249,7 @@ function createShellBridge(hooks) {
+         reportUnrouted(hooks, event, "unregistered-window");
+         return;
+       }
++      if (portSenders.has(sourceWindow)) return;
+       const msg = event.data;
+       if (typeof msg !== "object" || msg === null || typeof msg.type !== "string") return;
+       if (msg.type === "shell.ready") {
+@@ -1265,7 +1309,24 @@ function scriptJson(value) {
  }
  function renderNappletNamespacePrelude(options) {
    const domains = uniqueBareDomains(["shell", ...options.domains]);
@@ -82,16 +169,25 @@ diff --git a/dist/index.js b/dist/index.js
 +    }
 +    requestTimeoutsMs[operation] = timeout;
 +  }
-+  return `<script data-kehto-nip5d-injection>(${nappletNamespacePrelude.toString()})(${scriptJson(domains)},${scriptJson(requestTimeoutsMs)},(${snapshotAppData.toString()})(${scriptJson(eligibleAppData(options.appData, domains) ?? null)}));</script>`;
++  // Only host-owned, self-contained functions may be serialized into the bootstrap.
++  const bindings = options.privatePort ? (options.guestBindings ?? []).map(binding => {
++    const functions = binding.map(fn => {
++      const source = Function.prototype.toString.call(fn);
++      if (/<\/script/i.test(source)) throw new TypeError("Invalid guest binding");
++      return "(" + source + ")";
++    });
++    return "[" + functions.join(",") + "]";
++  }) : [];
++  return `<script data-kehto-nip5d-injection>(${nappletNamespacePrelude.toString()})(${scriptJson(domains)},${scriptJson(requestTimeoutsMs)},(${snapshotAppData.toString()})(${scriptJson(eligibleAppData(options.appData, domains) ?? null)}),${options.privatePort === true},[${bindings.join(",")}]);</script>`;
  }
  function injectNappletNamespacePrelude(html, options) {
    const prelude = renderNappletNamespacePrelude(options);
-@@ -1281,13 +1310,20 @@
+@@ -1281,30 +1342,52 @@ function injectNappletNamespacePrelude(html, options) {
    }
    return `${prelude}${html}`;
  }
 -function nappletNamespacePrelude(domains) {
-+function nappletNamespacePrelude(domains, requestTimeoutsMs = {}, appData) {
++function nappletNamespacePrelude(domains, requestTimeoutsMs = {}, appData, privatePort = false, bindings = []) {
    const target = window;
    const allowed = new Set(domains);
 +  const policyJSON = JSON.stringify(appData);
@@ -107,10 +203,38 @@ diff --git a/dist/index.js b/dist/index.js
 +    if (typeof target.crypto?.getRandomValues !== "function") throw new Error("Secure randomness unavailable");
 +    const bytes = target.crypto.getRandomValues(new Uint8Array(16));
 +    return prefix + Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
++  }
++  const channel = privatePort ? new MessageChannel() : null;
++  const port = channel?.port1;
++  const parent = target.parent;
++  const send = port ? port.postMessage.bind(port) : message => parent.postMessage(message, "*");
++  const receiver = port ?? target;
++  const add = receiver.addEventListener.bind(receiver);
++  const remove = receiver.removeEventListener.bind(receiver);
++  const dataOf = Function.call.bind(Object.getOwnPropertyDescriptor(MessageEvent.prototype, "data").get);
++  if (channel) {
++    port.start();
++    parent.postMessage({type:"napplet.hello"}, "*", [channel.port2]);
    }
    function post(message) {
-     target.parent.postMessage(message, "*");
-@@ -1304,7 +1340,7 @@
+-    target.parent.postMessage(message, "*");
++    send(message);
+   }
+   function listen(listener) {
+-    target.addEventListener("message", listener);
+-    return () => target.removeEventListener("message", listener);
++    const receive = port ? event => {
++      if (event.isTrusted) listener({source:parent, isTrusted:true, data:dataOf(event)});
++    } : listener;
++    add("message", receive);
++    return () => remove("message", receive);
+   }
+   function isParentMessage(event) {
+-    return event.source === target.parent;
++    return event.source === parent;
+   }
+   function request(message, resultType, map, options = {}) {
+     const requestId = message.id ?? id();
      const outbound = { ...message, id: requestId };
      return new Promise((resolve, reject) => {
        const off = listen((event) => {
@@ -119,7 +243,7 @@ diff --git a/dist/index.js b/dist/index.js
          const incoming = event.data;
          if (typeof incoming !== "object" || incoming === null) return;
          const msg = incoming;
-@@ -1326,7 +1362,7 @@
+@@ -1326,7 +1409,7 @@ function nappletNamespacePrelude(domains) {
        const timer = setTimeout(() => {
          off();
          reject(new Error(`${message.type} timed out`));
@@ -128,7 +252,7 @@ diff --git a/dist/index.js b/dist/index.js
        post(outbound);
      });
    }
-@@ -1418,7 +1454,8 @@
+@@ -1418,7 +1501,8 @@ function nappletNamespacePrelude(domains) {
        const domains2 = freezeStrings(rawDomains);
        const services = freezeStrings(Array.isArray(message.services) ? message.services : []);
        environment = Object.freeze({
@@ -138,7 +262,16 @@ diff --git a/dist/index.js b/dist/index.js
          services
        });
        off();
-@@ -1813,6 +1850,17 @@
+@@ -1437,7 +1521,7 @@ function nappletNamespacePrelude(domains) {
+       return Object.freeze(strings);
+     }
+     function supports(domain) {
+-      return typeof domain === "string" && environment?.capabilities.domains.includes(domain) === true;
++      return typeof domain === "string" && allowed.has(domain) && Object.prototype.hasOwnProperty.call(root, domain);
+     }
+     const shell2 = {
+       ready: () => ready,
+@@ -1813,6 +1897,17 @@ function nappletNamespacePrelude(domains) {
      "submit"
    ]);
    let keysSmartForwardingInstalled = false;
@@ -156,7 +289,7 @@ diff --git a/dist/index.js b/dist/index.js
    function normalizeKeyName(key) {
      if (typeof key !== "string") return "";
      return key.length === 1 ? key.toUpperCase() : key;
-@@ -1821,6 +1869,7 @@
+@@ -1821,6 +1916,7 @@ function nappletNamespacePrelude(domains) {
      return `${value.ctrl}|${value.alt}|${value.shift}|${value.meta}|${normalizeKeyName(value.key)}`;
    }
    function bindingComboKey(binding) {
@@ -164,7 +297,7 @@ diff --git a/dist/index.js b/dist/index.js
      if (typeof binding !== "string" || binding.trim() === "") return null;
      const parts = binding.split("+");
      const key = parts.pop()?.trim();
-@@ -1904,24 +1953,48 @@
+@@ -1904,24 +2000,48 @@ function nappletNamespacePrelude(domains) {
      if (keysSmartForwardingInstalled) return;
      keysSmartForwardingInstalled = true;
      listen((event) => {
@@ -202,8 +335,8 @@ diff --git a/dist/index.js b/dist/index.js
 -      if (typeof keyEvent.key === "string" && modifierKeys.has(keyEvent.key)) return;
 -      if (isTextEntryTarget(keyEvent.target ?? documentLike?.activeElement)) return;
 +      if (!keysInputActive || !keyEvent.isTrusted || !documentLike?.hasFocus() || documentLike.hidden ||
-+          keyEvent.isComposing || keyEvent.keyCode === 229 || keyEvent.repeat || keyEvent.defaultPrevented ||
-+          keyEvent.ctrlKey || keyEvent.altKey || keyEvent.shiftKey || keyEvent.metaKey) return;
++          keyEvent.isComposing || keyEvent.keyCode === 229 || keyEvent.repeat || keyEvent.defaultPrevented) return;
++      if ((keyEvent.ctrlKey || keyEvent.metaKey) && ["a", "c", "f", "g", "j", "l", "n", "p", "r", "t", "v", "w", "x", "z"].includes(keyEvent.key.toLowerCase())) return;
 +      if (typeof keyEvent.key === "string" && (modifierKeys.has(keyEvent.key) || reservedKeyNames.has(keyEvent.key))) return;
 +      const path = apply(getPath, keyEvent, []);
 +      if (!isKeySurface(path[0])) return;
@@ -219,7 +352,7 @@ diff --git a/dist/index.js b/dist/index.js
          keyEvent.preventDefault?.();
          notifyKeyAction(actionId);
          return;
-@@ -1958,7 +2031,7 @@
+@@ -1958,7 +2078,7 @@ function nappletNamespacePrelude(domains) {
          }
          callbacks.add(callback);
          const off = listen((event) => {
@@ -228,7 +361,7 @@ diff --git a/dist/index.js b/dist/index.js
            const msg = event.data;
            if (typeof msg === "object" && msg !== null && msg.type === "keys.action" && msg.actionId === actionId) callback();
          });
-@@ -2033,6 +2106,8 @@
+@@ -2033,6 +2153,8 @@ function nappletNamespacePrelude(domains) {
    }
    function makeConfig() {
      let schema = null;
@@ -237,7 +370,7 @@ diff --git a/dist/index.js b/dist/index.js
      return {
        registerSchema: (nextSchema, version2) => request(
          { type: "config.registerSchema", schema: nextSchema, ...version2 === void 0 ? {} : { version: version2 } },
-@@ -2044,15 +2119,27 @@
+@@ -2044,15 +2166,27 @@ function nappletNamespacePrelude(domains) {
        ),
        get: () => request({ type: "config.get" }, "config.values", (msg) => msg.values ?? {}),
        subscribe(callback) {
@@ -251,12 +384,12 @@ diff --git a/dist/index.js b/dist/index.js
 +          delivered = true;
 +          lastValues = JSON.stringify(msg.values ?? {});
 +          callback(JSON.parse(lastValues));
-         });
--        fire({ type: "config.subscribe" });
++        });
 +        if (++subscribers === 1) fire({ type: "config.subscribe" });
 +        else if (lastValues !== void 0) queueMicrotask(() => {
 +          if (active && !delivered) callback(JSON.parse(lastValues));
-+        });
+         });
+-        fire({ type: "config.subscribe" });
          return subscriptionHandle(() => {
 -          fire({ type: "config.unsubscribe" });
 +          active = false;
@@ -268,7 +401,7 @@ diff --git a/dist/index.js b/dist/index.js
          });
        },
        openSettings: (options) => fire({ type: "config.openSettings", ...options && typeof options === "object" ? options : {} }),
-@@ -2062,7 +2149,7 @@
+@@ -2062,7 +2196,7 @@ function nappletNamespacePrelude(domains) {
            const msg = event.data;
            if (typeof msg === "object" && msg !== null && msg.type === "config.schemaError") callback(msg);
          });
@@ -277,7 +410,7 @@ diff --git a/dist/index.js b/dist/index.js
        },
        get schema() {
          return schema;
-@@ -2071,18 +2158,42 @@
+@@ -2071,18 +2205,42 @@ function nappletNamespacePrelude(domains) {
    }
    function makeResource() {
      const objectUrls = /* @__PURE__ */ new Set();
@@ -322,7 +455,7 @@ diff --git a/dist/index.js b/dist/index.js
              if (objectUrl) {
                URL.revokeObjectURL(objectUrl);
                objectUrls.delete(objectUrl);
-@@ -2090,14 +2201,17 @@
+@@ -2090,14 +2248,17 @@ function nappletNamespacePrelude(domains) {
              }
            }
          };
@@ -341,7 +474,7 @@ diff --git a/dist/index.js b/dist/index.js
          for (const url of objectUrls) URL.revokeObjectURL(url);
          objectUrls.clear();
        }
-@@ -2265,25 +2379,85 @@
+@@ -2265,25 +2426,95 @@ function nappletNamespacePrelude(domains) {
          ...Object.keys(sanitizedBehavior).length === 0 ? {} : { behavior: sanitizedBehavior }
        };
      };
@@ -355,7 +488,6 @@ diff --git a/dist/index.js b/dist/index.js
 -        "intent.invoke.result",
 -        (msg) => fieldOrThrow(msg, "result", "intent.invoke.result missing result")
 -      );
--    };
 +    const fromUri = (uri, options = {}) => {
 +      if (!options || typeof options !== "object" || Array.isArray(options) ||
 +          Object.keys(options).some((key) => !["payload", "handler", "behavior"].includes(key))) {
@@ -378,7 +510,7 @@ diff --git a/dist/index.js b/dist/index.js
 +        fields.set(name, decodeURIComponent(pair.slice(equals + 1)));
 +      }
 +      return { ...result, payload: Object.fromEntries(fields) };
-+    };
+     };
 +    const deliveryHandlers = new Set();
 +    const pendingDeliveries = new Map();
 +    const storeDelivery = pendingDeliveries.set.bind(pendingDeliveries);
@@ -387,11 +519,10 @@ diff --git a/dist/index.js b/dist/index.js
 +    const notify = (handler, delivery) => {
 +      try { handler(delivery); } catch { /* Other subscriptions still receive their delivery. */ }
 +    };
-+    const channel = new MessageChannel();
-+    const consume = channel.port1.postMessage.bind(channel.port1);
-+    const readData = Function.call.bind(Object.getOwnPropertyDescriptor(MessageEvent.prototype, "data").get);
-+    channel.port1.onmessage = (event) => {
-+      const { receipt, message } = readData(event);
++    const deliveryChannel = port ? null : new MessageChannel();
++    const consume = deliveryChannel ? deliveryChannel.port1.postMessage.bind(deliveryChannel.port1)
++      : receipt => post({type:"hypergolic.intent.consumed", receipt});
++    const receiveDelivery = (receipt, message) => {
 +      const delivery = Object.freeze(message.delivery);
 +      if (deliveryHandlers.size === 0) {
 +        storeDelivery(receipt, delivery);
@@ -400,7 +531,18 @@ diff --git a/dist/index.js b/dist/index.js
 +      for (const handler of [...deliveryHandlers]) notify(handler, delivery);
 +      consume(receipt);
 +    };
-+    target.parent.postMessage({ type: "hypergolic.intent.delivery-port" }, "*", [channel.port2]);
++    if (deliveryChannel) {
++      deliveryChannel.port1.onmessage = event => {
++        const {receipt, message} = dataOf(event);
++        receiveDelivery(receipt, message);
++      };
++      target.parent.postMessage({type:"hypergolic.intent.delivery-port"}, "*", [deliveryChannel.port2]);
++    } else {
++      let sequence = 0;
++      listen(event => {
++        if (event.data?.type === "intent.deliver") receiveDelivery(++sequence, event.data);
++      });
++    }
 +    const invokeRequest = (value, modern) => request(
 +      { type: "intent.invoke", request: normalizeRequest(value) },
 +      "intent.invoke.result",
@@ -444,7 +586,7 @@ diff --git a/dist/index.js b/dist/index.js
        available: (archetype) => request(
          { type: "intent.available", archetype },
          "intent.available.result",
-@@ -2367,8 +2541,11 @@
+@@ -2367,8 +2598,11 @@ function nappletNamespacePrelude(domains) {
        open: (url, options) => request(
          { type: "link.open", url, ...options ? { options } : {} },
          "link.open.result",
@@ -458,7 +600,7 @@ diff --git a/dist/index.js b/dist/index.js
        )
      };
    }
-@@ -2383,9 +2560,9 @@
+@@ -2383,9 +2617,9 @@ function nappletNamespacePrelude(domains) {
      };
    }
    function makeLists() {
@@ -470,7 +612,7 @@ diff --git a/dist/index.js b/dist/index.js
        add: (list, items, options) => req("lists.add", { list, items, ...options ? { options } : {} }),
        remove: (list, items, options) => req("lists.remove", { list, items, ...options ? { options } : {} })
      };
-@@ -2396,7 +2573,12 @@
+@@ -2396,7 +2630,12 @@ function nappletNamespacePrelude(domains) {
        encodeNip19: (input) => req("common.encodeNip19", { input }),
        decodeNip19: (value) => req("common.decodeNip19", { value }),
        getProfile: (targetValue) => req("common.getProfile", { target: targetValue }),
@@ -484,7 +626,7 @@ diff --git a/dist/index.js b/dist/index.js
        follow: (...pubkeys) => req("common.follow", { pubkeys }),
        unfollow: (...pubkeys) => req("common.unfollow", { pubkeys }),
        react: (targetEventId, reaction, customEmojiHref) => req("common.react", {
-@@ -2479,7 +2661,7 @@
+@@ -2479,7 +2718,7 @@ function nappletNamespacePrelude(domains) {
      return intent;
    }
    function isProtectedDomain(domain) {
@@ -493,7 +635,7 @@ diff --git a/dist/index.js b/dist/index.js
    }
    function makeDomain(domain, existing) {
      if (domain === "shell") return shell;
-@@ -2487,14 +2669,13 @@
+@@ -2487,14 +2726,13 @@ function nappletNamespacePrelude(domains) {
      if (domain === "identity") return makeProtectedIdentity();
      if (domain === "theme") return makeProtectedTheme();
      if (domain === "intent") return makeProtectedIntent();
@@ -509,10 +651,49 @@ diff --git a/dist/index.js b/dist/index.js
        case "media":
          return makeMedia();
        case "notify":
+@@ -2576,6 +2814,10 @@ function nappletNamespacePrelude(domains) {
+     }
+     return guardNappletNamespace(next);
+   }
++  if (port) {
++    const wire = Object.freeze({send: post, listen: callback => listen(event => callback(event.data))});
++    for (const [install, ...helpers] of bindings) install(wire, ...helpers);
++  }
+   let root = buildNappletNamespace(target.napplet);
+   Object.defineProperty(target, "napplet", {
+     get() {
+@@ -2632,7 +2874,7 @@ function createKeysProxy(deps) {
+     },
+     emit(windowId, envelope) {
+       const win = deps.originRegistry.getIframeWindow(windowId);
+-      if (win) win.postMessage(envelope, "*");
++      if (win) sendToFrame(win, envelope);
+     }
+   };
+ }
+@@ -2645,7 +2887,7 @@ function createMediaProxy(deps) {
+     },
+     emit(windowId, envelope) {
+       const win = deps.originRegistry.getIframeWindow(windowId);
+-      if (win) win.postMessage(envelope, "*");
++      if (win) sendToFrame(win, envelope);
+     }
+   };
+ }
+@@ -2658,7 +2900,7 @@ function createNotifyProxy(deps) {
+     },
+     emit(windowId, envelope) {
+       const win = deps.originRegistry.getIframeWindow(windowId);
+-      if (win) win.postMessage(envelope, "*");
++      if (win) sendToFrame(win, envelope);
+     }
+   };
+ }
 diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 0ec36f0..8e1aadd 100644
 --- a/dist/index.d.ts
 +++ b/dist/index.d.ts
-@@ -241,7 +241,16 @@
+@@ -241,7 +241,16 @@ interface WebrtcHooks {
   * temporarily suppress domains to simulate smaller or policy-constrained shell
   * environments while still using the production shell-ready path.
   */
@@ -529,7 +710,7 @@ diff --git a/dist/index.d.ts b/dist/index.d.ts
      /** Bare capability domains to remove from the delivered environment. */
      readonly disabledDomains?: readonly string[];
      /**
-@@ -325,6 +334,7 @@
+@@ -325,6 +334,7 @@ interface UnroutedMessageInfo {
   * `shell.supports(domain)` locally from this snapshot after `shell.init`.
   */
  interface ShellCapabilities {
@@ -537,7 +718,7 @@ diff --git a/dist/index.d.ts b/dist/index.d.ts
      /** Immutable bare domain names the shell offers to this napplet. */
      readonly domains: readonly string[];
  }
-@@ -350,6 +360,8 @@
+@@ -350,6 +360,8 @@ interface ShellEnvironment {
   * ```
   */
  interface ShellAdapter {
@@ -546,10 +727,24 @@ diff --git a/dist/index.d.ts b/dist/index.d.ts
      relayPool: RelayPoolHooks;
      relayConfig: RelayConfigHooks;
      windowManager: WindowManagerHooks;
-@@ -594,11 +606,16 @@
+@@ -476,6 +488,7 @@ interface ShellAdapter {
+  * ```
+  */
+ interface ShellBridge {
++    bindPort(source: Window, origin: string, send: (message: unknown) => void): (message: {type: string}) => void;
+     /**
+      * Handle an incoming postMessage from a napplet iframe.
+      *
+@@ -594,11 +607,22 @@ declare function createShellBridge(hooks: ShellAdapter): ShellBridge;
   * ```
   */
  interface NappletNamespacePreludeOptions {
++    readonly privatePort?: boolean;
++    /** Trusted host binding serialized inside the private bootstrap. */
++    readonly guestBindings?: readonly (readonly [
++        (wire: {send(message: object): void; listen(callback: (value: unknown) => void): () => void}, ...helpers: never[]) => void,
++        ...((...args: never[]) => unknown)[]
++    ])[];
 +    readonly appData?: ShellAppDataPolicy;
      /**
       * Optional bare NAP domain names the shell exposes to this napplet.

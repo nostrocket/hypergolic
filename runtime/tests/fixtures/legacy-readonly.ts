@@ -12,10 +12,10 @@ function mount(html: string, recipe = false, guarded = false): void {
   state.requests = []; state.closes = []; state.status = []; state.deliveries = []; state.live = true; state.revoked = 0; state.resumed = 0; state.queueRuns = 0;
   const frame = document.createElement('iframe'); frame.id = 'legacy'; frame.sandbox.add('allow-scripts'); document.body.append(frame);
   const source = frame.contentWindow!;
-  let guard: ReturnType<typeof createLegacyDocumentGuard> | null = null;
+  const guard = createLegacyDocumentGuard(frame, source, session, () => {state.revoked++; state.live = false; receiver.destroy();}, () => state.resumed++);
   const receiver = createLegacyReadOnlyReceiver({frame, source, session,
     relays: ['wss://relay.damus.io', 'wss://nos.lol', 'wss://relay.nostr.band', 'wss://relay.primal.net'],
-    live: () => state.live && (!guard || guard.isActive()),
+    send: guard.send, live: () => state.live && guard.isActive(),
     subscribe(request, deliver) {
       state.requests.push(request); state.deliveries.push(deliver);
       if (state.auto) setTimeout(() => {
@@ -24,16 +24,16 @@ function mount(html: string, recipe = false, guarded = false): void {
       }, 0);
     }, close: request => state.closes.push(request), status: message => state.status.push(message)});
   state.receiver = receiver;
-  if (guarded) {
-    const NativeChannel = window.MessageChannel;
-    window.MessageChannel = class extends NativeChannel {
-      constructor() {super(); state.disconnectDocumentPort = () => this.port1.close(); window.MessageChannel = NativeChannel;}
-    };
-  }
-  if (guarded) guard = createLegacyDocumentGuard(frame, source, session, () => {state.revoked++; state.live = false; receiver.destroy();}, () => state.resumed++);
   state.guard = guard;
-  if (guard) frame.addEventListener('load', () => guard!.loaded());
-  const receive = (event: MessageEvent) => {if (guard) guard.receive(event, receiver.receive); else receiver.receive(event);}; window.addEventListener('message', receive);
+  frame.addEventListener('load', () => guard!.loaded());
+  const receive = (event: MessageEvent) => {
+    if (guarded && event.source === source && event.data?.type === 'napplet.hello' && event.ports.length === 1) {
+      const port = event.ports[0]!;
+      state.disconnectDocumentPort = () => port.close();
+    }
+    guard.receive(event, receiver.receive);
+  };
+  window.addEventListener('message', receive);
   const oldDestroy = receiver.destroy;
   state.destroy = () => {guard?.destroy(); oldDestroy(); window.removeEventListener('message', receive);};
   let projected = html.replace(/<head[^>]*>/i, match => match + `<meta http-equiv="Content-Security-Policy" content="${policy}">`);

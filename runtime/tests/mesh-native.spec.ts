@@ -1,4 +1,4 @@
-import {test, expect, type Page} from './published-wire';
+import {test, expect, holdShellReadiness, type Page} from './published-wire';
 import {createServer, type Server} from 'node:http';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -21,9 +21,9 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => {await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));});
 const digest = (input: string | Buffer) => createHash('sha256').update(input).digest('hex');
-async function open(page: Page, options: {main?: boolean; domains?: string[]; mesh?: unknown; change?: boolean; large?: boolean} = {}) {
+async function open(page: Page, options: {main?: boolean; modern?: boolean; domains?: string[]; mesh?: unknown; change?: boolean; large?: boolean} = {}) {
   const html = `<!doctype html><html><head><title>Owned Mesh</title></head><body><p id="owned">Owned Mesh</p>${options.large ? '<!--' + 'x'.repeat(270000) + '-->' : ''}</body></html>`;
-  const hash = digest(html), metadata = {publisher: '1'.repeat(64), appId: 'owned-mesh', eventId: '2'.repeat(64), htmlHash: hash, version: digest(`${hash} /index.html\n`), domains: options.domains ?? ['mesh'], ...(options.mesh === null ? {} : {mesh: options.mesh ?? context})};
+  const hash = digest(html), metadata = {publisher: '1'.repeat(64), appId: 'owned-mesh', ...(options.modern && {manifestFormat:'nip-5d'}), eventId: '2'.repeat(64), htmlHash: hash, version: digest(`${hash} /index.html\n`), domains: options.domains ?? ['mesh'], ...(options.mesh === null ? {} : {mesh: options.mesh ?? context})};
   await page.addInitScript(({generation, metadata, html, change}) => {
     if (window !== top) return;
     const listeners = new Set<(event: {data: string}) => void>();
@@ -143,6 +143,27 @@ test('native revocation is irreversible and destroy is registration-scoped and i
   await page.evaluate(() => {(window as any).__client.destroy(); (window as any).__client.destroy();});
   expect((await posts(page)).filter(row => row.type === 'mesh.dispose')).toEqual([{type: 'mesh.dispose', sessionId: generation, sourceRevision: revision, sequence: 2}]);
   expect(await page.evaluate(() => (window as any).__client.mesh.available())).toBe(false);
+});
+
+test('modern Mesh subscribes, receives stored events, closes and releases its native source on the private port', async ({page}) => {
+  const readWire = await holdShellReadiness(page);
+  await open(page,{main:true,modern:true});
+  const guest = page.frameLocator('#napplet');
+  const body = guest.locator('body');
+  await expect(body).toHaveText('Owned Mesh');
+  await body.evaluate(() => {
+    const subscription = (window as any).napplet.mesh.subscribe([{kinds:[20431]}],{ttl:0});
+    subscription.on('event', ({event}: {event:{content:string}}) => {document.body.dataset.content = event.content;});
+    subscription.on('eose', () => subscription.close());
+  });
+  const row = await next(page,'mesh'), {subId} = JSON.parse(row.message);
+  await emit(page,stream(row.sequence,1,{type:'mesh.event',subId,result:{event:signed('stored on the private port')}}));
+  await expect(body).toHaveAttribute('data-content','stored on the private port');
+  await emit(page,stream(row.sequence,2,{type:'mesh.eose',subId,ttl:0}));
+  expect(JSON.parse((await next(page,'mesh',2)).message)).toEqual({type:'mesh.close',subId});
+  expect(await readWire()).toEqual({transfers:1,windowTypes:['napplet.hello'],portTypes:['shell.ready','mesh.subscribe','mesh.close']});
+  await page.locator('#napplet').evaluate(frame => frame.remove());
+  await next(page,'mesh.dispose');
 });
 
 test('verified native artifact activates the actual eager SDK facade and removal disposes its source', async ({page}) => {

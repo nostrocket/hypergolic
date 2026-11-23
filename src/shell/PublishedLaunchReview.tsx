@@ -6,7 +6,7 @@ import { AccessibilityInfo, AppState, ScrollView, StyleSheet, Text, View, type T
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { boundedPublishedTitle, publishedAppLabel, snapshotEventId } from '../napplets/published-identity';
 import type { VerifiedLaunchMetadata } from '../napplets/verified-launch-metadata';
-import { launchAccessCopy } from './launch-access-copy';
+import { launchAccessCopy, LEGACY_MANIFEST_NOTICE } from './launch-access-copy';
 import { compactPublisher, formatNpub } from '../security/public-identity';
 import { OwnerContext } from './IdentityOwnerContext';
 import { ShellModal } from './ShellModal';
@@ -178,6 +178,7 @@ export function PublishedLaunchReview({ target, source, changesAccess, onAccept,
         <ScrollView testID="published-review-content" contentContainerStyle={styles.content} style={styles.scroll}>
           <Text ref={heading} accessibilityRole="header" style={styles.heading}>{title ?? `Open ${target.metadata.title}?`}</Text>
           <LaunchIdentity key={`${target.publisher}:${target.eventId}:${target.metadata.icon ?? ''}`} target={target} source={source} />
+          {target.metadata.legacyManifest && <Text style={styles.body}>{LEGACY_MANIFEST_NOTICE}</Text>}
           {readOnly ? <Text style={styles.body}>Legacy read-only mode supplies compatibility libraries and bounded public content. Declared capability access is not granted. Signing, publishing and uploads are unavailable.</Text> : <RequestedAccess key={`access:${target.eventId}`} target={target} changesAccess={changesAccess} />}
           <Text style={styles.detail}>Hypergolic restricts direct network connections. Full network isolation is still being tested on mobile devices.</Text>
           {children}

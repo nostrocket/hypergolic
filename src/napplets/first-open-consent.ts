@@ -80,7 +80,7 @@ export async function requestFirstOpenConsent(
   signal: AbortSignal,
   assertActive: () => void,
   review: (request: NappletConsentReview) => Promise<boolean>,
-  mode: 'review' | 'saved-pin' = 'review',
+  mode: 'review' | 'direct-open' | 'saved-pin' = 'review',
 ): Promise<VerifiedNappletAdmission> {
   assertVerifiedArtifact(artifactInput);
   const artifact: VerifiedNappletArtifact = artifactInput;
@@ -120,7 +120,7 @@ export async function requestFirstOpenConsent(
     }
   }
 
-  if (!accepted) {
+  if (!accepted || (mode === 'direct-open' && artifact.manifest.format === 'legacy-path')) {
     const request = Object.freeze({ user, publisher, appId, eventId, metadata: verifiedLaunchMetadata(artifact), ...(publication.kind===5129?{snapshot:publication.snapshot}:{}),
       domains: requestedDomains, unsupportedDomains,
       optionalDomains, unsupportedOptionalDomains });
@@ -129,6 +129,13 @@ export async function requestFirstOpenConsent(
     catch (error) { if (error instanceof ReviewBusyError) throw error; return fail(); }
     active(signal, owner, identity, assertActive);
     if (!approved) return fail();
+    if (accepted) {
+      const latest = await storage.readAccessGrant({signal});
+      active(signal, owner, identity, assertActive);
+      if (!latest || latest.revision !== current?.revision) return fail();
+    }
+  }
+  if (!accepted) {
     try {
       await storage.replaceAccessGrant(domains, current?.revision ?? null, { signal }, supportReview);
     } catch { return fail(); }

@@ -5,6 +5,9 @@ import { naddrEncode } from 'nostr-tools/nip19';
 import { finalizeEvent, getPublicKey } from 'nostr-tools/pure';
 import { loadPublishedArtifact, PublishedLoadError } from '../../src/napplets/loader.ts';
 import { createNativePublishedRelayLookup, type NativePublishedRelayPort } from '../../src/napplets/native-published-relay.ts';
+import { createPublishedRevisionReads } from '../../src/napplets/published-revision-reads.ts';
+import { verifyArtifact, verifyManifest } from '../../src/napplets/verified-artifact.ts';
+import { publishedOpenFailureText } from '../../src/shell/published-settings-actions.ts';
 import { createNativePublishedArtifactSource } from '../../src/napplets/published-source.ts';
 
 const secret = Uint8Array.from([...new Uint8Array(31), 2]);
@@ -27,13 +30,13 @@ const event = {
   tags: signed.tags.map(tag => [...tag]), content: signed.content, sig: signed.sig,
 };
 
-function relayPort(calls: string[]): NativePublishedRelayPort {
+function relayPort(calls: string[], reply = event): NativePublishedRelayPort {
   let id = 0;
   return {
     newInstanceId() { id++; return `00000000-0000-4000-8000-${String(id).padStart(12, '0')}`; },
     async queryPublishedRelay(_operationId, url, requestText, subscriptionId) {
       calls.push(`${url}|${requestText}`);
-      return [JSON.stringify(['EVENT', subscriptionId, event]), JSON.stringify(['EOSE', subscriptionId])];
+      return [JSON.stringify(['EVENT', subscriptionId, reply]), JSON.stringify(['EOSE', subscriptionId])];
     },
     cancelPublishedRelay() {},
     revokeAllPublishedRelay() {},
@@ -68,4 +71,29 @@ test('native source delegates only the selected relays and Blossom reads retain 
     source: tamperedSource, lookupRelays: [relays[0]!], signal: new AbortController().signal,
     assertActive: () => undefined,
   }), PublishedLoadError);
+});
+
+test('a signed release without a server reports a missing download location before either native reader runs', async () => {
+  const manifest = finalizeEvent({kind: 35129, created_at: event.created_at, content: 'Signed release with no download hints.',
+    tags: [['d', identifier], ['x', htmlHash]]}, secret);
+  const lookup = createNativePublishedRelayLookup(relayPort([], manifest));
+  let downloads = 0;
+  const unexpectedDownload = async (): Promise<never> => { downloads++; throw Error('Unexpected download'); };
+  for (const fileBacked of [false, true]) {
+    const source = createNativePublishedArtifactSource({relayLookup: lookup, fetchPublicHttps: unexpectedDownload,
+      ...(fileBacked ? {readVerifiedBody: unexpectedDownload} : {})});
+    const options = {source, lookupRelays: relays, signal: new AbortController().signal, assertActive() {}};
+    await assert.rejects(loadPublishedArtifact(link, options), error => {
+      assert.equal((error as PublishedLoadError).code, 'PUBLISHED_NO_DOWNLOAD_SERVER');
+      assert.match(publishedOpenFailureText(error), /lists no download server/);
+      return true;
+    });
+    const cached = await verifyArtifact(await verifyManifest({kind: 35129, pubkey, identifier, relayHints: []},
+      JSON.parse(JSON.stringify(manifest))), html);
+    const reads = createPublishedRevisionReads(async () => cached);
+    const restored = await reads.load(link, options, {user: pubkey, epoch: 1, assertActive() {}});
+    assert.equal(restored.manifest.eventId, manifest.id);
+    assert.equal(restored.htmlHash, htmlHash);
+  }
+  assert.equal(downloads, 0);
 });

@@ -2,6 +2,16 @@
 
 Discover and other napplets with Link access use NAP-LINK to open a named kind-35129 publication. The caller passes its Nostr address. The shell resolves the address and reviews the signed revision it actually found. See the [link contract](external-links.md) for URL handling, result codes and limits.
 
+## Supported publication kinds
+
+| Publication | Open from Settings | Find in Discover | Open through NAP-LINK |
+| --- | --- | --- | --- |
+| Named (35129) | Yes, by address | Yes | Yes, by address |
+| Snapshot (5129) | Yes, by event link | No | No |
+| Root (15129) | No | No | No |
+
+The [pinned NIP-5D draft](https://github.com/dskvr/nips/blob/f60550c3409d6d81a875088ec83e660571e10504/5D.md) defines all three kinds. A root belongs to a publisher and has no named identifier.
+
 ## Review and launch
 
 1. The shell checks the caller’s Link access, focused workspace session and selected account. It admits one launch at a time. Before contacting relays, it checks whether the named target can use a live view and, for a new target, whether there is room for another card.
@@ -10,6 +20,16 @@ Discover and other napplets with Link access use NAP-LINK to open a named kind-3
 4. The shell rechecks capacity after approval and at commit. It focuses a matching mounted napplet or stages the approved artifact and opens it in the workspace. When capacity prevents an open, the shell explains how to free room and returns the ordinary policy denial to the caller. A different saved revision goes through the normal update flow. Closing the caller, losing focus before commit or changing identity can cancel the request.
 
 Use the open napplet’s workspace menu to pin it to Home. Shortcuts belong to the selected account. See [workspace storage](workspace-storage.md).
+
+## Guest transport
+
+Bundled guests and modern published releases start with the [NIP-5D port handoff](https://github.com/dskvr/nips/blob/f60550c3409d6d81a875088ec83e660571e10504/5D.md#transport). Its injected bootstrap creates the channel before publisher scripts run. The shell accepts the port from the registered frame, binds the verified publication and grants, and answers requests there. The guest can ask for its theme before requesting Shell environment details. A granted Mesh service uses the same connection and keeps its native source checks. The two reviewed read-only releases use their port for public reads and images. The reviewed Workspace Journal release uses its private connection to save and restore an unfinished entry. Its text and cursor stay in instance storage. Other older-format releases retain their previous transport. [Migration issue](https://github.com/nostrocket/hypergolic/issues/98).
+
+When the private connection closes, the shell retires the guest. WebViews without a port-close event check the connection every ten seconds while visible. A missed reply on the next check ends the session. The shell starts a fresh check after visibility changes or a prolonged timer delay. A later window message from a modern published guest or from bundled Discover or Support ends its session. The shell accepts one compatibility reply when it has just asked that guest about unsaved work. The reply must match the pending question and arrive before the deadline. The two reviewed readers end their sessions on any later guest window message.
+
+## Opening an older named release
+
+A release that signs a file listing can still open through legacy compatibility. The shell verifies its signature and HTML hash, identifies the older format in the launch review, and asks before opening it from an address. A saved capability grant alone cannot approve that choice. Reopening an exact saved pin can reuse its existing grant. A manual update identifies the older format in the version review. Automatic catalog refresh keeps the current release when an update would require legacy compatibility.
 
 ## Opening a snapshot from Settings
 
