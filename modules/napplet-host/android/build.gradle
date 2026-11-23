@@ -11,6 +11,7 @@ version = '0.0.0'
 expoModule { canBePublished false }
 android {
   namespace 'org.nostrocket.hypergolic.host'
+  sourceSets.main.assets.srcDir '../ios/Resources/svg'
   externalNativeBuild { cmake { path file('CMakeLists.txt') } }
   buildFeatures { buildConfig true }
   defaultConfig {

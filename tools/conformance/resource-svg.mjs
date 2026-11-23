@@ -1,3 +1,4 @@
+import {readFile} from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {createRequire} from 'node:module';
@@ -15,7 +16,18 @@ export async function observeResourceSvg() {
   const registration = {sessionId:session, generation:session, instanceId:session, epoch:0,
     user:'1'.repeat(64), publisher:'2'.repeat(64), appId:'svg-check', version:'3'.repeat(64), fixture:'published', domains:['resource']};
   const authority = {nativeToken:randomUUID(), assertActive() {}};
-  const service = createResourceService({https:() => assert.fail('Unexpected network request'), servers:() => [], sha256:() => assert.fail('Unexpected hash fetch')});
+  const {chromium} = createRequire(new URL('../../runtime/package.json', import.meta.url))('@playwright/test');
+  const browser = await chromium.launch();
+  const template = await readFile(new URL('../../modules/napplet-host/ios/Resources/svg/resource-svg.html', import.meta.url), 'utf8');
+  const rasterizeSvg = async input => {
+    const view = await browser.newPage();
+    try {
+      await view.setContent(template.replace('__SVG_BASE64__', Buffer.from(input).toString('base64')));
+      await view.waitForFunction(() => typeof window.pngResult === 'string', null, {timeout:4000});
+      return Uint8Array.from(Buffer.from(await view.evaluate(() => window.pngResult), 'base64'));
+    } finally { await view.close(); }
+  };
+  const service = createResourceService({rasterizeSvg, https:() => assert.fail('Unexpected network request'), servers:() => [], sha256:() => assert.fail('Unexpected hash fetch')});
   const broker = createResourceBroker({service, transfers:createResourceTransfers(randomUUID)}, {registration, assertActive:authority.assertActive});
   try {
     const adapter = createResourceAdapter({async request(message) {
@@ -46,28 +58,26 @@ export async function observeResourceSvg() {
     assert.equal(illustration.blob.type, illustration.mime);
     const bytes = new Uint8Array(await illustration.blob.arrayBuffer());
     assert.equal(classifyResourceBytes(bytes), illustration.mime);
-    const {chromium} = createRequire(new URL('../../runtime/package.json', import.meta.url))('@playwright/test');
-    const browser = await chromium.launch();
-    try {
-      const page = await browser.newPage();
-      const pixels = await page.evaluate(async url => {
-        const image = new Image();
-        image.src = url;
-        await image.decode();
-        const canvas = document.createElement('canvas');
-        canvas.width = image.width;
-        canvas.height = image.height;
-        const context = canvas.getContext('2d');
-        context.drawImage(image, 0, 0);
-        return {width:image.width, height:image.height, rgba:Array.from(context.getImageData(0, 0, 1, 1).data)};
-      }, 'data:' + illustration.mime + ';base64,' + Buffer.from(bytes).toString('base64'));
-      assert.equal(pixels.width, 2);
-      assert.equal(pixels.height, 2);
-      const [red, green, blue, alpha] = pixels.rgba;
-      assert.ok(red > 240 && green < 16 && blue < 16 && alpha === 255, 'Expected an opaque red illustration');
-    } finally { await browser.close(); }
+    const page = await browser.newPage();
+    const pixels = await page.evaluate(async url => {
+      const image = new Image();
+      image.src = url;
+      await image.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const context = canvas.getContext('2d');
+      context.drawImage(image, 0, 0);
+      return {width:image.width, height:image.height, rgba:Array.from(context.getImageData(0, 0, 1, 1).data)};
+    }, 'data:' + illustration.mime + ';base64,' + Buffer.from(bytes).toString('base64'));
+    assert.equal(pixels.width, 2);
+    assert.equal(pixels.height, 2);
+    const [red, green, blue, alpha] = pixels.rgba;
+    assert.ok(red > 240 && green < 16 && blue < 16 && alpha === 255, 'Expected an opaque red illustration');
+
     return true;
   } finally {
+    await browser.close();
     broker.revoke();
     service.revokeAll();
   }

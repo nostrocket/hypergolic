@@ -381,3 +381,22 @@ test('resource info follows trusted Blossom disable/restore and absent Nostr res
   enabled=true;assert.equal((await info('restored')).info.schemes.find(value=>value.scheme==='blossom')!.enabled,true);
   await session.execute(bytes('direct'));assert.equal(h.calls(),1);h.service.revokeAll();
 });
+
+test('Resource caches converted PNG bytes only after verifying the signed Blossom hash', async () => {
+  const source = text('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>');
+  let conversions = 0;
+  const session = setup({https:async () => source, rasterizeSvg:async input => {
+    assert.deepEqual(input, source);
+    conversions++;
+    return png();
+  }}).bind();
+  await assert.rejects(session.execute(bytes('wrong', 'blossom:' + '1'.repeat(64))), error('decode-failed'));
+  assert.equal(conversions, 0);
+  const url = 'blossom:' + hash(source);
+  for (const id of ['first', 'cached']) {
+    const reply = await session.execute(bytes(id, url));
+    assert.deepEqual(reply?.value, {mime:'image/png',bytes:png()});
+  }
+  assert.equal(conversions, 1);
+  session.revoke();
+});
