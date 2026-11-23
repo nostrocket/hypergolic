@@ -1,0 +1,21 @@
+{"config":{"display":{"devices":[{"id":"desk","width":800,"height":480,"type":"eink"}],"permitted":{"default":true}},"upload":{"rails":[{"rail":"nip96","server":"https://files.example.com/api/v2/media","returns":["https"]},{"rail":"blossom","server":"https://blossom.example.com","returns":["https","blossom"]}],"defaultRail":"nip96","maxBytes":104857600,"mimeTypes":["image/png","image/jpeg","application/pdf"]}},"host":{"hash":"test","sniff":"test"}}
+{"t":"create","w":1,"manifest":{"kind":35129,"pubkey":"0000000000000000000000000000000000000000000000000000000000000abc","content":"test napplet","tags":[["d","my-napplet"],["x","00000000000000000000000000000000000000000000000000000000000fbb62"]],"id":"0000000000000000000000000000000000000000000000000000000000000011"},"bytes":"bXktbmFwcGxldA==","inst":1}
+{"t":"load","w":1}
+{"t":"hello","w":1,"ports":[7]}
+{"t":"event","event":{"t":"userChanged","pubkey":"ab12cd..."}}
+{"t":"message","port":7,"msg":{"type":"identity.getPublicKey","id":"q1"}}
+{"t":"message","port":7,"msg":{"type":"identity.getProfile","id":"q2"}}
+{"t":"reply","tag":{"domain":"identity","n":0},"reply":{"t":"json","json":{"profile":{"name":"Alice","about":"Nostr dev","picture":"https://..."}}}}
+{"t":"message","port":7,"msg":{"type":"identity.getProfile","id":"q3"}}
+{"t":"reply","tag":{"domain":"identity","n":1},"reply":{"t":"json","json":{"profile":null}}}
+{"t":"message","port":7,"msg":{"type":"identity.getRelays","id":"q5"}}
+{"t":"reply","tag":{"domain":"identity","n":2},"reply":{"t":"json","json":{"relays":{"wss://relay.example.com":{"read":true,"write":true},"wss://readonly.example.com":{"read":true,"write":false}}}}}
+{"t":"message","port":7,"msg":{"type":"identity.getList","id":"q6","listType":"bookmarks"}}
+{"t":"reply","tag":{"domain":"identity","n":3},"reply":{"t":"json","json":{"entries":["note1abc...","note1def..."]}}}
+{"t":"message","port":7,"msg":{"type":"identity.getMutes","id":"q7"}}
+{"t":"reply","tag":{"domain":"identity","n":4},"reply":{"t":"json","json":{"pubkeys":["spam1...","spam2..."]}}}
+{"t":"message","port":7,"msg":{"type":"identity.getZaps","id":"q8"}}
+{"t":"reply","tag":{"domain":"identity","n":5},"reply":{"t":"json","json":{"zaps":[{"eventId":"ev1...","sender":"ab12...","amount":21000,"content":"Great post!"}]}}}
+{"t":"message","port":7,"msg":{"type":"identity.getBadges","id":"q9"}}
+{"t":"reply","tag":{"domain":"identity","n":6},"reply":{"t":"json","json":{"badges":[{"id":"badge1...","name":"Early Adopter","awardedBy":"cd34..."}]}}}
+{"t":"event","event":{"t":"userChanged","pubkey":""}}

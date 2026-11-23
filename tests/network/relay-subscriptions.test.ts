@@ -1,3 +1,5 @@
+import {loadTrace, sends} from '../reference-shell/trace.mts';
+import {expectedResult, signedFixture} from '../reference-shell/relay-event.mts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { finalizeEvent } from 'nostr-tools/pure';
@@ -379,4 +381,27 @@ test('owner revocation or explicit close invalidates ordinary raw deadline witho
     assert.deepEqual(h.messages,[],mode);assert.equal(h.calls.length,1,mode);assert.equal(h.calls[0]!.stopped,1,mode);
     h.session.revoke();
   }
+});
+
+test('Lean relay-subscribe delivers the verified event and EOSE then stops the subscription', () => {
+  const [subscribe, incoming, eose, close] = loadTrace('relay-subscribe').steps.slice(4);
+  const signed = signedFixture(incoming.input.reply.event);
+  const host = harness([incoming.input.reply.relay]);
+  try {
+    host.session.subscribe(subscribe.input.msg, host.send);
+    const [call] = host.calls;
+    assert.deepEqual(JSON.parse(call.wire), ['REQ', call.sub, ...subscribe.input.msg.filters.map(
+      (filter: {limit: number}) => ({...filter, limit: Math.min(filter.limit, 32)}))]);
+    host.event(0, signed);
+    const [push] = sends(incoming);
+    const [received] = host.messages;
+    assert.ok(received.type === 'relay.event');
+    assert.deepEqual(received, {...push.msg, result: expectedResult(push.msg.result, incoming.input.reply.event, signed, received.result)});
+    host.eose();
+    assert.deepEqual(host.messages.slice(1), sends(eose).map(row => row.msg));
+    host.session.close(close.input.msg);
+    assert.equal(call.stopped, 1);
+    // The draft makes the terminal notification optional on caller-initiated close.
+    if (host.messages.length > 2) assert.deepEqual(host.messages.slice(2), sends(close).map(row => row.msg));
+  } finally {host.session.revoke();}
 });

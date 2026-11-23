@@ -1,3 +1,6 @@
+import {loadTrace, sends} from '../reference-shell/trace.mts';
+import {signedFixture} from '../reference-shell/relay-event.mts';
+import {captureOutboxPublicationReceipt} from '../../src/outbox/publication-receipt.ts';
 import assert from 'node:assert/strict';
 import {RelayQueryBusyError} from '../../src/network/relay-query-contract.ts';
 import {test} from 'node:test';
@@ -115,4 +118,24 @@ test('oversized existing signed relay list blocks review rather than silently dr
 test('local routing contention cannot select Network fallback', async () => {
   const h = setup(async () => { throw new RelayQueryBusyError(); });
   await assert.rejects(h.planner.plan(request, user, signal(), () => {}), /resolution busy/);
+});
+
+test('Lean outbox preserves the explicit destination and acknowledged event in the receipt', async () => {
+  const [request, signedStep, ack] = loadTrace('outbox').steps.slice(4);
+  const original = signedStep.input.reply.event;
+  const event = signedFixture(original);
+  const {planner, calls} = setup();
+  // The model fills in the timestamp before signing. The planner accepts a complete template.
+  const wire = {...request.input.msg, event: {...request.input.msg.event, created_at: original.created_at}};
+  const plan = await planner.plan(wire, event.pubkey, signal(), () => {});
+  const expected = sends(ack)[0].msg;
+  assert.deepEqual(expected.event, original);
+  assert.equal(expected.eventId, original.id);
+  assert.deepEqual(plan.event.destinations, signedStep.outputs[0].call.relays.map((relay: string) => new URL(relay).href));
+  assert.deepEqual(calls, []);
+  const outcomes = ack.input.reply.acks.map(([relay, accepted]: [string, boolean]) =>
+    ({relay: new URL(relay).href, eventId: event.id, status: accepted ? 'accepted' : 'rejected', reason: ''}));
+  const receipt = captureOutboxPublicationReceipt(plan, event, outcomes, null);
+  const relays = Object.fromEntries(Object.entries(expected.relays).map(([url, accepted]) => [new URL(url).href, accepted]));
+  assert.deepEqual(receipt.response, {...expected, relays, event, eventId: event.id});
 });
