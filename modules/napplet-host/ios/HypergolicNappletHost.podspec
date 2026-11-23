@@ -38,6 +38,6 @@ export PATH="$(dirname "${NODE_BINARY:-node}"):$PATH"
   s.source_files = '**/*.swift', 'BodyVerifier/*.{cpp,h}'
   s.public_header_files = 'BodyVerifier/*.h'
   s.libraries = 'c++', 'sqlite3'
-  s.resource_bundles = { 'HypergolicNappletHostAssets' => ['Resources/runtime/*', 'Resources/notices/*', 'Resources/shell-notices/*'] }
+  s.resource_bundles = { 'HypergolicNappletHostAssets' => ['Resources/runtime/*', 'Resources/svg/resource-svg.html', 'Resources/notices/*', 'Resources/shell-notices/*'] }
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'CLANG_CXX_LANGUAGE_STANDARD' => 'c++17' }
 end

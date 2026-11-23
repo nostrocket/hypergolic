@@ -174,6 +174,9 @@ class NappletHostModule : Module() {
       try { withContext(Dispatchers.IO) { UploadTransport.put(token, credential) } }
       catch (error: kotlinx.coroutines.CancellationException) { UploadTransport.cancel(token); throw error }
     }
+    AsyncFunction("rasterizeResourceSvg") Coroutine { encoded: String ->
+      appContext.reactContext?.let { ResourceSvg.render(it, encoded) }
+    }
     AsyncFunction("fetchResourceHttps") Coroutine { token: String, operationId: String, url: String ->
       val generation = ResourceCapability.admission(token, url)
       val job = currentCoroutineContext()[Job]
