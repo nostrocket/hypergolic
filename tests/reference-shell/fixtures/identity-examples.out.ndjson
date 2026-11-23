@@ -1,0 +1,20 @@
+{"step":0,"outputs":[{"t":"iframeCreated","w":1,"identity":{"d":"my-napplet","hash":"00000000000000000000000000000000000000000000000000000000000fbb62","publisher":"0000000000000000000000000000000000000000000000000000000000000abc","kind":"named","eventId":"0000000000000000000000000000000000000000000000000000000000000011"},"exposed":["shell","intent","inc","theme","identity","relay","storage","keys","media","notify","resource","config","upload","value","outbox","cvm","link","pow","display"]}]}
+{"step":1,"outputs":[]}
+{"step":2,"outputs":[{"t":"bound","w":1,"port":7,"identity":{"d":"my-napplet","hash":"00000000000000000000000000000000000000000000000000000000000fbb62","publisher":"0000000000000000000000000000000000000000000000000000000000000abc","kind":"named","eventId":"0000000000000000000000000000000000000000000000000000000000000011"}}]}
+{"step":3,"outputs":[{"t":"send","port":7,"msg":{"type":"identity.changed","pubkey":"ab12cd..."}}]}
+{"step":4,"outputs":[{"t":"send","port":7,"msg":{"type":"identity.getPublicKey.result","id":"q1","pubkey":"ab12cd..."}}]}
+{"step":5,"outputs":[{"t":"call","tag":{"domain":"identity","n":0},"call":{"t":"nap","domain":"identity","op":"query","args":{"query":"getProfile"}}}]}
+{"step":6,"outputs":[{"t":"send","port":7,"msg":{"type":"identity.getProfile.result","id":"q2","profile":{"name":"Alice","about":"Nostr dev","picture":"https://..."}}}]}
+{"step":7,"outputs":[{"t":"call","tag":{"domain":"identity","n":1},"call":{"t":"nap","domain":"identity","op":"query","args":{"query":"getProfile"}}}]}
+{"step":8,"outputs":[{"t":"send","port":7,"msg":{"type":"identity.getProfile.result","id":"q3","profile":null}}]}
+{"step":9,"outputs":[{"t":"call","tag":{"domain":"identity","n":2},"call":{"t":"nap","domain":"identity","op":"query","args":{"query":"getRelays"}}}]}
+{"step":10,"outputs":[{"t":"send","port":7,"msg":{"type":"identity.getRelays.result","id":"q5","relays":{"wss://relay.example.com":{"read":true,"write":true},"wss://readonly.example.com":{"read":true,"write":false}}}}]}
+{"step":11,"outputs":[{"t":"call","tag":{"domain":"identity","n":3},"call":{"t":"nap","domain":"identity","op":"query","args":{"query":"getList","listType":"bookmarks"}}}]}
+{"step":12,"outputs":[{"t":"send","port":7,"msg":{"type":"identity.getList.result","id":"q6","entries":["note1abc...","note1def..."]}}]}
+{"step":13,"outputs":[{"t":"call","tag":{"domain":"identity","n":4},"call":{"t":"nap","domain":"identity","op":"query","args":{"query":"getMutes"}}}]}
+{"step":14,"outputs":[{"t":"send","port":7,"msg":{"type":"identity.getMutes.result","id":"q7","pubkeys":["spam1...","spam2..."]}}]}
+{"step":15,"outputs":[{"t":"call","tag":{"domain":"identity","n":5},"call":{"t":"nap","domain":"identity","op":"query","args":{"query":"getZaps"}}}]}
+{"step":16,"outputs":[{"t":"send","port":7,"msg":{"type":"identity.getZaps.result","id":"q8","zaps":[{"eventId":"ev1...","sender":"ab12...","amount":21000,"content":"Great post!"}]}}]}
+{"step":17,"outputs":[{"t":"call","tag":{"domain":"identity","n":6},"call":{"t":"nap","domain":"identity","op":"query","args":{"query":"getBadges"}}}]}
+{"step":18,"outputs":[{"t":"send","port":7,"msg":{"type":"identity.getBadges.result","id":"q9","badges":[{"id":"badge1...","name":"Early Adopter","awardedBy":"cd34..."}]}}]}
+{"step":19,"outputs":[{"t":"send","port":7,"msg":{"type":"identity.changed","pubkey":""}}]}
