@@ -25,20 +25,31 @@ for (const engine of ['chromium', 'webkit']) {
 }
 const results = await assess(rules, checks, specs);
 const compatibility = [];
-for (const [id, title, name] of [
-  ['legacy-direct-open', 'Opening an older release by address prompts even with an existing grant', 'legacy format review cannot reuse a grant replaced while the prompt is open'],
-  ['legacy-saved-pin', 'An exact verified saved release reopens with its approved grant', 'only explicit trusted review persists the exact publisher, signed coordinate and capabilities'],
+for (const [id, title, file, name] of [
+  ['legacy-direct-open', 'Opening an older release by address prompts even with an existing grant', 'napplets/first-open-consent', 'legacy format review cannot reuse a grant replaced while the prompt is open'],
+  ['legacy-saved-pin', 'An exact verified saved release reopens with its approved grant', 'napplets/published-session', 'first open verifies, reviews, caches and stages; pinned restart uses cache without a new review'],
 ]) {
   try {
-    await runComponent('napplets/first-open-consent', name);
+    await runComponent(file, name);
     compatibility.push({id, title, issue:104, status:'pass'});
   } catch (error) {
     compatibility.push({id, title, issue:104, status:'regression', detail:String(error.message ?? error)});
   }
 }
 const revision = execFileSync('git', ['rev-parse', 'HEAD'], {encoding:'utf8'}).trim();
-const report = markdown(results) + '\n## Hypergolic compatibility policy\n\n' + compatibility.map(row => '- ' + row.status + ' — ' + row.title + (row.detail ? ' — ' + row.detail : '')).join('\n') + '\n' + '\nImplementation commit: `' + revision + '`\n';
+const profiles = {
+  strict: {passed:gate(results, true)},
+  compatibility: {passed:gate(compatibility), results:compatibility},
+};
+const report = [
+  markdown(results),
+  'Strict draft passed: ' + (profiles.strict.passed ? 'yes' : 'no'),
+  '', '## Hypergolic compatibility policy', '',
+  ...compatibility.map(row => '- ' + row.status + ' — ' + row.title + (row.detail ? ' — ' + row.detail : '')),
+  '', 'Compatibility policy passed: ' + (profiles.compatibility.passed ? 'yes' : 'no'),
+  '', 'Implementation commit: `' + revision + '`', '',
+].join('\n');
 process.stdout.write(report);
-if (values.json) await writeFile(values.json, JSON.stringify({version:1, revision, specs, results, profiles:{strict:{passed:gate(results, true)}, compatibility:{passed:gate(compatibility), results:compatibility}}}, null, 2) + '\n');
+if (values.json) await writeFile(values.json, JSON.stringify({version:1, revision, specs, results, profiles}, null, 2) + '\n');
 if (values.markdown) await writeFile(values.markdown, report);
 if (!gate(results, values.strict) || !gate(compatibility)) process.exitCode = 1;
