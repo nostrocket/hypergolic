@@ -22,13 +22,14 @@ interface Props {
   swipeY: SharedValue<number>;
   scrollGesture: ReturnType<typeof Gesture.Native>;
   onFocus: (id: string) => void;
+  onDiagnostics: (id: string) => void;
   onClose: (id: string) => void;
   onDragEnd: (id: string, close: boolean) => void;
   onMeasure: (id: string, measurement: CardMeasurement) => void;
   setRef: (id: string, view: ViewInstance | null) => void;
 }
 
-export function OverviewCard({ session, loaded, rect, captionHeight, busy, selected, pending, swipeId, swipeY, scrollGesture, onFocus, onClose, onDragEnd, onMeasure, setRef }: Props) {
+export function OverviewCard({ session, loaded, rect, captionHeight, busy, selected, pending, swipeId, swipeY, scrollGesture, onFocus, onDiagnostics, onClose, onDragEnd, onMeasure, setRef }: Props) {
   const { styles } = useShellStyles(createStyles);
   const { id, title } = session;
   const tapOrigin = useSharedValue<CardTouchPoint | null>(null);
@@ -129,6 +130,7 @@ export function OverviewCard({ session, loaded, rect, captionHeight, busy, selec
           <Text numberOfLines={1} style={styles.cardTitle}>{title}</Text>
           {pending && <Text style={styles.pending}>Approval waiting</Text>}
         </View>
+        {session.source === 'published' && <Pressable accessibilityRole="button" accessibilityLabel={`Diagnostics for ${title}`} onPress={() => onDiagnostics(id)} disabled={busy} style={styles.close}><Text style={styles.closeMark}>ⓘ</Text></Pressable>}
         <Pressable testID={`overview-close-${id}`} accessibilityRole="button" accessibilityLabel={`Close ${title}`} onPress={() => onClose(id)} disabled={busy} style={styles.close}>
           <Text style={styles.closeMark} accessible={false}>×</Text>
         </Pressable>

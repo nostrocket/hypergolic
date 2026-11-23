@@ -7,7 +7,7 @@ import {parseResourceRequest, publicResourceHttps, ResourceError, type ResourceB
 export const LEGACY_IMAGE_MIMES: readonly string[] = Object.freeze(['image/png', 'image/gif', 'image/jpeg', 'image/webp']);
 /** A separate native-attested image lane, never an ordinary Resource domain grant. */
 export function createLegacyImageBroker(native: NativeCapabilityPort, host: ResourceHost,
-  owner: Readonly<{registration: NativeRegistration; assertActive(): void}>) {
+  owner: Readonly<{diagnostics?: import('./napplet-diagnostics.ts').NappletDiagnostics; registration: NativeRegistration; assertActive(): void}>) {
   const registration = decodeNativeRegistration(owner.registration), expected = JSON.stringify(registration);
   const context = registration.legacyReadOnly;
   if (!context) throw new Error('Legacy consent required');
@@ -22,6 +22,7 @@ export function createLegacyImageBroker(native: NativeCapabilityPort, host: Reso
   return Object.freeze({
     revoke() {disposed = true; service.revoke(); transfers.revoke();},
     async dispatch(token: string): Promise<void> {
+      let complete: ((ok: boolean) => void) | undefined;
       let reply: string | null = null, type: string | undefined, id: string | undefined;
       try {
         const raw = native.take(token); if (raw === null) return;
@@ -43,13 +44,16 @@ export function createLegacyImageBroker(native: NativeCapabilityPort, host: Reso
           if (request.type !== 'resource.bytes' || Object.keys(value).length !== 3) throw new ResourceError('invalid-request');
           // Validate with the existing URL policy. Preserve original spelling for native request/effect equality.
           publicResourceHttps(request.url);
+          complete = owner.diagnostics?.resource();
           const result = await service.execute(request, {nativeToken: token, assertActive: () => active(token)});
           active(token);
           const image = result?.value as ResourceBytes | undefined;
           if (!image || !LEGACY_IMAGE_MIMES.includes(image.mime)) throw new ResourceError('blocked-by-policy');
           reply = JSON.stringify({type: type + '.result', id, transfer: transfers.stage(id, image)});
+          complete?.(true);
         }
       } catch (error) {
+        complete?.(false);
         if (id) try {transfers.cancel(id);} catch { /* Owner revocation already invalidates the carrier. */ }
         if (type === 'legacy.image.bytes' && id) reply = JSON.stringify({type: type + '.error', id,
           error: error instanceof ResourceError ? error.code : 'network-error'});

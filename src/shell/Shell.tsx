@@ -10,6 +10,8 @@ import { WorkspaceFullscreenContext, useWorkspaceFullscreen } from './WorkspaceF
 import { useWorkspaceDiscovery } from './useWorkspaceDiscovery';
 import { DiscoveryAccessReview } from './DiscoveryAccessReview';
 import { WorkspaceHeader } from './WorkspaceHeader';
+import {NappletDiagnostics} from './NappletDiagnostics';
+import {useDiagnostics} from './useDiagnostics';
 import { WorkspaceMenu } from './WorkspaceMenu';
 import { useWorkspaceMenu } from './useWorkspaceMenu';
 import { useWorkspaceConfig } from './useWorkspaceConfig';
@@ -94,45 +96,11 @@ function useReducedMotion(): boolean {
   return reduced;
 }
 
-export function Shell({ views: managedViews, blocked = false, hostActivityBlocked = blocked, initialWorkspace, workspace: controlledWorkspace, getWorkspace, onWorkspaceChange, identity, pendingApprovals, canCloseWithoutWarning, onBeforeClose, onHostEvent, footer, settingsComponent: SettingsContent }: ShellProps) {
-  const { styles } = useShellStyles(createStyles);
-  const runtime = useContext(RuntimeContext);
-  const owner = useContext(OwnerContext);
-  const [localWorkspace, setLocalWorkspace] = useState(() => initialWorkspace ?? initialWorkspaceForBuild());
-  const workspace = controlledWorkspace ?? localWorkspace;
-  const views = useWorkspaceViews(workspace, managedViews, runtime, pendingApprovals, canCloseWithoutWarning);
-  const fullscreen = useWorkspaceFullscreen(workspace);
-  const current = useRef(workspace);
-  useLayoutEffect(() => { current.current = workspace; }, [workspace]);
-  const change = useCallback((next: Workspace) => {
-    current.current = next;
-    if (controlledWorkspace === undefined) setLocalWorkspace(next);
-    onWorkspaceChange?.(next);
-  }, [onWorkspaceChange, controlledWorkspace]);
-  const [settings, setSettings] = useState(false);
-  const [closingId, setClosingId] = useState<string | null>(null);
-  const [handleDragging, setHandleDragging] = useState(false);
+function useWorkspaceAnimation() {
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
-  const lastCloseId = useRef<string | null>(null);
-  const overview = useRef<OverviewHandle>(null);
-  const {closeChecks, closeCheck, receiveHostEvent, requestClose: checkClose} = useCloseChecks({
-    workspace: current, blocked, identity: identity?.npub, lifetime: runtime,
-    pendingApprovals, canCloseWithoutWarning, onClean: closeSession, onWarning: setClosingId, onHostEvent,
-  });
-  const focusedIndex = Math.max(0, workspace.sessions.findIndex(session => session.id === workspace.focusedId));
-  const focused = workspace.sessions.find(session => session.id === workspace.focusedId);
-  const { session: menuSession, visible: menuVisible, anchor: menuAnchor, dismiss: dismissMenu, open: openMenu, clear: clearMenu } =
-    useWorkspaceMenu(focused, workspace.overview, { blocked, fullscreen, busy: busyRef, dragging: handleDragging, closeChecks });
-  const navigationBlocked = blocked || busy || closeCheck !== null;
-  const progress = useSharedValue(workspace.overview ? 1 : 0);
-  const position = useSharedValue(focusedIndex);
-  const scrollY = useSharedValue(0);
-  const swipeY = useSharedValue(0);
-  const swipeId = useSharedValue<string | null>(null);
   const animation = useRef<{ value: SharedValue<number>; token: symbol } | null>(null);
   const reduced = useReducedMotion();
-  const keyboardVisible = useRef(false);
   const runAnimation = useCallback((value: SharedValue<number>, toValue: number, done: () => void, duration = 280) => {
     if (animation.current) cancelAnimation(animation.current.value);
     const token = Symbol('transition');
@@ -155,6 +123,45 @@ export function Shell({ views: managedViews, blocked = false, hostActivityBlocke
     animation.current = null;
     if (running) cancelAnimation(running.value);
   }, []);
+  return {busy, busyRef, runAnimation};
+}
+
+export function Shell({ views: managedViews, blocked = false, hostActivityBlocked = blocked, initialWorkspace, workspace: controlledWorkspace, getWorkspace, onWorkspaceChange, identity, pendingApprovals, canCloseWithoutWarning, onBeforeClose, onHostEvent, footer, settingsComponent: SettingsContent }: ShellProps) {
+  const { styles } = useShellStyles(createStyles);
+  const runtime = useContext(RuntimeContext);
+  const owner = useContext(OwnerContext);
+  const [localWorkspace, setLocalWorkspace] = useState(() => initialWorkspace ?? initialWorkspaceForBuild());
+  const workspace = controlledWorkspace ?? localWorkspace;
+  const views = useWorkspaceViews(workspace, managedViews, runtime, pendingApprovals, canCloseWithoutWarning);
+  const fullscreen = useWorkspaceFullscreen(workspace);
+  const current = useRef(workspace);
+  useLayoutEffect(() => { current.current = workspace; }, [workspace]);
+  const change = useCallback((next: Workspace) => {
+    current.current = next;
+    if (controlledWorkspace === undefined) setLocalWorkspace(next);
+    onWorkspaceChange?.(next);
+  }, [onWorkspaceChange, controlledWorkspace]);
+  const [settings, setSettings] = useState(false);
+  const [closingId, setClosingId] = useState<string | null>(null);
+  const [handleDragging, setHandleDragging] = useState(false);
+  const {busy, busyRef, runAnimation} = useWorkspaceAnimation();
+  const lastCloseId = useRef<string | null>(null);
+  const overview = useRef<OverviewHandle>(null);
+  const {closeChecks, closeCheck, receiveHostEvent, requestClose: checkClose} = useCloseChecks({
+    workspace: current, blocked, identity: identity?.npub, lifetime: runtime,
+    pendingApprovals, canCloseWithoutWarning, onClean: closeSession, onWarning: setClosingId, onHostEvent,
+  });
+  const focusedIndex = Math.max(0, workspace.sessions.findIndex(session => session.id === workspace.focusedId));
+  const focused = workspace.sessions.find(session => session.id === workspace.focusedId);
+  const { session: menuSession, visible: menuVisible, anchor: menuAnchor, dismiss: dismissMenu, open: openMenu, clear: clearMenu } =
+    useWorkspaceMenu(focused, workspace.overview, { blocked, fullscreen, busy: busyRef, dragging: handleDragging, closeChecks });
+  const navigationBlocked = blocked || busy || closeCheck !== null;
+  const progress = useSharedValue(workspace.overview ? 1 : 0);
+  const position = useSharedValue(focusedIndex);
+  const scrollY = useSharedValue(0);
+  const swipeY = useSharedValue(0);
+  const swipeId = useSharedValue<string | null>(null);
+  const keyboardVisible = useRef(false);
   useEffect(() => {
     const shown = Keyboard.addListener('keyboardDidShow', () => { keyboardVisible.current = true; });
     const hidden = Keyboard.addListener('keyboardDidHide', () => { keyboardVisible.current = false; });
@@ -230,7 +237,8 @@ export function Shell({ views: managedViews, blocked = false, hostActivityBlocke
   const openNappletSettings = useWorkspaceConfig(owner, workspace, menuSession, clearMenu, {
     blocked: navigationBlocked, dragging: handleDragging, settings, closing: closingId !== null, discovery: discovery.review !== null,
   });
-  const obscured = settings || menuVisible || closingId !== null || discovery.review !== null;
+  const {inspection, inspect, dismissInspection} = useDiagnostics(workspace, navigationBlocked, identity?.npub, clearMenu);
+  const obscured = !!inspection || settings || menuVisible || closingId !== null || discovery.review !== null;
   const stageBlocked = useStageInputBlocked(navigationBlocked || obscured);
   const {resetZoom, registerZoomTarget, zoomResetAvailable} = useZoomReset({workspace, identity: identity?.npub, lifetime: runtime,
     active: AppState.currentState === 'active', blocked: navigationBlocked, dragging: handleDragging, settings,
@@ -244,16 +252,17 @@ export function Shell({ views: managedViews, blocked = false, hostActivityBlocke
           menuAnchor={menuAnchor} onSettings={openSettings} onHome={openHome} onOverview={openOverview} onMenu={openMenu} />
         <WorkspaceStage views={views} home={<Home workspace={workspace} disabled={stageBlocked} onOpen={openPin}
           onUnpin={unpin} onOverview={openOverview} onDiscover={openDiscovery} />} fullscreen={fullscreen} onZoomTarget={registerZoomTarget} closeCheck={closeCheck} workspace={workspace} progress={progress} position={position} scrollY={scrollY} swipeY={swipeY} swipeId={swipeId} busy={busy} blocked={stageBlocked} hostActivityBlocked={isHostActivityBlocked(hostActivityBlocked, obscured)} interactive={!handleDragging}
-          pending={pendingApprovals ?? noPending} ref={overview} onHostEvent={receiveHostEvent} onFocus={focusSession} onClose={requestClose} onOpen={openDiscovery}
+          pending={pendingApprovals ?? noPending} ref={overview} onHostEvent={receiveHostEvent} onFocus={focusSession} onClose={requestClose} onDiagnostics={inspect} onOpen={openDiscovery}
           onDragEnd={(id, close) => { runAnimation(swipeY, 0, () => { swipeId.set(null); if (close) requestClose(id); }, 140); }}
           onHandleStart={() => { setHandleDragging(true); dismissForNavigation(); cancelAnimation(position); }}
           onHandleEnd={onHandleEnd} />
       </View>
       <WorkspaceFullscreenContext value={fullscreen}>{footer}</WorkspaceFullscreenContext>
       <DiscoveryAccessReview review={discovery.review} decide={discovery.decide} />
+      {inspection && <NappletDiagnostics session={inspection.session} rows={inspection.rows} relays={owner?.relaySettings} close={dismissInspection} />}
       {menuSession && <WorkspaceMenu {...(menuSession.source === 'published' && {publisher: menuSession.publisher})} gameControls={usesGameControls(workspace, menuSession)}
         onGameControls={enabled => change(setGameControls(current.current, menuSession, enabled))} pinned={isPinned(workspace, menuSession)} onPin={() => togglePin(menuSession)} title={menuSession.title} disabled={navigationBlocked} onNappletSettings={openNappletSettings}
-        onResetZoom={() => resetZoom(menuSession)} zoomResetDisabled={!zoomResetAvailable}
+        onDiagnostics={menuSession.source === 'published' ? () => inspect(menuSession.id) : undefined} onResetZoom={() => resetZoom(menuSession)} zoomResetDisabled={!zoomResetAvailable}
         onDismiss={dismissMenu} onOverview={() => { clearMenu(); openOverview(); }}
         onSettings={() => { clearMenu(); openSettings(); }} onClose={() => { clearMenu(); requestClose(menuSession.id); }} />}
       <ClosePrompt title={workspace.sessions.find(session => session.id === closingId)?.title ?? null} onKeepOpen={keepOpen} onClose={confirmClose} onDismiss={() => overview.current?.focusCard(lastCloseId.current)} />

@@ -86,6 +86,7 @@ interface StageProps {
   pending: ReadonlySet<string>;
   onHostEvent?: (event: HostEvent) => void;
   onFocus: (id: string) => void;
+  onDiagnostics: (id: string) => void;
   onClose: (id: string) => void;
   onOpen: () => void;
   onDragEnd: (id: string, close: boolean) => void;
@@ -93,7 +94,7 @@ interface StageProps {
   onHandleEnd: (side: HandleSide, result: 'overview' | 'switch' | 'cancel') => void;
 }
 
-export const WorkspaceStage = forwardRef<OverviewHandle, StageProps>(function WorkspaceStage({ views, home, fullscreen, onZoomTarget, workspace, closeCheck, progress, position, scrollY, swipeY, swipeId, busy, blocked, hostActivityBlocked = blocked, interactive, pending, onHostEvent, onFocus, onClose, onOpen, onDragEnd, onHandleStart, onHandleEnd }, ref) {
+export const WorkspaceStage = forwardRef<OverviewHandle, StageProps>(function WorkspaceStage({ views, home, fullscreen, onZoomTarget, workspace, closeCheck, progress, position, scrollY, swipeY, swipeId, busy, blocked, hostActivityBlocked = blocked, interactive, pending, onHostEvent, onFocus, onDiagnostics, onClose, onOpen, onDragEnd, onHandleStart, onHandleEnd }, ref) {
   const { styles } = useShellStyles(createStyles);
   const [size, setSize] = useState<Size>({ width: 0, height: 0 });
   const [measured, setMeasured] = useState<Record<string, CardMeasurement>>({});
@@ -112,7 +113,7 @@ export const WorkspaceStage = forwardRef<OverviewHandle, StageProps>(function Wo
         progress={progress} position={position} scrollY={scrollY} swipeY={swipeY} swipeId={swipeId} {...workspaceSessionActivity({focused: workspace.focusedId === session.id, overview: workspace.overview, busy, interactive, blocked, checkingClose: closeCheck !== null, hostActivityBlocked})}
         raised={workspace.focusedId === session.id} onHostEvent={onHostEvent} />)}
       {!homeVisible(workspace) && <Overview ref={ref} loaded={loadedViews} sessions={workspace.sessions} geometry={geometry} size={size} visible={workspace.overview && !homeVisible(workspace)} busy={disabled} focusedId={workspace.focusedId}
-        progress={progress} scrollY={scrollY} swipeId={swipeId} swipeY={swipeY} pending={pending} onFocus={onFocus} onClose={onClose} onOpen={onOpen}
+        progress={progress} scrollY={scrollY} swipeId={swipeId} swipeY={swipeY} pending={pending} onFocus={onFocus} onClose={onClose} onDiagnostics={onDiagnostics} onOpen={onOpen}
         onDragEnd={onDragEnd}
         onMeasure={(id, measurement) => setMeasured(previous => {
           const prior = previous[id];

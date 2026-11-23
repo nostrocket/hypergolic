@@ -10,11 +10,12 @@ interface Props {
   title: string; publisher?: string; disabled: boolean; pinned?: boolean; onPin?(): void;
   gameControls: boolean; onGameControls(enabled: boolean): void;
   onResetZoom?(): void; zoomResetDisabled?: boolean;
+  onDiagnostics?(): void;
   onDismiss(): void; onOverview(): void; onSettings(): void; onNappletSettings?(): void; onClose(): void;
 }
 
 /** An in-shell overlay keeps menu dismissal and close/review dialogs in one navigation flow. */
-export function WorkspaceMenu({ title, publisher, disabled, gameControls, onGameControls, pinned, onPin, onDismiss, onOverview, onSettings, onNappletSettings, onResetZoom, zoomResetDisabled, onClose }: Props) {
+export function WorkspaceMenu({ title, publisher, disabled, gameControls, onGameControls, pinned, onPin, onDiagnostics, onDismiss, onOverview, onSettings, onNappletSettings, onResetZoom, zoomResetDisabled, onClose }: Props) {
   const { styles, colors } = useShellStyles(createStyles);
   const insets = useSafeAreaInsets();
   const done = useRef<ViewInstance>(null);
@@ -35,6 +36,7 @@ export function WorkspaceMenu({ title, publisher, disabled, gameControls, onGame
         </View>
         <ScrollView contentContainerStyle={styles.actions}>
           <Text selectable style={styles.actionText}>{publisher ? `Publisher · ${formatNpub(publisher)}` : 'Built into Hypergolic'}</Text>
+          {onDiagnostics && <ShellPressable accessibilityRole="button" disabled={disabled} onPress={onDiagnostics} style={styles.action}><Text style={styles.actionText}>Diagnostics</Text></ShellPressable>}
           {onPin && <ShellPressable testID="shell-pin" accessibilityRole="button" disabled={disabled} onPress={onPin} style={styles.action}><Text style={styles.actionText}>{pinned ? 'Unpin from Home' : 'Pin to Home'}</Text></ShellPressable>}
           <View style={styles.action}>
             <Text accessible={false} style={styles.actionText}>Game controls</Text>
