@@ -42,7 +42,7 @@ export function WorkspaceMenu({ title, publisher, disabled, gameControls, onGame
               accessibilityHint="Prevents text selection and double-tap zoom on game buttons in this napplet."
               disabled={disabled} value={gameControls} onValueChange={onGameControls} trackColor={{true: colors.accent}} />
           </View>
-          <ShellPressable testID="shell-menu-overview" accessibilityRole="button" disabled={disabled} onPress={onOverview} style={styles.action}><Text style={styles.actionText}>All napplets</Text><Text accessible={false} style={styles.symbol}>›</Text></ShellPressable>
+          <ShellPressable testID="shell-menu-overview" accessibilityRole="button" accessibilityLabel="All napplets" disabled={disabled} onPress={onOverview} style={styles.action}><View style={styles.overviewLabel}><Text style={styles.label}>All napplets</Text><Text style={styles.hint}>Swipe in from either side in landscape.</Text></View><Text accessible={false} style={styles.symbol}>›</Text></ShellPressable>
           {onNappletSettings && <ShellPressable testID="shell-menu-napplet-settings" accessibilityRole="button" disabled={disabled} onPress={onNappletSettings} style={styles.action}><Text style={styles.actionText}>Napplet settings</Text><Text accessible={false} style={styles.symbol}>›</Text></ShellPressable>}
           {Platform.OS === 'ios' && onResetZoom && <ShellPressable testID="shell-reset-zoom" accessibilityRole="button" disabled={disabled || zoomResetDisabled}
             accessibilityHint={zoomResetDisabled ? 'Available when this napplet is connected.' : 'Return this napplet to its normal zoom.'}
@@ -66,6 +66,9 @@ const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.cre
   doneText: { fontFamily: fonts.medium, fontSize: 14, color: colors.accent },
   actions: { paddingHorizontal: 18 },
   action: { minHeight: 52, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 16, borderBottomWidth: 1, borderBottomColor: colors.subtle },
+  overviewLabel: {flex: 1, gap: 2},
+  label: {fontFamily: fonts.body, fontSize: 17, color: colors.text},
+  hint: {fontFamily: fonts.body, fontSize: 14, color: colors.muted},
   actionText: { flex: 1, fontFamily: fonts.body, fontSize: 17, color: colors.text },
   symbol: { fontFamily: fonts.body, fontSize: 20, color: colors.muted },
 });
