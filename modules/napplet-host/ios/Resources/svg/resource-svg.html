@@ -1,0 +1,44 @@
+<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<script>
+// Only this bundled page runs as a document. Publisher bytes are decoded as an image.
+async function rasterize(encoded) {
+  const xml = new TextDecoder('utf-8', {fatal:true}).decode(Uint8Array.from(atob(encoded), c => c.charCodeAt(0)));
+  if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw Error();
+  const svg = new DOMParser().parseFromString(xml, 'image/svg+xml').documentElement;
+  if (svg.localName !== 'svg' || svg.namespaceURI !== 'http://www.w3.org/2000/svg') throw Error();
+  const shapes = new Set(['svg','g','defs','path','rect','circle','ellipse','line','polyline','polygon','title','desc','linearGradient','radialGradient','stop']);
+  const attributes = new Set(('xmlns version id width height viewBox preserveAspectRatio x y x1 y1 x2 y2 cx cy r rx ry fx fy fr d points transform fill fill-opacity fill-rule stroke stroke-width stroke-opacity stroke-linecap stroke-linejoin stroke-miterlimit stroke-dasharray stroke-dashoffset opacity color gradientUnits gradientTransform spreadMethod offset stop-color stop-opacity').split(' '));
+  const nodes = svg.getElementsByTagName('*');
+  if (nodes.length > 4096) throw Error();
+  for (const node of [svg, ...nodes]) {
+    if (node.namespaceURI !== svg.namespaceURI || !shapes.has(node.localName)) throw Error();
+    for (const attr of node.attributes) {
+      if (!attributes.has(attr.name)) throw Error();
+      if (/url\s*\(/i.test(attr.value) && !/^url\(#[A-Za-z_][A-Za-z0-9_.:-]*\)$/.test(attr.value)) throw Error();
+    }
+  }
+  const box = (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
+  function size(name, fallback) {
+    const raw = svg.getAttribute(name);
+    const value = raw === null ? fallback : /^\d+(?:\.\d+)?(?:px)?$/.test(raw) ? parseFloat(raw) : NaN;
+    if (!Number.isFinite(value) || value <= 0 || value > 1024) throw Error();
+    return Math.ceil(value);
+  }
+  const width = size('width', box.length === 4 ? box[2] : 300);
+  const height = size('height', box.length === 4 ? box[3] : 150);
+  const image = new Image(width, height);
+  // Serialize the checked root only, with concrete dimensions for viewBox-only files.
+  svg.setAttribute('width', String(width));
+  svg.setAttribute('height', String(height));
+  image.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(svg));
+  await image.decode();
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  canvas.getContext('2d').drawImage(image, 0, 0, width, height);
+  const png = canvas.toDataURL('image/png');
+  if (!png.startsWith('data:image/png;base64,') || png.length > 6 * 1024 * 1024) throw Error();
+  return png.slice('data:image/png;base64,'.length);
+}
+rasterize('__SVG_BASE64__').then(value => { window.pngResult = value; }, () => { window.pngResult = ''; });
+</script>
