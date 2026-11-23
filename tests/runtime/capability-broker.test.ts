@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import {loadTrace, sends} from '../reference-shell/trace.mts';
+import {expectedResult, signedFixture} from '../reference-shell/relay-event.mts';
+import {createNativeRelayQuery} from '../../src/network/native-relay-query.ts';
 import { createCapabilityBroker } from '../../src/runtime/capability-broker.ts';
 import { CAPABILITY_LIMITS, decodeNativeRegistration, IDENTITY_OPERATIONS, parseCapabilityRequest,
   type NativeRegistration } from '../../src/runtime/capability-protocol.ts';
@@ -269,3 +272,84 @@ test('maximum control-character strings round trip within the native request and
     response: JSON.stringify(native.results.get(read)) });
   assert(Buffer.byteLength(response) <= CAPABILITY_LIMITS.messageBytes);
 });
+
+test('Lean relay-query correlates the signed public event after EOSE', async t => {
+  const [request, event, eose] = loadTrace('relay-query').steps.slice(4);
+  const input = event.input.reply;
+  const signed = signedFixture(input.event);
+  const filters = request.input.msg.filters.map((filter: {authors: string[]}) => {
+    assert.deepEqual(filter.authors, [input.event.pubkey]);
+    return {...filter, authors: [signed.pubkey]};
+  });
+  const urls: string[] = [];
+  const service = createNativeRelayQuery({
+    newInstanceId: () => '00000000-0000-4000-8000-000000000001',
+    cancelPublishedRelay() {},
+    async queryPublishedRelay(_id, url, wire, sub) {
+      urls.push(url);
+      assert.deepEqual(JSON.parse(wire), ['REQ', sub, ...filters]);
+      return [JSON.stringify(['EVENT', sub, signed]), JSON.stringify(['EOSE', sub])];
+    }
+  }, () => [input.relay]);
+  const owner = registration({user: signed.pubkey, domains: ['relay']});
+  const {database} = await setup(t);
+  const native = new NativeLeases();
+  const broker = createCapabilityBroker(database, native, {registration: owner, assertActive() {}}, service);
+  const token = native.add(owner, {...request.input.msg, filters});
+  await broker.dispatch(token);
+  const actual = native.results.get(token) as {events: Record<string, unknown>[]};
+  const [wanted] = sends(eose);
+  assert.deepEqual(urls, [input.relay]);
+  assert.equal(actual.events.length, 1);
+  assert.deepEqual(actual, {...wanted.msg, events: [expectedResult(wanted.msg.events[0], input.event, signed, actual.events[0])]});
+});
+
+test('Lean identity-teardown discards the pending follows reply after revocation', {timeout: 5000}, async t => {
+  const [read, close, late] = loadTrace('identity-teardown').steps.slice(4);
+  assert.equal(read.input.port, close.input.port);
+  assert.equal(close.input.t, 'portClosed');
+  assert.deepEqual(late.input.tag, read.outputs[0].tag);
+  const started = Promise.withResolvers<AbortSignal>();
+  const ready = Promise.withResolvers<void>();
+  const {database} = await setup(t);
+  const owner = registration();
+  const native = new NativeLeases();
+  const broker = createCapabilityBroker(database, native, {registration: owner, assertActive() {}}, undefined, undefined, undefined, {
+    async read(request, registration, signal) {
+      assert.equal(registration.generation, owner.generation);
+      assert.equal(request.type, read.input.msg.type);
+      started.resolve(signal);
+      await ready.promise;
+      return {type: 'identity.getFollows.result', id: request.id, pubkeys: late.input.reply.json.pubkeys};
+    }
+  });
+  const token = native.add(owner, read.input.msg);
+  const pending = broker.dispatch(token);
+  const signal = await started.promise;
+  broker.revoke();
+  ready.resolve();
+  await pending;
+  assert.ok(signal.aborted);
+  assert.equal(native.results.get(token), null);
+  assert.deepEqual(sends(late), []);
+});
+
+for (const name of ['identity', 'identity-examples']) {
+  test('Lean ' + name + ' reads the connected public key with the original request ID', async t => {
+    const {steps} = loadTrace(name);
+    const change = steps.find(step => step.input.event?.t === 'userChanged');
+    assert.ok(change);
+    const read = steps.find(step => step.index > change.index && step.input.msg?.type === 'identity.getPublicKey');
+    assert.ok(read);
+    const [expected] = sends(read);
+    assert.equal(change.input.event.pubkey, expected.msg.pubkey);
+    const owner = registration({user: hex(17)});
+    const {database} = await setup(t);
+    const native = new NativeLeases();
+    const broker = createCapabilityBroker(database, native, {registration: owner, assertActive() {}});
+    const token = native.add(owner, read.input.msg);
+    await broker.dispatch(token);
+    // The example has a shortened key. The trusted registration supplies a full key.
+    assert.deepEqual(native.results.get(token), {...expected.msg, pubkey: owner.user});
+  });
+}
