@@ -1,8 +1,10 @@
 import {run} from 'node:test';
+import {referenceCases} from './reference-cases.mjs';
 import {fileURLToPath} from 'node:url';
 
 // These named production-component tests already have fixtures for the shell's selected profile.
 export const componentCases = [
+  ...referenceCases.map(([name, domain, file, title]) => ['lean-' + name, domain, file, title]),
   ['common-identifiers','COMMON','runtime/common-read','Common public NIP-19 helpers round trip all six types without using a secret'],
   ['config-reference-trace','CONFIG','presentation/config-oracle','Config matches the seven post-bootstrap steps of the pinned Lean trace'],
   ['cvm-message','CVM','cvm/contract','all MCP forms preserve payload, typed IDs and immutable capture'],

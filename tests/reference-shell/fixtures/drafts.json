@@ -1,0 +1,105 @@
+{
+  "NIP-5D": {
+    "shell": "f60550c3409d6d81a875088ec83e660571e10504",
+    "model": [
+      "f60550c3409d6d81a875088ec83e660571e10504"
+    ]
+  },
+  "NAP-CONFIG": {
+    "shell": "448013e6d8cb8c75dce49576b3e7c0d46d960eac",
+    "model": [
+      "bed9cb5b1e7c9b5babee8870aa18b12949af1d62"
+    ]
+  },
+  "NAP-CVM": {
+    "shell": "28cf1bdb5c6412bfbfcecb79a5a5121e18376f2f",
+    "model": [
+      "28cf1bdb5c6412bfbfcecb79a5a5121e18376f2f"
+    ]
+  },
+  "NAP-IDENTITY": {
+    "shell": "5ac0490461ca6fec2f0d2e45b4835cf9bc08de24",
+    "model": [
+      "c13e8891ca6375bd0063b6dbd995ba42088df75e"
+    ]
+  },
+  "NAP-INC": {
+    "shell": "377bf939c6c906817084b43dd21d424de646dbc2",
+    "model": [
+      "377bf939c6c906817084b43dd21d424de646dbc2"
+    ]
+  },
+  "NAP-INTENT": {
+    "shell": "43cb3a4e855570ec4b90b9cc05f0c721e5ad0aab",
+    "model": [
+      "9e25e6768b0528e5848297ce0b338bb3c94302bf",
+      "74f9bf85ebb83b50b7b2ad8308a835d5f3113cd9"
+    ]
+  },
+  "NAP-KEYS": {
+    "shell": "8869a4cf77b023f4b049f47c546910a0280dc1a6",
+    "model": [
+      "8869a4cf77b023f4b049f47c546910a0280dc1a6"
+    ]
+  },
+  "NAP-LINK": {
+    "shell": "100e5c939ae6b1ea82cc58587c6da45a1cf8a760",
+    "model": [
+      "100e5c939ae6b1ea82cc58587c6da45a1cf8a760"
+    ]
+  },
+  "NAP-MEDIA": {
+    "shell": "7806f438530251fce5129f8e6239d6b642278759",
+    "model": [
+      "7806f438530251fce5129f8e6239d6b642278759"
+    ]
+  },
+  "NAP-NOTIFY": {
+    "shell": "e14f5c9d6a6dd2a69ccf79668c4a3c1e955e1ac9",
+    "model": [
+      "67877ef6c31ec8acee3125c1d8b4c781010e37dc"
+    ]
+  },
+  "NAP-OUTBOX": {
+    "shell": "8865f73d52a4864afee145f28d26520476273927",
+    "model": [
+      "8865f73d52a4864afee145f28d26520476273927"
+    ]
+  },
+  "NAP-RELAY": {
+    "shell": "0be8abce18beb46ca37bd4ddd042f58d30b4eedc",
+    "model": [
+      "9f30b3505335a52c574ff570576687d6467021ff"
+    ]
+  },
+  "NAP-RESOURCE": {
+    "shell": "8c0645d32ceb159bc3e8bcec1107a92862b7e86a",
+    "model": [
+      "ae5b9c64ab8a4d8909f288829a01e99d6bd713bc"
+    ]
+  },
+  "NAP-SHELL": {
+    "shell": "5ac0490461ca6fec2f0d2e45b4835cf9bc08de24",
+    "model": [
+      "b9b0b7e38d99d9e3ad0b79e3de61b349156ee41f"
+    ]
+  },
+  "NAP-STORAGE": {
+    "shell": "f71e84ebca7474db260346cbfc2d88f41b4e421e",
+    "model": [
+      "4f4cf0ca7ecbd24c284a5d63bcd85e3de6af37ca"
+    ]
+  },
+  "NAP-THEME": {
+    "shell": "5ac0490461ca6fec2f0d2e45b4835cf9bc08de24",
+    "model": [
+      "377bf939c6c906817084b43dd21d424de646dbc2"
+    ]
+  },
+  "NAP-UPLOAD": {
+    "shell": "a7cc17463cbf5d9cb87884b31071bc4fc826034c",
+    "model": [
+      "f5cc981e527e2cc1572793a7a6e5082e5271ac49"
+    ]
+  }
+}
