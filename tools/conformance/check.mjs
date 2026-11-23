@@ -26,15 +26,16 @@ for (const engine of ['chromium', 'webkit']) {
 }
 const results = await assess(rules, checks, specs);
 const compatibility = [];
-for (const [id, title, file, name] of [
-  ['legacy-direct-open', 'Opening an older release by address prompts even with an existing grant', 'napplets/first-open-consent', 'legacy format review cannot reuse a grant replaced while the prompt is open'],
-  ['legacy-saved-pin', 'An exact verified saved release reopens with its approved grant', 'napplets/published-session', 'first open verifies, reviews, caches and stages; pinned restart uses cache without a new review'],
+for (const [id, issue, title, file, name] of [
+  ['legacy-intent-review', 103, 'Older INC handoffs ask for approval on every dispatch, including saved defaults', 'routing/broker', 'saved defaults select the exact publisher and still require review on every dispatch'],
+  ['legacy-direct-open', 104, 'Opening an older release by address prompts even with an existing grant', 'napplets/first-open-consent', 'legacy format review cannot reuse a grant replaced while the prompt is open'],
+  ['legacy-saved-pin', 104, 'An exact verified saved release reopens with its approved grant', 'napplets/published-session', 'first open verifies, reviews, caches and stages; pinned restart uses cache without a new review'],
 ]) {
   try {
     await runComponent(file, name);
-    compatibility.push({id, title, issue:104, status:'pass'});
+    compatibility.push({id, title, issue, status:'pass'});
   } catch (error) {
-    compatibility.push({id, title, issue:104, status:'regression', detail:String(error.message ?? error)});
+    compatibility.push({id, title, issue, status:'regression', detail:String(error.message ?? error)});
   }
 }
 const revision = execFileSync('git', ['rev-parse', 'HEAD'], {encoding:'utf8'}).trim();
