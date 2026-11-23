@@ -1,0 +1,9 @@
+{"config":{},"host":{"hash":"test","sniff":"test"},"restore":{"storage":[[{"key":{"t":"named","publisher":"0000000000000000000000000000000000000000000000000000000000000abc","d":"my-napplet"},"hash":"00000000000000000000000000000000000000000000000000000000000fbb62"},[["theme","dark"]]]],"schemas":[],"values":[],"intentDefaults":[],"linkRules":[],"uploadConsent":[],"valueAllowances":[],"cvmAllowances":[]}}
+{"t":"portClosed","port":7}
+{"t":"message","port":7,"msg":{"type":"storage.get","id":"a0","key":"theme"}}
+{"t":"create","w":1,"manifest":{"kind":35129,"pubkey":"0000000000000000000000000000000000000000000000000000000000000abc","content":"test napplet","tags":[["d","my-napplet"],["x","00000000000000000000000000000000000000000000000000000000000fbb62"]],"id":"0000000000000000000000000000000000000000000000000000000000000011"},"bytes":"bXktbmFwcGxldA==","inst":1}
+{"t":"load","w":1}
+{"t":"hello","w":1,"ports":[7]}
+{"t":"message","port":7,"msg":{"type":"storage.get","id":"a1","key":"theme"}}
+{"t":"message","port":7,"msg":{"type":"storage.set","id":"b1","key":"lang","value":"en"}}
+{"t":"message","port":7,"msg":{"type":"storage.keys","id":"k1"}}

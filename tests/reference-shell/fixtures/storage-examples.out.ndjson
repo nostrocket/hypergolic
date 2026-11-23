@@ -1,0 +1,7 @@
+{"step":0,"outputs":[{"t":"iframeCreated","w":1,"identity":{"d":"my-napplet","hash":"00000000000000000000000000000000000000000000000000000000000fbb62","publisher":"0000000000000000000000000000000000000000000000000000000000000abc","kind":"named","eventId":"0000000000000000000000000000000000000000000000000000000000000011"},"exposed":["shell","intent","inc","theme","identity","relay","storage","keys","media","notify","resource","config","upload","value","outbox","cvm","link","pow","display"]}]}
+{"step":1,"outputs":[]}
+{"step":2,"outputs":[{"t":"bound","w":1,"port":7,"identity":{"d":"my-napplet","hash":"00000000000000000000000000000000000000000000000000000000000fbb62","publisher":"0000000000000000000000000000000000000000000000000000000000000abc","kind":"named","eventId":"0000000000000000000000000000000000000000000000000000000000000011"}}]}
+{"step":3,"outputs":[{"t":"send","port":7,"msg":{"type":"storage.set.result","id":"b1"}}]}
+{"step":4,"outputs":[{"t":"send","port":7,"msg":{"type":"storage.get.result","id":"a1","value":"dark"}}]}
+{"step":5,"outputs":[{"t":"send","port":7,"msg":{"type":"storage.set.result","id":"b3"}}]}
+{"step":6,"outputs":[{"t":"send","port":7,"msg":{"type":"storage.keys.result","id":"d4","keys":["language","theme"]}}]}

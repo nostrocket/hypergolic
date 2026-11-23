@@ -1,0 +1,6 @@
+{"config":{},"host":{}}
+{"t":"create","w":1,"manifest":{"kind":35129,"pubkey":"0000000000000000000000000000000000000000000000000000000000000abc","content":"hi","tags":[["d","hi"],["x","90572d4be39c3e0ce5e8a2db3499165267d2743669a3cc9da683fec2eef229af"]],"id":"0000000000000000000000000000000000000000000000000000000000000001"},"bytes":"PCFkb2N0eXBlIGh0bWw+PHRpdGxlPmhpPC90aXRsZT4=","inst":1}
+{"t":"load","w":1}
+{"t":"hello","w":1,"ports":[7]}
+{"t":"create","w":2,"manifest":{"kind":35129,"pubkey":"0000000000000000000000000000000000000000000000000000000000000abc","content":"hi","tags":[["d","hi"],["x","e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"]],"id":"0000000000000000000000000000000000000000000000000000000000000002"},"bytes":"PCFkb2N0eXBlIGh0bWw+PHRpdGxlPmhpPC90aXRsZT4=","inst":2}
+{"t":"message","port":7,"msg":{"type":"shell.ready"}}
