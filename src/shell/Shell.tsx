@@ -238,7 +238,7 @@ export function Shell({ views: managedViews, blocked = false, hostActivityBlocke
     blocked: navigationBlocked, dragging: handleDragging, settings, closing: closingId !== null, discovery: discovery.review !== null,
   });
   const {panel, inspect} = useDiagnostics(workspace, navigationBlocked, identityKey, clearMenu);
-  const obscured = !!panel || settings || menuVisible || closingId !== null || discovery.review !== null;
+  const obscured = [panel, settings, menuVisible, closingId, discovery.review].some(Boolean);
   const stageBlocked = useStageInputBlocked(navigationBlocked || obscured);
   const {resetZoom, registerZoomTarget, zoomResetAvailable} = useZoomReset({workspace, identity: identityKey, lifetime: runtime,
     active: AppState.currentState === 'active', blocked: navigationBlocked, dragging: handleDragging, settings,
