@@ -1,0 +1,6 @@
+{"step":0,"outputs":[{"t":"iframeCreated","w":1,"identity":{"d":"my-napplet","hash":"00000000000000000000000000000000000000000000000000000000000fbb62","publisher":"0000000000000000000000000000000000000000000000000000000000000abc","kind":"named","eventId":"0000000000000000000000000000000000000000000000000000000000000011"},"exposed":["shell","intent","inc","theme","identity","relay","storage","keys","media","notify","resource","config","upload","value","outbox","cvm","link","pow","display"]}]}
+{"step":1,"outputs":[]}
+{"step":2,"outputs":[{"t":"bound","w":1,"port":7,"identity":{"d":"my-napplet","hash":"00000000000000000000000000000000000000000000000000000000000fbb62","publisher":"0000000000000000000000000000000000000000000000000000000000000abc","kind":"named","eventId":"0000000000000000000000000000000000000000000000000000000000000011"}}]}
+{"step":3,"outputs":[{"t":"send","port":7,"msg":{"type":"theme.get.result","id":"t1","error":"no active theme"}}]}
+{"step":4,"outputs":[{"t":"send","port":7,"msg":{"type":"theme.changed","theme":{"colors":{"background":"#ffffff","text":"#333333","primary":"#0066cc"}}}}]}
+{"step":5,"outputs":[{"t":"send","port":7,"msg":{"type":"theme.get.result","id":"t2","theme":{"colors":{"background":"#ffffff","text":"#333333","primary":"#0066cc"}}}}]}
