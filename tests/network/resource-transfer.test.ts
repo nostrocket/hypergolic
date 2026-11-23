@@ -1,3 +1,5 @@
+import {loadTrace, sends} from '../reference-shell/trace.mts';
+import type {ResourceResolvers} from '../../src/resources/resource-service.ts';
 import {glyphFile,glyphStack,glyph,tile} from './resource-pbf-fixtures.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -11,11 +13,11 @@ import type { NativeRegistration } from '../../src/runtime/capability-protocol.t
 
 const registration: NativeRegistration = {sessionId:'resource-lab-1',generation:'generation-1',epoch:0,user:'1'.repeat(64),publisher:'2'.repeat(64),appId:'resource-lab',version:'3'.repeat(64),instanceId:'resource-lab-1',fixture:'resource-lab',domains:['resource','theme']};
 const authority = {nativeToken:randomUUID(),assertActive() {}};
-function harness(body = new TextEncoder().encode('a'.repeat(3 * 1024 * 1024))) {
+function harness(body = new TextEncoder().encode('a'.repeat(3 * 1024 * 1024)), fetch?: ResourceResolvers['https']) {
   let current = true;
   const active = () => { if (!current) throw Error('revoked'); };
   const transfers = createResourceTransfers(randomUUID);
-  const service = createResourceService({ https:async () => body, servers:() => [], sha256:async () => '' });
+  const service = createResourceService({ https:fetch ?? (async () => body), servers:() => [], sha256:async () => '' });
   const broker = createResourceBroker({service,transfers}, {registration,assertActive:active});
   const requests: unknown[] = [];
   const native = { async request(message: {type:string}) {
@@ -127,4 +129,30 @@ test('specific map PBF bytes survive app classification and trusted runtime recl
       assert.deepEqual(new Uint8Array(await reply.blob.arrayBuffer()),body);assert.equal(reply.blob.type,mime);
     }finally{h.finish();}
   }
+});
+
+test('Lean resource-cancel aborts the fetch and drops its late reply', {timeout: 5000}, async () => {
+  const [request, cancel, late] = loadTrace('resource-cancel').steps.slice(3);
+  const started = Promise.withResolvers<AbortSignal>();
+  const body = Promise.withResolvers<Uint8Array<ArrayBuffer>>();
+  const urls: string[] = [];
+  const host = harness(new Uint8Array(), (url, signal) => {
+    urls.push(url);
+    started.resolve(signal);
+    return body.promise;
+  });
+  const replies: object[] = [];
+  const send = (reply: object) => replies.push(reply);
+  try {
+    const pending = host.adapter({message: request.input.msg, send});
+    const signal = await started.promise;
+    assert.deepEqual(urls, [request.outputs[0].call.url]);
+    assert.equal(signal.aborted, false);
+    await host.adapter({message: cancel.input.msg, send});
+    assert.equal(cancel.outputs[0].effect.t, 'cancel');
+    assert.equal(signal.aborted, true);
+    body.resolve(new Uint8Array(Buffer.from(late.input.reply.outcome.body, 'base64')));
+    await pending;
+    assert.deepEqual(replies, [...sends(request), ...sends(cancel), ...sends(late)]);
+  } finally {body.resolve(new Uint8Array()); host.finish();}
 });
