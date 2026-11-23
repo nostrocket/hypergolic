@@ -133,12 +133,14 @@ inputs and elements with a button role. It disables browser double-tap zoom on
 these controls while respecting the game's explicit touch-action styles.
 Custom unmarked controls need markup from the game author.
 
+### Landscape navigation
+
+A focused napplet uses the landscape viewport. Swipe inward from either side to reveal **All napplets** on that side. Tap it to open the overview. Select the card to resume the napplet. The button hides after four seconds, or the Android accessibility timeout if longer. With VoiceOver or TalkBack active, the button has its own space above the napplet. Android Back also opens the overview after dismissing any open keyboard or shell surface.
+
 ### Follow-up
 
 - Long-press actions to rearrange and unpin Home shortcuts. The first version uses
   Edit on Home and Unpin from Home in the napplet menu.
-
-A focused napplet uses the landscape viewport. **All napplets** stays available in the upper corner and returns to the overview without closing the napplet. Android Back also opens the overview after dismissing any open keyboard or shell surface.
 
 ### Reclaiming background views
 
