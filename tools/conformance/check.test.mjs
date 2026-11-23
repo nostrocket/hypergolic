@@ -1,3 +1,7 @@
+import reviewedDrafts from '../../tests/reference-shell/fixtures/drafts.json' with {type: 'json'};
+import pinnedSpecs from './specs.json' with {type: 'json'};
+import {referenceCases} from './reference-cases.mjs';
+import blobs from '../../tests/reference-shell/fixtures/blobs.json' with {type: 'json'};
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { assess, gate } from './report.mjs';
@@ -36,4 +40,14 @@ test('drift compares document bytes, detects removal and fails on incomplete ups
   assert.equal(deleted.removed, true);
   await assert.rejects(compareSpecs(catalog, request({})));
   await assert.rejects(compareSpecs(catalog, async () => { throw Error('unavailable'); }));
+});
+
+test('each additional reference fixture has exactly one registered gate', () => {
+  assert.deepEqual(referenceCases.map(([name]) => name).sort(), Object.keys(blobs).sort());
+});
+
+test('a changed shell draft pin requires reviewing its reference trace decisions', () => {
+  for (const [name, {shell}] of Object.entries(reviewedDrafts)) {
+    assert.equal(pinnedSpecs[name].revision, shell, 'Review reference coverage for ' + name);
+  }
 });

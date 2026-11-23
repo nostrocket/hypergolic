@@ -1,0 +1,98 @@
+{
+  "cvm": {
+    "in": "3de351694bfca576898c0226460f909de30b60d6",
+    "out": "dad423aea9d02077fb8a05ddf663177d9138c1d8"
+  },
+  "identity": {
+    "in": "aa0f35145eadf544f4b2b81c36a2b17257e424ad",
+    "out": "33ea392a49b1e5d0879ad3897fae2c2680313038"
+  },
+  "identity-examples": {
+    "in": "cd310d059b73b24a3383f7ee2aa5c34b0d0e509a",
+    "out": "7d3eef0fe5c3a925cc8184eb97d2aff60ee39f42"
+  },
+  "identity-teardown": {
+    "in": "58a90df978a03730abc3f71b935c85629c2eb094",
+    "out": "d283be7f6ba261b1b3504395576bb0566392635f"
+  },
+  "inc": {
+    "in": "52b06c2b48f65ea87fd255748d1cd3b7273bf630",
+    "out": "e8e657beedb0e3df652e1469b632daa5b8756002"
+  },
+  "inc-channel": {
+    "in": "5b015361d22d317f2d0d1c5ffd4bf1214c27ba5f",
+    "out": "a17c9efdfff5c6c04d8a1c7cdd7c147960d69258"
+  },
+  "inc-named": {
+    "in": "f55a686c3663f6be80148eaa2e4b34423b3add1d",
+    "out": "003a91c705fa13a4def26026bd09e50fcf060118"
+  },
+  "intent": {
+    "in": "30ceb461071cfe681a3ed0ca295abc096dcbf817",
+    "out": "ad407bbaa294f90fb79a087aab268203ab6a050b"
+  },
+  "keys": {
+    "in": "53067b3e017b7a8a0f995b352463c1319c78c02d",
+    "out": "0f3bb00982f0720944218d6a28e0a4ce4773b46a"
+  },
+  "link": {
+    "in": "a6df08b953fe26a6ab57960690af4bfcdfaaea4f",
+    "out": "522884c011d396bd9033a342421b14272d87ae5b"
+  },
+  "link-denied": {
+    "in": "1385796980cb0724546b3b2b1c3447239ec577be",
+    "out": "3b0c3c5d3f51acc67d0a61857d7e2c6900d59cbe"
+  },
+  "notify": {
+    "in": "aa022d4d21172fea2e5942a4c62534655c4fa9ee",
+    "out": "2aaea8f3d002c0530788386cb60c32ea7d60ba56"
+  },
+  "outbox": {
+    "in": "30721bfc964a47635ff09868d6f749064c9fdf25",
+    "out": "74ae537587821a682f67dec5991e15dc563ab420"
+  },
+  "relay-publish": {
+    "in": "7571651cd1b78e5bf2a87a0d7708672b162171c4",
+    "out": "a51ccddd1490f1cf39da52894311ac458d712a37"
+  },
+  "relay-query": {
+    "in": "9ead720cdcac45a951f812c8ee30cb9ff96a88c7",
+    "out": "502ee78e417c760dd86752ed5ae86c85c56c2e81"
+  },
+  "relay-subscribe": {
+    "in": "5e007b117b0daf1ef6cdb706fb04b003820f9541",
+    "out": "87689f0ab7faf4c244882f53ee6c205f88eabd86"
+  },
+  "resource-cancel": {
+    "in": "b70d4f0d4624517a446d26c637022b3ea885acbb",
+    "out": "b8e5c41e0cf7e483adaae2545e8c527ab7a1f07e"
+  },
+  "restore": {
+    "in": "5ee37c16da47a8cd1af34f0c219b1b10916fb8dc",
+    "out": "72977fc145a9f508479375ef1249132077a7779e"
+  },
+  "sha256": {
+    "in": "a2cc5aee90019d17cebbb138a82504717059953c",
+    "out": "753797763b51498846938d2b4d80319c200d1be4"
+  },
+  "storage": {
+    "in": "96561c6118523843cd61f9b9c77cf36711e0be84",
+    "out": "76bb0cacd84227cd007902d9df8c17bea73f8854"
+  },
+  "storage-examples": {
+    "in": "d25fb85fd087197104a4d13564791680c2039baa",
+    "out": "f8982172af0c5e9760209f3eacde9c6fbe4e9847"
+  },
+  "storage-quota": {
+    "in": "73dadf1633b1f6de0ba4728dbb2b51583439be43",
+    "out": "1b7a4691e5dd42f8a3b99d2f8a8c697c1704d28e"
+  },
+  "theme": {
+    "in": "fdef96dc5fc8639ce01f28cdd9af22a77d18f073",
+    "out": "de2bce1497b421a223957b4e979f18f47fb15179"
+  },
+  "theme-full": {
+    "in": "2922a5cd1aa17a227431b7d41949cb0389cbf4fb",
+    "out": "69705f5e401c7ad45a97fb8509c6d670236c7d4b"
+  }
+}
