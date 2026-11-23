@@ -24,9 +24,21 @@ for (const engine of ['chromium', 'webkit']) {
   };
 }
 const results = await assess(rules, checks, specs);
+const compatibility = [];
+for (const [id, title, name] of [
+  ['legacy-direct-open', 'Opening an older release by address prompts even with an existing grant', 'legacy format review cannot reuse a grant replaced while the prompt is open'],
+  ['legacy-saved-pin', 'An exact verified saved release reopens with its approved grant', 'only explicit trusted review persists the exact publisher, signed coordinate and capabilities'],
+]) {
+  try {
+    await runComponent('napplets/first-open-consent', name);
+    compatibility.push({id, title, issue:104, status:'pass'});
+  } catch (error) {
+    compatibility.push({id, title, issue:104, status:'regression', detail:String(error.message ?? error)});
+  }
+}
 const revision = execFileSync('git', ['rev-parse', 'HEAD'], {encoding:'utf8'}).trim();
-const report = markdown(results) + '\nImplementation commit: `' + revision + '`\n';
+const report = markdown(results) + '\n## Hypergolic compatibility policy\n\n' + compatibility.map(row => '- ' + row.status + ' — ' + row.title + (row.detail ? ' — ' + row.detail : '')).join('\n') + '\n' + '\nImplementation commit: `' + revision + '`\n';
 process.stdout.write(report);
-if (values.json) await writeFile(values.json, JSON.stringify({version:1, revision, specs, results}, null, 2) + '\n');
+if (values.json) await writeFile(values.json, JSON.stringify({version:1, revision, specs, results, profiles:{strict:{passed:gate(results, true)}, compatibility:{passed:gate(compatibility), results:compatibility}}}, null, 2) + '\n');
 if (values.markdown) await writeFile(values.markdown, report);
-if (!gate(results, values.strict)) process.exitCode = 1;
+if (!gate(results, values.strict) || !gate(compatibility)) process.exitCode = 1;
