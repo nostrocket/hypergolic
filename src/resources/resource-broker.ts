@@ -14,24 +14,30 @@ export function createResourceBroker(host: ResourceHost, owner: CapabilityOwner)
     async dispatch(value: unknown, authority: ResourceAuthority): Promise<string | null> {
       authority.assertActive();
       if (!owner.registration.domains.includes('resource')) return null;
+      let complete: ((ok: boolean) => void) | undefined;
       try {
         const type = value && typeof value === 'object' && 'type' in value ? value.type : null;
         if (type === 'resource.__chunk') return JSON.stringify(transfers.read(value));
         const request = parseResourceRequest(value);
         if (request.type === 'resource.cancel') transfers.cancel(request.id);
+        if (request.type === 'resource.bytes' || request.type === 'resource.bytesMany') complete = owner.diagnostics?.resource();
         const result = await service.execute(request, authority);
         authority.assertActive();
-        if (result === null) return null;
+        if (result === null) { complete?.(false); return null; }
         if (request.type === 'resource.bytes') {
-          return JSON.stringify({ type: result.type, id: request.id, transfer: transfers.stage(request.id, result.value as ResourceBytes) });
+          const transfer = transfers.stage(request.id, result.value as ResourceBytes);
+          complete?.(true);
+          return JSON.stringify({ type: result.type, id: request.id, transfer });
         }
         if (request.type === 'resource.bytesMany') {
           const items = (result.items as ReadonlyArray<{ url: string; ok: boolean; value?: ResourceBytes; error?: string }>).map(item =>
             item.ok ? { url: item.url, ok: true, transfer: transfers.stage(request.id, item.value!) } : item);
+          complete?.(items.every(item => item.ok));
           return JSON.stringify({ type: result.type, id: request.id, items });
         }
         return JSON.stringify(result);
       } catch (error) {
+        complete?.(false);
         if (value && typeof value === 'object' && 'id' in value && typeof value.id === 'string') transfers.cancel(value.id);
         authority.assertActive();
         const failure = resourceFailure(value, error instanceof ResourceError ? error.code : 'network-error');

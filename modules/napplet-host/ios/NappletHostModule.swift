@@ -27,6 +27,9 @@ public final class NappletHostModule: Module {
     nonisolated(unsafe) weak let streamEmitter = self
     Name("HypergolicNappletHost")
     Events("onRelayStream", "onRelayLifecycle", "onUploadProgress", "onRoutingLifecycle")
+    AsyncFunction("copyDiagnostics") { (text: String) async in
+      await MainActor.run { UIPasteboard.general.setItems([["public.utf8-plain-text": text]], options: [.localOnly: true]) }
+    }
     OnCreate {
       Task { @MainActor in RestrictedNappletHost.removeAbandonedRules() }
       UploadTransport.observeProgress { event in streamEmitter?.emit(event: "onUploadProgress", payload: ["token": event.token, "bytesSent": event.bytesSent, "bytesTotal": event.bytesTotal]) }

@@ -24,6 +24,7 @@ interface Props {
   swipeY: SharedValue<number>;
   pending: ReadonlySet<string>;
   onFocus: (id: string) => void;
+  onDiagnostics: (id: string) => void;
   onClose: (id: string) => void;
   onOpen: () => void;
   onDragEnd: (id: string, close: boolean) => void;
@@ -37,7 +38,7 @@ function focusView(view: ViewInstance | TextInstance | null | undefined) {
 const sessionKey = (session: NappletDescriptor): string => session.id;
 
 /** Only transparent controls virtualize; the live native views stay in WorkspaceStage. */
-export const Overview = forwardRef<OverviewHandle, Props>(function Overview({ loaded, sessions, geometry, size, visible, busy, focusedId, progress, scrollY, swipeId, swipeY, pending, onFocus, onClose, onOpen, onDragEnd, onMeasure }, ref) {
+export const Overview = forwardRef<OverviewHandle, Props>(function Overview({ loaded, sessions, geometry, size, visible, busy, focusedId, progress, scrollY, swipeId, swipeY, pending, onFocus, onDiagnostics, onClose, onOpen, onDragEnd, onMeasure }, ref) {
   const { styles } = useShellStyles(createStyles);
   const scroll = useRef<FlatList<NappletDescriptor>>(null);
   const heading = useRef<TextInstance>(null);
@@ -66,8 +67,8 @@ export const Overview = forwardRef<OverviewHandle, Props>(function Overview({ lo
   const renderCard = useCallback(({ item, index }: { item: NappletDescriptor; index: number }) => (
     <OverviewCard session={item} loaded={loaded.has(item.id)} rect={geometry.cards[index]} captionHeight={geometry.captionHeight}
       busy={inactive} selected={focusedId === item.id} pending={pending.has(item.id)} swipeId={swipeId} swipeY={swipeY} scrollGesture={scrollGesture}
-      setRef={setCardRef} onFocus={onFocus} onClose={onClose} onDragEnd={onDragEnd} onMeasure={onMeasure} />
-  ), [loaded, inactive, focusedId, geometry, onClose, onDragEnd, onFocus, onMeasure, pending, scrollGesture, setCardRef, swipeId, swipeY]);
+      setRef={setCardRef} onFocus={onFocus} onClose={onClose} onDiagnostics={onDiagnostics} onDragEnd={onDragEnd} onMeasure={onMeasure} />
+  ), [loaded, inactive, focusedId, geometry, onDiagnostics, onClose, onDragEnd, onFocus, onMeasure, pending, scrollGesture, setCardRef, swipeId, swipeY]);
   return <Animated.View style={[StyleSheet.absoluteFill, styles.layer, opacity]} pointerEvents={visible && !busy ? 'auto' : 'none'} accessibilityElementsHidden={!visible} importantForAccessibility={visible ? 'auto' : 'no-hide-descendants'}>
     <GestureDetector gesture={scrollGesture}>
       <Animated.FlatList ref={scroll} data={sessions} numColumns={2} keyExtractor={sessionKey} testID="napplet-overview"

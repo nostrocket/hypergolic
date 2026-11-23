@@ -44,7 +44,7 @@ export function createStreamDeliveryQueue(native:NativeRelaySubscriptionPort, to
   }};
 }
 export function createRelaySubscriptionBroker(native:NativeRelaySubscriptionPort,
-  manager:ReturnType<typeof createRelaySubscriptions>,owner:Readonly<{registration:NativeRegistration;assertActive():void}>) {
+  manager:ReturnType<typeof createRelaySubscriptions>,owner:Readonly<{diagnostics?:import('./napplet-diagnostics.ts').NappletDiagnostics;registration:NativeRegistration;assertActive():void}>) {
   const registration=decodeNativeRegistration(owner.registration),expected=JSON.stringify(registration);
   const session=manager.session({registration,assertActive:owner.assertActive});
   const tokens=new Map<string,string>(),queues=new Map<string,ReturnType<typeof createStreamDeliveryQueue>>();
@@ -68,6 +68,7 @@ export function createRelaySubscriptionBroker(native:NativeRelaySubscriptionPort
     revoke,
     close(input:unknown){active();const request=parseRelayClose(input);stop(request.subId);},
     dispatch(token:string) {
+      let trace: ReturnType<NonNullable<typeof owner.diagnostics>['relay']> | undefined;
       let handled=false, request:RelaySubscribeRequest|undefined;
       try {
         active();const raw=native.take(token);if(raw===null)return;
@@ -80,7 +81,9 @@ export function createRelaySubscriptionBroker(native:NativeRelaySubscriptionPort
         const queue=createStreamDeliveryQueue(native,token,selected.subId,'relay',active,
           ()=>session.close({type:'relay.close',id:'relay-delivery-limit',subId:selected.subId}),()=>forget(selected.subId));
         queues.set(selected.subId,queue);
+        trace = owner.diagnostics?.relay(selected, captured.request);
         session.subscribe(selected,message=> {
+          trace?.observe(message);
           try {
             return queue.send(message);
           }catch{stop(selected.subId);return false;}
@@ -90,7 +93,8 @@ export function createRelaySubscriptionBroker(native:NativeRelaySubscriptionPort
           try{active();for(const [subId,current] of tokens)if(!native.isActive(current))stop(subId);else queues.get(subId)?.drain();}
           catch{revoke();}
         },25);
-      }catch{
+      }catch(error){
+        trace?.rejected(error instanceof Error && error.message === 'relay destination denied');
         // Only an exact, accepted native token can report a rejected stream start.
         if(request&&tokens.get(request.subId)===token) {
           try {

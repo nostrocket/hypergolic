@@ -1,3 +1,4 @@
+import {createNappletDiagnostics, type NappletDiagnostics, type DiagnosticEntry} from './napplet-diagnostics.ts';
 import {supportsWorkspaceJournalCheckpoint} from '../napplets/workspace-journal-checkpoint.ts';
 import {createSessionCheckpoint, type SessionCheckpoint} from './session-checkpoint.ts';
 import {createCatalogRecommendations} from '../napplets/catalog-recommendation.ts';
@@ -34,10 +35,11 @@ import type { NativeRegistration } from './capability-protocol.ts';
 export interface NativeCapabilityEvent { type: 'capability'; sessionId: string; generation: string; token: string; lane?: 'approval' | 'outbox-subscription' | 'subscription' | 'upload' | 'routing' | 'presentation' | 'configuration' | 'napplet-link' | 'cvm' | 'legacy-subscription' | 'legacy' | 'legacy-image' }
 export interface RuntimeBinding { readonly configuration: string; receive(event: NativeCapabilityEvent): void; revoke(): void }
 type PublishedCapabilities = Readonly<{requiredDomains: readonly string[]; optionalDomains: readonly string[]}>;
-export interface PublishedRuntimeBinding { readonly publishedArtifact: string; readonly requestedDomains: PublishedCapabilities; readonly checkpoint: SessionCheckpoint | null;
+export interface PublishedRuntimeBinding { diagnostics?(): DiagnosticEntry[]; readonly publishedArtifact: string; readonly requestedDomains: PublishedCapabilities; readonly checkpoint: SessionCheckpoint | null;
   ready(generation: string): void; readyGeneration(): string | null; receive(event: NativeCapabilityEvent): void; assertApproval(origin: ApprovalOrigin,domain?:'outbox'|'common'): void; assertUpload(origin: ApprovalOrigin): void; revoke(): void }
 export interface RuntimeNativePort extends NativeCapabilityPort { checkpointAvailable?(generation: string, id: string, consume: boolean): boolean; newInstanceId(): string; subscriptions?: NativeRelaySubscriptionPort }
 export interface RuntimeOwner {
+  diagnostics?(sessionId: string): DiagnosticEntry[];
   recordNavigationKeyboard?(sessionId: string, visible: boolean): void;
   canSuspend(session: NappletDescriptor): boolean;
   trySuspend(session: NappletDescriptor): boolean;
@@ -79,7 +81,7 @@ type ApprovalPorts = Readonly<{
 function capabilityReceiver(database: ShellDatabase, native: RuntimeNativePort,
   approvals: ApprovalPorts | undefined,
   sessionId: string, configuration: Omit<NativeRegistration, 'generation'>, assertActive: () => void, queries?: RelayQueryService, subscriptions?: ReturnType<typeof createRelaySubscriptions>, resources?: ResourceHost, uploads?: UploadService, identityData?: IdentityDataPort, routing?: RoutingBroker, notify?: NotifyBroker, config?: ConfigBroker, outbox?: OutboxReadService, outboxStreams?:ReturnType<typeof createOutboxSubscriptions>,
-  nappletLinks?: Readonly<{ broker: NappletLinkBroker; source: NappletDescriptor }>, cvm?:CvmService) {
+  nappletLinks?: Readonly<{ broker: NappletLinkBroker; source: NappletDescriptor }>, cvm?:CvmService, diagnostics?: NappletDiagnostics) {
   let generation: string | null = null;
   let broker: ReturnType<typeof createCapabilityBroker> | null = null;
   const canSign = approvals?.canSign;
@@ -99,7 +101,7 @@ function capabilityReceiver(database: ShellDatabase, native: RuntimeNativePort,
         identifier(event.token); identifier(event.generation);
         if (generation === null) {
           generation = event.generation;
-          const owner={registration:{...configuration,generation},assertActive};
+          const owner={diagnostics,registration:{...configuration,generation},assertActive};
           if(configuration.legacyReadOnly && configuration.domains.length === 0 && resources) legacyImages=createLegacyImageBroker(native,resources,owner);
           if(configuration.legacyReadOnly && configuration.domains.length === 0 && native.subscriptions && subscriptions) legacyStreams=createLegacySubscriptionBroker(native.subscriptions,native,subscriptions,owner);
           if(configuration.domains.includes('relay')&&native.subscriptions&&subscriptions)streams=createRelaySubscriptionBroker(native.subscriptions,subscriptions,owner);
@@ -168,7 +170,8 @@ export function createRuntimeOwner(database: ShellDatabase,
       assertPreparedActive();
       exactSession(selected);
     };
-    const receiver = capabilityReceiver(database, native, approvals, selected.id, configuration, assertActive, queries, subscriptions, resources, uploads, identityData, routing?.broker, notify, config, outbox, outboxStreams, entry, cvm);
+    const diagnostics = createNappletDiagnostics();
+    const receiver = capabilityReceiver(database, native, approvals, selected.id, configuration, assertActive, queries, subscriptions, resources, uploads, identityData, routing?.broker, notify, config, outbox, outboxStreams, entry, cvm, diagnostics);
     const sessions = identity.getSnapshot().session.workspace.getSnapshot().workspace.sessions;
     for (const [id, item] of suspended) if (!sessions.some(card => samePublishedPin(card, item.session))) suspended.delete(id);
     const previous = suspended.get(selected.id);
@@ -177,12 +180,14 @@ export function createRuntimeOwner(database: ShellDatabase,
     const checkpoint = configuration.domains.includes('storage') && supportsWorkspaceJournalCheckpoint(selected) ? createSessionCheckpoint(
       resume, () => { if (suspended.get(selected.id) === previous) suspended.delete(selected.id); }, previous?.editing) : null;
     const binding: PublishedRuntimeBinding = Object.freeze({
+      diagnostics() { assertActive(); return diagnostics.snapshot(); },
       checkpoint,
       publishedArtifact: hostInput,
       requestedDomains: Object.freeze({ requiredDomains: ready.artifact.manifest.requiredDomains,
         optionalDomains: ready.artifact.manifest.optionalDomains }),
       ready(generation: string) {
         assertActive();
+        if (mounted !== generation) diagnostics.ready();
         mounted = identifier(generation);
         checkpoint?.ready(mounted);
       },
@@ -237,6 +242,7 @@ export function createRuntimeOwner(database: ShellDatabase,
     } catch {return false;}
   };
   return Object.freeze({
+    diagnostics(id: string) { try { return running.get(id)?.diagnostics?.() ?? []; } catch { return []; } },
     recordNavigationKeyboard: (id: string, visible: boolean) => running.get(id)?.checkpoint?.recordNavigationKeyboard(visible),
     canSuspend: (session: NappletDescriptor) => suspend(session, false),
     trySuspend: (session: NappletDescriptor) => suspend(session, true),

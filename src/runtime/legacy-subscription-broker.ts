@@ -8,7 +8,7 @@ import type {NativeRelaySubscriptionPort} from './relay-subscription-broker.ts';
 
 /** A native-attested read recipient never becomes an ordinary Relay grant. */
 export function createLegacySubscriptionBroker(native:NativeRelaySubscriptionPort, capability:NativeCapabilityPort,
-  manager:ReturnType<typeof createRelaySubscriptions>,owner:Readonly<{registration:NativeRegistration;assertActive():void}>) {
+  manager:ReturnType<typeof createRelaySubscriptions>,owner:Readonly<{diagnostics?:import('./napplet-diagnostics.ts').NappletDiagnostics;registration:NativeRegistration;assertActive():void}>) {
   const registration=decodeNativeRegistration(owner.registration),expected=JSON.stringify(registration);
   const context=registration.legacyReadOnly;
   if(!context)throw new Error('Legacy consent required');
@@ -46,6 +46,7 @@ export function createLegacySubscriptionBroker(native:NativeRelaySubscriptionPor
       finally{capability.finish(token,null);}
     },
     dispatch(token:string) {
+      let trace: ReturnType<NonNullable<typeof owner.diagnostics>['relay']> | undefined;
       let handled=false, request:RelaySubscribeRequest|undefined;
       try {
         active();const raw=native.take(token);if(raw===null)return;
@@ -58,7 +59,9 @@ export function createLegacySubscriptionBroker(native:NativeRelaySubscriptionPor
         request=selected;
         if(tokens.has(selected.subId)||!native.accept(token))throw new Error('Native stream unavailable');
         active();tokens.set(selected.subId,token);
+        trace = owner.diagnostics?.relay(selected, captured.request);
         session.subscribe(selected,message=> {
+          trace?.observe(message);
           try {
             active();if(!native.isActive(token))throw new Error('Native stream revoked');
             if(!native.mayDeliver(token))return 'paused';
@@ -72,7 +75,8 @@ export function createLegacySubscriptionBroker(native:NativeRelaySubscriptionPor
           try{active();for(const [subId,current] of tokens)if(!native.isActive(current))stop(subId);}
           catch{revoke();}
         },25);
-      }catch{
+      }catch(error){
+        trace?.rejected(error instanceof Error && error.message === 'relay destination denied');
         // Only an exact, accepted native token can report a rejected stream start.
         if(request&&tokens.get(request.subId)===token) {
           try {
