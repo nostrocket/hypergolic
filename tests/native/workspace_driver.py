@@ -48,7 +48,7 @@ def retained_overview_cards(nodes):
         raise CheckFailed('Short stroke opened a close warning')
     if any(label(node).endswith('napplet handle') for node in nodes):
         raise CheckFailed('Focused handles survive the claimed overview')
-    exactly_one(nodes, lambda node: label(node) == 'Your napplets', 'retained overview heading')
+    exactly_one(nodes, lambda node: node.get('resource-id') == 'napplet-overview', 'retained overview heading')
     expected = ['Open UX Lab 1', 'Open UX Lab 2', 'Open UX Lab 3']
     actual = [label(node) for node in nodes if label(node).startswith('Open UX Lab ')]
     if sorted(actual) != expected:
@@ -342,7 +342,7 @@ class WorkspaceDriver(base.Driver):
     def overview(self,side='right'):
         before=self.observe()
         self.handle(side,None,'tap')
-        _,nodes=self.wait(lambda ns:any(label(n)=='Your napplets' for n in ns),'native overview')
+        _,nodes=self.wait(lambda ns:any(n.get('resource-id')=='napplet-overview' for n in ns),'native overview')
         if any(label(n).endswith('napplet handle') for n in nodes):raise CheckFailed('Hidden handles leak into overview accessibility')
         same_instances(before,self.observe())
         return nodes
@@ -413,21 +413,26 @@ class WorkspaceDriver(base.Driver):
             self.correlate('UX Lab '+str(number))
             if number<3:self.handle('right','UX Lab '+str(number+1))
         rows=self.observe();self.overview()
-        _,nodes=self.nodes();card=exactly_one(nodes,lambda n:label(n)=='Open UX Lab 3','third overview card')
-        x1,y1,x2,y2=node_bounds(card)
-        self.swipe(((x1+x2)/2,y1+(y2-y1)*.8,(x1+x2)/2,y1+(y2-y1)*.15),120)
-        _,nodes=self.wait(lambda ns:any(label(n)=='Close UX Lab 3?' for n in ns),'upward swipe unknown-work confirmation')
+        _,nodes=self.nodes()
+        self.tap(exactly_one(nodes,lambda n:label(n)=='Close UX Lab 3','visible close control'))
+        _,nodes=self.wait(lambda ns:any(label(n)=='Close UX Lab 3?' for n in ns),'close button unknown-work confirmation')
         self.tap(exactly_one(nodes,lambda n:n.get('resource-id','').endswith('close-keep-open'),'Keep open default action'))
         self.wait(lambda ns:any(label(n)=='Open UX Lab 3' for n in ns),'kept third card')
         after=self.observe();same_instances(rows,after)
         for key,row in target_map(rows).items():assert_state(row['snapshot'],target_map(after)[key]['snapshot'])
-        self.check('swipe-close-keep-open','Actual upward card swipe opened warning; Keep open retained all targets/data')
+        self.check('button-close-keep-open','Keep open retained all targets/data')
         remaining=rows
         for number in (3,2,1):
             title='UX Lab '+str(number)
-            _,nodes=self.nodes();self.tap(exactly_one(nodes,lambda n:label(n)=='Close '+title,'close '+title))
-            self.wait(lambda ns:any(label(n)=='Close '+title+'?' for n in ns),'unknown-work confirmation')
-            _,nodes=self.nodes();self.tap(exactly_one(nodes,lambda n:n.get('resource-id','').endswith('close-confirm'),'Close anyway'))
+            _,nodes=self.nodes()
+            if number==3:
+                card=exactly_one(nodes,lambda n:label(n)=='Open '+title,'third overview card')
+                x1,y1,x2,y2=node_bounds(card)
+                self.swipe(((x1+x2)/2,y1+(y2-y1)*.8,(x1+x2)/2,y1+(y2-y1)*.15),120)
+            else:
+                self.tap(exactly_one(nodes,lambda n:label(n)=='Close '+title,'close '+title))
+                _,nodes=self.wait(lambda ns:any(label(n)=='Close '+title+'?' for n in ns),'unknown-work confirmation')
+                self.tap(exactly_one(nodes,lambda n:n.get('resource-id','').endswith('close-confirm'),'Close anyway'))
             expected_id=self.bindings[title][0]
             after=self.wait_targets(lambda observed:len(observed)==len(remaining)-1,'exact closed target disappearance')
             if set(target_map(remaining))-set(target_map(after))!={expected_id}:raise CheckFailed('Closing removed the wrong native target')
@@ -435,18 +440,19 @@ class WorkspaceDriver(base.Driver):
                 if identity(row)!=identity(target_map(remaining)[key]):raise CheckFailed('Closing remounted another session')
                 assert_state(target_map(remaining)[key]['snapshot'],row['snapshot'])
             remaining=after
-            self.wait(lambda ns:any(label(n)=='Your napplets' for n in ns),'stayed in overview after close')
+            if after:
+                self.wait(lambda ns:any(n.get('resource-id')=='napplet-overview' for n in ns),'stayed in overview after close')
             self.check('exact-session-closed',{'title':title,'removedTarget':expected_id,'remaining':len(after)})
-        _,nodes=self.wait(lambda ns:any(label(n)=='Nothing open' for n in ns),'explicit empty workspace')
+        _,nodes=self.wait(lambda ns:any(n.get('resource-id')=='home-overview' for n in ns),'explicit empty workspace')
         if any(n.get('class')=='android.webkit.WebView' for n in nodes):raise CheckFailed('WebView survives final close')
         self.capture('closed-all-empty')
-        self.tap(exactly_one(nodes,lambda n:n.get('resource-id','').endswith('empty-open-napplet'),'empty Open napplet'))
+        self.tap(exactly_one(nodes,lambda n:n.get('resource-id','').endswith('shell-settings'),'Settings on Home'))
         _,nodes=self.wait(lambda ns:any(n.get('resource-id','').endswith('settings-open-ux-lab') for n in ns),'settings bundled route')
         self.tap(exactly_one(nodes,lambda n:n.get('resource-id','').endswith('settings-open-ux-lab'),'Open UX Lab'))
         self.focused('UX Lab 4');fresh=self.wait_targets(lambda observed:len(observed)==1,'new explicit fixture')
         if fresh[0]['generation'] in {row['generation'] for row in rows} or fresh[0]['snapshot']['counter']!='0' or fresh[0]['snapshot']['draft']!='':
             raise CheckFailed('Explicit reopen did not create a new temporary runtime instance')
-        self.check('empty-settings-reopen','Observed Nothing open -> Settings -> Open UX Lab -> fresh generation UX Lab 4')
+        self.check('empty-settings-reopen','Observed Home -> Settings -> Open UX Lab -> fresh generation UX Lab 4')
 
     def navigation_close(self):
         self.gestures()
@@ -461,7 +467,7 @@ class WorkspaceDriver(base.Driver):
         density = self.adb_run('shell', 'wm', 'density')
         stroke = short_card_stroke(bounds, density)
         self.swipe(stroke['points'], stroke['durationMs'])
-        _, nodes = self.wait(lambda observed: any(label(node) == 'Your napplets' for node in observed),
+        _, nodes = self.wait(lambda observed: any(node.get('resource-id') == 'napplet-overview' for node in observed),
                              'overview retained after short card stroke', timeout=8)
         retained_overview_cards(nodes)
         after = self.observe()

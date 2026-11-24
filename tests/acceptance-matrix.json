@@ -125,11 +125,11 @@
         "ios-physical"
       ],
       "steps": [
-        "Use the selected dirty-state contract to prepare clean, dirty and unknown sessions; arm a pending approval in each. Swipe its overview card upward.",
+        "Prepare clean, dirty and unknown sessions. Flick each card upward, including one with a pending approval. Repeat using the card close button with and without pending work.",
         "Choose default Keep open, then repeat and choose Close anyway. Send a late callback and reopen the napplet."
       ],
       "expected": [
-        "Clean closes directly; dirty/unknown warn with Keep open as default. Cancellation preserves the session; accepted close tears it down.",
+        "A flick moves only the target offscreen and closes it directly. Using the button closes a clean session directly when host work is safe. Dirty, unknown or pending work presents Keep open as the default.",
         "Old pending/approved authority is revoked and cannot be replayed after reopen; new work requires a fresh request/review."
       ],
       "evidence": [
@@ -956,8 +956,8 @@
     },
     {
       "id": "UX-07",
-      "requirement": "Upward card swipe closes; clean closes without prompt; unsaved/unknown warns Keep open(default)/Close anyway",
-      "requiredEvidence": "Clean/dirty/unknown cases via selected contract; cancel preserves session; accepted close tears it down and cancels approvals; no guessed dirty-state NAP",
+      "requirement": "An upward flick closes directly. Close controls check for unsaved or pending work and offer Keep open or Close anyway when needed.",
+      "requiredEvidence": "Flick and close-control cases for clean, dirty and unknown work. Cancel preserves the session. Closing tears down the target and cancels approvals.",
       "phase": "2.11",
       "testCases": [
         "T03"

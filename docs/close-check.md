@@ -50,7 +50,12 @@ Use `unknown` when the guest cannot determine whether its own work is saved.
 
 ## Host behavior and safeguards
 
-An upward overview-card close gesture starts one ephemeral check. The shell binds
+Flicking an overview card upward dismisses the card and closes that session directly.
+A short or cancelled drag returns the card to its place. Closing discards unsaved
+work and uses the same teardown as **Close anyway**.
+
+The card’s × button, its accessibility close action and **Close napplet** in the
+focused menu start one ephemeral check. The shell binds
 it to its actual descriptor, identity and native generation. The runtime accepts
 only its fixed native control message and a response from the captured live guest;
 the native host accepts only its existing main-frame diagnostic lane and generation.

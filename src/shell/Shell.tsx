@@ -1,4 +1,5 @@
 import type { WorkspaceViews } from './workspace-views';
+import { useOverviewSwipe } from './useOverviewSwipe';
 import { useWorkspaceViews } from './useWorkspaceViews';
 import { Home } from './Home';
 import { homeVisible, isPinned } from './pins';
@@ -160,8 +161,6 @@ export function Shell({ views: managedViews, blocked = false, hostActivityBlocke
   const progress = useSharedValue(workspace.overview ? 1 : 0);
   const position = useSharedValue(focusedIndex);
   const scrollY = useSharedValue(0);
-  const swipeY = useSharedValue(0);
-  const swipeId = useSharedValue<string | null>(null);
   const keyboardVisible = useRef(false);
   useEffect(() => {
     const shown = Keyboard.addListener('keyboardDidShow', () => { keyboardVisible.current = true; });
@@ -240,7 +239,9 @@ export function Shell({ views: managedViews, blocked = false, hostActivityBlocke
   });
   const {panel, inspect} = useDiagnostics(workspace, navigationBlocked, identityKey, clearMenu);
   const obscured = [panel, settings, menuVisible, closingId, discovery.review].some(Boolean);
-  const stageBlocked = useStageInputBlocked(navigationBlocked || obscured);
+  const inputBlocked = useStageInputBlocked(blocked || closeCheck !== null || obscured);
+  const stageBlocked = busy || inputBlocked;
+  const {swipeId, swipeY, onDragEnd} = useOverviewSwipe(workspace, inputBlocked, scrollY, runAnimation, closeSession);
   const fullscreenExit = useFullscreenExit({focusedId: workspace.focusedId, fullscreen, blocked: stageBlocked, dragging: handleDragging});
   const {resetZoom, registerZoomTarget, zoomResetAvailable} = useZoomReset({workspace, identity: identityKey, lifetime: runtime,
     active: AppState.currentState === 'active', blocked: navigationBlocked, dragging: handleDragging, settings,
@@ -255,7 +256,7 @@ export function Shell({ views: managedViews, blocked = false, hostActivityBlocke
         <WorkspaceStage views={views} home={<Home workspace={workspace} disabled={stageBlocked} onOpen={openPin}
           onUnpin={unpin} onOverview={openOverview} onDiscover={openDiscovery} />} fullscreen={fullscreen} onZoomTarget={registerZoomTarget} closeCheck={closeCheck} workspace={workspace} progress={progress} position={position} scrollY={scrollY} swipeY={swipeY} swipeId={swipeId} busy={busy} blocked={stageBlocked} hostActivityBlocked={isHostActivityBlocked(hostActivityBlocked, obscured)} interactive={!handleDragging}
           pending={pendingApprovals ?? noPending} ref={overview} onHostEvent={receiveHostEvent} onFocus={focusSession} onClose={requestClose} onDiagnostics={inspect} onOpen={openDiscovery}
-          onDragEnd={(id, close) => { runAnimation(swipeY, 0, () => { swipeId.set(null); if (close) requestClose(id); }, 140); }}
+          onDragEnd={onDragEnd}
           onHandleStart={() => { setHandleDragging(true); dismissForNavigation(); cancelAnimation(position); }}
           onHandleEnd={onHandleEnd} />
       </View>

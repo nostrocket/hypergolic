@@ -77,7 +77,7 @@ export function adjacentNapplet(state: Workspace, direction: -1 | 1): string | n
   const index = state.sessions.findIndex(session => session.id === state.focusedId);
   return state.sessions[index + direction]?.id ?? null;
 }
-/** Call only after the trusted close warning was accepted (or known clean). */
+/** Remove the session after an explicit close gesture or a completed close check. */
 export function closeNapplet(state: Workspace, id: string): Workspace {
   if (!state.sessions.some(session => session.id === id)) return state;
   const sessions = state.sessions.filter(session => session.id !== id);
