@@ -25,7 +25,7 @@ const profiles = [
 ];
 
 async function boot(page: Page, options: { relay?: boolean; direct?: boolean; pending?: boolean; legacyBrowser?: boolean; pendingProfiles?: boolean; fullHost?: boolean; partialOutbox?: boolean; rejectOutbox?: boolean; embedded?: boolean; community?: 'populated' | 'held' | 'invalid'; holdRecommenderProfile?: boolean; holdArtwork?: boolean; failArtwork?: boolean } = {},
-  feed?: ReturnType<typeof manifest>[], exactOnly: ReturnType<typeof manifest>[] = []) {
+  feed?: ReturnType<typeof manifest>[], exactOnly: ReturnType<typeof manifest>[] = [], profileRecords = profiles) {
   const external: string[] = [];
   await page.route(/^https?:/, route => {
     if (route.request().url() === 'https://parent.fixture.test/') return route.fulfill({contentType: 'text/html',
@@ -140,7 +140,7 @@ async function boot(page: Page, options: { relay?: boolean; direct?: boolean; pe
         },
       },
     };
-  }, { input: feed ?? [grid, tool, spoof], exactOnly, profiles, options, png, imageHash, paginated: Boolean(feed), communityList });
+  }, { input: feed ?? [grid, tool, spoof], exactOnly, profiles: profileRecords, options, png, imageHash, paginated: Boolean(feed), communityList });
   await page.goto(options.embedded ? 'https://parent.fixture.test/' : 'https://fixture.test/');
   return external;
 }
@@ -422,11 +422,11 @@ test('detail uses signed metadata and keeps opening reachable at narrow widths',
   await page.getByRole('button', { name: 'Details for Grid Game', exact: true }).click();
   await expect(page.locator('#detail-heading')).toHaveText('Grid Game');
   await expect(page.locator('.publication-date')).toHaveAttribute('datetime', new Date(grid.created_at * 1000).toISOString());
-  await expect(page.locator('.access-summary')).toHaveText('Uses Nostr relays.');
+  await expect(page.getByRole('list', {name: 'Required access requested by the publisher'})).toHaveText('Nostr relays');
   await expect(page.getByRole('heading', { name: 'Required', exact: true })).toBeHidden();
-  await page.getByText('Access details', { exact: true }).click();
+  await page.locator('summary[aria-label="Access details"]').click();
   await expect(page.getByRole('heading', { name: 'Required', exact: true })).toBeVisible();
-  await page.getByText('Access details', { exact: true }).click();
+  await page.locator('summary[aria-label="Access details"]').click();
   await page.setViewportSize({ width: 320, height: 568 });
   await page.getByText('Publication details', { exact: true }).click();
   await expect(page.getByText(gridAddress, { exact: true })).toBeVisible();
@@ -483,7 +483,7 @@ test('access details render distinct decorative icons for the declared domains',
     extra: [['R', 'identity'], ['R', 'relay'], ['R', 'cvm'], ['O', 'dm'], ['O', 'future']] });
   await boot(page, {}, [app]);
   await page.getByRole('button', { name: 'Details for Access icons', exact: true }).click();
-  await page.getByText('Access details', { exact: true }).click();
+  await page.locator('summary[aria-label="Access details"]').click();
   const icons = page.locator('.cap-row svg[aria-hidden="true"] path');
   await expect(icons).toHaveCount(5);
   const paths = await icons.evaluateAll(nodes => nodes.map(node => node.getAttribute('d')));
@@ -831,12 +831,19 @@ test('a short publication without preview keeps the final row beside its Open ac
 
 test('a publication without a preview lists its signed required access once', async ({page}) => {
   const app = manifest({title: 'Declared access', extra: [['R', 'inc'], ['R', 'gamepad'], ['R', 'future'], ['O', 'dm']]});
-  await boot(page, {}, [app]);
+  await boot(page, {}, [app], [], [profile(1, clock, '{"display_name":"J"}')]);
   await page.getByRole('button', {name: 'Details for Declared access'}).click();
+  await expect(page.locator('#publisher-name')).toHaveText('J');
   const tiles = page.getByRole('list', {name: 'Required access requested by the publisher'});
   await expect(tiles).toBeVisible();
+  const access = (await page.locator('.access-details summary').boundingBox())!;
+  const publisher = (await page.locator('.detail-publisher summary').boundingBox())!;
+  expect(access.y + access.height).toBeLessThanOrEqual(publisher.y);
+  expect(access.height).toBeGreaterThanOrEqual(44);
+  expect(publisher.height).toBeGreaterThanOrEqual(44);
+  expect(publisher.width).toBeGreaterThanOrEqual(44);
   await expect(tiles.getByRole('listitem')).toHaveText(['future', 'Gamepad', 'Napplet messages']);
-  await expect(page.locator('.access-summary')).toBeHidden();
-  await page.getByText('Access details', {exact: true}).click();
+  await expect(page.getByRole('heading', {name: 'Access', exact: true})).toHaveCount(1);
+  await page.locator('summary[aria-label="Access details"]').click();
   await expect(page.locator('.cap-row[data-requirement="optional"]')).toContainText('Direct messages');
 });

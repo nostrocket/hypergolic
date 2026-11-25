@@ -7,17 +7,6 @@ import type {RevisionHistory} from './pager.ts';
 import {publicationTimestamp} from './publication-date.ts';
 import {recommendControl} from './recommendations.ts';
 
-function accessList(names: string[]): string {
-  if (names.length < 2) return names.join('');
-  return names.slice(0, -1).join(', ') + ' and ' + names.at(-1);
-}
-
-function detailSection(title: string): HTMLElement {
-  const section = node('section', 'detail-section');
-  section.append(node('h2', '', title));
-  return section;
-}
-
 function capabilities(section: HTMLElement, label: string, names: string[]): void {
   if (!names.length) return;
   section.append(node('h3', 'cap-group', label));
@@ -78,20 +67,26 @@ function requiredAccessSummary(domains: string[]): HTMLElement {
 }
 
 function publicationAccess(app: Publication): HTMLElement {
-  const caps = detailSection('Access');
-  const accessName = (name: string) => name === 'outbox' ? 'Nostr relays' : accessCopy(name).name;
-  const requiredNames = [...new Set(app.required.map(accessName))];
-  caps.append(node('p', 'access-summary', requiredNames.length ? `Uses ${accessList(requiredNames)}.` : 'No required access declared.'));
-  if (app.required.length) caps.append(requiredAccessSummary(app.required));
-  const accessDetails = node('details', 'access-details');
-  const accessHeading = node('summary', '', 'Access details');
-  accessHeading.append(glyph('down'));
-  accessDetails.append(accessHeading);
-  capabilities(accessDetails, 'Required', app.required);
-  capabilities(accessDetails, 'Optional', app.optional);
-  accessDetails.append(node('p', 'muted', 'These are publisher requests. Your shell decides which access is available.'));
-  if (app.required.length || app.optional.length) caps.append(accessDetails);
-  return caps;
+  const section = node('section', 'detail-section');
+  const heading = node('h2', '', 'Access');
+  heading.prepend(glyph('key'));
+  if (app.required.length || app.optional.length) {
+    const details = node('details', 'access-details');
+    const summary = node('summary');
+    summary.setAttribute('aria-label', 'Access details');
+    summary.append(heading, glyph('down'));
+    details.append(summary);
+    capabilities(details, 'Required', app.required);
+    capabilities(details, 'Optional', app.optional);
+    details.append(node('p', 'muted', 'These are publisher requests. Your shell decides which access is available.'));
+    section.append(details);
+  } else {
+    section.append(heading);
+  }
+  section.append(app.required.length
+    ? requiredAccessSummary(app.required)
+    : node('p', 'access-summary', 'No required access declared.'));
+  return section;
 }
 
 type DetailOptions = {
@@ -117,9 +112,7 @@ export function renderPublicationDetail(detail: HTMLElement, entry: CatalogEntry
   header.append(goBack);
 
   const identity = node('div', 'identity');
-  const names = node('div');
-  names.append(title);
-  identity.append(artwork(app, media, identity), names);
+  identity.append(artwork(app, media, identity), title);
 
   const actions = node('div', 'detail-actions');
   const announcement = node('div');
@@ -143,20 +136,20 @@ export function renderPublicationDetail(detail: HTMLElement, entry: CatalogEntry
   explanation.hidden = !explanation.textContent;
   const preview = node('div', 'detail-art');
   screenshot(preview, app.screenshots, media);
-  const about = node('div', 'detail-intro');
-  about.append(node('p', 'description', app.description || 'The publisher did not provide a description.'));
+  const lead = node('p', 'description detail-intro', app.description || 'The publisher did not provide a description.');
+  const byline = node('div', 'publication-byline');
+  byline.append(publisherDisclosure(app));
   const timestamp = publicationTimestamp(app.signed.event.created_at);
   if (timestamp) {
     const updated = node('time', 'publication-date', `Updated ${timestamp.label}`);
     updated.dateTime = timestamp.iso;
-    about.append(updated);
+    byline.append(updated);
   }
   const recommendation = recommendControl(app);
 
-  names.append(publisherDisclosure(app));
   const overview = node('div', 'detail-overview');
   const launchCover = find<HTMLTemplateElement>('launch-cover-template').content.cloneNode(true);
-  overview.append(preview, launchCover, identity, about);
+  overview.append(preview, launchCover, identity, lead);
 
   const publication = node('details', 'publication');
   publication.id = 'publication-reference';
@@ -164,9 +157,13 @@ export function renderPublicationDetail(detail: HTMLElement, entry: CatalogEntry
   referenceTitle.append(glyph('down'));
   publication.append(referenceTitle, reference('Publication address', app.address), reference('Signed event ID', app.signed.event.id), reference('Format', app.format), reference('Artifact hash', app.artifactHash));
   if (app.categories.length) publication.append(reference('Categories', app.categories.join(' · ')));
+  const more = node('div', 'publication-links');
+  more.append(publication);
+  if (recommendation) more.append(recommendation);
+  const secondary = node('div', 'publication-secondary');
+  secondary.append(byline, more);
   const body = node('div', 'detail-body');
-  body.append(header, overview, publicationAccess(app), explanation, publication);
-  if (recommendation) body.append(recommendation);
+  body.append(header, overview, publicationAccess(app), explanation, secondary);
   actions.prepend(announcement);
   detail.replaceChildren(body, actions);
   updatePublisher(app, publisherProfile);

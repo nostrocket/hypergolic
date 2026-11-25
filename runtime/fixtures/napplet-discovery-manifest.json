@@ -13,11 +13,11 @@
     [
       "path",
       "/index.html",
-      "b691045b35dfb506d6a9560361364f5b3e1ca9ce41be97800e9590cde8c70534"
+      "1d4f15084a63df0e6dbdbe28f348cd3a4b57d2844653c71a3fd4aea3cd0bcf05"
     ],
     [
       "x",
-      "46a80a87dc2c91b6c2d20b89e91efa06c827b34d384e18504f194d893ca14a31",
+      "adff805d94a5c264afacddb07a59a8babd2d94ea02e16f2cf9376c5d5e0afd71",
       "aggregate"
     ],
     [
@@ -45,5 +45,5 @@
       "outbox"
     ]
   ],
-  "aggregateHash": "46a80a87dc2c91b6c2d20b89e91efa06c827b34d384e18504f194d893ca14a31"
+  "aggregateHash": "adff805d94a5c264afacddb07a59a8babd2d94ea02e16f2cf9376c5d5e0afd71"
 }
