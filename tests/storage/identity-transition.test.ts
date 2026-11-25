@@ -6,6 +6,7 @@ import { VaultError } from '../../src/security/identity-vault.ts';
 import { Integrated, pubkey } from '../security/harness.ts';
 import { initialTestWorkspace, bundledUXDescriptor, assertBundledWorkspace } from '../../src/shell/fixtures.ts';
 import { emptyWorkspace, openNapplet, snapshotWorkspace } from '../../src/shell/workspace.ts';
+import { defaultPins, pinNapplet } from '../../src/shell/pins.ts';
 import { setup, deferred, registration } from './harness.ts';
 
 const imports = new WeakMap<IdentityTransition, { setImportTarget(value: number): void }>();
@@ -137,6 +138,9 @@ test('source persistence failure stops before identity mutation and preserves sa
 
 test('lost destination commit acknowledgement requires restart; no old identity is exposed under the new selection', async t => {
   const { transition, sqlite, native, ports } = await start(t);
+  const source = transition.getSnapshot().session.workspace;
+  source.change(pinNapplet(source.getSnapshot().workspace, bundledUXDescriptor(1)));
+  await source.flush();
   sqlite.faults.push({ prefix: 'COMMIT', mode: 'after' });
   await assert.rejects(transition.confirm(await request(transition)), { code: 'RECOVERY_REQUIRED' });
   assert.equal(transition.getSnapshot().phase, 'recovery');
@@ -144,7 +148,9 @@ test('lost destination commit acknowledgement requires restart; no old identity 
   assert.throws(transition.sessionAuthority().assertActive, { code: 'STALE' });
   const restarted = await IdentityTransition.open(ports);
   assert.equal(restarted.getSnapshot().session.vault.selectedPubkey, pubkey(2));
-  assert.equal(restarted.getSnapshot().session.workspace.getSnapshot().workspace.sessions.length, 3);
+  const recovered = restarted.getSnapshot().session.workspace.getSnapshot().workspace;
+  assert.equal(recovered.sessions.length, 3);
+  assert.deepEqual(recovered.pins, defaultPins());
 });
 
 test('corrupt destination workspace is preserved and blocks entry after durable selection', async t => {

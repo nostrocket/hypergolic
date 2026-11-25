@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parsePublicIdentity, formatNpub } from '../../src/security/public-identity.ts';
 import { IdentityTransition } from '../../src/security/identity-transition.ts';
-import { initialTestWorkspace, assertBundledWorkspace } from '../../src/shell/fixtures.ts';
+import { initialTestWorkspace, assertBundledWorkspace, bundledUXDescriptor } from '../../src/shell/fixtures.ts';
+import { defaultPins, pinNapplet, showHome, unpinNapplet } from '../../src/shell/pins.ts';
+import { closeNapplet, openNapplet, setGameControls } from '../../src/shell/workspace.ts';
+import { openShellDatabase } from '../../src/storage/database.ts';
 import { setup, registration } from '../storage/harness.ts';
 import { harness, pubkey, second } from './native-vault-harness.ts';
 
@@ -55,4 +58,45 @@ test('public account transition revokes old authority, isolates storage and rest
   const restored = transition.sessionAuthority();
   assert.equal(await database.bindStorage(registration({ user: restored.user, assertActive: restored.assertActive })).port.get('retained'), 'original identity data');
   assert.equal(vault.getSnapshot().identities.length, 2);
+});
+
+test('switching public accounts carries open cards and restores each Home after restart', async t => {
+  const { vault } = harness();
+  await vault.open();
+  const { database, sqlite } = await setup(t);
+  const ports = { vault, database, seed: initialTestWorkspace, assertAvailable: assertBundledWorkspace };
+  let transition = await IdentityTransition.open(ports);
+  const workspace = () => transition.getSnapshot().session.workspace;
+  async function restart() {
+    await ports.database.close();
+    await vault.open();
+    ports.database = await openShellDatabase(sqlite, 'ios');
+    transition = await IdentityTransition.open(ports);
+  }
+
+  const extraCard = bundledUXDescriptor(4);
+  const openCards = openNapplet(initialTestWorkspace(), extraCard);
+  const original = setGameControls(pinNapplet(openCards, extraCard), extraCard, true);
+  workspace().change(original);
+
+  await transition.confirm(transition.preparePublicIdentity(second));
+  assert.deepEqual(workspace().getSnapshot().workspace, openCards);
+
+  const home = showHome(closeNapplet(openCards, extraCard.id));
+  const emptyHome = unpinNapplet(home, defaultPins()[0]!);
+  workspace().change(emptyHome);
+  const back = transition.prepareSelect(pubkey);
+  assert(back);
+  await transition.confirm(back);
+  const originalHome = { ...home, pins: original.pins, gameControls: original.gameControls };
+  assert.deepEqual(workspace().getSnapshot().workspace, originalHome);
+
+  await restart();
+  assert.deepEqual(workspace().getSnapshot().workspace, originalHome);
+  const again = transition.prepareSelect(second);
+  assert(again);
+  await transition.confirm(again);
+  assert.deepEqual(workspace().getSnapshot().workspace, emptyHome);
+  await restart();
+  assert.deepEqual(workspace().getSnapshot().workspace, emptyHome);
 });

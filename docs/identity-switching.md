@@ -39,10 +39,12 @@ authority denies operations during switching. Accepted changes revoke the old
 binding, advance epoch/revision as applicable and remount loaded sessions under
 fresh authority. Data stays scoped to the selected account.
 
-Account switching carries the currently loaded descriptors in opening order and
-focus into that account's workspace; returning uses its own saved napplet data,
-not a resurrected set of views previously closed elsewhere. Same-account method
-changes also flush/restart sessions. Selection has no automatic signer fallback.
+Account switching carries the open cards in opening order, their focus and the
+current Home or overview selection. Returning to an account leaves previously
+closed cards closed. Each account keeps its own Home shortcuts, game-control
+preferences and saved napplet data. A new account starts with the Discover
+shortcut. Removing every shortcut keeps Home empty across switches and restarts.
+Same-account method changes also flush/restart sessions. Selection has no automatic signer fallback.
 
 Known precommit denial preserves live state and re-enables edits. Uncertain native
 writes, failed source saves or destination failures require recovery/restart;
