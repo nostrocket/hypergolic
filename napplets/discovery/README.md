@@ -12,7 +12,7 @@ pnpm --filter @napplets/discovery exec playwright install chromium webkit
 pnpm --filter @napplets/discovery verify
 ```
 
-The build writes one unsigned `dist/index.html` and prints its size and SHA-256. The artifact includes its runtime license notices. The browser tests inject a test shell and signed fixtures. The shipped directory reads from the active shell.
+The build writes one unsigned `dist/index.html` and prints its size and SHA-256. The artifact includes its runtime license notices. When a signed publication has no usable screenshot, Details shows the official Hypergolic Home launch photograph for the current theme. The bundled JPEGs in `artwork/` are landscape crops of `assets/shell/launch-morning.jpg` and `assets/shell/launch-night.jpg` in the Hypergolic repository. From this package there, run `python3 prepare-artwork.py` with Pillow to refresh the crops when the Home originals change. The browser tests inject a test shell and signed fixtures. The shipped directory reads from the active shell.
 
 ## Guest contracts
 

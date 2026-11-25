@@ -1,6 +1,6 @@
 import {accessCopy} from './access-copy.ts';
 import type {CatalogEntry, Profile, Publication} from './catalog.ts';
-import {accessGlyph, artwork, button, find, glyph, node, publicationColours, screenshot} from './dom.ts';
+import {accessGlyph, artwork, button, find, glyph, node, screenshot} from './dom.ts';
 import {canOpen} from './host.ts';
 import type {ViewMedia} from './media.ts';
 import type {RevisionHistory} from './pager.ts';
@@ -65,13 +65,13 @@ function publisherDisclosure(app: Publication): HTMLElement {
   return publisher;
 }
 
-function accessTiles(domains: string[]): HTMLElement {
-  const list = node('ul', 'access-tiles');
+function requiredAccessSummary(domains: string[]): HTMLElement {
+  const list = node('ul', 'required-access');
   list.setAttribute('aria-label', 'Required access requested by the publisher');
   const labels = new Map([['gamepad', 'Gamepad'], ['inc', 'Napplet messages'], ['intent', 'Napplet actions']]);
   for (const domain of domains) {
-    const tile = node('li', 'access-tile');
-    tile.append(accessGlyph(domain), node('span', '', labels.get(domain) ?? accessCopy(domain).name));
+    const tile = node('li', 'required-domain');
+    tile.textContent = labels.get(domain) ?? accessCopy(domain).name;
     list.append(tile);
   }
   return list;
@@ -82,7 +82,7 @@ function publicationAccess(app: Publication): HTMLElement {
   const accessName = (name: string) => name === 'outbox' ? 'Nostr relays' : accessCopy(name).name;
   const requiredNames = [...new Set(app.required.map(accessName))];
   caps.append(node('p', 'access-summary', requiredNames.length ? `Uses ${accessList(requiredNames)}.` : 'No required access declared.'));
-  if (app.required.length) caps.append(accessTiles(app.required));
+  if (app.required.length) caps.append(requiredAccessSummary(app.required));
   const accessDetails = node('details', 'access-details');
   const accessHeading = node('summary', '', 'Access details');
   accessHeading.append(glyph('down'));
@@ -119,7 +119,7 @@ export function renderPublicationDetail(detail: HTMLElement, entry: CatalogEntry
   const identity = node('div', 'identity');
   const names = node('div');
   names.append(title);
-  identity.append(artwork(app, media, true), names);
+  identity.append(artwork(app, media, identity), names);
 
   const actions = node('div', 'detail-actions');
   const announcement = node('div');
@@ -155,8 +155,8 @@ export function renderPublicationDetail(detail: HTMLElement, entry: CatalogEntry
 
   names.append(publisherDisclosure(app));
   const overview = node('div', 'detail-overview');
-  overview.style.setProperty('--detail-tone', publicationColours(app)[0]);
-  overview.append(preview, identity, about);
+  const launchCover = find<HTMLTemplateElement>('launch-cover-template').content.cloneNode(true);
+  overview.append(preview, launchCover, identity, about);
 
   const publication = node('details', 'publication');
   publication.id = 'publication-reference';

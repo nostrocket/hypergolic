@@ -435,14 +435,21 @@ test('detail uses signed metadata and keeps opening reachable at narrow widths',
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
-test('detail names absent publisher media without inventing artwork', async ({ page }) => {
+test('detail keeps the theme’s launch cover separate from missing publisher media', async ({ page }) => {
   await boot(page, { direct: true }, [tool]);
   await page.getByRole('button', { name: 'Details for Relay Tool', exact: true }).click();
   await expect(page.locator('#detail .detail-art')).toBeHidden();
   await expect(page.locator('#detail .detail-art img')).toHaveCount(0);
   await expect(page.locator('#publisher-name')).toContainText('npub');
   await page.setViewportSize({width: 350, height: 720});
-  const plate = (await page.locator('.app-icon-large').boundingBox())!;
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
+    const cover = page.locator('.launch-cover img:visible');
+    await expect(cover).toHaveCount(1);
+    await expect(cover).toHaveClass(theme === 'dark' ? 'launch-night' : 'launch-morning');
+    await expect.poll(() => cover.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBe(676);
+  }
+  const plate = (await page.locator('.launch-cover').boundingBox())!;
   const title = (await page.locator('#detail-heading').boundingBox())!;
   expect(plate.width).toBeGreaterThan(300);
   expect(title.y).toBeGreaterThanOrEqual(plate.y + plate.height);
@@ -655,7 +662,8 @@ test('same-publisher apps have legible title initials and stable distinct colour
     }
   }
   await page.getByRole('button', {name: 'Details for Faultline', exact: true}).click();
-  await expect(page.locator('.app-icon-large .tile-pattern i')).toHaveCount(25);
+  await expect(page.locator('.app-icon-large')).toBeHidden();
+  await expect(page.locator('.launch-cover img:visible')).toHaveCount(1);
 });
 
 test('title initials remain during artwork loading and verified art replaces them cleanly', async ({page}) => {
@@ -780,6 +788,7 @@ test('details finds the first usable signed screenshot after unavailable, mismat
   await page.getByRole('button', {name: 'Details for Screenshot gallery'}).click();
   await expect(page.getByRole('img', {name: 'First usable screenshot'})).toBeVisible();
   await expect(page.locator('.detail-art img')).toHaveCount(1);
+  await expect(page.locator('.launch-cover')).toBeHidden();
   await expect(page.getByRole('button', {name: 'Open Napplet', exact: true})).toBeVisible();
 });
 
@@ -820,7 +829,7 @@ test('a short publication without preview keeps the final row beside its Open ac
   expect(open.y).toBeGreaterThanOrEqual(844 * .65);
 });
 
-test('a publication without a preview shows its signed required access as tiles', async ({page}) => {
+test('a publication without a preview lists its signed required access once', async ({page}) => {
   const app = manifest({title: 'Declared access', extra: [['R', 'inc'], ['R', 'gamepad'], ['R', 'future'], ['O', 'dm']]});
   await boot(page, {}, [app]);
   await page.getByRole('button', {name: 'Details for Declared access'}).click();

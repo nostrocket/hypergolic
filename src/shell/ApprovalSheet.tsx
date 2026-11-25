@@ -1,7 +1,7 @@
 import {reviewTextPage} from './review-text-page';
 import {useReviewControl} from './useReviewControl';
 import { ThumbAction } from './ThumbAction';
-import { ShellBackdrop } from './ShellBackdrop';
+import { LaunchHorizon } from './ShellBackdrop';
 import { TrustedBand } from './TrustedBand';
 import {OutboxReview} from './OutboxReview';
 import { useRef, useState } from 'react';
@@ -189,7 +189,7 @@ function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismis
         <TrustedBand label="Signing request" />
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           {stacked && secondary}
-          <View style={styles.hero}><ShellBackdrop mood="shelf" /><View style={styles.heading}>
+          <View style={styles.hero}><LaunchHorizon /><View style={styles.heading}>
             <Text accessibilityRole="header" style={[styles.title, {fontSize: displayFontSize(30, fontScale)}]}>{requestedAction(item)}</Text>
             <Text style={styles.requester}>Requested by <Text style={styles.source}>{nappletTitle}</Text></Text>
           </View></View>
@@ -229,7 +229,7 @@ const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.cre
   backdrop: { flex: 1, backgroundColor: colors.shade, justifyContent: 'flex-end' },
   sheet: { maxHeight: '90%', backgroundColor: colors.surface, borderTopWidth: 1, borderColor: colors.border, borderTopLeftRadius: 0, borderTopRightRadius: 0 },
   scroll: { gap: 10, paddingHorizontal: 16, paddingVertical: 12 },
-  hero: { overflow: 'hidden', borderWidth: 1, borderColor: colors.border, paddingTop: 48 },
+  hero: { overflow: 'hidden', borderWidth: 1, borderColor: colors.border },
   heading: { gap: 2, backgroundColor: colors.surface, padding: 12 },
   requester: { fontFamily: fonts.body, fontSize: 16, color: colors.muted },
   source: { fontFamily: fonts.strong, color: colors.text },

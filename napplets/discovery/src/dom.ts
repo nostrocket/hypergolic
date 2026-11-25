@@ -1,4 +1,3 @@
-import { identityArt } from './identity-art.ts';
 import { accessIconPath } from './access-icon.ts';
 import type { Media, Publication } from './catalog.ts';
 import type { ViewMedia } from './media.ts';
@@ -64,7 +63,7 @@ function publicationSeed(app: Publication): number {
   return hash >>> 0;
 }
 
-export function publicationColours(app: Publication) {
+function publicationColours(app: Publication) {
   return initialColours[publicationSeed(app) % initialColours.length]!;
 }
 
@@ -78,25 +77,11 @@ function titleInitials(app: Publication): HTMLElement {
   return tile;
 }
 
-function detailPattern(app: Publication): HTMLElement {
-  const tile = node('span', 'tile-pattern');
-  const seed = publicationSeed(app);
-  for (let row = 0; row < 5; row++) {
-    for (let column = 0; column < 5; column++) {
-      const bit = row * 3 + Math.min(column, 4 - column);
-      const lit = (row === 2 && column === 2) || ((seed >>> bit) & 1);
-      tile.append(node('i', lit ? 'lit' : ''));
-    }
-  }
-  return tile;
-}
-
-export function artwork(app: Publication, media: ViewMedia, large = false): HTMLElement {
-  const frame = node('span', large ? 'app-icon app-icon-large' : 'app-icon');
+export function artwork(app: Publication, media: ViewMedia, detailIdentity?: HTMLElement): HTMLElement {
+  const frame = node('span', detailIdentity ? 'app-icon app-icon-large' : 'app-icon');
   frame.setAttribute('aria-hidden', 'true');
-  frame.append(large ? detailPattern(app) : titleInitials(app));
-  if (large) frame.style.setProperty('--address-art', identityArt(publicationSeed(app), publicationColours(app)[0]));
-  if (app.icon) media.show(frame, app.icon, img => frame.replaceChildren(labelImage(img, '', 72, 72)));
+  if (!detailIdentity) frame.append(titleInitials(app));
+  if (app.icon) media.show(detailIdentity ?? frame, app.icon, img => frame.replaceChildren(labelImage(img, '', 72, 72)));
   return frame;
 }
 

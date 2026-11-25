@@ -25,7 +25,7 @@ import { IdentityBackup } from './IdentityBackup';
 import { RelaySettings } from './RelaySettings';
 import { PublishedHostLab } from './PublishedHostLab';
 import { SettingsForm } from './SettingsForm';
-import { ShellBackdrop } from './ShellBackdrop';
+import { LaunchHorizon } from './ShellBackdrop';
 import { OpenPublishedNapplet } from './OpenPublishedNapplet';
 import { UpdatePublishedNapplet } from './UpdatePublishedNapplet';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
@@ -201,7 +201,7 @@ function SettingsHome({session, onBackup, onCloseBackup, onDelete, onImport, onP
   const publishedCount = publishedSessions.length;
   const accountCount = session.vault.identities.length;
   return <>
-      <View style={styles.currentIdentity}><ShellBackdrop mood="shelf" /><View style={styles.identityCopy}><Text style={styles.identityLabel}>Active identity</Text>
+      <View style={styles.currentIdentity}><LaunchHorizon /><View style={styles.identityCopy}><Text style={styles.identityLabel}>Active identity</Text>
         <Text selectable testID="settings-full-npub" style={styles.npub}>{formatNpub(session.vault.selectedPubkey)}</Text></View>
       </View>
       <View style={styles.sections}>
@@ -293,7 +293,7 @@ export function IdentitySettings({ openDiscovery, openBundledTest, openStateLab,
 }
 const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.create({
   body: { padding: 24, paddingTop: 12, paddingBottom: 40, gap: 16 },
-  currentIdentity: { overflow: 'hidden', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingTop: 54 },
+  currentIdentity: { overflow: 'hidden', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   identityCopy: { padding: 12, backgroundColor: colors.surface, gap: 4 },
   identityLabel: { fontFamily: fonts.mono, fontSize: 11, letterSpacing: 1.5, color: colors.muted, textTransform: 'uppercase' },
   sections: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.glass },

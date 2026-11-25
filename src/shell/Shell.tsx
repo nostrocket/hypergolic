@@ -21,7 +21,7 @@ import { OwnerContext } from './IdentityOwnerContext';
 import { useWorkspaceBack } from './useWorkspaceBack';
 import { useBundledNapplets } from './useBundledNapplets';
 import { publishedSettingsActions } from './published-settings-actions';
-import { ShellBackdrop, WorkspaceBackdrop } from './ShellBackdrop';
+import { WorkspaceBackdrop } from './ShellBackdrop';
 import {snapshotEventId} from '../napplets/published-identity';
 import {useCloseChecks} from './useCloseChecks';
 import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
@@ -336,7 +336,7 @@ function ShellSettings({ settings, blocked, identity, SettingsContent, published
       settingsClose.current?.focus();
       if (settingsClose.current) AccessibilityInfo.sendAccessibilityEvent(settingsClose.current, 'focus');
     }}>
-      <SafeAreaProvider><SafeAreaView style={styles.settingsScreen}><ShellBackdrop mood="quiet" />
+      <SafeAreaProvider><SafeAreaView style={styles.settingsScreen}>
         <View style={styles.settingsHeader}><Text accessibilityRole="header" style={[styles.settingsTitle, {fontSize: displayFontSize(28, fontScale)}]}>Settings</Text><Pressable ref={settingsClose} disabled={blocked} accessibilityState={{ disabled: blocked }} accessibilityRole="button" testID="settings-done" onPress={openSettings} style={styles.done}><Text style={styles.doneText}>Done</Text></Pressable></View>
         {settings && (SettingsContent ? <SettingsContent closeSettings={openSettings} openBundledTest={openBundledTest} openStateLab={openFixture} openPublished={openPublished}
           publishedSessions={publishedSessions} checkPublishedUpdate={checkPublishedUpdate} openDiscovery={openDiscovery} /> : <View style={styles.settingsBody}>
