@@ -61,17 +61,23 @@ rest of either edge retains system Back. This follows Android's
 
 Settings opens with the active identity and groups controls into Identity,
 Connections and Napplet access. The Identity row shows the saved account count.
-Discover and address opening follow these groups. Inputs retain native
-keyboard and secure-entry behavior. Address validation explains how to correct
+A fixed bottom action opens Discover when the address is empty and verifies an
+entered address. While editing, the keyboard’s Go action submits the address.
+Inputs retain native keyboard and secure-entry behavior. Address validation explains how to correct
 invalid input. A pending lookup can be cancelled; verification status describes
 actual work performed by the existing resolver.
 
 Signing review places the requester beneath the requested action and groups the
-signing identity with the destination relays. The event content follows. At large
-text sizes the actions scroll with the review. Trusted review sheets use an
+signing identity with the destination relays. The event content follows. The primary action stays at the bottom while the event scrolls. At large
+text sizes the secondary actions join the scrollable content. Trusted review sheets use an
 edge-to-edge orange band. Event bodies, publishers, identities, destinations and exact
 request details remain available. These controls present existing authority;
 the visual band does not grant a capability or verify a publisher by itself.
+
+Discover Details adapts its ambient colour to the publication and keeps Open
+under the scrollable preview, description and access information. The primary
+controls respond to thumb position with a slight label shift and press elevation.
+Reduced motion keeps positional feedback still.
 
 Napplets own their content and typography. Those using the existing theme service
 receive the shared background, text and accent colors. The host reads system

@@ -441,6 +441,11 @@ test('detail names absent publisher media without inventing artwork', async ({ p
   await expect(page.locator('#detail .detail-art')).toBeHidden();
   await expect(page.locator('#detail .detail-art img')).toHaveCount(0);
   await expect(page.locator('#publisher-name')).toContainText('npub');
+  await page.setViewportSize({width: 350, height: 720});
+  const plate = (await page.locator('.app-icon-large').boundingBox())!;
+  const title = (await page.locator('#detail-heading').boundingBox())!;
+  expect(plate.width).toBeGreaterThan(300);
+  expect(title.y).toBeGreaterThanOrEqual(plate.y + plate.height);
 });
 
 test('access rows describe publisher declarations without assuming a host policy', async ({page}) => {
@@ -650,7 +655,7 @@ test('same-publisher apps have legible title initials and stable distinct colour
     }
   }
   await page.getByRole('button', {name: 'Details for Faultline', exact: true}).click();
-  await expect(page.locator('.app-icon-large .tile-pattern i')).toHaveCount(9);
+  await expect(page.locator('.app-icon-large .tile-pattern i')).toHaveCount(25);
 });
 
 test('title initials remain during artwork loading and verified art replaces them cleanly', async ({page}) => {
@@ -776,4 +781,53 @@ test('details finds the first usable signed screenshot after unavailable, mismat
   await expect(page.getByRole('img', {name: 'First usable screenshot'})).toBeVisible();
   await expect(page.locator('.detail-art img')).toHaveCount(1);
   await expect(page.getByRole('button', {name: 'Open Napplet', exact: true})).toBeVisible();
+});
+
+test('Details anchors Open while a large-text disclosure scrolls and releases its press state', async ({page}) => {
+  await page.setViewportSize({width: 390, height: 844});
+  await boot(page);
+  await page.getByRole('button', {name: 'Details for Grid Game'}).click();
+  await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+  await page.locator('#publication-reference summary').click();
+  const scroll = page.locator('.detail-body');
+  await scroll.evaluate(element => { element.scrollTop = 0; });
+  const open = page.getByRole('button', {name: 'Open Napplet'});
+  const before = (await open.boundingBox())!;
+  await scroll.evaluate(element => { element.scrollTop = element.scrollHeight; });
+  expect(await scroll.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+  expect(await open.boundingBox()).toEqual(before);
+  expect(before.y).toBeGreaterThanOrEqual(844 * .65);
+  expect(before.y + before.height).toBeLessThanOrEqual(844);
+  await page.mouse.move(before.x + 10, before.y + 20);
+  await page.mouse.down();
+  await expect(open).toHaveAttribute('data-pressing', '');
+  const start = await open.evaluate(element => element.style.getPropertyValue('--label-shift'));
+  await page.mouse.move(before.x + before.width - 10, before.y + 20);
+  expect(await open.evaluate(element => element.style.getPropertyValue('--label-shift'))).not.toEqual(start);
+  await page.mouse.move(0, 0);
+  await page.mouse.up();
+  await expect(open).not.toHaveAttribute('data-pressing', '');
+  expect(await page.evaluate(() => (window as any).fixture.opens)).toEqual([]);
+});
+
+test('a short publication without preview keeps the final row beside its Open action', async ({page}) => {
+  await boot(page, {fullHost: true});
+  await page.getByRole('button', {name: 'Details for Relay Tool'}).click();
+  await expect(page.locator('.detail-art')).toBeEmpty();
+  const row = (await page.getByRole('button', {name: 'Recommend publicly'}).boundingBox())!;
+  const open = (await page.getByRole('button', {name: 'Open Napplet'}).boundingBox())!;
+  expect(open.y - (row.y + row.height)).toBeLessThanOrEqual(24);
+  expect(open.y).toBeGreaterThanOrEqual(844 * .65);
+});
+
+test('a publication without a preview shows its signed required access as tiles', async ({page}) => {
+  const app = manifest({title: 'Declared access', extra: [['R', 'inc'], ['R', 'gamepad'], ['R', 'future'], ['O', 'dm']]});
+  await boot(page, {}, [app]);
+  await page.getByRole('button', {name: 'Details for Declared access'}).click();
+  const tiles = page.getByRole('list', {name: 'Required access requested by the publisher'});
+  await expect(tiles).toBeVisible();
+  await expect(tiles.getByRole('listitem')).toHaveText(['future', 'Gamepad', 'Napplet messages']);
+  await expect(page.locator('.access-summary')).toBeHidden();
+  await page.getByText('Access details', {exact: true}).click();
+  await expect(page.locator('.cap-row[data-requirement="optional"]')).toContainText('Direct messages');
 });

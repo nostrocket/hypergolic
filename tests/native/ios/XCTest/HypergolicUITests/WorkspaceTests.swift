@@ -477,9 +477,7 @@ final class WorkspaceTests: XCTestCase {
     input.tap()
     for character in naddr { input.typeText(String(character)) }
     guard (input.value as? String) == naddr else { throw Failure.invalid("Could not enter exact public naddr") }
-    let open = app.buttons.matching(identifier: "settings-open-napplet").firstMatch
-    try stateNativeReveal(open)
-    try identityPress("settings-open-napplet")
+    input.typeText("\n")
     let openError = app.staticTexts.matching(identifier: "settings-napplet-error").firstMatch
     try until("Live first-open review or explicit open error", timeout: 60) {
       (self.app.descendants(matching: .any).matching(identifier: "settings-napplet-review").firstMatch.exists
@@ -535,9 +533,7 @@ final class WorkspaceTests: XCTestCase {
     input.tap()
     for character in fixture.naddr { input.typeText(String(character)) }
     guard (input.value as? String) == fixture.naddr else { throw Failure.invalid("Could not enter exact live naddr") }
-    let open = app.buttons.matching(identifier: "settings-open-napplet").firstMatch
-    try stateNativeReveal(open)
-    try identityPress("settings-open-napplet")
+    input.typeText("\n")
     try until("Live v1 first-open review") {
       self.app.descendants(matching: .any).matching(identifier: "settings-napplet-review").firstMatch.exists
         && self.app.buttons.matching(identifier: "settings-napplet-approve").firstMatch.isHittable
@@ -657,9 +653,7 @@ final class WorkspaceTests: XCTestCase {
     // One long XCTest text action outruns React Native's controlled input on Simulator.
     for character in addressText { input.typeText(String(character)) }
     guard (input.value as? String) == addressText else { throw Failure.invalid("Could not enter fixture naddr") }
-    let open = app.buttons.matching(identifier: "settings-open-napplet").firstMatch
-    try stateNativeReveal(open)
-    try identityPress("settings-open-napplet")
+    input.typeText("\n")
     try until("Exact first-open published consent review") {
       self.app.descendants(matching: .any).matching(identifier: "settings-napplet-review").firstMatch.exists
         && self.app.buttons.matching(identifier: "settings-napplet-approve").firstMatch.isHittable
@@ -851,8 +845,7 @@ final class WorkspaceTests: XCTestCase {
     input.tap()
     for character in addressText { input.typeText(String(character)) }
     guard (input.value as? String) == addressText else { throw Failure.invalid("Could not enter changed-access fixture naddr") }
-    try stateNativeReveal(app.buttons.matching(identifier: "settings-open-napplet").firstMatch)
-    try identityPress("settings-open-napplet")
+    input.typeText("\n")
     try until("Exact first-open changed-access consent review") {
       self.app.descendants(matching: .any).matching(identifier: "settings-napplet-review").firstMatch.exists
         && self.app.buttons.matching(identifier: "settings-napplet-approve").firstMatch.isHittable

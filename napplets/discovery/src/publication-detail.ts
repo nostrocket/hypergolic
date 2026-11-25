@@ -1,6 +1,6 @@
 import {accessCopy} from './access-copy.ts';
 import type {CatalogEntry, Profile, Publication} from './catalog.ts';
-import {accessGlyph, artwork, button, find, glyph, node, screenshot} from './dom.ts';
+import {accessGlyph, artwork, button, find, glyph, node, publicationColours, screenshot} from './dom.ts';
 import {canOpen} from './host.ts';
 import type {ViewMedia} from './media.ts';
 import type {RevisionHistory} from './pager.ts';
@@ -65,11 +65,24 @@ function publisherDisclosure(app: Publication): HTMLElement {
   return publisher;
 }
 
+function accessTiles(domains: string[]): HTMLElement {
+  const list = node('ul', 'access-tiles');
+  list.setAttribute('aria-label', 'Required access requested by the publisher');
+  const labels = new Map([['gamepad', 'Gamepad'], ['inc', 'Napplet messages'], ['intent', 'Napplet actions']]);
+  for (const domain of domains) {
+    const tile = node('li', 'access-tile');
+    tile.append(accessGlyph(domain), node('span', '', labels.get(domain) ?? accessCopy(domain).name));
+    list.append(tile);
+  }
+  return list;
+}
+
 function publicationAccess(app: Publication): HTMLElement {
   const caps = detailSection('Access');
   const accessName = (name: string) => name === 'outbox' ? 'Nostr relays' : accessCopy(name).name;
   const requiredNames = [...new Set(app.required.map(accessName))];
   caps.append(node('p', 'access-summary', requiredNames.length ? `Uses ${accessList(requiredNames)}.` : 'No required access declared.'));
+  if (app.required.length) caps.append(accessTiles(app.required));
   const accessDetails = node('details', 'access-details');
   const accessHeading = node('summary', '', 'Access details');
   accessHeading.append(glyph('down'));
@@ -128,7 +141,6 @@ export function renderPublicationDetail(detail: HTMLElement, entry: CatalogEntry
     explanation.textContent = 'This shell does not offer link opening. Select the address in Publication details.';
   }
   explanation.hidden = !explanation.textContent;
-  actions.append(announcement);
   const preview = node('div', 'detail-art');
   screenshot(preview, app.screenshots, media);
   const about = node('div', 'detail-intro');
@@ -141,10 +153,10 @@ export function renderPublicationDetail(detail: HTMLElement, entry: CatalogEntry
   }
   const recommendation = recommendControl(app);
 
-
   names.append(publisherDisclosure(app));
   const overview = node('div', 'detail-overview');
-  overview.append(identity, about);
+  overview.style.setProperty('--detail-tone', publicationColours(app)[0]);
+  overview.append(preview, identity, about);
 
   const publication = node('details', 'publication');
   publication.id = 'publication-reference';
@@ -152,8 +164,10 @@ export function renderPublicationDetail(detail: HTMLElement, entry: CatalogEntry
   referenceTitle.append(glyph('down'));
   publication.append(referenceTitle, reference('Publication address', app.address), reference('Signed event ID', app.signed.event.id), reference('Format', app.format), reference('Artifact hash', app.artifactHash));
   if (app.categories.length) publication.append(reference('Categories', app.categories.join(' · ')));
-  detail.replaceChildren(header, overview, preview, publicationAccess(app), explanation, publication);
-  if (recommendation) detail.append(recommendation);
-  detail.append(actions);
+  const body = node('div', 'detail-body');
+  body.append(header, overview, publicationAccess(app), explanation, publication);
+  if (recommendation) body.append(recommendation);
+  actions.prepend(announcement);
+  detail.replaceChildren(body, actions);
   updatePublisher(app, publisherProfile);
 }

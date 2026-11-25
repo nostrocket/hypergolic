@@ -1,3 +1,4 @@
+import { useReducedMotion } from './useReducedMotion';
 import type { WorkspaceViews } from './workspace-views';
 import { useOverviewSwipe } from './useOverviewSwipe';
 import { useWorkspaceViews } from './useWorkspaceViews';
@@ -24,7 +25,7 @@ import { ShellBackdrop, WorkspaceBackdrop } from './ShellBackdrop';
 import {snapshotEventId} from '../napplets/published-identity';
 import {useCloseChecks} from './useCloseChecks';
 import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
-import { AccessibilityInfo, AppState, Keyboard, Platform, StyleSheet, Text, View, type ViewInstance } from 'react-native';
+import { AccessibilityInfo, AppState, Keyboard, Platform, useWindowDimensions, StyleSheet, Text, View, type ViewInstance } from 'react-native';
 import { ShellModal as Modal } from './ShellModal';
 import { ShellPressable as Pressable } from './ShellPressable';
 import { cancelAnimation, Easing, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
@@ -38,7 +39,7 @@ import { WorkspaceStage } from './WorkspaceStage';
 import {useZoomReset} from './useZoomReset';
 import { directionForHandle, type HandleSide } from './motion';
 import { usesGameControls, setGameControls, adjacentNapplet, closeNapplet, focusNapplet, showOverview, type NappletDescriptor, type Workspace } from './workspace';
-import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
+import { displayFontSize, useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 import { RuntimeContext } from '../runtime/RuntimeContext';
 import { ReviewFocus } from './ReviewFocus';
 import type { NappletConsentReview } from '../napplets/first-open-consent';
@@ -84,17 +85,6 @@ function useStageInputBlocked(shellBlocked: boolean): boolean {
   const reviews = useContext(OwnerContext)?.routing?.reviews;
   const current = useSyncExternalStore(reviews?.subscribe ?? noRoutingSubscription, reviews?.getSnapshot ?? noRoutingReview);
   return shellBlocked || current !== null;
-}
-
-function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(true);
-  useEffect(() => {
-    let active = true;
-    void AccessibilityInfo.isReduceMotionEnabled().then(value => { if (active) setReduced(value); }).catch(() => undefined);
-    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduced);
-    return () => { active = false; subscription.remove(); };
-  }, []);
-  return reduced;
 }
 
 function useWorkspaceAnimation() {
@@ -339,6 +329,7 @@ function confirmWorkspaceNappletClose({ closingId, current, onBeforeClose, runti
 
 function ShellSettings({ settings, blocked, identity, SettingsContent, publishedSessions, openSettings, openBundledTest, openFixture, openPublished, checkPublishedUpdate, openDiscovery }: ShellSettingsProps) {
   const { styles } = useShellStyles(createStyles);
+  const {fontScale} = useWindowDimensions();
   const settingsClose = useRef<ViewInstance>(null);
   return (
     <Modal visible={settings} animationType="none" onRequestClose={() => { if (!blocked) openSettings(); }} onShow={() => {
@@ -346,7 +337,7 @@ function ShellSettings({ settings, blocked, identity, SettingsContent, published
       if (settingsClose.current) AccessibilityInfo.sendAccessibilityEvent(settingsClose.current, 'focus');
     }}>
       <SafeAreaProvider><SafeAreaView style={styles.settingsScreen}><ShellBackdrop mood="quiet" />
-        <View style={styles.settingsHeader}><Text accessibilityRole="header" style={styles.settingsTitle}>Settings</Text><Pressable ref={settingsClose} disabled={blocked} accessibilityState={{ disabled: blocked }} accessibilityRole="button" testID="settings-done" onPress={openSettings} style={styles.done}><Text style={styles.doneText}>Done</Text></Pressable></View>
+        <View style={styles.settingsHeader}><Text accessibilityRole="header" style={[styles.settingsTitle, {fontSize: displayFontSize(28, fontScale)}]}>Settings</Text><Pressable ref={settingsClose} disabled={blocked} accessibilityState={{ disabled: blocked }} accessibilityRole="button" testID="settings-done" onPress={openSettings} style={styles.done}><Text style={styles.doneText}>Done</Text></Pressable></View>
         {settings && (SettingsContent ? <SettingsContent closeSettings={openSettings} openBundledTest={openBundledTest} openStateLab={openFixture} openPublished={openPublished}
           publishedSessions={publishedSessions} checkPublishedUpdate={checkPublishedUpdate} openDiscovery={openDiscovery} /> : <View style={styles.settingsBody}>
           <Text selectable testID="settings-full-npub" style={styles.settingsText}>{identity ? identity.npub : 'Identity is not configured in this build.'}</Text>
@@ -362,7 +353,7 @@ const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.cre
   screen: { flex: 1, backgroundColor: colors.background },
   content: { flex: 1 },
   settingsScreen: { flex: 1, backgroundColor: colors.background },
-  settingsHeader: { minHeight: 72, paddingHorizontal: 24, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  settingsHeader: { minHeight: 72, flexWrap: 'wrap', paddingHorizontal: 24, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   settingsTitle: { fontFamily: fonts.display, fontSize: 28, color: colors.text },
   done: { minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
   doneText: { textTransform: 'uppercase', letterSpacing: 1.8, fontFamily: fonts.strong, fontSize: 14, color: colors.accent },

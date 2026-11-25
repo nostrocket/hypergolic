@@ -1,5 +1,7 @@
 import {reviewTextPage} from './review-text-page';
 import {useReviewControl} from './useReviewControl';
+import { ThumbAction } from './ThumbAction';
+import { ShellBackdrop } from './ShellBackdrop';
 import { TrustedBand } from './TrustedBand';
 import {OutboxReview} from './OutboxReview';
 import { useRef, useState } from 'react';
@@ -9,7 +11,7 @@ import { ShellPressable as Pressable } from './ShellPressable';
 import { formatNpub } from '../security/public-identity.ts';
 import {snapshotEventId} from '../napplets/published-identity';
 import { requiresNewFollowListConfirmation, type ApprovalItem } from '../security/approval-service.ts';
-import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
+import { displayFontSize, useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export type ApprovalSheetProps = Readonly<{
@@ -114,18 +116,11 @@ function RecommendationDetails({item}: {item: ApprovalItem}) {
             </View>}</>;
 }
 
-function ReviewActions({approveDisabled, approve, busy, reject, rejectItem, dismiss, landscape, stacked}: {
-  approveDisabled: boolean; approve(): void; busy: boolean; reject: React.RefObject<ViewInstance | null>;
-  rejectItem(): void; dismiss(): void; landscape: boolean; stacked: boolean;
+function SecondaryActions({busy, reject, rejectItem, dismiss, stacked}: {
+  busy: boolean; reject: React.RefObject<ViewInstance | null>; rejectItem(): void; dismiss(): void; stacked: boolean;
 }) {
   const {styles} = useShellStyles(createStyles);
-  return <View style={[styles.actions, landscape && styles.actionsLandscape]}>
-    <Pressable testID="approval-sheet-approve" accessibilityRole="button" accessibilityLabel="Continue to signer"
-      accessibilityState={{disabled: approveDisabled}} disabled={approveDisabled} onPress={approve}
-      style={({pressed}) => [styles.approve, landscape && styles.actionLandscape, (pressed || approveDisabled) && styles.pressed]}>
-      <Text style={styles.approveText}>{busy ? 'Signing and publishing…' : 'Continue to signer'}</Text>
-    </Pressable>
-    <View style={[styles.secondaryActions, landscape && styles.secondaryLandscape, stacked && styles.stacked]}>
+  return <View style={[styles.secondaryActions, stacked && styles.stacked]}>
       <Pressable ref={reject} testID="approval-sheet-reject" accessibilityRole="button"
         accessibilityState={{disabled: busy}} disabled={busy} onPress={rejectItem}
         style={({pressed}) => [styles.reject, !stacked && styles.secondaryAction, (pressed || busy) && styles.pressed]}>
@@ -136,7 +131,6 @@ function ReviewActions({approveDisabled, approve, busy, reject, rejectItem, dism
         style={({pressed}) => [styles.dismiss, !stacked && styles.secondaryAction, (pressed || busy) && styles.pressed]}>
         <Text style={styles.dismissText}>Dismiss</Text>
       </Pressable>
-    </View>
   </View>;
 }
 
@@ -177,15 +171,14 @@ function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismis
   const insets = useSafeAreaInsets();
   const { width, height, fontScale } = useWindowDimensions();
   const stacked = fontScale > 1.4;
-  const landscape = width > height;
+  const wideFooter = width > height && !stacked;
   const publisherNpub = formatNpub(item.origin.publisher);
   const manifestEventId = snapshotEventId(item.origin.appId);
   const [confirmedNewList, setConfirmedNewList] = useState(false);
   const needsNewList = requiresNewFollowListConfirmation(item);
   const approveDisabled = busy || !control.ready || (needsNewList && !confirmedNewList);
   const dismiss = () => { if (!busy) onDismiss(item.id); };
-  const actions = <ReviewActions approveDisabled={approveDisabled} approve={() => onApprove(item.id, confirmedNewList ? item.id : undefined)}
-          busy={busy} reject={reject} rejectItem={() => onReject(item.id)} dismiss={dismiss} landscape={landscape && !stacked} stacked={stacked}/>;
+  const secondary = <SecondaryActions busy={busy} reject={reject} rejectItem={() => onReject(item.id)} dismiss={dismiss} stacked={stacked}/>;
   return <Modal visible transparent animationType="none" onRequestClose={dismiss} onShow={() => {
     control.onShow();
     reject.current?.focus();
@@ -195,10 +188,11 @@ function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismis
       <View testID="approval-sheet" accessibilityViewIsModal style={[styles.sheet, { paddingBottom: Math.max(16, insets.bottom) }]}>
         <TrustedBand label="Signing request" />
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <View style={styles.heading}>
-            <Text accessibilityRole="header" style={styles.title}>{requestedAction(item)}</Text>
+          {stacked && secondary}
+          <View style={styles.hero}><ShellBackdrop mood="shelf" /><View style={styles.heading}>
+            <Text accessibilityRole="header" style={[styles.title, {fontSize: displayFontSize(30, fontScale)}]}>{requestedAction(item)}</Text>
             <Text style={styles.requester}>Requested by <Text style={styles.source}>{nappletTitle}</Text></Text>
-          </View>
+          </View></View>
           <SigningRoute item={item}/>
           <EventReview item={item} busy={busy} confirmedNewList={confirmedNewList}
             onToggleNewList={() => setConfirmedNewList(value => !value)}/>
@@ -213,9 +207,14 @@ function Review({ item, nappletTitle, busy, error, onApprove, onReject, onDismis
           </Pressable>
           {details && <ReviewText style={styles.json} text={JSON.stringify({ event: item.event.event, hash: item.event.hash }, null, 2)}/>}
           {error && <Text accessibilityLiveRegion="polite" style={styles.error}>{error}</Text>}
-          {stacked && actions}
         </ScrollView>
-        {!stacked && actions}
+        <View style={[styles.actions, wideFooter && styles.actionsLandscape]}>
+          {!stacked && secondary}
+          <ThumbAction testID="approval-sheet-approve" label={busy ? 'Signing and publishing…' : 'Continue to signer'}
+            accessibilityLabel="Continue to signer" disabled={approveDisabled}
+            style={wideFooter ? styles.actionLandscape : undefined}
+            onPress={() => onApprove(item.id, confirmedNewList ? item.id : undefined)} />
+        </View>
       </View>
     </View>
   </Modal>;
@@ -229,13 +228,14 @@ export function ApprovalSheet(props: ApprovalSheetProps) {
 const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: colors.shade, justifyContent: 'flex-end' },
   sheet: { maxHeight: '90%', backgroundColor: colors.surface, borderTopWidth: 1, borderColor: colors.border, borderTopLeftRadius: 0, borderTopRightRadius: 0 },
-  scroll: { gap: 12, padding: 20 },
-  heading: { gap: 4 },
+  scroll: { gap: 10, paddingHorizontal: 16, paddingVertical: 12 },
+  hero: { overflow: 'hidden', borderWidth: 1, borderColor: colors.border, paddingTop: 48 },
+  heading: { gap: 2, backgroundColor: colors.surface, padding: 12 },
   requester: { fontFamily: fonts.body, fontSize: 16, color: colors.muted },
   source: { fontFamily: fonts.strong, color: colors.text },
   route: { backgroundColor: colors.raised, padding: 14, gap: 6, borderLeftWidth: 2, borderColor: colors.accent },
   metadata: { fontFamily: fonts.body, color: colors.muted, fontSize: 14 },
-  title: { fontFamily: fonts.display, color: colors.text, fontSize: 32, letterSpacing: 0.2 },
+  title: { fontFamily: fonts.strong, color: colors.text, fontSize: 30, letterSpacing: 0.2 },
   content: { fontFamily: fonts.body, color: colors.text, fontSize: 17, lineHeight: 25 },
   record: { gap: 10 },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: 2 },
@@ -248,15 +248,12 @@ const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.cre
   detailsText: { textTransform: 'uppercase', letterSpacing: 1.8, fontFamily: fonts.strong, color: colors.accent, fontSize: 14, },
   json: { fontFamily: fonts.mono, color: colors.muted, fontSize: 12, lineHeight: 18 },
   error: { fontFamily: fonts.body, color: colors.accent, fontSize: 16, lineHeight: 24 },
-  secondaryActions: { flexDirection: 'row', gap: 8 },
+  secondaryActions: { flexGrow: 1, flexDirection: 'row', gap: 8 },
   secondaryAction: { flex: 1 },
   stacked: { flexDirection: 'column' },
-  secondaryLandscape: { flex: 2 },
   actions: { gap: 6, paddingHorizontal: 20, paddingTop: 12, borderTopWidth: 1, borderColor: colors.border },
   actionsLandscape: { flexDirection: 'row', paddingVertical: 8 },
   actionLandscape: { flex: 1 },
-  approve: { minHeight: 52, alignItems: 'center', justifyContent: 'center', borderRadius: 0, backgroundColor: colors.primary, padding: 12 },
-  approveText: { textTransform: 'uppercase', letterSpacing: 1.8, fontFamily: fonts.strong, color: colors.onPrimary, fontSize: 14, },
   reject: { minHeight: 50, alignItems: 'center', justifyContent: 'center', borderRadius: 0, borderWidth: 1, borderColor: colors.border, padding: 12 },
   rejectText: { textTransform: 'uppercase', letterSpacing: 1.8, fontFamily: fonts.strong, color: colors.text, fontSize: 14, },
   dismiss: { minHeight: 48, alignItems: 'center', justifyContent: 'center', padding: 12 },

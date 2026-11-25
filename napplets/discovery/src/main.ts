@@ -326,8 +326,27 @@ function openButton(entry: CatalogEntry, placement: 'row' | 'detail', feedback: 
   const spinner = node('span', 'open-spinner');
   spinner.setAttribute('aria-hidden', 'true');
   control.append(spinner, node('span', 'open-label'));
+  if (placement === 'detail') {
+    control.append(glyph('chevron'));
+    control.addEventListener('pointerdown', positionOpenLabel, {passive: true});
+    control.addEventListener('pointermove', positionOpenLabel, {passive: true});
+    const release = () => { delete control.dataset.pressing; };
+    for (const type of ['pointerup', 'pointercancel', 'pointerleave', 'lostpointercapture', 'blur']) {
+      control.addEventListener(type, release);
+    }
+  }
   updateOpenControl(control);
   return control;
+}
+
+function positionOpenLabel(event: PointerEvent): void {
+  if (!event.isPrimary || !event.buttons) return;
+  const control = event.currentTarget as HTMLButtonElement;
+  if (event.type === 'pointerdown') control.dataset.pressing = '';
+  if (!control.hasAttribute('data-pressing')) return;
+  const bounds = control.getBoundingClientRect();
+  const fraction = Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width));
+  control.style.setProperty('--label-shift', (6 * fraction - 3).toFixed(2) + 'px');
 }
 
 function updateOpenControl(control: HTMLButtonElement): void {
