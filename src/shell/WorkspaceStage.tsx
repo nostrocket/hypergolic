@@ -89,7 +89,7 @@ interface StageProps {
   onDiagnostics: (id: string) => void;
   onClose: (id: string) => void;
   onOpen: () => void;
-  onDragEnd: (id: string, close: boolean) => void;
+  onDragEnd: (id: string, cardBottom: number | null) => void;
   onHandleStart: () => void;
   onHandleEnd: (side: HandleSide, result: 'overview' | 'switch' | 'cancel') => void;
 }

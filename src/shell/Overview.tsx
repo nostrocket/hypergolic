@@ -27,7 +27,7 @@ interface Props {
   onDiagnostics: (id: string) => void;
   onClose: (id: string) => void;
   onOpen: () => void;
-  onDragEnd: (id: string, close: boolean) => void;
+  onDragEnd: (id: string, cardBottom: number | null) => void;
   onMeasure: (id: string, measurement: CardMeasurement) => void;
 }
 function focusView(view: ViewInstance | TextInstance | null | undefined) {

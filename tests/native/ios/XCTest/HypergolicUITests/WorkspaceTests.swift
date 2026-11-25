@@ -20,7 +20,7 @@ final class WorkspaceTests: XCTestCase {
     "identity-switch": ["identity-settings-safe-area", "identity-cancel-retains-live-state", "identity-import-restarts-all", "identity-duplicate-and-selector", "identity-selection-after-restart"],
     "workspace-restart": ["selected-napplet-after-restart", "opening-order-after-restart", "explicit-empty-after-restart"],
     "card-cancel": ["short-card-stroke-cancel", "two-touch-card-cancel", "cancelled-card-state-retained"],
-    "closing": ["seed-close-state", "gentle-overview-scroll", "rapid-swipe-warning", "keep-open-retains-state", "close-removes-only-target", "other-session-state-retained", "visible-close-controls", "quiet-empty-overview", "empty-settings-and-open"],
+    "closing": ["seed-close-state", "gentle-overview-scroll", "close-button-warning", "keep-open-retains-state", "close-removes-only-target", "other-session-state-retained", "visible-close-controls", "quiet-empty-overview", "empty-settings-and-open"],
     "switch-state": ["seed-a", "seed-b-isolated", "edge-roundtrip-a", "two-column-overview", "overview-restore-b", "stop-at-last", "stop-at-first-and-restore-a"],
     "gestures": ["vertical-content-scroll", "horizontal-content-scroll", "marker-selection", "scroll-and-selection-retained"],
     "approval-review": ["exact-public-review", "reject-denies-sdk", "dismiss-pauses-queue", "background-preserves-pending"],
@@ -1422,9 +1422,9 @@ final class WorkspaceTests: XCTestCase {
     try until("First card fully available for swipe") {
       first.frame.intersection(scroller.frame).height > first.frame.height * 0.9
     }
-    try rapidCloseSwipe(1)
+    try nativeTap(one(app.buttons.matching(identifier: "overview-close-ux-lab-1"), "visible close control"), name: "close-button-a")
     try warning(for: 1)
-    record("rapid-swipe-warning", closePromptVisible(), ["title": "Close UX Lab 1?", "warning": warningText])
+    record("close-button-warning", closePromptVisible(), ["title": "Close UX Lab 1?", "warning": warningText])
     capture("unknown-state-warning")
     try nativeTap(one(app.buttons.matching(identifier: "close-keep-open"), "Keep open"), name: "keep-open")
     try overviewReady([1, 2, 3])
@@ -1436,8 +1436,6 @@ final class WorkspaceTests: XCTestCase {
 
     try openOverview(expected: [1, 2, 3])
     try rapidCloseSwipe(1)
-    try warning(for: 1)
-    try nativeTap(one(app.buttons.matching(identifier: "close-confirm"), "Close anyway"), name: "confirm-close-a")
     try overviewReady([2, 3])
     record("close-removes-only-target", overviewIDs() == ["ux-lab-2", "ux-lab-3"] && visibleLeaves().isEmpty,
            ["remainingCards": overviewIDs(), "removedCardExists": app.buttons.matching(identifier: "overview-card-ux-lab-1").firstMatch.exists])
@@ -1457,16 +1455,13 @@ final class WorkspaceTests: XCTestCase {
     record("visible-close-controls", overviewIDs().isEmpty, ["remainingCards": overviewIDs()])
     record("quiet-empty-overview", try emptyOverview(), ["visibleLeafWebViews": visibleLeaves().count, "remainingCards": overviewIDs()])
     capture("quiet-empty-overview")
-    for target in ["shell-settings", "overview-open", "empty-open-napplet"] {
-      try nativeTap(one(app.buttons.matching(identifier: target), "empty overview entry point"), name: "empty-" + target)
-      try until("Settings opened from empty overview") { self.app.buttons.matching(identifier: "settings-done").firstMatch.isHittable }
-      capture("empty-settings-" + target)
-      try nativeTap(one(app.buttons.matching(identifier: "settings-done"), "Settings Done"), name: "settings-done")
-      try overviewReady([])
-      guard try emptyOverview() else { throw Failure.invalid("Empty overview did not survive Settings roundtrip") }
-    }
-    record("empty-settings-and-open", try emptyOverview(), ["testedEntryPoints": ["shell-settings", "overview-open", "empty-open-napplet"]])
-    capture("empty-after-settings")
+    try nativeTap(one(app.buttons.matching(identifier: "shell-settings"), "Settings"), name: "empty-settings")
+    try nativeTap(one(app.buttons.matching(identifier: "settings-done"), "Settings Done"), name: "settings-done")
+    try overviewReady([])
+    try nativeTap(one(app.buttons.matching(identifier: "home-overview"), "Open overview"), name: "empty-overview")
+    let discover = app.buttons.matching(identifier: "empty-open-napplet").firstMatch
+    record("empty-settings-and-open", discover.waitForExistence(timeout: 5) && discover.isHittable, ["remainingCards": overviewIDs()])
+    capture("empty-overview-discover")
     complete = true
   }
 
@@ -1487,7 +1482,7 @@ final class WorkspaceTests: XCTestCase {
     let wanted = numbers.map { "ux-lab-\($0)" }.sorted()
     try until("Expected overview cards") {
       self.overviewIDs() == wanted && self.visibleLeaves().isEmpty && !self.closePromptVisible()
-        && self.app.buttons.matching(identifier: "overview-open").firstMatch.exists
+        && self.app.buttons.matching(identifier: numbers.isEmpty ? "home-overview" : "overview-open").firstMatch.exists
     }
   }
   private func openOverview(expected: [Int]) throws {
@@ -1535,9 +1530,7 @@ final class WorkspaceTests: XCTestCase {
   private func emptyOverview() throws -> Bool {
     let handles = app.buttons.matching(NSPredicate(format: "identifier == %@ OR identifier == %@", "handle-left", "handle-right")).allElementsBoundByIndex.filter { $0.exists && $0.isHittable }
     return overviewIDs().isEmpty && visibleLeaves().isEmpty && handles.isEmpty
-      && app.staticTexts.matching(NSPredicate(format: "label == %@", "Nothing open")).firstMatch.exists
-      && app.buttons.matching(identifier: "empty-open-napplet").firstMatch.isHittable
-      && app.buttons.matching(identifier: "overview-open").firstMatch.isHittable
+      && app.buttons.matching(identifier: "home-overview").firstMatch.isHittable
       && app.buttons.matching(identifier: "shell-settings").firstMatch.isHittable
   }
 

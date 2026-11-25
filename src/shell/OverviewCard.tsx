@@ -24,7 +24,7 @@ interface Props {
   onFocus: (id: string) => void;
   onDiagnostics: (id: string) => void;
   onClose: (id: string) => void;
-  onDragEnd: (id: string, close: boolean) => void;
+  onDragEnd: (id: string, cardBottom: number | null) => void;
   onMeasure: (id: string, measurement: CardMeasurement) => void;
   setRef: (id: string, view: ViewInstance | null) => void;
 }
@@ -62,11 +62,11 @@ export function OverviewCard({ session, loaded, rect, captionHeight, busy, selec
   const down = useCallback((event: GestureTouchEvent, manager: GestureStateManager) => {
     'worklet';
     const touch = event.allTouches.length === 1 ? event.allTouches[0] : undefined;
-    if (origin.get() !== null || event.numberOfTouches !== 1 || !touch) { cancel(manager); return; }
+    if (swipeId.get() !== null || origin.get() !== null || event.numberOfTouches !== 1 || !touch) { cancel(manager); return; }
     origin.set({ id: touch.id, x: touch.absoluteX, y: touch.absoluteY, time: Date.now() });
     dragging.set(false); cancelled.set(false); finalized.set(false); releaseAccepted.set(false);
     travel.set({ dx: 0, dy: 0, vx: 0, vy: 0, touches: 1 });
-  }, [cancel, cancelled, dragging, finalized, origin, releaseAccepted, travel]);
+  }, [cancel, cancelled, dragging, finalized, origin, releaseAccepted, swipeId, travel]);
   const up = useCallback((event: GestureTouchEvent, manager: GestureStateManager) => {
     'worklet';
     const drag = releasedCardTouch(origin.get(), event.changedTouches, event.numberOfTouches, Date.now(), cancelled.get());
@@ -76,6 +76,7 @@ export function OverviewCard({ session, loaded, rect, captionHeight, busy, selec
     if (drag) travel.set(drag);
     if (dragging.get()) manager.end(); else manager.fail();
   }, [cancelled, dragging, origin, releaseAccepted, travel]);
+  const cardBottom = rect.y + rect.height + captionHeight;
   const pan = Gesture.Manual().enabled(!busy)
     .blocksExternalGesture(scrollGesture).shouldCancelWhenOutside(false)
     .onTouchesDown(down)
@@ -93,7 +94,7 @@ export function OverviewCard({ session, loaded, rect, captionHeight, busy, selec
       const wasDragging = dragging.get();
       const close = success && wasDragging && !cancelled.get() && releaseAccepted.get();
       dragging.set(false); origin.set(null); releaseAccepted.set(false);
-      if (wasDragging) scheduleOnRN(onDragEnd, id, close);
+      if (wasDragging) scheduleOnRN(onDragEnd, id, close ? cardBottom : null);
     });
   const tap = Gesture.Tap().enabled(!busy).maxDistance(8).requireExternalGestureToFail(pan)
     .onTouchesDown((event, manager) => {

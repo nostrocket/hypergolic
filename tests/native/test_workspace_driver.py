@@ -9,7 +9,7 @@ import workspace_driver as wd
 
 
 def overview_nodes():
-    nodes = [{'text': 'Your napplets', 'bounds': '[10,20][290,60]'}]
+    nodes = [{'resource-id': 'napplet-overview', 'bounds': '[10,20][290,60]'}]
     for index, title in enumerate(('UX Lab 1', 'UX Lab 2', 'UX Lab 3')):
         nodes.append({'content-desc': 'Open ' + title, 'bounds': f'[{10 + 100 * index},100][{90 + 100 * index},500]'})
     return nodes
