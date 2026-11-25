@@ -176,18 +176,50 @@ details[open] summary svg:last-child { rotate: 90deg; }
 }
 
 /* Detail follows the signed release; action controls stay within reach while reading. */
-#detail { padding-bottom: 1rem; }
-#detail .identity { align-items: flex-start; margin: .65rem 0; }
-#detail h1 { margin: .2rem 0 0; max-width: none; font-size: clamp(1.8rem, 7.5vw, 2.55rem); }
-#detail .app-icon-large { width: clamp(4.5rem, 19vw, 6rem); height: clamp(4.5rem, 19vw, 6rem); }
+#detail {
+  font-family: Barlow, system-ui, sans-serif;
+  padding-bottom: 1rem;
+}
+.detail-overview {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 1rem;
+  margin-bottom: 1.1rem;
+  border: 1px solid var(--well-line);
+  background: var(--well);
+}
+.detail-overview::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0 0 auto auto;
+  width: 35%;
+  height: .95rem;
+  background: radial-gradient(ellipse 75% 220% at 69% -143%, transparent 96%, var(--orange) 98%, transparent 100%);
+  pointer-events: none;
+}
+.detail-overview::after {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  width: 1.2rem;
+  height: .42rem;
+  border-block-start: 2px solid var(--orange);
+  border-inline-start: 2px solid var(--orange);
+}
+#detail .identity { align-items: flex-start; margin: 0 0 .65rem; }
+#detail h1 { font-weight: 600; letter-spacing: -.035em; margin: .2rem 0 0; max-width: none; font-size: clamp(1.8rem, 7.5vw, 2.55rem); }
+#detail .app-icon-large { width: clamp(3rem, 13vw, 4.5rem); height: clamp(3rem, 13vw, 4.5rem); border-radius: 0; }
 .detail-publisher summary { min-height: 44px; font-weight: 620; color: var(--muted); }
 .detail-publisher summary svg:first-child { display: none; }
 .detail-publisher summary svg:last-child { margin-left: 0; width: 1rem; }
-.detail-publisher .reference { margin-left: calc(-1 * clamp(4.5rem, 19vw, 6rem) - .85rem); }
-.detail-intro { margin-bottom: 1.2rem; }
-.detail-intro > .description { font-size: 1.1rem; line-height: 1.45; }
-.publication-date { display: block; margin-top: .55rem; color: var(--muted); font-size: .9rem; }
-.detail-art .preview img { width: 100%; max-height: 24rem; border: 1px solid var(--well-line); }
+.detail-publisher .reference { margin-left: calc(-1 * clamp(3rem, 13vw, 4.5rem) - .85rem); }
+.detail-intro { max-width: 58ch; }
+.detail-intro > .description { font-size: 1.18rem; line-height: 1.4; }
+.publication-date { display: block; margin-top: .8rem; color: var(--muted); font-size: .88rem; }
+.detail-art .preview img { width: 100%; max-height: 24rem; border-radius: 0; border: 1px solid var(--well-line); }
 .media-fallback { padding: .8rem; color: var(--muted); border: 1px dashed var(--line); border-radius: .65rem; font-size: .88rem; }
 .access-explanation { color: var(--muted); margin: .45rem 0 .75rem; }
 #detail .detail-section { padding: 1rem 0; border-top: 0; }
@@ -197,7 +229,7 @@ details[open] summary svg:last-child { rotate: 90deg; }
 #detail .publication summary svg:last-child { rotate: -90deg; }
 #detail .publication[open] summary svg:last-child { rotate: 0deg; }
 #detail .detail-actions { position: sticky; bottom: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: .5rem; padding: .8rem 0 max(.6rem, env(safe-area-inset-bottom)); margin: 1rem 0 0; background: var(--canvas); border-top: 1px solid var(--line); }
-#detail .detail-open { flex: 1 1 8rem; width: auto; min-height: 48px; }
+#detail .detail-open { border-radius: 0; flex: 1 1 8rem; width: auto; min-height: 48px; }
 #detail .detail-open.quiet { flex: 0 1 7rem; border: 1px solid var(--line); border-radius: .65rem; color: var(--ink); }
 #detail .detail-actions > :not(button) { flex-basis: 100%; }
 #detail .detail-actions:has(.feedback:not([hidden])) { position: static; }
@@ -220,7 +252,8 @@ main:has(#detail:not([hidden])) { min-height: 100dvh; padding-bottom: 0; display
 #detail:not([hidden]) { flex: 1; display: flex; flex-direction: column; padding-bottom: 0; }
 #detail > * { flex-shrink: 0; }
 #detail .detail-actions { margin-top: auto; padding-top: .8rem; }
-#detail .publication { margin-bottom: 1rem; }
+#detail .publication { margin-bottom: .35rem; }
+#detail .recommend-control { margin-bottom: .65rem; }
 #detail .recommend-button { display: inline-flex; align-items: center; gap: .65rem; min-height: 44px; color: var(--muted); }
 #detail .recommend-button svg { width: 1.5rem; height: 1.5rem; }
 #detail .detail-open > svg { width: 1.2rem; height: 1.2rem; }

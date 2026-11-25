@@ -418,7 +418,7 @@ final class OutboxReviewPresentationTests:XCTestCase {
    };XCTFail("Review content unavailable: "+app.debugDescription)
   }
   app.terminate();app.launch();XCTAssertTrue(app.staticTexts["Presentation only · no signing or publication"].waitForExistence(timeout:30));record("presentation-only-launch")
-  tap("Review destinations");XCTAssertTrue(app.staticTexts["Approve signing request"].waitForExistence(timeout:10));record("exact-event-identity")
+  tap("Review destinations");XCTAssertTrue(app.staticTexts["Your signing identity"].waitForExistence(timeout:10));record("exact-event-identity")
   let destinations=app.staticTexts.matching(NSPredicate(format:"label == %@","Publication destinations")).firstMatch;reveal(destinations);record("exact-destinations-origins")
   let ancillary=app.staticTexts.matching(NSPredicate(format:"label == %@","Also send your existing relay list")).firstMatch;reveal(ancillary);record("existing-list-review")
   let details=app.buttons["Show exact event"];reveal(details);details.tap();app.scrollViews.firstMatch.swipeUp();record("exact-primary-template")

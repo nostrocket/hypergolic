@@ -57,8 +57,7 @@ export function OpenPublishedNapplet({ open }: { open: SettingsActions['openPubl
     ids={reviewIds} />;
   return <View style={styles.group}>
     <Text accessibilityRole="header" style={styles.title}>Open a napplet</Text>
-    <Text style={styles.detail}>Paste a named napplet address (naddr) or a snapshot link (nevent). This version cannot open root napplets. We’ll verify the signed release and show you its publisher and requested access.</Text>
-    <Text style={styles.addressLabel}>Napplet address</Text>
+    <Text style={styles.addressLabel}>Named address or snapshot link</Text>
     <TextInput testID="settings-napplet-address" accessibilityLabel="Napplet address" value={link} onChangeText={value => { setLink(value); setError(''); }}
       autoCapitalize="none" autoCorrect={false} maxLength={8192} editable={!busy} placeholder="naddr1… or nevent1…" placeholderTextColor={colors.muted}
       style={styles.input} returnKeyType="done" onSubmitEditing={start} />

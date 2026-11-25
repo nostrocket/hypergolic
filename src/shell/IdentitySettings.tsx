@@ -201,18 +201,13 @@ function SettingsHome({session, onBackup, onCloseBackup, onDelete, onImport, onP
   const { styles } = useShellStyles(createStyles);
   const {transition, formatNpub, runtime, actions, relaySettings, resourceSettings, uploadSettings, listAccess, routing, notificationSettings} = useIdentityOwner();
   const publishedCount = publishedSessions.length;
+  const accountCount = session.vault.identities.length;
   return <>
-      <View style={styles.currentIdentity}><Text style={styles.identityLabel}>Your identity</Text>
+      <View style={styles.currentIdentity}><Text style={styles.identityLabel}>Active identity</Text>
         <Text selectable testID="settings-full-npub" style={styles.npub}>{formatNpub(session.vault.selectedPubkey)}</Text>
       </View>
-      {runtime && openDiscovery && <Action title="Discover napplets" testID="settings-open-discovery" onPress={openDiscovery} />}
-      {runtime && <OpenPublishedNapplet open={openPublished} />}
       <View style={styles.sections}>
-      {runtime && publishedCount > 0 && <SettingsSection title="Published napplet updates"
-        detail={`${publishedCount} ${publishedCount === 1 ? 'napplet' : 'napplets'} in this workspace`} id="published-updates">
-        {publishedSessions.map(session => <UpdatePublishedNapplet key={session.id} session={session} check={checkPublishedUpdate} />)}
-      </SettingsSection>}
-      <SettingsSection title="Identity" detail="Accounts, signing methods and backup" id="identity">
+      <SettingsSection title="Identity" detail={`${accountCount} saved ${accountCount === 1 ? 'identity' : 'identities'} · Signing and backup`} id="identity">
       <SignerSettings transition={transition} session={session} actions={actions} format={formatNpub}
         onBackup={onBackup} onCloseBackup={onCloseBackup} />
       <SavedIdentities session={session} transition={transition} format={formatNpub} canDelete={Boolean(actions)}
@@ -230,6 +225,14 @@ function SettingsHome({session, onBackup, onCloseBackup, onDelete, onImport, onP
       {notificationSettings && <NotificationSettings key={`notifications-${session.epoch}`} service={notificationSettings} />}
       <IdentityListSettings service={listAccess ?? null} user={session.vault.selectedPubkey} />
       </SettingsSection>
+      </View>
+      {runtime && openDiscovery && <Action title="Discover napplets" testID="settings-open-discovery" onPress={openDiscovery} subdued />}
+      {runtime && <OpenPublishedNapplet open={openPublished} />}
+      <View style={styles.sections}>
+      {runtime && publishedCount > 0 && <SettingsSection title="Published napplet updates"
+        detail={`${publishedCount} ${publishedCount === 1 ? 'napplet' : 'napplets'} in this workspace`} id="published-updates">
+        {publishedSessions.map(session => <UpdatePublishedNapplet key={session.id} session={session} check={checkPublishedUpdate} />)}
+      </SettingsSection>}
       <DeveloperSettings onSignedLab={onSignedLab} openBundledTest={openBundledTest} openStateLab={openStateLab} />
       <AboutSettings />
       </View>
@@ -297,10 +300,10 @@ export function IdentitySettings({ openDiscovery, openBundledTest, openStateLab,
   </ScrollView>;
 }
 const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.create({
-  body: { padding: 24, paddingTop: 12, paddingBottom: 40, gap: 28 },
-  currentIdentity: { borderLeftWidth: 2, borderColor: colors.accent, paddingLeft: 14, gap: 8 },
+  body: { padding: 24, paddingTop: 12, paddingBottom: 40, gap: 16 },
+  currentIdentity: { borderWidth: 1, borderColor: colors.border, borderLeftWidth: 3, borderLeftColor: colors.accent, backgroundColor: colors.surface, padding: 14, gap: 6 },
   identityLabel: { fontFamily: fonts.mono, fontSize: 11, letterSpacing: 1.5, color: colors.muted, textTransform: 'uppercase' },
-  sections: { gap: 0 },
+  sections: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.glass },
   group: { gap: 20 },
   title: { fontFamily: fonts.display, fontSize: 28, color: colors.text },
   detail: { fontFamily: fonts.body, color: colors.muted, fontSize: 16, lineHeight: 24 },

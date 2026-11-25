@@ -46,7 +46,7 @@ export function RelaySettings({ service }: { service: RelaySettingsService | nul
     <View style={styles.switches}>
       {(['network', 'lookup'] as const).map(item => <Pressable key={item} accessibilityRole="button" accessibilityState={{ selected: role === item }}
         testID={`relay-role-${item}`} onPress={() => { setRole(item); setError(''); }} style={[styles.role, role === item && styles.activeRole]}>
-        <Text style={styles.roleText}>{item === 'network' ? 'Network' : 'Lookup'}</Text>
+        <Text style={[styles.roleText, role === item && styles.selectedRoleText]}>{item === 'network' ? 'Network' : 'Lookup'}</Text>
       </Pressable>)}
     </View>
     <Text style={styles.detail}>{network
@@ -101,7 +101,8 @@ const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.cre
   section: { gap: 14 }, heading: { fontFamily: fonts.display, color: colors.text, fontSize: 28, },
   detail: { fontFamily: fonts.body, color: colors.muted, fontSize: 15, lineHeight: 22 },
   switches: { flexDirection: 'row', gap: 10 }, role: { flex: 1, alignItems: 'center', padding: 13, borderRadius: 0, borderWidth: 1, borderColor: colors.border },
-  activeRole: { backgroundColor: colors.surface }, roleText: { fontFamily: fonts.strong, color: colors.text, fontSize: 15, },
+  activeRole: { backgroundColor: colors.primary, borderColor: colors.primary }, roleText: { fontFamily: fonts.strong, color: colors.text, fontSize: 15, },
+  selectedRoleText: { color: colors.onPrimary },
   relayRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13, borderRadius: 0, backgroundColor: colors.surface },
   url: { fontFamily: fonts.mono, flex: 1, color: colors.text, fontSize: 13, },
   networkRow: { flexDirection: 'column', alignItems: 'stretch', gap: 4 }, networkUrl: { flex: 0 },

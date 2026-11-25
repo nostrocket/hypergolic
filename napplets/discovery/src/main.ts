@@ -338,7 +338,8 @@ function updateOpenControl(control: HTMLButtonElement): void {
   if (openPending) control.setAttribute('aria-disabled', 'true');
   else control.removeAttribute('aria-disabled');
   control.setAttribute('aria-label', pending ? `Opening ${control.dataset.openTitle}…` : control.dataset.openLabel!);
-  control.querySelector('.open-label')!.textContent = pending ? 'Opening…' : 'Open';
+  const label = control.classList.contains('detail-open') ? 'Open napplet' : 'Open';
+  control.querySelector('.open-label')!.textContent = pending ? 'Opening…' : label;
 }
 
 function updateOpenControls(): void {

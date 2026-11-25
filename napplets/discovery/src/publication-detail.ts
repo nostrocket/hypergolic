@@ -51,6 +51,36 @@ export function updatePublisher(app: Publication, profile?: Profile): void {
   about.hidden = !about.textContent;
 }
 
+function publisherDisclosure(app: Publication): HTMLElement {
+  const publisher = node('div', 'detail-publisher');
+  const profile = node('details', 'publisher');
+  const summary = node('summary');
+  const profileLabel = node('span');
+  profileLabel.id = 'publisher-name';
+  summary.append(glyph('profile'), profileLabel, glyph('chevron'));
+  const profileAbout = node('p', 'description');
+  profileAbout.id = 'publisher-about';
+  profile.append(summary, profileAbout, reference('Signing key', app.npub));
+  publisher.append(profile);
+  return publisher;
+}
+
+function publicationAccess(app: Publication): HTMLElement {
+  const caps = detailSection('Access');
+  const accessName = (name: string) => name === 'outbox' ? 'Nostr relays' : accessCopy(name).name;
+  const requiredNames = [...new Set(app.required.map(accessName))];
+  caps.append(node('p', 'access-summary', requiredNames.length ? `Uses ${accessList(requiredNames)}.` : 'No required access declared.'));
+  const accessDetails = node('details', 'access-details');
+  const accessHeading = node('summary', '', 'Access details');
+  accessHeading.append(glyph('down'));
+  accessDetails.append(accessHeading);
+  capabilities(accessDetails, 'Required', app.required);
+  capabilities(accessDetails, 'Optional', app.optional);
+  accessDetails.append(node('p', 'muted', 'These are publisher requests. Your shell decides which access is available.'));
+  if (app.required.length || app.optional.length) caps.append(accessDetails);
+  return caps;
+}
+
 type DetailOptions = {
   backToSearch: boolean;
   close(): void;
@@ -110,32 +140,11 @@ export function renderPublicationDetail(detail: HTMLElement, entry: CatalogEntry
     about.append(updated);
   }
   const recommendation = recommendControl(app);
-  if (recommendation) about.append(recommendation);
 
-  const publisher = node('div', 'detail-publisher');
-  const profile = node('details', 'publisher');
-  const summary = node('summary');
-  const profileLabel = node('span');
-  profileLabel.id = 'publisher-name';
-  summary.append(glyph('profile'), profileLabel, glyph('chevron'));
-  const profileAbout = node('p', 'description');
-  profileAbout.id = 'publisher-about';
-  profile.append(summary, profileAbout, reference('Signing key', app.npub));
-  publisher.append(profile);
-  names.append(publisher);
 
-  const caps = detailSection('Access');
-  const accessName = (name: string) => name === 'outbox' ? 'Nostr relays' : accessCopy(name).name;
-  const requiredNames = [...new Set(app.required.map(accessName))];
-  caps.append(node('p', 'access-summary', requiredNames.length ? `Uses ${accessList(requiredNames)}.` : 'No required access declared.'));
-  const accessDetails = node('details', 'access-details');
-  const accessHeading = node('summary', '', 'Access details');
-  accessHeading.append(glyph('down'));
-  accessDetails.append(accessHeading);
-  capabilities(accessDetails, 'Required', app.required);
-  capabilities(accessDetails, 'Optional', app.optional);
-  accessDetails.append(node('p', 'muted', 'These are publisher requests. Your shell decides which access is available.'));
-  if (app.required.length || app.optional.length) caps.append(accessDetails);
+  names.append(publisherDisclosure(app));
+  const overview = node('div', 'detail-overview');
+  overview.append(identity, about);
 
   const publication = node('details', 'publication');
   publication.id = 'publication-reference';
@@ -143,6 +152,8 @@ export function renderPublicationDetail(detail: HTMLElement, entry: CatalogEntry
   referenceTitle.append(glyph('down'));
   publication.append(referenceTitle, reference('Publication address', app.address), reference('Signed event ID', app.signed.event.id), reference('Format', app.format), reference('Artifact hash', app.artifactHash));
   if (app.categories.length) publication.append(reference('Categories', app.categories.join(' · ')));
-  detail.replaceChildren(header, identity, about, preview, caps, explanation, publication, actions);
+  detail.replaceChildren(header, overview, preview, publicationAccess(app), explanation, publication);
+  if (recommendation) detail.append(recommendation);
+  detail.append(actions);
   updatePublisher(app, publisherProfile);
 }

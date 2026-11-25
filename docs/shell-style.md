@@ -59,14 +59,17 @@ inward swipe there. Exclusions clear when handles are disabled or detached; the
 rest of either edge retains system Back. This follows Android's
 [selective gesture-conflict guidance](https://developer.android.com/develop/ui/views/touch-and-input/gestures/gesturenav).
 
-Settings keeps address opening near the top and groups the remaining controls into
-Identity, Connections, Napplet access and Developer tools. Inputs retain native
+Settings opens with the active identity and groups controls into Identity,
+Connections and Napplet access. The Identity row shows the saved account count.
+Discover and address opening follow these groups. Inputs retain native
 keyboard and secure-entry behavior. Address validation explains how to correct
 invalid input. A pending lookup can be cancelled; verification status describes
 actual work performed by the existing resolver.
 
-Trusted review sheets use an edge-to-edge orange band, scrollable content and
-reachable actions. Event bodies, publishers, identities, destinations and exact
+Signing review places the requester beneath the requested action and groups the
+signing identity with the destination relays. The event content follows. At large
+text sizes the actions scroll with the review. Trusted review sheets use an
+edge-to-edge orange band. Event bodies, publishers, identities, destinations and exact
 request details remain available. These controls present existing authority;
 the visual band does not grant a capability or verify a publisher by itself.
 
