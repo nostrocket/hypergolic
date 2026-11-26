@@ -1,3 +1,4 @@
+import {dispatchFile} from '../files/file-broker.ts';
 import {encryptedEvent} from '../security/encrypted-event.ts';
 import { RequestHistory } from './request-history.ts';
 import {CapabilityReadAdmission, CapabilityReadBusy} from './capability-read-admission.ts';
@@ -138,6 +139,15 @@ export function createCapabilityBroker(database: ShellDatabase, native: NativeCa
         assertActive(token);
         const payload = captured.request;
         const type = payload && typeof payload === 'object' && 'type' in payload ? payload.type : null;
+        if (typeof type === 'string' && type.startsWith('fs.')) {
+          const request = payload as Record<string,unknown>;
+          const id = request.id;
+          if (!registration.domains.includes('fs') || registration.fixture !== 'published' || typeof id !== 'string' || !id || id.length > 128) return;
+          const fields = seen.claim(id,type) ? {error:'conflict'} :
+            await dispatchFile(database, registration, request, () => assertActive(token)).catch(() => ({error:'io-error'}));
+          response = JSON.stringify({type:type + '.result',id,...fields});
+          return;
+        }
         if (type === 'outbox.close') {
           if (registration.domains.includes('outbox')) closeOutbox?.(payload);
           return;

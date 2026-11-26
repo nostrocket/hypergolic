@@ -369,3 +369,37 @@ for (const name of ['identity', 'identity-examples']) {
     assert.deepEqual(native.results.get(token), {...expected.msg, pubkey: owner.user});
   });
 }
+
+test('file picker resolves only for its live published owner and stale writers receive a conflict', async t => {
+  const {filePicker} = await import('../../src/files/file-picker.ts');
+  const {database} = await setup(t);
+  const config = registration({fixture:'published',domains:['fs']});
+  const native = new NativeLeases();
+  const broker = createCapabilityBroker(database,native,{registration:config,assertActive() {}});
+  async function request(fields: Record<string,unknown>, id: string) {
+    const token = native.add(config,{...fields,id});
+    await broker.dispatch(token);
+    return native.results.get(token);
+  }
+  const path = '/Documents/example.txt';
+  assert.deepEqual(await request({type:'fs.write',path,data:btoa('first'),options:{ifAbsent:true}},'file-create'),
+    {type:'fs.write.result',id:'file-create',result:{bytesWritten:5,size:5}});
+  const opened = new Promise<void>(resolve => {
+    const stop = filePicker.subscribe(() => { if (filePicker.snapshot()) { stop();resolve(); } });
+  });
+  const token = native.add(config,{type:'fs.pickFile',id:'file-pick'});
+  const picked = broker.dispatch(token);
+  await opened;
+  assert.deepEqual(filePicker.snapshot()?.names,['example.txt']);
+  native.revoke(token);
+  filePicker.snapshot()?.finish('example.txt');
+  await picked;
+  assert.equal(native.results.get(token),null);
+  assert.deepEqual(await request({type:'fs.write',path,data:btoa('stale'),options:{ifRevision:'old'}},'file-stale'),
+    {type:'fs.write.result',id:'file-stale',error:'conflict'});
+  const noAccess = registration({fixture:'published',domains:[]});
+  const other = createCapabilityBroker(database,native,{registration:noAccess,assertActive() {}});
+  const denied = native.add(noAccess,{type:'fs.read',id:'file-denied',path});
+  await other.dispatch(denied);
+  assert.equal(native.results.get(denied),null);
+});

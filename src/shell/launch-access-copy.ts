@@ -7,6 +7,7 @@ const capabilityCopy = new Map<string, readonly [string, string]>([
   ['shell', ['Shell connection', 'Connect to Hypergolic and check which capabilities are available.']],
   ['lists', ['Public recommendations', 'Ask to add an app to your public recommendations. You review the app and relays before publishing.']],
   ['identity', ['Public profile', 'Read your public account information. Some public lists need separate approval.']],
+  ['fs', ['Documents', 'Read, create and change files in this napplet’s Documents folder for your selected account.']],
   ['storage', ['App storage', 'Save data for this napplet under your selected identity.']],
   ['theme', ['Appearance', 'Follow Hypergolic’s light or dark theme.']],
   ['relay', ['Nostr relays', 'Read events and ask to publish through your configured relays.']],

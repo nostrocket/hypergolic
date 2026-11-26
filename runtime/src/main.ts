@@ -1,3 +1,4 @@
+import {installFileFacade, injectFileFacade, fileReceiver} from './file-guest';
 import { bindFrameListeners, createGuestFrame, createLoadHandler } from './guest-frame';
 import { NAPPLET_LINK_LEASE_MS } from '../../src/links/link-contract';
 import {createLegacyImageMount} from './legacy-image-mount';
@@ -209,7 +210,7 @@ function createGuestEndpoint(artifact: RuntimeMetadata, hooks: ShellAdapter, sen
   // Mesh uses the private native lane, outside the SDK's fixed domain catalogue.
   const nativeMesh = artifact.published && artifact.domains.includes('mesh') && isNativeMeshContext(artifact.mesh, sessionId);
   const environment = {...resolved, capabilities: {...resolved.capabilities,
-    domains: Object.freeze([...resolved.capabilities.domains, ...(nativeMesh ? ['mesh'] : [])])},
+    domains: Object.freeze([...resolved.capabilities.domains, ...(nativeMesh ? ['mesh'] : []), ...(artifact.domains.includes('fs') && !resolved.capabilities.domains.includes('fs') ? ['fs'] : [])])},
     services: [...resolved.services, CLOSE_CHECK_SERVICE]};
   const frame = createGuestFrame(artifact.title);
   const source = frame.contentWindow;
@@ -312,12 +313,13 @@ function mount(artifact: RuntimeMetadata) {
     }
   };
   const cvm = artifact.domains.includes('cvm') ? createCvmGuestReceiver(sendGuest,native.cvm,live) : null;
+  const files = artifact.domains.includes('fs') ? fileReceiver(native.request,sendGuest,live,() => isRuntimeInputActive() && document.hasFocus()) : undefined;
   const enforcePrivateChannel = artifact.published || fixtureName === 'napplet-discovery' || fixtureName === 'nap-support';
   const guestPort = privatePort ? createGuestPort(frame, source, bridge, artifact.domains, account.current, routing.consume,
-    {enforcePrivateChannel, keys, cvm, checkpoint:artifact.journalCheckpoint ? closeCheck.checkpointResult : undefined, mesh:mesh?.receiveValue, media:value => handleMediaRequest(value, hasMedia ? native.sendMedia : null, sendGuest)}, markReady, () => fail('runtime-bootstrap')) : null;
+    {enforcePrivateChannel, keys, cvm, files, checkpoint:artifact.journalCheckpoint ? closeCheck.checkpointResult : undefined, mesh:mesh?.receiveValue, media:value => handleMediaRequest(value, hasMedia ? native.sendMedia : null, sendGuest)}, markReady, () => fail('runtime-bootstrap')) : null;
   const receiveGuest = guestMessageReceiver(frame, source, {
     domains: artifact.domains, routing, keys, account: account.current, sendMedia: hasMedia ? native.sendMedia : null,
-    cvm,
+    cvm, files,
     closed: () => stopped, live,
     dispatch(event) {
       if (mesh?.receive(event)) return;
@@ -375,6 +377,7 @@ function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
     ...environment.capabilities, privatePort,
     guestBindings: [
       [installPortLiveness],
+      ...(artifact.domains.includes('fs') ? [[installFileFacade, secureUuidV4] as const] : []),
       ...(artifact.journalCheckpoint ? [journalBinding] : []),
       ...(hasMesh ? [meshBinding] : []),
       ...(artifact.domains.includes('media') ? [[installMediaFacade] as const] : []),
@@ -382,7 +385,8 @@ function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
     ],
     requestTimeoutsMs: approvalTimeouts(artifact),
   });
-  const withMedia=!privatePort && artifact.published && artifact.domains.includes('media') ? injectMediaFacade(injected) : injected;
+  const withFiles = !privatePort && artifact.domains.includes('fs') ? injectFileFacade(injected) : injected;
+  const withMedia=!privatePort && artifact.published && artifact.domains.includes('media') ? injectMediaFacade(withFiles) : withFiles;
   const withCvm = !privatePort && artifact.published && artifact.domains.includes('cvm') ? injectCvmFacade(withMedia) : withMedia;
   frame.srcdoc = prefix + (!privatePort && hasMesh ? injectMeshFacade(withCvm) : withCvm);
 }
