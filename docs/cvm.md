@@ -35,6 +35,18 @@ Shared and browser fixtures cover contracts, wrappers, long-lived native project
 
 The exact original Kipinä agent publication also uses `ws://localhost:3334` for its journal. That is an independent publisher destination dependency; this profile does not reroute it or authorize local/private networking. Its prompt/history workflow may publish journal records before CVM. A local-only controlled CVM proof is not a successful ordinary paired-agent primary workflow.
 
+### Published provider checks
+
+The iOS reply subscription requests live events of kinds 1059 and 21059 addressed to the session’s ephemeral public key. Its `since` covers the two-day outer-envelope tolerance. Wavefunc requires that explicit time bound even when `limit: 0` requests no stored events.
+
+On 26 November 2026, a desktop probe exercised the shell’s MCP client with fresh disposable keys, the first relay declared by each publication, and the tool arguments from the hash-verified artifacts. The probe verified the signed replies and their request references. These observations cover the protocol exchange. Standalone device rendering is a separate acceptance step.
+
+| Published tool | Observation |
+| --- | --- |
+| Funclet · `search_artists` | Wavefunc closed the reply subscription when the time bound was omitted. Adding it returned 20 artists for “Miles Davis”. The existing Android filter also returned 20. |
+| Shiftfield · `soy_board_read` | The `depth-v1` board returned five rows with both iOS filters. |
+| Compose · `search_profiles` | Its fixed provider did not answer initialization within 30 seconds on its first relay. Separate diagnostic runs timed out on its two other listed relays. The search itself was never dispatched. |
+
 ### Running ordinary acceptance
 
 Use the standalone Release app, a disposable account and a verified publication that calls a free read-only tool. Funclet's **Artists** search exercises `search_artists`. Record the artifact digest, publication event, provider, relay, arguments and observed result on each platform.

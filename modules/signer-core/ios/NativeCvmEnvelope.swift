@@ -51,7 +51,7 @@ final class NativeCvmEnvelope: @unchecked Sendable {
       let outer = try NativeNostrSignedEvent(json: signed, peer: sender, maximumBytes: Self.maximumEvent).event
       let client = try key.publicKey()
       guard [1059,21059].contains(outer.kind), outer.createdAt <= now + 30,
-        now <= outer.createdAt + 172800, Self.recipient(outer.tags, client) else { throw Failure.denied }
+        now <= outer.createdAt + NativeCvmReplySubscription.maximumAge, Self.recipient(outer.tags, client) else { throw Failure.denied }
       try check()
       var clear = try key.decryptAuthenticated(peer: sender, payload: Data(outer.content.utf8)); defer { clear.resetBytes(in: 0..<clear.count) }
       guard clear.count <= Self.maximumEvent, let raw = String(data: clear, encoding: .utf8) else { throw Failure.denied }

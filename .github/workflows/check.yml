@@ -292,9 +292,10 @@ jobs:
         run: |
           test "$(xcodebuild -version | head -n 1)" = 'Xcode 27.1'
           test "$(xcrun --sdk iphoneos --show-sdk-version)" = '27.1'
-      - name: Verify native CVM initialization correlation
+      - name: Verify native CVM reply filter and initialization correlation
         run: |
           xcrun swiftc -swift-version 6 -warnings-as-errors \
+            modules/signer-core/ios/NativeCvmReplySubscription.swift \
             modules/signer-core/ios/NativeCvmInitialization.swift \
             tests/native/cvm/ios/CvmInitializationProof.swift \
             -o "$RUNNER_TEMP/cvm-initialization-proof"
