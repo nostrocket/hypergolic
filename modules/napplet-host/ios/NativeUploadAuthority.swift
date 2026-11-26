@@ -82,10 +82,12 @@ final class NativeUploadAuthority: @unchecked Sendable {
       let session = Session(generation, identity); sessions[generation] = session; return session
     }
   }
-  func setForeground(_ active: Bool) {
+  func setForeground(_ active: Bool, retaining retained: Request? = nil) {
     lock.withLock {
       prune(); foreground = active
-      if !active { for row in requests.values { row.clear() }; requests.removeAll() }
+      if !active {
+        for key in requests.keys.filter({ requests[$0]?.request !== retained }) { requests.removeValue(forKey: key)?.clear() }
+      }
     }
   }
   func focus(_ session: Session?) { lock.withLock { prune(); if session == nil || registered(session) { focused = session } } }

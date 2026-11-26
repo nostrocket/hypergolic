@@ -150,3 +150,28 @@ for their explicit source/OS-double scopes. Earlier legacy-vault runtime results
 do not establish acceptance of the new namespace. Physical at-rest protection,
 authentication/capture, backup/deletion, recovery and full Phase 2/3 route
 acceptance remain open; see [testing](testing.md).
+
+## Workspace lock and signature confirmation
+
+Open Settings and select Device privacy. Workspace
+lock is shared by every account and defaults to off. Enabling it, disabling it,
+or changing a signing confirmation preference requires device authentication.
+Unlock uses the system biometric or device credential. The Android system prompt
+requires API 30 or later and a configured screen lock.
+
+When enabled, the workspace starts locked. Leaving the application hides its
+recent-apps preview. Returning within one minute restores access. A cold start,
+Lock now, Android screen-off, or an iOS protected-data loss requires another
+unlock. iOS delivers protected-data loss according to the device's lock policy.
+Older Android versions use a secure activity window while workspace lock is
+enabled, which also restricts screenshots. Workspace lock protects the interface.
+Existing identity storage and backup authentication remain independent.
+
+Signature confirmation is stored separately for each public key and signing
+method category. Local signing and additional confirmation before external
+signer handoff both start off. Once enabled, approval of the exact event opens
+a fresh device prompt before signing or signer handoff. This applies to sign-only
+and publication requests. A reviewed publication sends the authorized signed
+event to its reviewed destinations without another device prompt for each relay.
+An app unlock has no authority over an event. A refusal or expired source
+ends the request before dispatch. External signers keep their own prompts.

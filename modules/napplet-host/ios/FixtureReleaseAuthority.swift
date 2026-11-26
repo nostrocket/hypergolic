@@ -28,8 +28,15 @@ final class FixtureReleaseAuthority: @unchecked Sendable {
     if !available || self.epoch != epoch || self.user != user {cancel()}
     self.user=user; self.epoch=epoch; self.available=available; return true
   }}
-  func foreground(_ active: Bool) { lock.withLock {
-    foregrounded=active; uploads.setForeground(active); manifests.setForeground(active); if !active {cancel()}
+  private var suspendedPrompt = false
+  func foreground(_ active: Bool, retaining token: String? = nil) { lock.withLock {
+    let retained = token.flatMap { token in entry.flatMap { $0.token == token ? $0 : nil } }
+    foregrounded = active
+    uploads.setForeground(active, retaining: retained?.request)
+    manifests.setForeground(active, retaining: retained?.manifestRequest)
+    if active && suspendedPrompt { _ = manifests.resumeReview() }
+    suspendedPrompt = retained != nil
+    if !active && retained == nil { cancel() }
   }}
   func prepare(_ fixture: String, bytes: Data, expectedHash: String, server: String, tags: String) -> Entry? { lock.withLock {
     guard available, foregrounded, let user, let epoch, fixture.range(of:"^[a-z][a-z0-9-]{0,63}$",options:.regularExpression) != nil,

@@ -1,3 +1,4 @@
+import HypergolicNappletHost
 import ExpoModulesCore
 import ExpoModulesJSI
 import HypergolicIdentityOwner
@@ -118,7 +119,7 @@ public final class HypergolicSignerCoreModule: Module {
     }
     Function("cancelNativeAndroidSigner") { (_: String) in }
     Function("nativeSigningHandoffState") { (kind: String, token: String) throws -> String? in
-      try nativeVaultResult { try nativeVault.lease().handoffs.signingState(kind: kind, token: token) }
+      try nativeVaultResult { try nativeVault.lease().handoffs.signingState(kind: kind, token: token) ?? NativeSigningSourceFacade.devicePromptState(kind: kind, token: token) }
     }
     Function("nativeRemotePreparationHandoffState") { (vaultID: String, revision: Double, attemptID: String) throws -> String? in
       guard let revision = try? nativeVaultRevision(revision) else { return nil }

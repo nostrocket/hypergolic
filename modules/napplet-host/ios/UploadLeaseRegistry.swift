@@ -55,7 +55,13 @@ final class UploadLeaseRegistry: @unchecked Sendable {
     }
   }
   func isRegistered(_ generation: String) -> Bool { lock.withLock {sessions[generation] != nil} }
-  func foreground(_ active: Bool) { lock.withLock { authority.setForeground(active) } }
+  private var suspendedPrompt: String?
+  func foreground(_ active: Bool, retaining token: String? = nil) {
+    lock.withLock {
+      suspendedPrompt = active ? nil : token
+      authority.setForeground(active, retaining: token.flatMap { rows[$0]?.request })
+    }
+  }
   func focus(_ generation: String, active: Bool) {
     lock.withLock { guard let session = sessions[generation] else { return }; if active { authority.focus(session.handle) } else { _ = authority.clearFocus(session.handle) } }
   }
@@ -170,7 +176,7 @@ final class UploadLeaseRegistry: @unchecked Sendable {
       var result: [Invalid] = []
       for token in Array(rows.keys) {
         guard let row = rows[token] else { continue }
-        if sessions[row.session.generation] === row.session && authority.contains(row.request) { continue }
+        if sessions[row.session.generation] === row.session && (suspendedPrompt == token || authority.contains(row.request)) { continue }
         result.append(Invalid(token: token, generation: row.session.generation, uploadId: row.uploadId,
           dispatched: row.grant.map {authority.wasDispatched($0)} ?? false)); remove(token, row)
       }
