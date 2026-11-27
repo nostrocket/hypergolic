@@ -22,6 +22,7 @@ const paths = {
   close: 'm6 6 12 12M18 6 6 18',
   chevron: 'm9 5 7 7-7 7',
   down: 'm5 9 7 7 7-7',
+  key: 'M14.5 3a6.5 6.5 0 0 0-5.7 9.6L3 18.4V22h3.6l1.7-1.7V18h2.3l2-2A6.5 6.5 0 1 0 14.5 3z M17 7.5h.01',
   profile: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-6-2a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm-9 8a7 7 0 0 1 12 0',
 };
 
@@ -56,34 +57,32 @@ const initialColours = [
   ['#d3a1a8', '#47232b'], ['#b0bf88', '#2b3916'], ['#c8b79c', '#3f3120'], ['#b7a7bf', '#3d2c44'],
 ] as const;
 
+function publicationSeed(app: Publication): number {
+  const identity = `${app.publisher}:${app.identifier}`;
+  let hash = 2166136261;
+  for (let index = 0; index < identity.length; index++) hash = Math.imul(hash ^ identity.charCodeAt(index), 16777619);
+  return hash >>> 0;
+}
+
+function publicationColours(app: Publication) {
+  return initialColours[publicationSeed(app) % initialColours.length]!;
+}
+
 function titleInitials(app: Publication): HTMLElement {
   const words = app.title.match(/[\p{L}\p{N}][\p{L}\p{N}\p{M}]*/gu) ?? [];
   const initials = words.slice(0, 2).map(word => [...word][0]).join('').toUpperCase() || '?';
   const tile = node('span', 'app-initials', initials);
-  const identity = `${app.publisher}:${app.identifier}`;
-  let hash = 2166136261;
-  for (let index = 0; index < identity.length; index++) hash = Math.imul(hash ^ identity.charCodeAt(index), 16777619);
-  const [background, ink] = initialColours[(hash >>> 0) % initialColours.length]!;
+  const [background, ink] = publicationColours(app);
   tile.style.setProperty('--initials-background', background);
   tile.style.setProperty('--initials-ink', ink);
   return tile;
 }
 
-function detailPattern(publisher: string): HTMLElement {
-  const tile = node('span', 'tile-pattern');
-  const seed = publisher.slice(0, 6);
-  for (let index = 0; index < 9; index++) {
-    const bit = (parseInt(seed[index % seed.length]!, 16) >> (index % 4)) & 1;
-    tile.append(node('i', bit ? 'lit' : ''));
-  }
-  return tile;
-}
-
-export function artwork(app: Publication, media: ViewMedia, large = false): HTMLElement {
-  const frame = node('span', large ? 'app-icon app-icon-large' : 'app-icon');
+export function artwork(app: Publication, media: ViewMedia, detailIdentity?: HTMLElement): HTMLElement {
+  const frame = node('span', detailIdentity ? 'app-icon app-icon-large' : 'app-icon');
   frame.setAttribute('aria-hidden', 'true');
-  frame.append(large ? detailPattern(app.publisher) : titleInitials(app));
-  if (app.icon) media.show(frame, app.icon, img => frame.replaceChildren(labelImage(img, '', 72, 72)));
+  if (!detailIdentity) frame.append(titleInitials(app));
+  if (app.icon) media.show(detailIdentity ?? frame, app.icon, img => frame.replaceChildren(labelImage(img, '', 72, 72)));
   return frame;
 }
 

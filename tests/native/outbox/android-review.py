@@ -30,7 +30,7 @@ class Journey(base.Journey):
   self.result.update(kind='hypergolic-android-outbox-review-v1',scope=__doc__,installedApkSha256=sha(actual),buildSha256=sha(self.args.build.read_bytes()))
   self.adb('shell','am','force-stop',PACKAGE);self.adb('shell','am','start','-W','-n',PACKAGE+'/org.nostrocket.hypergolic.dev.MainActivity')
   self.find('Presentation only · no signing or publication');self.record('presentation-only-launch')
-  self.tap(self.find('Review destinations'));self.find('Approve signing request');self.record('exact-event-identity')
+  self.tap(self.find('Review destinations'));self.find('Your signing identity');self.record('exact-event-identity')
   self.reveal('Publication destinations');self.record('exact-destinations-origins')
   self.reveal('Also send your existing relay list');self.record('existing-list-review')
   self.tap(self.reveal('Show exact event'));self.up();self.record('exact-primary-template')

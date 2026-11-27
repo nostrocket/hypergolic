@@ -94,12 +94,22 @@ for (const declaration of ['R', 'O']) {
       new Uint8Array(32).fill(1));
     const guest = await openRuntime(page, 'napplet-discovery', [{event}]);
     await guest.getByRole('button', {name: 'Details for Independent Outbox', exact: true}).click();
-    await expect(guest.locator('.access-summary')).toHaveText(declaration === 'R' ? 'Uses Nostr relays.' : 'No required access declared.');
+    const required = guest.getByRole('list', {name: 'Required access requested by the publisher', exact: true});
+    if (declaration === 'R') {
+      await expect(required).toBeVisible();
+      await expect(required.getByRole('listitem')).toHaveText(['Outbox routing']);
+    } else {
+      await expect(required).toHaveCount(0);
+      await expect(guest.getByText('No required access declared.', {exact: true})).toBeVisible();
+    }
     await expect(guest.locator('.access-consequence')).toHaveCount(0);
-    await guest.getByText('Access details', {exact: true}).click();
+    await guest.getByLabel('Access details', {exact: true}).click();
+    await expect(guest.getByRole('heading', {name: declaration === 'R' ? 'Required' : 'Optional', exact: true})).toBeVisible();
     const capability = guest.locator('.access-details .cap-row');
     await expect(capability).toHaveCount(1);
-    await expect(capability).toContainText('Outbox routing');
+    await expect(capability.getByText('Outbox routing', {exact: true})).toBeVisible();
+    await expect(capability.getByText('Read Nostr events or ask to publish using the relays associated with the accounts involved.', {exact: true})).toBeVisible();
+    await expect(guest.getByText('These are publisher requests. Your shell decides which access is available.', {exact: true})).toBeVisible();
     await expect(capability).not.toContainText('unavailable');
     await guest.getByRole('button', {name: 'Open Napplet', exact: true}).click();
     await expect.poll(() => page.evaluate(() => (window as unknown as TestWindow).discoveryOpenTest.calls.length)).toBe(1);

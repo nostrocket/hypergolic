@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
 import { ActivityIndicator, Platform, Text, View } from 'react-native';
+import { SettingsForm } from './SettingsForm';
 import type { IdentitySettingsActions } from '../security/native-identity-actions';
 import type { IdentitySession } from '../security/identity-transition';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
@@ -64,7 +65,7 @@ export function IdentityBackup({ actions, session, npub, reviewing, onReview, on
     {available === true ? <Action title="Back up selected identity" testID="identity-backup-start" onPress={onReview} subdued />
       : <Text testID="identity-backup-unavailable" style={styles.detail}>{available === null ? 'Checking device authentication…' : 'Device authentication is unavailable. Enable a device passcode or supported biometric authentication to back up an identity.'}</Text>}
   </View>;
-  return <View style={styles.group}>
+  return <SettingsForm action={busy ? undefined : {label: "Authenticate and show backup", testID: "identity-backup-confirm", onPress: show}}>
     <Text accessibilityRole="header" style={styles.title}>{busy ? 'Confirm on your device' : 'Back up identity?'}</Text>
     <Text selectable testID="identity-backup-npub" style={styles.npub}>{npub}</Text>
     <Text style={styles.detail}>After authentication, your private key appears for you to write down.</Text>
@@ -72,8 +73,7 @@ export function IdentityBackup({ actions, session, npub, reviewing, onReview, on
     {error && <Text testID="identity-backup-error" accessibilityLiveRegion="polite" style={styles.detail}>Backup was not completed. Your identity is unchanged.</Text>}
     {busy && <ActivityIndicator color={colors.accent} />}
     <Action title="Cancel" testID="identity-backup-cancel" onPress={close} subdued />
-    {!busy && <Action title="Authenticate and show backup" testID="identity-backup-confirm" onPress={show} />}
-  </View>;
+  </SettingsForm>;
 }
 
 const createStyles = (colors: ShellPalette, fonts: ShellFonts) => ({

@@ -27,3 +27,8 @@ export function useShellStyles<T>(createStyles: (colors: ShellPalette, fonts: Sh
 
 /** Keeps visible grips beside the guest viewport while touch targets remain larger. */
 export const HANDLE_GUTTER = 14;
+
+/** Display headings grow more slowly than body copy at accessibility sizes so whole words still fit. */
+export function displayFontSize(base: number, fontScale: number): number {
+  return Math.max(18, base / Math.sqrt(Math.max(1, fontScale)));
+}

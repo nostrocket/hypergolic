@@ -2,17 +2,18 @@ import {useReviewControl} from './useReviewControl';
 import { useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { accessIconUri } from './access-icon';
 import { Image } from 'expo-image';
-import { AccessibilityInfo, AppState, ScrollView, StyleSheet, Text, View, type TextInstance } from 'react-native';
+import { AccessibilityInfo, AppState, ScrollView, StyleSheet, useWindowDimensions, Text, View, type TextInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { boundedPublishedTitle, publishedAppLabel, snapshotEventId } from '../napplets/published-identity';
 import type { VerifiedLaunchMetadata } from '../napplets/verified-launch-metadata';
 import { launchAccessCopy, LEGACY_MANIFEST_NOTICE } from './launch-access-copy';
 import { compactPublisher, formatNpub } from '../security/public-identity';
 import { OwnerContext } from './IdentityOwnerContext';
+import { ThumbAction } from './ThumbAction';
 import { ShellModal } from './ShellModal';
 import { ShellPressable } from './ShellPressable';
 import { TrustedBand } from './TrustedBand';
-import { useShellStyles, type ShellFonts, type ShellPalette } from './theme';
+import { displayFontSize, useShellStyles, type ShellFonts, type ShellPalette } from './theme';
 
 type ReviewTarget = Readonly<{
   metadata: VerifiedLaunchMetadata;
@@ -111,10 +112,11 @@ function ReviewImage({ uri }: { uri: string | undefined }) {
 function LaunchIdentity({ target, source }: { target: ReviewTarget; source: LaunchSource | undefined }) {
   const { styles } = useShellStyles(createStyles);
   const { name, artwork } = useLaunchArtwork(target);
+  const largeType = useWindowDimensions().fontScale > 1.4;
   return <View style={styles.section}>
-    <View style={styles.identityRow}>
+    <View style={largeType ? styles.identityColumn : styles.identityRow}>
       <ReviewImage uri={artwork} />
-      <View style={styles.identityCopy}>
+      <View style={largeType ? styles.fullIdentityCopy : styles.identityCopy}>
         <Text testID="published-review-publisher" style={styles.name}>Publisher · {compactPublisher(target.publisher)}</Text>
         {name && <Text style={styles.detail}>Profile name · {name}</Text>}
         {source && <Text style={styles.detail}>{source.label}</Text>}
@@ -166,8 +168,13 @@ export function PublishedLaunchReview({ target, source, changesAccess, onAccept,
 }) {
   const { styles } = useShellStyles(createStyles);
   const insets = useSafeAreaInsets();
+  const {fontScale} = useWindowDimensions();
+  const largeType = fontScale > 1.4;
   const heading = useRef<TextInstance>(null);
   const control = useReviewControl(target.eventId);
+  const cancel = <ShellPressable accessibilityRole="button" testID={ids.cancel} onPress={onCancel} style={[styles.button, largeType && styles.scrollCancel]}>
+            <Text style={styles.buttonText}>Cancel</Text>
+          </ShellPressable>;
   return <ShellModal key={target.eventId} visible transparent animationType="none" onRequestClose={onCancel} onShow={() => {
     control.onShow();
     if (heading.current) AccessibilityInfo.sendAccessibilityEvent(heading.current, 'focus');
@@ -176,7 +183,8 @@ export function PublishedLaunchReview({ target, source, changesAccess, onAccept,
       <View accessibilityViewIsModal testID={ids.review} style={styles.sheet}>
         <TrustedBand label="Launch review" />
         <ScrollView testID="published-review-content" contentContainerStyle={styles.content} style={styles.scroll}>
-          <Text ref={heading} accessibilityRole="header" style={styles.heading}>{title ?? `Open ${target.metadata.title}?`}</Text>
+          <Text ref={heading} accessibilityRole="header" style={[styles.heading, {fontSize: displayFontSize(30, fontScale)}]}>{title ?? `Open ${target.metadata.title}?`}</Text>
+          {largeType && cancel}
           <LaunchIdentity key={`${target.publisher}:${target.eventId}:${target.metadata.icon ?? ''}`} target={target} source={source} />
           {target.metadata.legacyManifest && <Text style={styles.body}>{LEGACY_MANIFEST_NOTICE}</Text>}
           {readOnly ? <Text style={styles.body}>Legacy read-only mode supplies compatibility libraries and bounded public content. Declared capability access is not granted. Signing, publishing and uploads are unavailable.</Text> : <RequestedAccess key={`access:${target.eventId}`} target={target} changesAccess={changesAccess} />}
@@ -185,12 +193,9 @@ export function PublishedLaunchReview({ target, source, changesAccess, onAccept,
           <TechnicalDetails key={`technical:${target.eventId}`} target={target} source={source} />
         </ScrollView>
         <View style={[styles.actions, { paddingBottom: Math.max(12, insets.bottom) }]}>
-          <ShellPressable accessibilityRole="button" testID={ids.cancel} onPress={onCancel} style={styles.button}>
-            <Text style={styles.buttonText}>Cancel</Text>
-          </ShellPressable>
-          <ShellPressable accessibilityRole="button" testID={ids.approve} disabled={!control.ready} onPress={onAccept} style={[styles.button, styles.primary]}>
-            <Text style={[styles.buttonText, styles.primaryText]}>{approveLabel ?? (changesAccess ? 'Allow and open' : 'Open')}</Text>
-          </ShellPressable>
+          {!largeType && cancel}
+          <ThumbAction testID={ids.approve} disabled={!control.ready} onPress={onAccept} style={styles.primary}
+            label={approveLabel ?? (changesAccess ? 'Allow and open' : 'Open')} />
         </View>
       </View>
     </View>
@@ -204,6 +209,8 @@ const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.cre
   content: { padding: 22, gap: 24 },
   heading: { fontFamily: fonts.display, fontSize: 30, color: colors.text },
   identityRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  identityColumn: { flexDirection: 'column-reverse', alignItems: 'stretch', gap: 12 },
+  fullIdentityCopy: {gap: 3},
   identityCopy: { flex: 1, gap: 3 },
   artwork: { width: 68, height: 68, borderRadius: 10, backgroundColor: colors.raised, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   image: { width: '100%', height: '100%' },
@@ -222,8 +229,8 @@ const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.cre
   disclosure: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 48, gap: 8 },
   disclosureText: { flexShrink: 1, fontFamily: fonts.strong, fontSize: 15, color: colors.accent },
   actions: { flexDirection: 'row', flexWrap: 'wrap', borderTopWidth: 1, borderColor: colors.border, gap: 8, paddingHorizontal: 20, paddingTop: 10 },
+  scrollCancel: {flexGrow: 0, flexBasis: 'auto'},
   button: { flexGrow: 1, flexBasis: '44%', minWidth: 112, minHeight: 48, paddingVertical: 10, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border },
   buttonText: { fontFamily: fonts.strong, fontSize: 16, textAlign: 'center', color: colors.text },
-  primary: { backgroundColor: colors.primary, borderColor: colors.primary },
-  primaryText: { color: colors.onPrimary },
+  primary: { flexGrow: 1, flexBasis: '44%', minWidth: 112 },
 });

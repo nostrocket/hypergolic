@@ -4,10 +4,14 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 
 const base = new URL('.', import.meta.url);
-const [template, css, notices, bundle] = await Promise.all([
+const [template, css, notices, regular, semibold, morning, night, bundle] = await Promise.all([
   readFile(new URL('index.template.html', base), 'utf8'),
   readFile(new URL('src/style.css', base), 'utf8'),
   readFile(new URL('THIRD_PARTY_NOTICES.txt', base), 'utf8'),
+  readFile(new URL('fonts/Barlow-Regular.woff2', base)),
+  readFile(new URL('fonts/Barlow-SemiBold.woff2', base)),
+  readFile(new URL('artwork/launch-morning.jpg', base)),
+  readFile(new URL('artwork/launch-night.jpg', base)),
   build({
     absWorkingDir: fileURLToPath(base),
     entryPoints: ['src/main.ts'],
@@ -23,7 +27,10 @@ const [template, css, notices, bundle] = await Promise.all([
 ]);
 
 if (notices.includes('-->')) throw new Error('Third-party notices contain an HTML comment terminator.');
-const artifact = template.replace('/* CSS */', () => css)
+const face = (weight, font) => `@font-face { font-family: Barlow; font-weight: ${weight}; font-display: swap; src: url(data:font/woff2;base64,${font.toString('base64')}) format("woff2"); }`;
+const artifact = template.replace('/* CSS */', () => [face(400, regular), face(600, semibold), css].join('\n'))
+  .replace('LAUNCH_MORNING', () => 'data:image/jpeg;base64,' + morning.toString('base64'))
+  .replace('LAUNCH_NIGHT', () => 'data:image/jpeg;base64,' + night.toString('base64'))
   .replace('<!-- THIRD_PARTY_NOTICES -->', () => `<!--
 ${notices.trimEnd()}
 -->`)

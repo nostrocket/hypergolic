@@ -25,14 +25,16 @@ import { useIdentityOwner } from './IdentityOwnerContext';
 import { IdentityBackup } from './IdentityBackup';
 import { RelaySettings } from './RelaySettings';
 import { PublishedHostLab } from './PublishedHostLab';
+import { SettingsForm } from './SettingsForm';
+import { LaunchHorizon } from './ShellBackdrop';
 import { OpenPublishedNapplet } from './OpenPublishedNapplet';
 import { UpdatePublishedNapplet } from './UpdatePublishedNapplet';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 
-function Action({ title, testID, onPress, subdued = false }: { title: string; testID: string; onPress: () => void; subdued?: boolean }) {
+function Action({ title, testID, onPress }: { title: string; testID: string; onPress: () => void }) {
   const { styles } = useShellStyles(createStyles);
-  return <Pressable accessibilityRole="button" testID={testID} onPress={onPress} style={[styles.action, subdued && styles.subdued]}>
-    <Text style={subdued ? styles.subduedText : styles.actionText}>{title}</Text>
+  return <Pressable accessibilityRole="button" testID={testID} onPress={onPress} style={styles.action}>
+    <Text style={styles.actionText}>{title}</Text>
   </Pressable>;
 }
 function ImportIdentity({ transition, onClose }: { transition: IdentityTransition; onClose: () => void }) {
@@ -54,13 +56,13 @@ function ImportIdentity({ transition, onClose }: { transition: IdentityTransitio
         ? 'The saved identity limit has been reached.' : 'Import was not completed. Your identity is unchanged.');
     }).finally(() => setBusy(false));
   };
-  return <View style={styles.group}>
+  return <SettingsForm action={busy ? undefined : {label: "Enter secret key", testID: "identity-import-review", onPress: review}}>
     <Text accessibilityRole="header" style={styles.title}>Import identity</Text>
     <Text style={styles.detail}>Enter your nsec in the next screen. Your current identity will remain saved on this device.</Text>
     {error !== '' && <Text testID="identity-import-error" accessibilityLiveRegion="polite" style={styles.detail}>{error}</Text>}
-    {busy ? <ActivityIndicator color={colors.accent} /> : <Action title="Enter secret key" testID="identity-import-review" onPress={review} />}
-    <Action title="Cancel" testID="identity-import-cancel" onPress={() => { transition.cancelImportPreparation(); onClose(); }} subdued />
-  </View>;
+    {busy && <ActivityIndicator color={colors.accent} />}
+    <Action title="Cancel" testID="identity-import-cancel" onPress={() => { transition.cancelImportPreparation(); onClose(); }} />
+  </SettingsForm>;
 }
 function PublicIdentity({ transition, onClose }: { transition: IdentityTransition; onClose(): void }) {
   const { styles } = useShellStyles(createStyles);
@@ -76,28 +78,25 @@ function PublicIdentity({ transition, onClose }: { transition: IdentityTransitio
     try { transition.preparePublicIdentity(pubkey); onClose(); }
     catch { setError('This public profile could not be opened. Try again.'); }
   };
-  return <View style={styles.group}>
+  return <SettingsForm action={{label: "Review public profile", testID: "identity-public-review", onPress: review}}>
     <Text accessibilityRole="header" style={styles.title}>Read-only public profile</Text>
     <Text style={styles.detail}>Enter an npub or public key to read public data as that account. This adds no private key or signing method. Signing and publishing are unavailable.</Text>
     <TextInput accessibilityLabel="Public key or npub" testID="identity-public-key" style={styles.input}
-      value={input} onChangeText={setInput} autoCapitalize="none" autoCorrect={false} maxLength={128}
+      value={input} onChangeText={setInput} returnKeyType="go" onSubmitEditing={review} autoCapitalize="none" autoCorrect={false} maxLength={128}
       placeholder="npub or public key" />
     {error !== '' && <Text testID="identity-public-error" accessibilityLiveRegion="polite" style={styles.detail}>{error}</Text>}
-    <Action title="Review public profile" testID="identity-public-review" onPress={review} />
-    <Action title="Cancel" testID="identity-public-cancel" onPress={onClose} subdued />
-  </View>;
+    <Action title="Cancel" testID="identity-public-cancel" onPress={onClose} />
+  </SettingsForm>;
 }
 function ConfirmIdentity({ pending, transition, npub }: { pending: IdentityChange; transition: IdentityTransition; npub: string }) {
   const { styles } = useShellStyles(createStyles);
   const copy = identityChangeCopy(pending, transition.getSnapshot().session.vault.selectedPubkey);
-  return <View style={styles.group}>
+  return <SettingsForm action={{label: copy.approve, testID: "identity-change-confirm", onPress: () => { void transition.confirm(pending).catch(() => undefined); }}}>
     <Text accessibilityRole="header" style={styles.title}>{copy.title}</Text>
     <Text selectable testID="identity-change-npub" style={styles.npub}>{npub}</Text>
     <Text style={styles.detail}>{copy.detail}</Text>
-    <Action title="Keep current settings" testID="identity-change-cancel" onPress={() => transition.cancel(pending)} subdued />
-    <Action title={copy.approve} testID="identity-change-confirm"
-      onPress={() => { void transition.confirm(pending).catch(() => undefined); }} />
-  </View>;
+    <Action title="Keep current settings" testID="identity-change-cancel" onPress={() => transition.cancel(pending)} />
+  </SettingsForm>;
 }
 type DeletionReview = Readonly<{ pubkey: string; session: IdentitySession }>;
 function DeleteIdentity({ review, transition, actions, npub, busy, onClose }: {
@@ -118,19 +117,18 @@ function DeleteIdentity({ review, transition, actions, npub, busy, onClose }: {
       onClose();
     });
   };
-  return <View style={styles.group}>
+  return <SettingsForm action={available === true && !busy ? {label: "Authenticate and delete", testID: "identity-delete-confirm", onPress: confirm} : undefined}>
     <Text accessibilityRole="header" style={styles.title}>{busy ? 'Confirm on your device' : 'Delete saved identity?'}</Text>
     <Text selectable testID="identity-delete-npub" style={styles.npub}>{npub}</Text>
     <Text style={styles.detail}>This removes this account’s local key and saved signer connections from this device. Keep a separate backup of any local key you need to restore. Your currently selected identity and open napplets stay as they are.</Text>
     {busy ? <>
       <ActivityIndicator color={colors.accent} />
-      <Action title="Cancel deletion" testID="identity-delete-cancel-auth" onPress={() => { transition.cancelDeletion(review.session); try { actions.cancelDeletion(); } catch { /* Revoked locally before native cleanup. */ } }} subdued />
+      <Action title="Cancel deletion" testID="identity-delete-cancel-auth" onPress={() => { transition.cancelDeletion(review.session); try { actions.cancelDeletion(); } catch { /* Revoked locally before native cleanup. */ } }} />
     </> : <>
-      <Action title="Keep identity" testID="identity-delete-cancel" onPress={onClose} subdued />
-      {available === true ? <Action title="Authenticate and delete" testID="identity-delete-confirm" onPress={confirm} />
-        : <Text testID="identity-delete-unavailable" style={styles.detail}>{available === null ? 'Checking device authentication…' : 'Device authentication is unavailable. Enable a device passcode or supported biometric authentication to delete an identity.'}</Text>}
+      <Action title="Keep identity" testID="identity-delete-cancel" onPress={onClose} />
+      {available !== true && <Text testID="identity-delete-unavailable" style={styles.detail}>{available === null ? 'Checking device authentication…' : 'Device authentication is unavailable. Enable a device passcode or supported biometric authentication to delete an identity.'}</Text>}
     </>}
-  </View>;
+  </SettingsForm>;
 }
 function failureMessage(failure: ReturnType<IdentityTransition['getSnapshot']>['failure']): string {
   if (isSignerFailureCode(failure)) return signerFailureMessage(failure);
@@ -165,7 +163,7 @@ function SavedIdentities({session, transition, format, canDelete, onDelete}: {
       </Pressable>
       {canDelete && identity.pubkey !== session.vault.selectedPubkey && (session.vault.pendingDeletion === null || session.vault.pendingDeletion === identity.pubkey) &&
         <Action title={identity.status === 'deleting' ? 'Finish deletion' : 'Delete identity'} testID={`identity-delete-${identity.pubkey}`}
-          onPress={() => onDelete(identity.pubkey)} subdued />}
+          onPress={() => onDelete(identity.pubkey)} />}
       </View>)}
   </>;
 }
@@ -175,45 +173,40 @@ function DeveloperSettings({ onSignedLab, openBundledTest, openStateLab }: Pick<
   if (!developerToolsEnabled) return null;
   return <SettingsSection title="Developer tools" detail="Test napplets and compatibility" id="developer">
       <NativeSignerCheck />
-      {runtime && <Action title="Open NAP Support" testID="settings-open-nap-support" onPress={() => openStateLab('nap-support')} subdued />}
+      {runtime && <Action title="Open NAP Support" testID="settings-open-nap-support" onPress={() => openStateLab('nap-support')} />}
       {runtime && <>
         <Text accessibilityRole="header" style={styles.title}>Signed host test</Text>
-        <Action title="Inspect signed test napplet" testID="settings-inspect-signed-test" onPress={onSignedLab} subdued />
+        <Action title="Inspect signed test napplet" testID="settings-inspect-signed-test" onPress={onSignedLab} />
       </>}
       {fixturePublisher && <FixturePublisherLab service={fixturePublisher} format={formatNpub} />}
       <Text accessibilityRole="header" style={styles.title}>Bundled test napplets</Text>
-      <Action title="Open UX Lab" testID="settings-open-ux-lab" onPress={openBundledTest} subdued />
+      <Action title="Open UX Lab" testID="settings-open-ux-lab" onPress={openBundledTest} />
       {runtime && <>
-        <Action title="Open Upload Lab" testID="settings-open-upload-lab" onPress={() => openStateLab('upload-lab')} subdued />
-        <Action title="Open Resource Lab" testID="settings-open-resource-lab" onPress={() => openStateLab('resource-lab')} subdued />
-        <Action title="Open Routing Lab" testID="settings-open-routing-lab" onPress={() => openStateLab('routing-lab')} subdued />
-        <Action title="Open Routing Lab Peer" testID="settings-open-routing-lab-peer" onPress={() => openStateLab('routing-lab-peer')} subdued />
-        <Action title="Open Feed Lab" testID="settings-open-feed-lab" onPress={() => openStateLab('feed-lab')} subdued />
-        <Action title="Open Approval Lab" testID="settings-open-approval-lab" onPress={() => openStateLab('approval-lab')} subdued />
-        <Action title="Open Close Lab" testID="settings-open-close-lab" onPress={() => openStateLab('close-lab')} subdued />
-        <Action title="Open State Lab" testID="settings-open-state-lab" onPress={() => openStateLab('state-lab')} subdued />
-        <Action title="Open State Lab Peer" testID="settings-open-state-lab-peer" onPress={() => openStateLab('state-lab-peer')} subdued />
-        <Action title="Open State Lab · other publisher" testID="settings-open-state-lab-other-publisher" onPress={() => openStateLab('state-lab-other-publisher')} subdued />
+        <Action title="Open Upload Lab" testID="settings-open-upload-lab" onPress={() => openStateLab('upload-lab')} />
+        <Action title="Open Resource Lab" testID="settings-open-resource-lab" onPress={() => openStateLab('resource-lab')} />
+        <Action title="Open Routing Lab" testID="settings-open-routing-lab" onPress={() => openStateLab('routing-lab')} />
+        <Action title="Open Routing Lab Peer" testID="settings-open-routing-lab-peer" onPress={() => openStateLab('routing-lab-peer')} />
+        <Action title="Open Feed Lab" testID="settings-open-feed-lab" onPress={() => openStateLab('feed-lab')} />
+        <Action title="Open Approval Lab" testID="settings-open-approval-lab" onPress={() => openStateLab('approval-lab')} />
+        <Action title="Open Close Lab" testID="settings-open-close-lab" onPress={() => openStateLab('close-lab')} />
+        <Action title="Open State Lab" testID="settings-open-state-lab" onPress={() => openStateLab('state-lab')} />
+        <Action title="Open State Lab Peer" testID="settings-open-state-lab-peer" onPress={() => openStateLab('state-lab-peer')} />
+        <Action title="Open State Lab · other publisher" testID="settings-open-state-lab-other-publisher" onPress={() => openStateLab('state-lab-other-publisher')} />
       </>}      </SettingsSection>;
 }
-function SettingsHome({session, onBackup, onCloseBackup, onDelete, onImport, onPublic, onSignedLab, openDiscovery, openBundledTest, openStateLab, openPublished, publishedSessions, checkPublishedUpdate}: Omit<SettingsActions, 'closeSettings'> & {
+function SettingsHome({session, onBackup, onCloseBackup, onDelete, onImport, onPublic, onSignedLab, openBundledTest, openStateLab, publishedSessions, checkPublishedUpdate}: Omit<SettingsActions, 'closeSettings' | 'openPublished' | 'openDiscovery'> & {
   session: IdentitySession; onBackup(): void; onCloseBackup(): void; onDelete(pubkey: string): void; onImport(): void; onPublic(): void; onSignedLab(): void;
 }) {
   const { styles } = useShellStyles(createStyles);
   const {transition, formatNpub, runtime, actions, relaySettings, resourceSettings, uploadSettings, listAccess, routing, notificationSettings} = useIdentityOwner();
   const publishedCount = publishedSessions.length;
+  const accountCount = session.vault.identities.length;
   return <>
-      <View style={styles.currentIdentity}><Text style={styles.identityLabel}>Your identity</Text>
-        <Text selectable testID="settings-full-npub" style={styles.npub}>{formatNpub(session.vault.selectedPubkey)}</Text>
+      <View style={styles.currentIdentity}><LaunchHorizon /><View style={styles.identityCopy}><Text style={styles.identityLabel}>Active identity</Text>
+        <Text selectable testID="settings-full-npub" style={styles.npub}>{formatNpub(session.vault.selectedPubkey)}</Text></View>
       </View>
-      {runtime && openDiscovery && <Action title="Discover napplets" testID="settings-open-discovery" onPress={openDiscovery} />}
-      {runtime && <OpenPublishedNapplet open={openPublished} />}
       <View style={styles.sections}>
-      {runtime && publishedCount > 0 && <SettingsSection title="Published napplet updates"
-        detail={`${publishedCount} ${publishedCount === 1 ? 'napplet' : 'napplets'} in this workspace`} id="published-updates">
-        {publishedSessions.map(session => <UpdatePublishedNapplet key={session.id} session={session} check={checkPublishedUpdate} />)}
-      </SettingsSection>}
-      <SettingsSection title="Identity" detail="Accounts, signing methods and backup" id="identity">
+      <SettingsSection title="Identity" detail={`${accountCount} saved ${accountCount === 1 ? 'identity' : 'identities'} · Signing and backup`} id="identity">
       <SignerSettings transition={transition} session={session} actions={actions} format={formatNpub}
         onBackup={onBackup} onCloseBackup={onCloseBackup} />
       <SavedIdentities session={session} transition={transition} format={formatNpub} canDelete={Boolean(actions)}
@@ -234,6 +227,12 @@ function SettingsHome({session, onBackup, onCloseBackup, onDelete, onImport, onP
       {notificationSettings && <NotificationSettings key={`notifications-${session.epoch}`} service={notificationSettings} />}
       <IdentityListSettings service={listAccess ?? null} user={session.vault.selectedPubkey} />
       </SettingsSection>
+      </View>
+      <View style={styles.sections}>
+      {runtime && publishedCount > 0 && <SettingsSection title="Published napplet updates"
+        detail={`${publishedCount} ${publishedCount === 1 ? 'napplet' : 'napplets'} in this workspace`} id="published-updates">
+        {publishedSessions.map(session => <UpdatePublishedNapplet key={session.id} session={session} check={checkPublishedUpdate} />)}
+      </SettingsSection>}
       <DeveloperSettings onSignedLab={onSignedLab} openBundledTest={openBundledTest} openStateLab={openStateLab} />
       <AboutSettings />
       </View>
@@ -241,7 +240,7 @@ function SettingsHome({session, onBackup, onCloseBackup, onDelete, onImport, onP
 }
 export function IdentitySettings({ openDiscovery, openBundledTest, openStateLab, openPublished, publishedSessions, checkPublishedUpdate }: SettingsActions) {
   const { styles, colors } = useShellStyles(createStyles);
-  const { transition, formatNpub, actions } = useIdentityOwner();
+  const { transition, formatNpub, actions, runtime } = useIdentityOwner();
   const state = useSyncExternalStore(transition.subscribe, transition.getSnapshot);
   const [importing, setImporting] = useState(false);
   const [publicEntry, setPublicEntry] = useState(false);
@@ -270,14 +269,10 @@ export function IdentitySettings({ openDiscovery, openBundledTest, openStateLab,
     const pending = transition.getSnapshot().pending;
     if (pending) transition.cancel(pending);
   }, [transition]);
-  if (deletion && actions) return <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.body}>
-    <DeleteIdentity review={deletion} transition={transition} actions={actions} npub={formatNpub(deletion.pubkey)}
-      busy={state.phase === 'deleting'} onClose={closeDeletion} />
-  </ScrollView>;
-  if (backupReview && actions) return <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.body}>
-    <IdentityBackup actions={actions} session={state.session} npub={formatNpub(state.session.vault.selectedPubkey)} reviewing
-      onReview={() => setBackupReview(true)} onClose={() => setBackupReview(false)} Action={Action} />
-  </ScrollView>;
+  if (deletion && actions) return <DeleteIdentity review={deletion} transition={transition} actions={actions} npub={formatNpub(deletion.pubkey)}
+      busy={state.phase === 'deleting'} onClose={closeDeletion} />;
+  if (backupReview && actions) return <IdentityBackup actions={actions} session={state.session} npub={formatNpub(state.session.vault.selectedPubkey)} reviewing
+      onReview={() => setBackupReview(true)} onClose={() => setBackupReview(false)} Action={Action} />;
   if (developerToolsEnabled && signedLab) return <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
     <PublishedHostLab onClose={() => setSignedLab(false)} sessionAuthority={() => transition.sessionAuthority()} />
   </ScrollView>;
@@ -287,24 +282,25 @@ export function IdentitySettings({ openDiscovery, openBundledTest, openStateLab,
   if (state.phase === 'switching') return <View style={styles.body}>
     <ActivityIndicator color={colors.accent} /><Text accessibilityRole="header" style={styles.title}>Updating account…</Text>
   </View>;
-  if (state.pending) return <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-    <ConfirmIdentity pending={state.pending} transition={transition} npub={formatNpub(state.pending.pubkey)} />
-  </ScrollView>;
-  return <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-    {state.failure && <Text testID="identity-change-error" accessibilityLiveRegion="polite" style={styles.detail}>{failureMessage(state.failure)}</Text>}
-    {publicEntry ? <PublicIdentity transition={transition} onClose={() => setPublicEntry(false)} /> : importing ? <ImportIdentity transition={transition} onClose={closeImport} /> : <>
-      <SettingsHome session={state.session} onBackup={() => setBackupReview(true)} onCloseBackup={() => setBackupReview(false)}
+  if (state.pending) return <ConfirmIdentity pending={state.pending} transition={transition} npub={formatNpub(state.pending.pubkey)} />;
+  const failure = state.failure && <Text testID="identity-change-error" accessibilityLiveRegion="polite" style={styles.detail}>{failureMessage(state.failure)}</Text>;
+  if (publicEntry) return <>{failure}<PublicIdentity transition={transition} onClose={() => setPublicEntry(false)} /></>;
+  if (importing) return <>{failure}<ImportIdentity transition={transition} onClose={closeImport} /></>;
+  const content = <>
+    {failure}
+    <SettingsHome session={state.session} onBackup={() => setBackupReview(true)} onCloseBackup={() => setBackupReview(false)}
         onDelete={pubkey => setDeletion(Object.freeze({pubkey, session: state.session}))} onImport={() => setImporting(true)} onPublic={() => setPublicEntry(true)} onSignedLab={() => setSignedLab(true)}
-        openDiscovery={openDiscovery} openBundledTest={openBundledTest} openStateLab={openStateLab} openPublished={openPublished} publishedSessions={publishedSessions} checkPublishedUpdate={checkPublishedUpdate} />
-    </>}
-
-  </ScrollView>;
+        openBundledTest={openBundledTest} openStateLab={openStateLab} publishedSessions={publishedSessions} checkPublishedUpdate={checkPublishedUpdate} />
+  </>;
+  if (runtime) return <OpenPublishedNapplet open={openPublished} discover={openDiscovery}>{content}</OpenPublishedNapplet>;
+  return <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">{content}</ScrollView>;
 }
 const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.create({
-  body: { padding: 24, paddingTop: 12, paddingBottom: 40, gap: 28 },
-  currentIdentity: { borderLeftWidth: 2, borderColor: colors.accent, paddingLeft: 14, gap: 8 },
+  body: { padding: 24, paddingTop: 12, paddingBottom: 40, gap: 16 },
+  currentIdentity: { overflow: 'hidden', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  identityCopy: { padding: 12, backgroundColor: colors.surface, gap: 4 },
   identityLabel: { fontFamily: fonts.mono, fontSize: 11, letterSpacing: 1.5, color: colors.muted, textTransform: 'uppercase' },
-  sections: { gap: 0 },
+  sections: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.glass },
   group: { gap: 20 },
   title: { fontFamily: fonts.display, fontSize: 28, color: colors.text },
   detail: { fontFamily: fonts.body, color: colors.muted, fontSize: 16, lineHeight: 24 },
@@ -312,8 +308,6 @@ const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.cre
   input: { fontFamily: fonts.body, color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: 0, minHeight: 56, padding: 16, fontSize: 16 },
   identity: { padding: 16, gap: 10, borderWidth: 1, borderColor: colors.border, borderRadius: 0 },
   identitySelect: { minHeight: 56, gap: 10 },
-  action: { padding: 18, minHeight: 56, borderRadius: 0, backgroundColor: colors.primary, alignItems: 'center' },
-  subdued: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-  actionText: { textTransform: 'uppercase', letterSpacing: 1.8, fontFamily: fonts.strong, color: colors.onPrimary, fontSize: 14, },
-  subduedText: { textTransform: 'uppercase', letterSpacing: 1.8, fontFamily: fonts.strong, color: colors.text, fontSize: 14 },
+  action: { padding: 18, minHeight: 56, borderRadius: 0, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center' },
+  actionText: { textTransform: 'uppercase', letterSpacing: 1.8, fontFamily: fonts.strong, color: colors.text, fontSize: 14 },
 });

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import {  StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { ShellPressable as Pressable } from './ShellPressable';
 import { useShellStyles, type ShellFonts, type ShellPalette } from './theme';
 
@@ -15,10 +15,10 @@ export function SettingsSection({ title, detail, id, children }: { title: string
   </View>;
 }
 const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.create({
-  section: { borderTopWidth: 1, borderColor: colors.border },
-  trigger: { minHeight: 82, flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 18 },
-  label: { flex: 1, gap: 5 },
-  title: { color: colors.text, fontFamily: fonts.medium, fontSize: 21 },
+  section: { paddingHorizontal: 14 },
+  trigger: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 11 },
+  label: { flex: 1, gap: 2 },
+  title: { color: colors.text, fontFamily: fonts.strong, fontSize: 20 },
   detail: { color: colors.muted, fontFamily: fonts.body, fontSize: 14, lineHeight: 20 },
   indicator: { color: colors.accent, fontFamily: fonts.body, fontSize: 28 },
   pressed: { opacity: 0.65 },

@@ -1,6 +1,8 @@
 import { PublishedLaunchReview } from './PublishedLaunchReview';
-import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Keyboard, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Keyboard, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SettingsDock } from './SettingsForm';
+import { ThumbAction } from './ThumbAction';
 import { ShellPressable as Pressable } from './ShellPressable';
 import { ShellTextInput as TextInput } from './ShellTextInput';
 import type { SettingsActions } from './Shell';
@@ -10,7 +12,7 @@ import { publishedOpenFailureText } from './published-settings-actions';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 
 /** A trusted settings surface for one explicit published open. */
-export function OpenPublishedNapplet({ open }: { open: SettingsActions['openPublished'] }) {
+export function OpenPublishedNapplet({ open, discover, children }: { open: SettingsActions['openPublished']; discover?: SettingsActions['openDiscovery']; children: ReactNode }) {
   const { styles, colors } = useShellStyles(createStyles);
   const [link, setLink] = useState('');
   const [busy, setBusy] = useState(false);
@@ -55,33 +57,38 @@ export function OpenPublishedNapplet({ open }: { open: SettingsActions['openPubl
   if (review) return <PublishedLaunchReview target={{ ...review, requiredDomains: review.domains }}
     title="Allow this napplet?" changesAccess onAccept={() => decide(true)} onCancel={() => decide(false)}
     ids={reviewIds} />;
-  return <View style={styles.group}>
+  const showDiscover = discover && !link.trim();
+  return <View style={styles.screen}>
+    <ScrollView automaticallyAdjustKeyboardInsets keyboardDismissMode="on-drag" contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+      {children}
+      <View style={styles.group}>
     <Text accessibilityRole="header" style={styles.title}>Open a napplet</Text>
-    <Text style={styles.detail}>Paste a named napplet address (naddr) or a snapshot link (nevent). This version cannot open root napplets. We’ll verify the signed release and show you its publisher and requested access.</Text>
-    <Text style={styles.addressLabel}>Napplet address</Text>
+    <Text style={styles.addressLabel}>Named address or snapshot link</Text>
     <TextInput testID="settings-napplet-address" accessibilityLabel="Napplet address" value={link} onChangeText={value => { setLink(value); setError(''); }}
       autoCapitalize="none" autoCorrect={false} maxLength={8192} editable={!busy} placeholder="naddr1… or nevent1…" placeholderTextColor={colors.muted}
-      style={styles.input} returnKeyType="done" onSubmitEditing={start} />
+      style={styles.input} returnKeyType="go" onSubmitEditing={start} />
     {error !== '' && <Text testID="settings-napplet-error" accessibilityLiveRegion="polite" style={styles.error}>{error}</Text>}
     {busy && <Text testID="settings-napplet-loading" accessibilityLiveRegion="polite" style={styles.detail}>Finding and verifying the signed napplet…</Text>}
-    <Pressable accessibilityRole="button" testID="settings-open-napplet" disabled={busy || !link.trim()} accessibilityState={{ disabled: busy || !link.trim() }} onPress={start} style={[styles.action, (busy || !link.trim()) && styles.disabled]}>
-      {busy ? <ActivityIndicator color={colors.background} /> : <Text style={styles.actionText}>Verify and open</Text>}
-    </Pressable>
+      </View>
+    </ScrollView>
+    <SettingsDock>
+    {showDiscover ? <ThumbAction label="Discover napplets" testID="settings-open-discovery" onPress={discover} />
+      : <ThumbAction label={busy ? "Verifying…" : "Verify and open"} testID="settings-open-napplet" disabled={busy || !link.trim()} onPress={start} />}
     {busy && <Pressable accessibilityRole="button" testID="settings-napplet-cancel" onPress={cancel} style={styles.secondary}><Text style={styles.secondaryText}>Cancel opening</Text></Pressable>}
+    </SettingsDock>
   </View>;
 }
 
 const reviewIds = { review: 'settings-napplet-review', approve: 'settings-napplet-approve', cancel: 'settings-napplet-reject' };
 
 const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.create({
-  disabled: { opacity: 0.45 },
+  screen: { flex: 1 },
+  body: { paddingHorizontal: 20, paddingVertical: 12, gap: 12 },
   addressLabel: { fontFamily: fonts.mono, fontSize: 11, letterSpacing: 1.2, textTransform: 'uppercase', color: colors.muted },
   group: { gap: 12 }, title: { fontFamily: fonts.display, color: colors.text, fontSize: 28, },
   detail: { fontFamily: fonts.body, color: colors.muted, fontSize: 15, lineHeight: 22 },
   error: { fontFamily: fonts.body, color: colors.accent, fontSize: 15, lineHeight: 22 },
   input: { fontFamily: fonts.body, color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: 0, minHeight: 56, padding: 16, fontSize: 16 },
-  action: { padding: 18, minHeight: 56, borderRadius: 0, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
-  actionText: { textTransform: 'uppercase', letterSpacing: 1.8, fontFamily: fonts.strong, color: colors.onPrimary, fontSize: 14, },
   secondary: { padding: 18, minHeight: 56, borderRadius: 0, borderColor: colors.border, borderWidth: 1, alignItems: 'center' },
   secondaryText: { textTransform: 'uppercase', letterSpacing: 1.8, fontFamily: fonts.strong, color: colors.text, fontSize: 14 },
 });

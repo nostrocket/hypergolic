@@ -25,7 +25,7 @@ const profiles = [
 ];
 
 async function boot(page: Page, options: { relay?: boolean; direct?: boolean; pending?: boolean; legacyBrowser?: boolean; pendingProfiles?: boolean; fullHost?: boolean; partialOutbox?: boolean; rejectOutbox?: boolean; embedded?: boolean; community?: 'populated' | 'held' | 'invalid'; holdRecommenderProfile?: boolean; holdArtwork?: boolean; failArtwork?: boolean } = {},
-  feed?: ReturnType<typeof manifest>[], exactOnly: ReturnType<typeof manifest>[] = []) {
+  feed?: ReturnType<typeof manifest>[], exactOnly: ReturnType<typeof manifest>[] = [], profileRecords = profiles) {
   const external: string[] = [];
   await page.route(/^https?:/, route => {
     if (route.request().url() === 'https://parent.fixture.test/') return route.fulfill({contentType: 'text/html',
@@ -140,7 +140,7 @@ async function boot(page: Page, options: { relay?: boolean; direct?: boolean; pe
         },
       },
     };
-  }, { input: feed ?? [grid, tool, spoof], exactOnly, profiles, options, png, imageHash, paginated: Boolean(feed), communityList });
+  }, { input: feed ?? [grid, tool, spoof], exactOnly, profiles: profileRecords, options, png, imageHash, paginated: Boolean(feed), communityList });
   await page.goto(options.embedded ? 'https://parent.fixture.test/' : 'https://fixture.test/');
   return external;
 }
@@ -422,11 +422,11 @@ test('detail uses signed metadata and keeps opening reachable at narrow widths',
   await page.getByRole('button', { name: 'Details for Grid Game', exact: true }).click();
   await expect(page.locator('#detail-heading')).toHaveText('Grid Game');
   await expect(page.locator('.publication-date')).toHaveAttribute('datetime', new Date(grid.created_at * 1000).toISOString());
-  await expect(page.locator('.access-summary')).toHaveText('Uses Nostr relays.');
+  await expect(page.getByRole('list', {name: 'Required access requested by the publisher'})).toHaveText('Nostr relays');
   await expect(page.getByRole('heading', { name: 'Required', exact: true })).toBeHidden();
-  await page.getByText('Access details', { exact: true }).click();
+  await page.locator('summary[aria-label="Access details"]').click();
   await expect(page.getByRole('heading', { name: 'Required', exact: true })).toBeVisible();
-  await page.getByText('Access details', { exact: true }).click();
+  await page.locator('summary[aria-label="Access details"]').click();
   await page.setViewportSize({ width: 320, height: 568 });
   await page.getByText('Publication details', { exact: true }).click();
   await expect(page.getByText(gridAddress, { exact: true })).toBeVisible();
@@ -435,12 +435,24 @@ test('detail uses signed metadata and keeps opening reachable at narrow widths',
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
-test('detail names absent publisher media without inventing artwork', async ({ page }) => {
+test('detail keeps the theme’s launch cover separate from missing publisher media', async ({ page }) => {
   await boot(page, { direct: true }, [tool]);
   await page.getByRole('button', { name: 'Details for Relay Tool', exact: true }).click();
   await expect(page.locator('#detail .detail-art')).toBeHidden();
   await expect(page.locator('#detail .detail-art img')).toHaveCount(0);
   await expect(page.locator('#publisher-name')).toContainText('npub');
+  await page.setViewportSize({width: 350, height: 720});
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
+    const cover = page.locator('.launch-cover img:visible');
+    await expect(cover).toHaveCount(1);
+    await expect(cover).toHaveClass(theme === 'dark' ? 'launch-night' : 'launch-morning');
+    await expect.poll(() => cover.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBe(676);
+  }
+  const plate = (await page.locator('.launch-cover').boundingBox())!;
+  const title = (await page.locator('#detail-heading').boundingBox())!;
+  expect(plate.width).toBeGreaterThan(300);
+  expect(title.y).toBeGreaterThanOrEqual(plate.y + plate.height);
 });
 
 test('access rows describe publisher declarations without assuming a host policy', async ({page}) => {
@@ -471,7 +483,7 @@ test('access details render distinct decorative icons for the declared domains',
     extra: [['R', 'identity'], ['R', 'relay'], ['R', 'cvm'], ['O', 'dm'], ['O', 'future']] });
   await boot(page, {}, [app]);
   await page.getByRole('button', { name: 'Details for Access icons', exact: true }).click();
-  await page.getByText('Access details', { exact: true }).click();
+  await page.locator('summary[aria-label="Access details"]').click();
   const icons = page.locator('.cap-row svg[aria-hidden="true"] path');
   await expect(icons).toHaveCount(5);
   const paths = await icons.evaluateAll(nodes => nodes.map(node => node.getAttribute('d')));
@@ -650,7 +662,8 @@ test('same-publisher apps have legible title initials and stable distinct colour
     }
   }
   await page.getByRole('button', {name: 'Details for Faultline', exact: true}).click();
-  await expect(page.locator('.app-icon-large .tile-pattern i')).toHaveCount(9);
+  await expect(page.locator('.app-icon-large')).toBeHidden();
+  await expect(page.locator('.launch-cover img:visible')).toHaveCount(1);
 });
 
 test('title initials remain during artwork loading and verified art replaces them cleanly', async ({page}) => {
@@ -775,5 +788,62 @@ test('details finds the first usable signed screenshot after unavailable, mismat
   await page.getByRole('button', {name: 'Details for Screenshot gallery'}).click();
   await expect(page.getByRole('img', {name: 'First usable screenshot'})).toBeVisible();
   await expect(page.locator('.detail-art img')).toHaveCount(1);
+  await expect(page.locator('.launch-cover')).toBeHidden();
   await expect(page.getByRole('button', {name: 'Open Napplet', exact: true})).toBeVisible();
+});
+
+test('Details anchors Open while a large-text disclosure scrolls and releases its press state', async ({page}) => {
+  await page.setViewportSize({width: 390, height: 844});
+  await boot(page);
+  await page.getByRole('button', {name: 'Details for Grid Game'}).click();
+  await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+  await page.locator('#publication-reference summary').click();
+  const scroll = page.locator('.detail-body');
+  await scroll.evaluate(element => { element.scrollTop = 0; });
+  const open = page.getByRole('button', {name: 'Open Napplet'});
+  const before = (await open.boundingBox())!;
+  await scroll.evaluate(element => { element.scrollTop = element.scrollHeight; });
+  expect(await scroll.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+  expect(await open.boundingBox()).toEqual(before);
+  expect(before.y).toBeGreaterThanOrEqual(844 * .65);
+  expect(before.y + before.height).toBeLessThanOrEqual(844);
+  await page.mouse.move(before.x + 10, before.y + 20);
+  await page.mouse.down();
+  await expect(open).toHaveAttribute('data-pressing', '');
+  const start = await open.evaluate(element => element.style.getPropertyValue('--label-shift'));
+  await page.mouse.move(before.x + before.width - 10, before.y + 20);
+  expect(await open.evaluate(element => element.style.getPropertyValue('--label-shift'))).not.toEqual(start);
+  await page.mouse.move(0, 0);
+  await page.mouse.up();
+  await expect(open).not.toHaveAttribute('data-pressing', '');
+  expect(await page.evaluate(() => (window as any).fixture.opens)).toEqual([]);
+});
+
+test('a short publication without preview keeps the final row beside its Open action', async ({page}) => {
+  await boot(page, {fullHost: true});
+  await page.getByRole('button', {name: 'Details for Relay Tool'}).click();
+  await expect(page.locator('.detail-art')).toBeEmpty();
+  const row = (await page.getByRole('button', {name: 'Recommend publicly'}).boundingBox())!;
+  const open = (await page.getByRole('button', {name: 'Open Napplet'}).boundingBox())!;
+  expect(open.y - (row.y + row.height)).toBeLessThanOrEqual(24);
+  expect(open.y).toBeGreaterThanOrEqual(844 * .65);
+});
+
+test('a publication without a preview lists its signed required access once', async ({page}) => {
+  const app = manifest({title: 'Declared access', extra: [['R', 'inc'], ['R', 'gamepad'], ['R', 'future'], ['O', 'dm']]});
+  await boot(page, {}, [app], [], [profile(1, clock, '{"display_name":"J"}')]);
+  await page.getByRole('button', {name: 'Details for Declared access'}).click();
+  await expect(page.locator('#publisher-name')).toHaveText('J');
+  const tiles = page.getByRole('list', {name: 'Required access requested by the publisher'});
+  await expect(tiles).toBeVisible();
+  const access = (await page.locator('.access-details summary').boundingBox())!;
+  const publisher = (await page.locator('.detail-publisher summary').boundingBox())!;
+  expect(access.y + access.height).toBeLessThanOrEqual(publisher.y);
+  expect(access.height).toBeGreaterThanOrEqual(44);
+  expect(publisher.height).toBeGreaterThanOrEqual(44);
+  expect(publisher.width).toBeGreaterThanOrEqual(44);
+  await expect(tiles.getByRole('listitem')).toHaveText(['future', 'Gamepad', 'Napplet messages']);
+  await expect(page.getByRole('heading', {name: 'Access', exact: true})).toHaveCount(1);
+  await page.locator('summary[aria-label="Access details"]').click();
+  await expect(page.locator('.cap-row[data-requirement="optional"]')).toContainText('Direct messages');
 });

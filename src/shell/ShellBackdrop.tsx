@@ -9,6 +9,13 @@ const artwork = {
   light: { launch: require('../../assets/shell/launch-morning.jpg'), sky: require('../../assets/shell/sky-light.png'), planet: require('../../assets/shell/planet-light.png'), beam: require('../../assets/shell/beam-light.png'), flare: require('../../assets/shell/flare-light.png') },
 };
 
+/** Keep the real launch site and the end of its ignition trail inside short headers. */
+export function LaunchHorizon() {
+  const { styles, isDark } = useShellStyles(createStyles);
+  return <Image source={artwork[isDark ? 'dark' : 'light'].launch} style={styles.launchHorizon}
+    contentFit="cover" contentPosition="bottom" transition={0} accessible={false} />;
+}
+
 export function WorkspaceBackdrop({ home, overview }: { home: boolean; overview: boolean }) {
   return <ShellBackdrop mood={home ? 'home' : overview ? 'shelf' : 'running'} />;
 }
@@ -31,6 +38,7 @@ export function ShellBackdrop({ mood = 'shelf' }: { mood?: Mood }) {
 }
 
 const createStyles = (colors: ShellPalette) => StyleSheet.create({
+  launchHorizon: { width: '100%', height: 84, backgroundColor: colors.surface },
   backdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, overflow: 'hidden', backgroundColor: colors.background },
   horizon: { top: '30%' },
   planet: { position: 'absolute', left: '-60%', width: '220%', aspectRatio: 1 },
