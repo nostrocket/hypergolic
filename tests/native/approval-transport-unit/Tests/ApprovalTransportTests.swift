@@ -390,3 +390,18 @@ private func waitForReplies(_ replies: Replies, count: Int) async {
     harness.registry.finish(token, response: nil)
   }
 }
+
+@Test func devicePromptReturnsOnlyToItsReviewedPublication() {
+  let harness = Harness()
+  harness.focusAndForeground()
+  let (token, _) = harness.admit(1)
+  #expect(harness.registry.take(token) != nil)
+  #expect(harness.registry.approve(token))
+  harness.registry.setForeground(false, presenting: token)
+  #expect(!harness.registry.isApproved(token))
+  harness.registry.setForeground(true)
+  #expect(harness.registry.isApproved(token))
+  harness.registry.setForeground(false, presenting: "different-operation")
+  harness.registry.setForeground(true)
+  #expect(!harness.registry.isLive(token))
+}
