@@ -349,11 +349,15 @@ final class ApprovalTransportRegistry: @unchecked Sendable {
     dispatch(deliveries)
   }
 
-  func setForeground(_ foreground: Bool) {
+  private var suspendedPrompt: String?
+  func setForeground(_ foreground: Bool, presenting token: String? = nil) {
     var deliveries: [Delivery] = []
     lock.withLock {
       deliveries = sweepLocked()
-      authority.setForeground(foreground)
+      let retained = token.flatMap { rows[$0]?.request }
+      authority.setForeground(foreground, retaining: retained)
+      if foreground, let suspendedPrompt, rows[suspendedPrompt] != nil { _ = authority.resumeReview() }
+      suspendedPrompt = foreground || retained == nil ? nil : token
       deliveries += sweepLocked()
     }
     dispatch(deliveries)
@@ -480,7 +484,7 @@ private final class ApprovalApplicationLifecycle {
     if UIApplication.shared.applicationState == .active { registry.setForeground(true) }
     let center = NotificationCenter.default
     observers.append(center.addObserver(forName: UIApplication.willResignActiveNotification,
-      object: nil, queue: .main) { [weak registry] _ in registry?.setForeground(false) })
+      object: nil, queue: .main) { [weak registry] _ in registry?.setForeground(false, presenting: NativeSigningSourceFacade.promptingToken(kind: "approval")) })
     observers.append(center.addObserver(forName: UIApplication.didEnterBackgroundNotification,
       object: nil, queue: .main) { [weak registry] _ in registry?.setForeground(false) })
     observers.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification,

@@ -28,6 +28,7 @@ export function quotaReply(value: unknown, domains: readonly string[], error: 'q
   if (typeof type !== 'string' || type.length > 64 || !domains.includes(type.split('.')[0]!) ||
       typeof id !== 'string' || !id.length || id.length > 128 || new TextEncoder().encode(id).length > 128) return null;
 
+  if (type.startsWith('fs.')) return {type:type + '.result',id,error};
   if (type === 'relay.subscribe' || type === 'outbox.subscribe') {
     if (typeof subId !== 'string' || !subId.length || subId.length > 128 || new TextEncoder().encode(subId).length > 128) return null;
     return {type: type === 'relay.subscribe' ? 'relay.closed' : 'outbox.closed', subId, reason: error};

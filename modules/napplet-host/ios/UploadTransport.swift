@@ -70,7 +70,7 @@ import Network
     if !config.domains.contains("upload") || leases.register(generation, identity: config.user, registration: config.snapshot, granted: true) { return true }
     recoveryReads.revoke(generation); return false
   }
-  nonisolated static func foreground(_ value: Bool) { recoveryReads.foreground(value); leases.foreground(value); Task { @MainActor in sweep() } }
+  nonisolated static func foreground(_ value: Bool, retaining token: String? = nil) { recoveryReads.foreground(value); leases.foreground(value, retaining: token); Task { @MainActor in sweep() } }
   static func focus(_ generation: String, active: Bool) { leases.focus(generation, active: active); sweep() }
   static func revoke(_ generation: String) {
     recoveryReads.revoke(generation); leases.revoke(generation); sweep()

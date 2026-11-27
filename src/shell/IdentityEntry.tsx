@@ -1,3 +1,4 @@
+import {FilePickerView} from '../files/FilePickerView';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { ActivityIndicator, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
@@ -51,7 +52,7 @@ export function IdentityEntry() {
   const { styles, isDark } = useShellStyles(createStyles);
   const state = useSyncExternalStore(subscribeIdentity, getIdentityState);
   useEffect(() => { startIdentity(); }, []);
-  if (state.status === 'ready') return <IdentityShell owner={state.owner} />;
+  if (state.status === 'ready') return <><IdentityShell owner={state.owner} /><FilePickerView /></>;
   if (state.status === 'opening') return <OpeningScreen />;
   const message = unavailableMessages[state.status];
   return <SafeAreaView style={styles.screen}>

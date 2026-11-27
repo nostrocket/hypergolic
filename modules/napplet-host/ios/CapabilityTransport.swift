@@ -10,7 +10,10 @@ final class CapabilityLifecycle: @unchecked Sendable {
   init() {
     let center = NotificationCenter.default
     for name in [UIApplication.willResignActiveNotification, UIApplication.didEnterBackgroundNotification] {
-      observers.append(center.addObserver(forName: name, object: nil, queue: nil) { _ in CapabilityTransport.foreground(false); CvmTransport.shared.foreground(false) })
+      observers.append(center.addObserver(forName: name, object: nil, queue: nil) { notification in
+        let token = notification.name == UIApplication.willResignActiveNotification ? NativeSigningSourceFacade.promptingToken(kind: "upload") : nil
+        CapabilityTransport.foreground(false, retainingUpload: token); CvmTransport.shared.foreground(false)
+      })
     }
     observers.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: nil) { _ in CapabilityTransport.foreground(true); CvmTransport.shared.foreground(true) })
     Task { @MainActor in let active = UIApplication.shared.applicationState == .active; CapabilityTransport.foreground(active); CvmTransport.shared.foreground(active) }
@@ -79,7 +82,7 @@ struct CapabilityConfiguration {
     case "feed-lab": expected = Set(domains).contains("outbox") ? ["identity", "outbox", "relay", "theme"] : ["identity", "relay", "theme"]
     case "published":
       expected = Set(domains)
-      let supported: Set<String> = ["identity", "storage", "theme", "relay", "resource", "upload", "link", "intent", "inc", "notify", "config", "outbox", "keys", "media", "common", "cvm", "lists"]
+      let supported: Set<String> = ["identity", "storage", "theme", "relay", "resource", "upload", "link", "intent", "inc", "notify", "config", "outbox", "keys", "media", "common", "cvm", "lists", "fs"]
       guard domains.count <= supported.count, expected.isSubset(of: supported),
             !expected.contains("lists") || expected.contains("relay") else {
         throw Invalid.configuration
@@ -164,10 +167,10 @@ enum CapabilityTransport {
   // UIKit lifecycle and app-owned services are exercised by native app tests.
   #if canImport(UIKit)
   nonisolated static let lifecycle = CapabilityLifecycle()
-  nonisolated static func foreground(_ value: Bool) {
+  nonisolated static func foreground(_ value: Bool, retainingUpload: String? = nil) {
     RoutingTransport.shared.foreground(value)
     LinkTransport.foreground(value)
-    UploadTransport.foreground(value)
+    UploadTransport.foreground(value, retaining: retainingUpload)
     let revoked = leases.setForeground(value)
     Task { @MainActor in
       for token in revoked { pending.removeValue(forKey: token)?.reply(nil) }

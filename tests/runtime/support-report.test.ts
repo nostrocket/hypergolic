@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { capabilityCompatibility, supportForDomain } from '../../src/runtime/support-report.ts';
+import { capabilityCompatibility, reviewedCapabilityCompatibility, supportForDomain } from '../../src/runtime/support-report.ts';
 import { NAP_CATALOGUE } from '../../src/runtime/nap-catalogue.ts';
 
 test('published admission filters capabilities independently of catalogue status', () => {
-  assert.deepEqual(capabilityCompatibility(['media', 'theme', 'fs', 'outbox']).domains, ['media', 'outbox', 'theme']);
-  assert.deepEqual(capabilityCompatibility(['media', 'theme', 'fs', 'outbox']).unsupportedDomains, ['fs']);
-  assert.equal(supportForDomain('fs').status, 'unavailable');
+  assert.deepEqual(capabilityCompatibility(['media', 'theme', 'fs', 'outbox', 'gamepad']).domains, ['fs', 'media', 'outbox', 'theme']);
+  assert.deepEqual(capabilityCompatibility(['media', 'theme', 'fs', 'outbox', 'gamepad']).unsupportedDomains, ['gamepad']);
+  assert.equal(supportForDomain('fs').status, 'available');
   assert.equal(supportForDomain('media').status, 'available');
   assert.match(supportForDomain('media').detail, /Playlists and napplet-owned sessions are unavailable/);
   assert.equal(supportForDomain('resource').status, 'available');
@@ -26,7 +26,7 @@ test('support and request changes require a different remembered review', () => 
   const first = capabilityCompatibility(['fs', 'theme']);
   assert.equal(first.review, capabilityCompatibility(['theme', 'fs']).review);
   assert.notEqual(first.review, capabilityCompatibility(['theme', 'media']).review);
-  assert.notEqual(first.review, capabilityCompatibility(['fs', 'theme'], ['theme', 'fs']).review);
+  assert.notEqual(first.review, reviewedCapabilityCompatibility(['fs', 'theme'], 'before-fs').review);
 });
 
 test('new list writes require a Lists grant alongside Relay and preserve the old grant on saved sessions',async()=>{

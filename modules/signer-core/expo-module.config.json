@@ -5,12 +5,14 @@
   ],
   "android": {
     "modules": [
-      "org.nostrocket.hypergolic.signercore.SignerCoreModule"
+      "org.nostrocket.hypergolic.signercore.SignerCoreModule",
+      "org.nostrocket.hypergolic.signercore.HypergolicDevicePrivacyModule"
     ]
   },
   "apple": {
     "modules": [
-      "HypergolicSignerCoreModule"
+      "HypergolicSignerCoreModule",
+      "HypergolicDevicePrivacyModule"
     ],
     "podspecPath": "HypergolicSignerCore.podspec"
   }

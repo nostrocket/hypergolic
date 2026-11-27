@@ -121,3 +121,23 @@ before retry/cleanup. Remove exact test-owned apps/runners and scratch; compare
 before/after inventories and verify retained app/account/data remain intact.
 Uninstall alone does not establish Keychain erasure. Final acceptance is a
 separate decision after all required evidence and open gaps are reconciled.
+
+### Device privacy regression
+
+Use a disposable account and a phone with device authentication configured. Enable
+workspace lock under Settings → Device privacy. Check a cold open and a cold link,
+Lock now, a return from the app switcher before and after one minute, and a
+return after locking the phone. Inspect the recent-apps preview in both portrait
+and landscape. Cancelling unlock must leave the workspace covered.
+
+Enable local signature confirmation. Review a public test event, cancel the OS
+prompt, and check that no signature or relay publication occurred. Approve a
+different event once and check the signed bytes and approved relay destinations.
+Repeat immediately to check for a fresh prompt. Switch accounts to verify separate
+preferences. Repeat with additional confirmation enabled for an external signer,
+including its round trip inside and outside the workspace grace period. On
+Android, return a valid event from the disposable NIP-55 provider. The native
+“Resume signer request?” dialog must be visible above the shell. Resume the
+original event and check its relay outcome. Cancel a separate pre-handoff
+prompt and check that the provider received no new request. Verify
+that backup and key deletion still request their own device confirmation.

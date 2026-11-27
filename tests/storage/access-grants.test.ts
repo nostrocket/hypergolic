@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { openShellDatabase, type ShellDatabase } from '../../src/storage/database.ts';
-import { TABLES } from '../../src/storage/schema.ts';
+import { VERSION_4_TABLES as TABLES } from '../../src/storage/schema.ts';
 import { assertCode, DiskSQLite, hex, registration, setup } from './harness.ts';
 
 function control(database: ShellDatabase, patch: Parameters<typeof registration>[0] = {}) {
@@ -84,7 +84,7 @@ test('v2 database migrates to v4 without changing retained app data', async t =>
   assert.equal(await controlPort.selectedVersion(), hex(3));
   assert.equal(await controlPort.readAccessGrant(), null);
   const migrated = sqlite.raw();
-  assert.equal(migrated.prepare('PRAGMA user_version').get()!['user_version'], 4);
+  assert.equal(migrated.prepare('PRAGMA user_version').get()!['user_version'], 5);
   assert.equal(migrated.prepare('SELECT count(*) AS n FROM app_versions').get()!['n'], 1);
   assert.equal(migrated.prepare('SELECT count(*) AS n FROM selected_versions').get()!['n'], 1);
   migrated.close(); sqlite.connections.delete(migrated);

@@ -70,6 +70,7 @@ class SignerCoreModule : Module() {
   }
 
   private fun active(): Boolean = NativeIdentityOwnerAccess.owns(appContext) &&
+    appContext.currentActivity?.let { NativeDevicePrivacy.accessible(it) } == true &&
     appContext.runtime.reactContext?.lifecycleState == LifecycleState.RESUMED
 
   private fun claimedOwner() {
@@ -162,7 +163,7 @@ class SignerCoreModule : Module() {
   private fun cancelSigning(kind: String? = null, token: String? = null) {
     val cleanup = synchronized(session.lock) {
       val current = signing?.takeIf { kind == null || it.kind == kind && it.token == token }
-      if (current != null) signing = null
+      if (current != null) { signing = null; NativeDevicePrivacy.cancelExpiredPrompt() }
       val cancelHandoff = handoffs.cancellation(kind, token)
       val cancelCompleted = completedSignings.cancellation(kind, token)
       val cancelAndroid = androidSigners?.cancellation(kind, token)
@@ -664,24 +665,33 @@ class SignerCoreModule : Module() {
             }
             val remote = pending.remote
             val android = pending.android
+            val confirm = NativeReviewPanel.Confirmation { done ->
+              if (!NativeDevicePrivacy.accessible(activity)) done.accept(false)
+              else if (!NativeDevicePrivacy.requiresSigning(activity, source.identity, remote != null || android != null)) done.accept(true)
+              else CoroutineScope(continuation.context).launch {
+                done.accept(NativeDevicePrivacy.confirm(activity, "Confirm signature", "Sign the event you just reviewed.") {
+                  valid() && NativeDevicePrivacy.accessible(activity)
+                })
+              }
+            }
             if (remote == null && android == null) {
-              panel.show(activity, current, appContext, review, source.requester, "Local protected identity", source.destinations,
-                valid, { source.sign {
+              panel.showConfirmed(activity, current, appContext, review, source.requester, "Local protected identity", source.destinations,
+                valid, confirm, { done -> done.accept(source.sign {
                   synchronized(session.lock) {
                     session.require(pending.epoch, ::active)
                     if (signing !== pending) throw NativeVault.Error("AUTHORIZATION_DENIED")
                     records.assertRevision(appContext, vaultId, expected)
                     current.approveOnce(appContext, review)
                   }
-                } }, completed)
+                }) }, completed)
             } else {
               val method = if (remote != null) {
                 "Saved NIP-46 signer\nPeer: ${remote.peer}\nSigner relays:\n${remote.relays.joinToString("\n")}\n\nPublication destinations are listed separately below."
               } else {
                 "Saved Android signer app\nPackage: ${android!!.packageName}\nSigning certificates (SHA-256):\n${android.certificateSha256s.joinToString("\n")}"
               }
-              panel.showAsync(activity, current, appContext, review, source.requester, method,
-                source.destinations, valid, { deliver ->
+              panel.showConfirmed(activity, current, appContext, review, source.requester, method,
+                source.destinations, valid, confirm, { deliver ->
                   source.sign {
                     synchronized(session.lock) {
                       session.require(pending.epoch, ::active)

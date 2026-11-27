@@ -29,6 +29,35 @@ public final class NativeSigningSourceCapture: @unchecked Sendable {
 
 /// No Expo function exposes this facade. The signer borrows native host state by its original token.
 public enum NativeSigningSourceFacade {
+  // This marker preserves only the reviewed native request during a system authentication
+  // sheet. It cannot approve an event or survive a real background transition.
+  private final class Prompt: @unchecked Sendable {
+    let lock = NSLock()
+    var row: (kind: String, token: String, operation: UUID, resumed: Bool)?
+  }
+  private static let prompt = Prompt()
+  public static func beginDevicePrompt(kind: String, token: String, operation: UUID) {
+    prompt.lock.withLock { prompt.row = (kind, token, operation, false) }
+  }
+  public static func finishDevicePrompt(_ operation: UUID, success: Bool) {
+    prompt.lock.withLock {
+      guard prompt.row?.operation == operation else { return }
+      if success { prompt.row?.resumed = true } else { prompt.row = nil }
+    }
+  }
+  public static func devicePromptState(kind: String, token: String) -> String? {
+    prompt.lock.withLock {
+      guard let row = prompt.row, row.kind == kind, row.token == token else { return nil }
+      return row.resumed ? "resumed" : "pending"
+    }
+  }
+  static func promptingToken(kind: String) -> String? {
+    prompt.lock.withLock {
+      guard let row = prompt.row, !row.resumed, row.kind == kind else { return nil }
+      return row.token
+    }
+  }
+
   private static func requester(_ registration: [String: Any]) -> String? {
     guard let publisher = registration["publisher"] as? String, let app = registration["appId"] as? String,
       let version = registration["version"] as? String, let session = registration["sessionId"] as? String else { return nil }

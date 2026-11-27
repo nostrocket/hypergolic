@@ -1,6 +1,7 @@
 import { developerToolsEnabled } from '../config/build-info';
 import { AboutSettings } from './AboutSettings';
 import { backgroundIdentitySettings } from './identity-settings-lifecycle';
+import { DevicePrivacySettings } from './DevicePrivacySettings';
 import { SignerSettings } from './SignerSettings';
 import { identityChangeCopy } from './identity-change-copy';
 import { NativeSignerCheck } from './NativeSignerCheck';
@@ -212,6 +213,9 @@ function SettingsHome({session, onBackup, onCloseBackup, onDelete, onImport, onP
         onDelete={onDelete} />
       <Action title="Read-only public profile" testID="settings-public-identity" onPress={onPublic} />
       <Action title="Import identity" testID="settings-import-identity" onPress={onImport} />
+      </SettingsSection>
+      <SettingsSection title="Device privacy" detail="Workspace lock and signing confirmation" id="device-privacy">
+        <DevicePrivacySettings key={session.vault.selectedPubkey} pubkey={session.vault.selectedPubkey} />
       </SettingsSection>
       <SettingsSection title="Connections" detail="Relays, downloads and file uploads" id="connections">
       <RelaySettings service={relaySettings} />

@@ -14,7 +14,7 @@ import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 
 /** API 30+ system-owned credential/strong-biometric dialog. No JS-supplied authentication result. */
-internal class SystemDeletionAuthentication {
+class SystemDeletionAuthentication {
   private val main = Handler(Looper.getMainLooper())
   private class Pending(val signal: CancellationSignal, val canPresent: () -> Boolean, val finish: (Boolean) -> Unit)
   // Accessed on the main thread only. Exact object identity protects later prompts from stale callbacks.
@@ -29,7 +29,11 @@ internal class SystemDeletionAuthentication {
     ) == BiometricManager.BIOMETRIC_SUCCESS
   }
 
-  suspend fun authenticate(activity: Activity, details: DeletionAuthority.Prompt, canPresent: () -> Boolean): Boolean = withContext(Dispatchers.Main.immediate) {
+  internal suspend fun authenticate(activity: Activity, details: DeletionAuthority.Prompt, canPresent: () -> Boolean): Boolean =
+    authenticate(activity, details.title, details.explanation, details.description, canPresent)
+
+  suspend fun authenticate(activity: Activity, title: String, explanation: String, description: String,
+    canPresent: () -> Boolean): Boolean = withContext(Dispatchers.Main.immediate) {
     if (!available(activity) || pending != null || !canPresent()) throw DeletionAuthority.Denied()
     suspendCancellableCoroutine { continuation ->
       val signal = CancellationSignal()
@@ -50,9 +54,9 @@ internal class SystemDeletionAuthentication {
       }
       try {
         val prompt = BiometricPrompt.Builder(activity)
-          .setTitle(details.title)
-          .setSubtitle(details.explanation)
-          .setDescription(details.description)
+          .setTitle(title)
+          .setSubtitle(explanation)
+          .setDescription(description)
           .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL)
           .setConfirmationRequired(true)
           .build()

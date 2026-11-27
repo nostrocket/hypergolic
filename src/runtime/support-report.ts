@@ -11,9 +11,10 @@ const LIVE_MEDIA_SUPPORT_PROFILE = `${PROFILE_PREFIX}-media-live-mp3-v1`;
 const COMMON_SOCIAL_SUPPORT_PROFILE=`${PROFILE_PREFIX}-common-social-v1`;
 const CVM_SUPPORT_PROFILE=`${PROFILE_PREFIX}-cvm-free-foreground-v1`;
 const LISTS_SUPPORT_PROFILE = 'public-napplet-recommendations-v1';
-export const REPORTED_SUPPORT_PROFILE = `${PROFILE_PREFIX}-outbox-keys-v1/${MEDIA_SUPPORT_PROFILE}/${LIVE_MEDIA_SUPPORT_PROFILE}/${PROFILE_PREFIX}-common-read-v1/${COMMON_SOCIAL_SUPPORT_PROFILE}/${CVM_SUPPORT_PROFILE}/${LISTS_SUPPORT_PROFILE}`;
-export type ReviewedSupportProfile = 'current' | 'before-lists' | 'before-live' | 'before-cvm' | 'before-social' | 'before-common' | 'legacy';
-const beforeListsDomains = Object.freeze(SUPPORTED_CAPABILITY_DOMAINS.filter(domain => domain !== 'lists'));
+export const REPORTED_SUPPORT_PROFILE = `${PROFILE_PREFIX}-outbox-keys-v1/${MEDIA_SUPPORT_PROFILE}/${LIVE_MEDIA_SUPPORT_PROFILE}/${PROFILE_PREFIX}-common-read-v1/${COMMON_SOCIAL_SUPPORT_PROFILE}/${CVM_SUPPORT_PROFILE}/${LISTS_SUPPORT_PROFILE}/private-documents-v1`;
+export type ReviewedSupportProfile = 'current' | 'before-fs' | 'before-lists' | 'before-live' | 'before-cvm' | 'before-social' | 'before-common' | 'legacy';
+const beforeFsDomains = Object.freeze(SUPPORTED_CAPABILITY_DOMAINS.filter(domain => domain !== 'fs'));
+const beforeListsDomains = Object.freeze(beforeFsDomains.filter(domain => domain !== 'lists'));
 const beforeCommonDomains = Object.freeze(beforeListsDomains.filter(domain => domain !== 'common' && domain !== 'cvm'));
 const legacyDomains = Object.freeze(['identity', 'storage', 'theme', 'relay', 'resource', 'upload',
   'link', 'intent', 'inc', 'notify', 'config', 'outbox']);
@@ -22,6 +23,7 @@ const notes: Readonly<Record<string, string>> = Object.freeze({
   shell: 'Handshake and scoped discovery are implemented. Availability is not a full conformance assessment.',
   theme: 'Shell colours are delivered; the selected theme profile is bounded.',
   identity: 'Read-only public identity data; protected or encrypted data is unavailable.',
+  fs: 'Open and save files in Documents for this napplet and account. Other apps and device folders are outside this scope.',
   storage: 'Scoped get, set, remove and keys; version and instance isolation apply.',
   relay: 'Bounded query, subscriptions and approved publication. Encrypted publication is unavailable.',
   resource: 'Bounded HTTPS, Blossom, one-hop Nostr and data bytes; selected audio/video playback. Hashtree, SVG and streaming are unavailable.',
@@ -53,12 +55,13 @@ function supportProfile(requested: readonly string[], policy: ReviewedSupportPro
   if (intent && added.length) added.push('intent');
   const profile = added.length ? `${PROFILE_PREFIX}-${added.join('-')}-v1` : previous;
   const finite = requested.includes('media') ? `${profile}/${MEDIA_SUPPORT_PROFILE}` : profile;
-  const media = (policy==='current'||policy==='before-lists')&&requested.includes('media')?`${finite}/${LIVE_MEDIA_SUPPORT_PROFILE}`:finite;
+  const media = (policy==='current'||policy==='before-fs'||policy==='before-lists')&&requested.includes('media')?`${finite}/${LIVE_MEDIA_SUPPORT_PROFILE}`:finite;
   const read=policy!=='before-common'&&requested.includes('common')?`${media}/${PROFILE_PREFIX}-common-read-v1`:media;
   const social=granted.includes('common')&&granted.includes('identity')&&(granted.includes('relay')||granted.includes('outbox'));
-  const selected=(['current','before-lists','before-live','before-cvm'].includes(policy))&&social&&requested.includes('common')?`${read}/${COMMON_SOCIAL_SUPPORT_PROFILE}`:read;
-  const cvm = (policy==='current'||policy==='before-lists'||policy==='before-live')&&requested.includes('cvm')&&granted.includes('cvm')?`${selected}/${CVM_SUPPORT_PROFILE}`:selected;
-  return policy === 'current' && granted.includes('lists') && requested.includes('lists') ? `${cvm}/${LISTS_SUPPORT_PROFILE}` : cvm;
+  const selected=(['current','before-fs','before-lists','before-live','before-cvm'].includes(policy))&&social&&requested.includes('common')?`${read}/${COMMON_SOCIAL_SUPPORT_PROFILE}`:read;
+  const cvm = (policy==='current'||policy==='before-fs'||policy==='before-lists'||policy==='before-live')&&requested.includes('cvm')&&granted.includes('cvm')?`${selected}/${CVM_SUPPORT_PROFILE}`:selected;
+  const lists = (policy === 'current' || policy === 'before-fs') && granted.includes('lists') && requested.includes('lists') ? `${cvm}/${LISTS_SUPPORT_PROFILE}` : cvm;
+  return policy === 'current' && granted.includes('fs') && requested.includes('fs') ? lists + '/private-documents-v1' : lists;
 }
 
 export function capabilityCompatibility(requested: readonly string[], available: readonly string[] = SUPPORTED_CAPABILITY_DOMAINS,
@@ -73,6 +76,6 @@ export function capabilityCompatibility(requested: readonly string[], available:
 }
 
 export function reviewedCapabilityCompatibility(requested: readonly string[], policy: ReviewedSupportProfile,combinedRequested:readonly string[]=requested) {
-  const available = policy === 'legacy' ? legacyDomains : policy === 'before-common' ? beforeCommonDomains : policy==='current'?SUPPORTED_CAPABILITY_DOMAINS:policy==='before-lists'||policy==='before-live'?beforeListsDomains:beforeListsDomains.filter(domain=>domain!=='cvm');
+  const available = policy === 'legacy' ? legacyDomains : policy === 'before-common' ? beforeCommonDomains : policy==='current'?SUPPORTED_CAPABILITY_DOMAINS:policy==='before-fs'?beforeFsDomains:policy==='before-lists'||policy==='before-live'?beforeListsDomains:beforeListsDomains.filter(domain=>domain!=='cvm');
   return capabilityCompatibility(requested, available, policy,combinedRequested);
 }

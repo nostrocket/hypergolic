@@ -9,7 +9,11 @@ final class FixtureReleaseTransport: @unchecked Sendable {
   private init() {
     let center=NotificationCenter.default
     for name in [UIApplication.willResignActiveNotification,UIApplication.didEnterBackgroundNotification] {
-      observers.append(center.addObserver(forName:name,object:nil,queue:nil){[weak self] _ in self?.owner.foreground(false)})
+      observers.append(center.addObserver(forName:name,object:nil,queue:nil){[weak self] notification in
+        let prompt = notification.name == UIApplication.willResignActiveNotification
+          ? (NativeSigningSourceFacade.promptingToken(kind: "fixture-upload") ?? NativeSigningSourceFacade.promptingToken(kind: "fixture-manifest")) : nil
+        self?.owner.foreground(false, retaining: prompt)
+      })
     }
     observers.append(center.addObserver(forName:UIApplication.didBecomeActiveNotification,object:nil,queue:nil){[weak self] _ in self?.owner.foreground(true)})
     Task {@MainActor in self.owner.foreground(UIApplication.shared.applicationState == .active)}

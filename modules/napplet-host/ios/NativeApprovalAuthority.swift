@@ -118,7 +118,7 @@ final class NativeApprovalAuthority: @unchecked Sendable {
     }
   }
 
-  func setForeground(_ foreground: Bool) {
+  func setForeground(_ foreground: Bool, retaining reviewed: NativeApprovalRequestHandle? = nil) {
     withState {
       _ = prune(&$0)
       guard !$0.clockFailed else { return }
@@ -126,7 +126,7 @@ final class NativeApprovalAuthority: @unchecked Sendable {
       guard !foreground else { return }
       $0.paused = true
       $0.current = nil
-      removeApproved(state: &$0)
+      removeApproved(except: reviewed, state: &$0)
     }
   }
 
@@ -361,9 +361,9 @@ final class NativeApprovalAuthority: @unchecked Sendable {
     if let current = state.current, handles.contains(current) { state.current = nil }
   }
 
-  private func removeApproved(session: NativeApprovalSessionHandle? = nil, state: inout State) {
+  private func removeApproved(session: NativeApprovalSessionHandle? = nil, except retained: NativeApprovalRequestHandle? = nil, state: inout State) {
     let handles = state.requests.compactMap { handle, request -> NativeApprovalRequestHandle? in
-      guard session == nil || request.session == session else { return nil }
+      guard handle != retained, session == nil || request.session == session else { return nil }
       if case .approved = request.status { return handle }
       return nil
     }

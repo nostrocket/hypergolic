@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { openShellDatabase, type ShellDatabase } from '../../src/storage/database.ts';
-import { TABLES } from '../../src/storage/schema.ts';
+import { VERSION_4_TABLES as TABLES } from '../../src/storage/schema.ts';
 import { assertCode, DiskSQLite, hex, registration, setup } from './harness.ts';
 
 const old = hex(3), next = hex(4);
@@ -54,7 +54,7 @@ test('v1 update receipts migrate with an unknown event pin and refuse replay as 
   const database = await openShellDatabase(sqlite, 'android');
   const control = database.bindApp(registration()).port;
   const migrated = sqlite.raw();
-  assert.equal(migrated.prepare('PRAGMA user_version').get()!['user_version'], 4);
+  assert.equal(migrated.prepare('PRAGMA user_version').get()!['user_version'], 5);
   migrated.close(); sqlite.connections.delete(migrated);
   assert.deepEqual(await control.receipt('accepted_update_1'), {
     receiptId: 'accepted_update_1', fromVersion: old, targetVersion: next, rowCount: 0, byteCount: 0,

@@ -1,13 +1,13 @@
 {
   "schema": 1,
   "productionSources": {
-    "modules/napplet-host/ios/NativeApprovalAuthority.swift": "fb7d946e3d7c1b27326084df090fbb4a64e120b34bbe73a2af46301cf3a6c7b0"
+    "modules/napplet-host/ios/NativeApprovalAuthority.swift": "461b90c3c1ccb94fc763fefbce067d3c41c53d0d77de112a43fd12b286f6b419"
   },
   "testSources": {
-    "Tests/NativeApprovalAuthorityTests.swift": "d31e0a043b3ab3233a0951f33188d840cd2cc7d9f5df1f2158ddf88af69aedf7"
+    "Tests/NativeApprovalAuthorityTests.swift": "5d41d0ebf773955d71defeef272249b06dcbec5159f722c15a71d0262a39e01f"
   },
   "harnessFiles": {
-    "README.md": "ddc8ff927ae1b2db4c082bf75cf9e0b89586bacba3ca967da781d20d6d432d73",
+    "README.md": "2d729ae544807b84cf732c99d279aa09e91344334ca0c26bf4c2d3049ddf97a1",
     "Package.swift.template": "035a51f62312609a4ff1ece06cd7ab15fa9cff96d78921b8b8f5988a11c57c58",
     "runner.py": "5683231ea801c11df671eb6548a2e7bc3f7c3957760a8f35915b92f034d61e34"
   }

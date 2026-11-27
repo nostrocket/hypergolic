@@ -1,3 +1,4 @@
+import {documentOperation} from '../files/documents.ts';
 import { configure, schema, SHELL_DATABASE } from './schema.ts';
 import { decodeSnapshot, encodeSnapshot, identifier, publicKey, revision, text, utf8Bytes, version } from './codec.ts';
 import { fail, LIMITS, sanitize, ShellStorageError, type AccessGrant, type Binding, type RequestOptions, type Scope, type SQLiteConnection, type SQLiteModule, type StringStorage, type TrustedApp, type TrustedRegistration, type TrustedUser } from './ports.ts';
@@ -35,6 +36,7 @@ export interface AppStorageControl {
 }
 /** Trusted-shell factory. Never expose this object, binding/revoke controls or SQL to a napplet. */
 export interface ShellDatabase {
+  document?(owner: TrustedApp, input: Record<string, unknown>): Promise<Record<string, unknown>>;
   bindWorkspace(owner: TrustedUser): Binding<WorkspaceStorage>;
   bindStorage(registration: TrustedRegistration): Binding<StringStorage>;
   bindApp(owner: TrustedApp): Binding<AppStorageControl>;
@@ -414,6 +416,11 @@ export async function openShellDatabase(sqlite: SQLiteModule, platform: 'android
     bindWorkspace: (owner: TrustedUser) => {
       validated.clear();
       return bindWorkspace(connection, owner);
+    },
+    document: (owner: TrustedApp, input: Record<string, unknown>) => {
+      appParams(owner);
+      const binding = connection.lease(owner.assertActive);
+      return binding.submit(undefined, check => connection.transaction(check, io => documentOperation(io,owner,input))).finally(binding.revoke);
     },
     bindStorage: (owner: TrustedRegistration) => bindStorage(connection, owner, validated),
     bindApp: (owner: TrustedApp) => bindApp(connection, owner),

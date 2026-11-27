@@ -31,9 +31,18 @@ public final class NativeReviewPanel {
     showAsync(activity, core, owner, review, requester, method, destinations, ownerActive,
       done -> done.accept(approve.get()), completed);
   }
+  public interface Confirmation {
+    void confirm(Consumer<Boolean> completed);
+  }
   public void showAsync(Activity activity, NativeSignerCore core, Object owner, NativeSignerCore.Review review,
       String requester, String method, java.util.List<String> destinations, BooleanSupplier ownerActive,
       Consumer<Consumer<String>> approve, Consumer<String> completed) {
+    showConfirmed(activity, core, owner, review, requester, method, destinations, ownerActive,
+      callback -> callback.accept(true), approve, completed);
+  }
+  public void showConfirmed(Activity activity, NativeSignerCore core, Object owner, NativeSignerCore.Review review,
+      String requester, String method, java.util.List<String> destinations, BooleanSupplier ownerActive,
+      Confirmation confirmation, Consumer<Consumer<String>> approve, Consumer<String> completed) {
     if (Looper.myLooper() != Looper.getMainLooper() || dialog != null || activity.isFinishing() || activity.isDestroyed() || !ownerActive.getAsBoolean() || !core.canReview(owner, review)) throw new NativeSignerCore.Denied();
     TextView details = new TextView(activity);
     int inset = (int)(20 * activity.getResources().getDisplayMetrics().density);
@@ -45,7 +54,7 @@ public final class NativeReviewPanel {
     content.addView(details);
     content.addView(new EventPages(activity, review.unsignedEvent()));
     ScrollView scroll = new ScrollView(activity); scroll.addView(content);
-    boolean[] settled = {false}, dispatching = {false};
+    boolean[] settled = {false}, dispatching = {false}, confirming = {false};
     Runnable finishDenied = () -> {
       if (settled[0]) return; settled[0] = true;
       try { core.reject(owner, review); } catch (NativeSignerCore.Denied ignored) {}
@@ -65,8 +74,8 @@ public final class NativeReviewPanel {
     dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
       if (settled[0]) return;
       if (!ownerActive.getAsBoolean() || activity.isFinishing() || activity.isDestroyed()) { finishDenied.run(); return; }
-      if (dispatching[0]) return;
-      dispatching[0] = true;
+      if (dispatching[0] || confirming[0]) return;
+      confirming[0] = true;
       dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
       Consumer<String> finish = result -> {
         Runnable delivery = () -> {
@@ -83,7 +92,13 @@ public final class NativeReviewPanel {
         };
         if (Looper.myLooper() == Looper.getMainLooper()) delivery.run(); else main.post(delivery);
       };
-      try { approve.accept(finish); } catch (RuntimeException failure) { finishDenied.run(); }
+      confirmation.confirm(accepted -> {
+        if (settled[0] || !confirming[0]) return;
+        confirming[0] = false;
+        if (!accepted || !ownerActive.getAsBoolean() || !core.canReview(owner, review)) { finishDenied.run(); return; }
+        dispatching[0] = true;
+        try { approve.accept(finish); } catch (RuntimeException failure) { finishDenied.run(); }
+      });
     });
     expiration = new Runnable() { public void run() {
       if(settled[0])return;

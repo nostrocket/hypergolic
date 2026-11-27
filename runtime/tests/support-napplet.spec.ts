@@ -10,7 +10,7 @@ test('bundled Support napplet reads live report, filters, expands and has no fil
   const frame = page.frameLocator('#napplet');
   await expect(frame.locator('#host')).toContainText('Hypergolic');
   await expect(frame.locator('#naps > li')).toHaveCount(35);
-  await expect(frame.locator('li[data-domain="fs"] .support')).toHaveText('✕Unavailable');
+  await expect(frame.locator('li[data-domain="fs"] .support')).toHaveText('✓Available');
   await expect(frame.locator('li[data-domain="media"] .support')).toHaveText('✓Available');
   await expect(frame.locator('li[data-domain="resource"] .support')).toHaveText('✓Available');
   await expect(frame.locator('li[data-domain="outbox"] .support')).toHaveText('✓Available');
@@ -26,7 +26,7 @@ test('bundled Support napplet reads live report, filters, expands and has no fil
   await page.screenshot({path: testInfo.outputPath('fs.png')});
   await frame.getByLabel('Find a NAP').fill('');
   await frame.getByRole('button', {name: 'Available', exact: true}).click();
-  await expect(frame.locator('li[data-domain="fs"]')).toHaveCount(0);
+  await expect(frame.locator('li[data-domain="fs"]')).toHaveCount(1);
   await frame.getByRole('button', {name: 'All', exact: true}).click();
   await page.screenshot({path: testInfo.outputPath('catalogue.png')});
   const result = await frame.locator('body').evaluate(async () => {
