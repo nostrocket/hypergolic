@@ -22,6 +22,8 @@ const mocks = {
  'test:fixture': fixture,
  'expo': `import {fixture,store} from 'test:fixture'; export function requireNativeModule(name) { fixture.calls.push('module:'+name); if(name==='HypergolicSignerCore'&&!fixture.missingStore) return store; throw Error('TEST: module unavailable'); }`,
  'react-native': `import {forbidden} from 'test:fixture'; export const Platform={OS:'ios'}; export const Alert={alert:()=>forbidden('native-alert')};
+ export const AppState={addEventListener:()=>forbidden('native-app-state-listener')};
+ export const Button='Button',FlatList='FlatList',TextInput='TextInput';
  export const View='View',Text='Text',Pressable='Pressable',ActivityIndicator='ActivityIndicator',Modal='Modal',ScrollView='ScrollView',StatusBar='StatusBar'; export const useColorScheme=()=> 'light'; export const StyleSheet={create:value=>value};`,
  'expo-crypto': `import {forbidden} from 'test:fixture'; export const CryptoDigestAlgorithm={SHA256:'SHA-256'}; export const digest=()=>forbidden('artifact-digest'); export const digestStringAsync=()=>forbidden('config-digest'); export const randomUUID=()=>forbidden('random-id');`,
  'expo-sqlite': `import {forbidden} from 'test:fixture'; export const openDatabaseAsync=()=>forbidden('open-sqlite');`,
