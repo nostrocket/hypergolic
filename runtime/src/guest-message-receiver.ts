@@ -9,6 +9,7 @@ type GuestMessageRoutes = Readonly<{
   routing: ReturnType<typeof createGuestRouting>;
   keys: ReturnType<typeof createKeysSession> | null;
   sendMedia: ReturnType<typeof createNativeClient>['sendMedia'] | null;
+  files?: ((value:Record<string,unknown>)=>void) | undefined;
   cvm?:((value:unknown)=>void)|null;
   account?(): string | undefined;
   closed(): boolean;
@@ -47,6 +48,7 @@ export function guestMessageReceiver(frame: HTMLIFrameElement, source: Window, r
       return;
     }
     if (routes.live() && handleMediaRequest(event.data, routes.sendMedia, value => source.postMessage(value, '*'))) return;
+    if(typeof event.data?.type==='string'&&event.data.type.startsWith('fs.')){routes.files?.(event.data);return;}
     if(typeof event.data?.type==='string'&&event.data.type.startsWith('cvm.')){routes.cvm?.(event.data);return;}
     routes.dispatch(event);
   };

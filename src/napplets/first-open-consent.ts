@@ -110,7 +110,7 @@ export async function requestFirstOpenConsent(
   if (current?.supportReview === supportReview && sameSet(existing, domains)) {
     accepted = { domains, supportProfile: 'current' };
   } else {
-    for (const profile of ['before-lists','before-live','before-cvm','before-social','before-common','legacy'] as const) {
+    for (const profile of ['before-fs','before-lists','before-live','before-cvm','before-social','before-common','legacy'] as const) {
       const previous = publishedCapabilityCompatibility(requestedDomains, optionalDomains, profile);
       if (current?.supportReview === previous.review && sameSet(existing, previous.grantedDomains) &&
           (mode === 'saved-pin' || !domains.includes('media') && (!domains.includes('common') || !domains.includes('identity') || !domains.some(domain=>domain==='relay'||domain==='outbox')) && sameSet(previous.domains, domains))) {

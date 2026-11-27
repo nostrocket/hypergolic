@@ -8,7 +8,7 @@ import { parseRelayQuery, type RelayQueryRequest } from '../network/relay-query-
 import { LIMITS, type Scope } from '../storage/ports.ts';
 
 export const CAPABILITY_LIMITS = Object.freeze({ messageBytes: 2 * 1024 * 1024, sessionRequests: 1024 });
-export const SUPPORTED_CAPABILITY_DOMAINS = Object.freeze(['identity', 'storage', 'theme', 'relay', 'resource', 'upload', 'link', 'intent', 'inc', 'notify', 'config', 'outbox', 'keys', 'media', 'common', 'cvm', 'lists']);
+export const SUPPORTED_CAPABILITY_DOMAINS = Object.freeze(['identity', 'storage', 'theme', 'relay', 'resource', 'upload', 'link', 'intent', 'inc', 'notify', 'config', 'outbox', 'keys', 'media', 'common', 'cvm', 'lists', 'fs']);
 // Published and bundled admission use the same reviewed domain set; operations still enforce grants.
 const NATIVE_CAPABILITY_DOMAINS = SUPPORTED_CAPABILITY_DOMAINS;
 export const IDENTITY_OPERATIONS = ['identity.getPublicKey', 'identity.getRelays', 'identity.getProfile',

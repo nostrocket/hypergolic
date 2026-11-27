@@ -82,7 +82,7 @@ struct CapabilityConfiguration {
     case "feed-lab": expected = Set(domains).contains("outbox") ? ["identity", "outbox", "relay", "theme"] : ["identity", "relay", "theme"]
     case "published":
       expected = Set(domains)
-      let supported: Set<String> = ["identity", "storage", "theme", "relay", "resource", "upload", "link", "intent", "inc", "notify", "config", "outbox", "keys", "media", "common", "cvm", "lists"]
+      let supported: Set<String> = ["identity", "storage", "theme", "relay", "resource", "upload", "link", "intent", "inc", "notify", "config", "outbox", "keys", "media", "common", "cvm", "lists", "fs"]
       guard domains.count <= supported.count, expected.isSubset(of: supported),
             !expected.contains("lists") || expected.contains("relay") else {
         throw Invalid.configuration

@@ -8,7 +8,7 @@ export type GuestBindingTransport = {send(value: object): void; listen(callback:
 /** One guest-created channel per verified frame generation. */
 export function createGuestPort(frame: HTMLIFrameElement, source: Window, bridge: ShellBridge,
   domains: readonly string[], account: () => string | undefined, consumeIntent: (receipt: unknown) => void,
-  routes: {enforcePrivateChannel: boolean; checkpoint: ((value: Record<string, unknown>) => void) | undefined; keys: ReturnType<typeof createKeysSession> | null; media(value: unknown): boolean;
+  routes: {files?: ((value:Record<string,unknown>)=>void) | undefined; enforcePrivateChannel: boolean; checkpoint: ((value: Record<string, unknown>) => void) | undefined; keys: ReturnType<typeof createKeysSession> | null; media(value: unknown): boolean;
     cvm: ((value: unknown) => void) | null; mesh: ((value: unknown) => boolean) | undefined}, ready: () => void, fail: () => void) {
   let port: MessagePort | undefined;
   let stopObserving: (() => void) | undefined;
@@ -55,6 +55,7 @@ export function createGuestPort(frame: HTMLIFrameElement, source: Window, bridge
           routes.checkpoint?.(value);
           return;
         }
+        if (typeof value?.type === 'string' && value.type.startsWith('fs.')) { routes.files?.(value); return; }
         if (isKeysMessage(value)) {
           routes.keys?.receive(value);
           return;

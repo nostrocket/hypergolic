@@ -1,3 +1,4 @@
+import {installFileFacade, injectFileFacade, fileReceiver} from './file-guest';
 import { bindFrameListeners, createGuestFrame, createLoadHandler } from './guest-frame';
 import { NAPPLET_LINK_LEASE_MS } from '../../src/links/link-contract';
 import {createLegacyImageMount} from './legacy-image-mount';
@@ -209,7 +210,7 @@ function createGuestEndpoint(artifact: RuntimeMetadata, hooks: ShellAdapter, sen
   // Mesh uses the private native lane, outside the SDK's fixed domain catalogue.
   const nativeMesh = artifact.published && artifact.domains.includes('mesh') && isNativeMeshContext(artifact.mesh, sessionId);
   const environment = {...resolved, capabilities: {...resolved.capabilities,
-    domains: Object.freeze([...resolved.capabilities.domains, ...(nativeMesh ? ['mesh'] : [])])},
+    domains: Object.freeze([...resolved.capabilities.domains, ...(nativeMesh ? ['mesh'] : []), ...(artifact.domains.includes('fs') && !resolved.capabilities.domains.includes('fs') ? ['fs'] : [])])},
     services: [...resolved.services, CLOSE_CHECK_SERVICE]};
   const frame = createGuestFrame(artifact.title);
   const source = frame.contentWindow;
@@ -267,6 +268,20 @@ function nativeGuestServices(artifact: RuntimeMetadata, live: () => boolean, sen
   });
 }
 
+function runtimeDispatch(artifact: RuntimeMetadata, bridge: ReturnType<typeof createGuestEndpoint>['bridge'],
+  source: Window, startup: ReturnType<typeof guestStartup>, mesh: ReturnType<typeof createMeshGuestReceiver> | null, markReady: () => void) {
+  return (event: MessageEvent) => {
+    if (mesh?.receive(event)) return;
+    if (!validEnvelope(event.data)) {
+      if (startup.isReady() && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId)) rejectEnvelope(event, source, artifact.domains);
+      return;
+    }
+    // Kehto enforces the session and its frozen capabilities before dispatch.
+    bridge.handleMessage(event);
+    markReady();
+  };
+}
+
 function mount(artifact: RuntimeMetadata) {
   let legacyGuard: ReturnType<typeof createLegacyDocumentGuard> | undefined;
   const live = () => !stopped && frame.contentWindow === source && (artifact.legacyReadOnly !== undefined ? legacyGuard?.isActive() === true : startup.isReady() && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) !== undefined);
@@ -304,31 +319,22 @@ function mount(artifact: RuntimeMetadata) {
     (id, state) => hostWindow.HypergolicHost?.postMessage(JSON.stringify({type: 'close-check.result', sessionId, id, state})),
     artifact.journalCheckpoint ? {idle: () => frame.inert && native.idleForCheckpoint(), send:sendGuest} : undefined);
   const markReady = () => {
-    if (bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) && startup.complete()) {
-      if ((keys || artifact.journalCheckpoint) && privatePort) media.refresh();
-      keys?.refresh();
-      if (artifact.domains.includes('notify')) void native.notify({type: 'notify.__register'}).catch(() => {});
-      routing.ready();
-    }
+    if (!bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) || !startup.complete()) return;
+    if ((keys || artifact.journalCheckpoint) && privatePort) media.refresh();
+    keys?.refresh();
+    if (artifact.domains.includes('notify')) void native.notify({type: 'notify.__register'}).catch(() => {});
+    routing.ready();
   };
   const cvm = artifact.domains.includes('cvm') ? createCvmGuestReceiver(sendGuest,native.cvm,live) : null;
+  const files = artifact.domains.includes('fs') ? fileReceiver(native.request,sendGuest,live,() => isRuntimeInputActive() && document.hasFocus()) : undefined;
   const enforcePrivateChannel = artifact.published || fixtureName === 'napplet-discovery' || fixtureName === 'nap-support';
   const guestPort = privatePort ? createGuestPort(frame, source, bridge, artifact.domains, account.current, routing.consume,
-    {enforcePrivateChannel, keys, cvm, checkpoint:artifact.journalCheckpoint ? closeCheck.checkpointResult : undefined, mesh:mesh?.receiveValue, media:value => handleMediaRequest(value, hasMedia ? native.sendMedia : null, sendGuest)}, markReady, () => fail('runtime-bootstrap')) : null;
+    {enforcePrivateChannel, keys, cvm, files, checkpoint:artifact.journalCheckpoint ? closeCheck.checkpointResult : undefined, mesh:mesh?.receiveValue, media:value => handleMediaRequest(value, hasMedia ? native.sendMedia : null, sendGuest)}, markReady, () => fail('runtime-bootstrap')) : null;
   const receiveGuest = guestMessageReceiver(frame, source, {
     domains: artifact.domains, routing, keys, account: account.current, sendMedia: hasMedia ? native.sendMedia : null,
-    cvm,
+    cvm, files,
     closed: () => stopped, live,
-    dispatch(event) {
-      if (mesh?.receive(event)) return;
-      if (!validEnvelope(event.data)) {
-        if (startup.isReady() && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId)) rejectEnvelope(event, source, artifact.domains);
-        return;
-      }
-      // Kehto performs session gating, frozen capability enforcement and theme dispatch.
-      bridge.handleMessage(event);
-      markReady();
-    },
+    dispatch: runtimeDispatch(artifact, bridge, source, startup, mesh, markReady),
   });
   const failed = () => fail('frame-navigation');
   const loaded = createLoadHandler(frame, source, media, legacyGuard, failed);
@@ -375,6 +381,7 @@ function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
     ...environment.capabilities, privatePort,
     guestBindings: [
       [installPortLiveness],
+      ...(artifact.domains.includes('fs') ? [[installFileFacade, secureUuidV4] as const] : []),
       ...(artifact.journalCheckpoint ? [journalBinding] : []),
       ...(hasMesh ? [meshBinding] : []),
       ...(artifact.domains.includes('media') ? [[installMediaFacade] as const] : []),
@@ -382,7 +389,8 @@ function renderGuest(artifact: RuntimeMetadata, rawHtml: string): void {
     ],
     requestTimeoutsMs: approvalTimeouts(artifact),
   });
-  const withMedia=!privatePort && artifact.published && artifact.domains.includes('media') ? injectMediaFacade(injected) : injected;
+  const withFiles = !privatePort && artifact.domains.includes('fs') ? injectFileFacade(injected) : injected;
+  const withMedia=!privatePort && artifact.published && artifact.domains.includes('media') ? injectMediaFacade(withFiles) : withFiles;
   const withCvm = !privatePort && artifact.published && artifact.domains.includes('cvm') ? injectCvmFacade(withMedia) : withMedia;
   frame.srcdoc = prefix + (!privatePort && hasMesh ? injectMeshFacade(withCvm) : withCvm);
 }

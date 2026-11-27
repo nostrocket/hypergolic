@@ -13,10 +13,16 @@ const identity = {
   publisher: '1'.repeat(64), appId: 'published-test', eventId: '2'.repeat(64), version, htmlHash,
 };
 
-type Mode = 'modern-intent' | 'modern-services' | 'early-theme' | 'modern' | 'invalid-format' | 'unicode-full-chunk' | 'normal' | 'keys-domain' | 'bad-hash' | 'wrong-byte-length' | 'replayed-sequence' | 'unknown-domain' | 'relay-domain' | 'implied-wrappers' | 'attributed-head' | 'commented-head' | 'unsafe-head-comment' | 'upload-domain' | 'all-domains' | 'outbox-domain' | 'outbox-only' | 'published-approval' | 'intent-only' | 'soy-policy' | 'soy-policy-change'
+type Mode = 'file-documents-legacy' | 'file-documents' | 'modern-intent' | 'modern-services' | 'early-theme' | 'modern' | 'invalid-format' | 'unicode-full-chunk' | 'normal' | 'keys-domain' | 'bad-hash' | 'wrong-byte-length' | 'replayed-sequence' | 'unknown-domain' | 'relay-domain' | 'implied-wrappers' | 'attributed-head' | 'commented-head' | 'unsafe-head-comment' | 'upload-domain' | 'all-domains' | 'outbox-domain' | 'outbox-only' | 'published-approval' | 'intent-only' | 'soy-policy' | 'soy-policy-change'
   | 'snapshot' | 'snapshot-mismatch' | 'snapshot-title-change' | 'snapshot-discovery';
 
 function artifactFor(mode: Mode): Buffer {
+  if (mode === 'file-documents' && process.env.HYPERGOLIC_NOTEPAD_ARTIFACT) {
+    const bytes = readFileSync(process.env.HYPERGOLIC_NOTEPAD_ARTIFACT);
+    expect(digest(bytes)).toBe('a4dacb9ff7ae3e3543dad675437f0a1817b4d47abd9d97ddedfc869c1f31797e');
+    return bytes;
+  }
+  if (mode.startsWith('file-documents')) return Buffer.from('<!doctype html><html><head><title>Documents</title></head><body>Documents</body></html>');
   if (mode === 'modern-services') return Buffer.from('<!doctype html><html><head><title>Services</title></head><body>Services</body></html>');
   if (mode === 'early-theme') return Buffer.from('<!doctype html><html><head><script>window.napplet.theme.get().then(theme => document.body.textContent = theme.colors.primary)</script></head><body>Waiting</body></html>');
   if (mode === 'published-approval') return approvalHtml;
@@ -102,9 +108,9 @@ async function openPublished(page: Page, mode: Mode = 'normal', extraQuery = '')
         type: 'artifact.chunk', sessionId: generation,
         sequence: mode === 'replayed-sequence' ? sequence + 1 : sequence,
         ...part, byteLength: mode === 'wrong-byte-length' ? part.byteLength + 1 : part.byteLength,
-        ...claims, ...snapshot, ...(mode === 'modern-intent' || mode === 'modern-services' || mode === 'early-theme' || mode === 'modern' || mode === 'implied-wrappers' || mode === 'snapshot' ? {manifestFormat:'nip-5d'} :
+        ...claims, ...snapshot, ...(mode === 'file-documents' || mode === 'modern-intent' || mode === 'modern-services' || mode === 'early-theme' || mode === 'modern' || mode === 'implied-wrappers' || mode === 'snapshot' ? {manifestFormat:'nip-5d'} :
           mode === 'invalid-format' ? {manifestFormat:'unknown'} : {}), ...((mode==='soy-policy'||mode==='soy-policy-change')?{appData:{sourceKind:35129,policy:{profile:'soy.app-data/1',scope:mode==='soy-policy-change'&&sequence>0?'f'.repeat(64):'b7890c0793a7fa9c2570c56500f403724b1a4c0e453a9194ec7200132c634f8b',maxContentBytes:3072,relays:['wss://relay.damus.io'],defaultRelays:['wss://relay.damus.io']}}}:{}),
-        domains: mode === 'modern-services' ? ['identity','keys','outbox','resource','storage','theme'] : mode==='soy-policy'||mode==='soy-policy-change'?['identity','outbox','theme']:mode === 'intent-only' || mode === 'modern-intent' ? ['intent'] : mode === 'published-approval' ? ['identity', 'relay', 'theme'] : mode === 'unknown-domain' ? ['future-domain'] : mode === 'outbox-domain' ? ['outbox', 'relay', 'theme'] : mode === 'outbox-only' ? ['outbox', 'theme'] : mode === 'relay-domain' ? ['relay', 'theme'] : mode === 'upload-domain' ? ['upload'] : mode === 'keys-domain' ? ['keys', 'theme'] : mode === 'all-domains' ? ['config', 'identity', 'inc', 'intent', 'link', 'notify', 'outbox', 'relay', 'resource', 'storage', 'theme', 'upload'] : ['theme'],
+        domains: mode.startsWith('file-documents') ? ['fs'] : mode === 'modern-services' ? ['identity','keys','outbox','resource','storage','theme'] : mode==='soy-policy'||mode==='soy-policy-change'?['identity','outbox','theme']:mode === 'intent-only' || mode === 'modern-intent' ? ['intent'] : mode === 'published-approval' ? ['identity', 'relay', 'theme'] : mode === 'unknown-domain' ? ['future-domain'] : mode === 'outbox-domain' ? ['outbox', 'relay', 'theme'] : mode === 'outbox-only' ? ['outbox', 'theme'] : mode === 'relay-domain' ? ['relay', 'theme'] : mode === 'upload-domain' ? ['upload'] : mode === 'keys-domain' ? ['keys', 'theme'] : mode === 'all-domains' ? ['config', 'identity', 'inc', 'intent', 'link', 'notify', 'outbox', 'relay', 'resource', 'storage', 'theme', 'upload'] : ['theme'],
       };
       const wire = window.nativeMessage(envelope);
       for (const listener of listenerSet) listener({ data: wire });
@@ -127,6 +133,11 @@ async function openPublished(page: Page, mode: Mode = 'normal', extraQuery = '')
             const result = message.type === 'intent.invoke' ? {type: 'intent.invoke.result', id: message.id,
               result: {ok: true, handled: true, archetype, action, convention, handler: 'native-handler'}} : null;
             response = {type: 'routing.call.result', id: wire.id, response: result};
+          }
+          else if (mode.startsWith('file-documents') && wire.type.startsWith('fs.')) {
+            void (window as any).fileOperation(wire).then((fields: object) =>
+              state.reply(request.sequence,{type:wire.type + '.result',id:wire.id,...fields}));
+            return;
           }
           else if (wire.type === 'storage.get') response = {type:'storage.get.result', id:wire.id, value:'saved setting'};
           else if (wire.type === 'resource.info') response = {type:'resource.info.result', id:wire.id, info:{schemes:['data']}};
@@ -958,3 +969,53 @@ test('application-data native chunk context reaches actual runtime and cached gu
 test('application-data policy changes across native artifact chunks reject mount before guest startup',async({page})=>{
   await openPublished(page,'soy-policy-change');await expect(page.getByRole('alert')).toHaveText('The napplet could not be loaded.');await expect(page.locator('#napplet')).toHaveCount(0);
 });
+
+for (const mode of ['file-documents','file-documents-legacy'] as const) {
+test(`published documents persist through ${mode} and preserve revision preconditions`, async ({page}) => {
+  const {DiskSQLite, registration} = await import('../../tests/storage/harness.ts');
+  const {openShellDatabase} = await import('../../src/storage/database.ts');
+  const disk = new DiskSQLite();
+  const database = await openShellDatabase(disk,'android');
+  try {
+    await page.exposeFunction('fileOperation',(request:Record<string,unknown>) => database.document!(registration(),request));
+    await openPublished(page,mode);
+    const ui = page.frameLocator('#napplet');
+    if (mode === 'file-documents' && process.env.HYPERGOLIC_NOTEPAD_ARTIFACT) {
+      const editor = ui.locator('#editor');
+      const menu = async (action: string) => {
+        await ui.locator('[data-menu="file"]').click();
+        await ui.locator('[data-action="' + action + '"]').click();
+      };
+      await editor.fill('First draft');
+      await menu('saveAs');
+      await ui.locator('#fileNameInput').fill('Article.txt');
+      await ui.locator('#fileAccept').click();
+      await expect(ui.locator('#windowTitle')).toContainText('Article.txt');
+      await editor.fill('Edited draft');
+      await menu('save');
+      await expect.poll(async () => (await database.document!(registration(),{type:'fs.read',path:'/Documents/Article.txt'})).result).toMatchObject({data:Buffer.from('Edited draft').toString('base64')});
+      await page.reload();
+      await menu('open');
+      await ui.locator('#fileList').getByText('Article.txt').dblclick();
+      await expect(editor).toHaveValue('Edited draft');
+      return;
+    }
+    await expect(ui.locator('body')).toHaveText('Documents');
+    const guest = await (await page.locator('#napplet').elementHandle())?.contentFrame();
+    if (!guest) throw Error('Missing document frame');
+    await guest.evaluate(() => (window as any).napplet.shell.ready());
+    const result = await guest.evaluate(async () => {
+      const api = (window as any).napplet;
+      const path = '/Documents/Example.txt';
+      const info = await api.fs.info();
+      await api.fs.write(path,btoa('original'),{ifAbsent:true});
+      const {revision} = await api.fs.stat(path);
+      await api.fs.write(path,btoa('edited'),{ifRevision:revision});
+      const stale = await api.fs.write(path,btoa('stale'),{ifRevision:revision}).catch((error:Error) => error.message);
+      return {supported:api.shell.supports('fs'),roots:info.roots.map((root:any) => root.path),
+        files:(await api.fs.list('/Documents')).map((entry:any) => entry.name),text:atob((await api.fs.read(path)).data),stale};
+    });
+    expect(result).toEqual({supported:true,roots:['/Documents'],files:['Example.txt'],text:'edited',stale:'conflict'});
+  } finally { await database.close();disk.cleanup(); }
+});
+}

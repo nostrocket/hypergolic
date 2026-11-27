@@ -196,10 +196,10 @@ test('saved current-profile grants retain exact prior authority until Common is 
 
 test('unsupported names remain warning-only and a changed requested set or host profile requires review', async t => {
   const { database } = await setup(t); const { owner, storage } = control(database);
-  const first = await artifact(['theme', 'fs', 'gamepad']);
+  const first = await artifact(['theme', 'count', 'gamepad']);
   let prompts = 0;
   const accept = async (request: import('../../src/napplets/first-open-consent.ts').NappletConsentReview) => {
-    prompts++; assert.deepEqual(request.unsupportedDomains, ['fs', 'gamepad']); return true;
+    prompts++; assert.deepEqual(request.unsupportedDomains, ['count', 'gamepad']); return true;
   };
   const admitted = await requestFirstOpenConsent(first, owner, storage, new AbortController().signal, owner.assertActive, accept);
   assert.deepEqual(admitted.domains, ['theme']);
@@ -208,7 +208,7 @@ test('unsupported names remain warning-only and a changed requested set or host 
   assert.equal(prompts, 1);
   const current = (await storage.readAccessGrant())!;
   const olderReview = JSON.stringify({profile: 'hypergolic-native-2026-10-13-v1',
-    requested: ['fs', 'gamepad', 'theme'], domains: ['theme']});
+    requested: ['count', 'gamepad', 'theme'], domains: ['theme']});
   await storage.replaceAccessGrant(current.domains, current.revision, {}, olderReview);
   await assert.rejects(requestFirstOpenConsent(first, owner, storage, new AbortController().signal, owner.assertActive, async () => false),
     FirstOpenConsentError);

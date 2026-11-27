@@ -1,3 +1,4 @@
+import {dispatchFile} from '../files/file-broker.ts';
 import {encryptedEvent} from '../security/encrypted-event.ts';
 import { RequestHistory } from './request-history.ts';
 import {CapabilityReadAdmission, CapabilityReadBusy} from './capability-read-admission.ts';
@@ -112,6 +113,24 @@ function finishCapability(native: NativeCapabilityPort, token: string, response:
   try { native.finish(token, bounded); } catch { /* Native expiry retains the final denial boundary. */ }
 }
 
+async function fileReply(database: ShellDatabase, registration: NativeRegistration, request: Record<string,unknown>,
+  type: string, seen: RequestHistory, active: () => void) {
+  const id = request.id;
+  if (!registration.domains.includes('fs') || registration.fixture !== 'published' || typeof id !== 'string' || !id || id.length > 128) return null;
+  const fields = seen.claim(id,type) ? {error:'conflict'} :
+    await dispatchFile(database, registration, request, active).catch(() => ({error:'io-error'}));
+  return JSON.stringify({type:type + '.result',id,...fields});
+}
+
+async function prepareList(row: Record<string,unknown>, seen: RequestHistory, pending: CapabilityReadAdmission,
+  recommendations: ReturnType<typeof createCatalogRecommendations>, active: () => void) {
+  if (Object.keys(row).length !== 4 || typeof row.id !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(row.id) ||
+      typeof row.coordinate !== 'string' || row.coordinate.length > 512 || typeof row.create !== 'boolean' || seen.claim(row.id, LIST_PREPARE)) return null;
+  const {coordinate,create} = row;
+  const result = await pending.schedule(active, signal => recommendations.prepareAddition(coordinate, create, signal, active));
+  return JSON.stringify({type:LIST_PREPARE + '.result',id:row.id,result});
+}
+
 /** One broker per registered native view. It is never passed into the WebView. */
 export function createCapabilityBroker(database: ShellDatabase, native: NativeCapabilityPort, owner: CapabilityOwner, queries?: RelayQueryService, closeRelay?: (request:unknown)=>void, resources?: ResourceHost, identityData?: IdentityDataPort, outbox?: OutboxReadService, closeOutbox?: (request:unknown)=>void, recommendations?: ReturnType<typeof createCatalogRecommendations>) {
   const registration = decodeNativeRegistration(owner.registration);
@@ -138,6 +157,10 @@ export function createCapabilityBroker(database: ShellDatabase, native: NativeCa
         assertActive(token);
         const payload = captured.request;
         const type = payload && typeof payload === 'object' && 'type' in payload ? payload.type : null;
+        if (typeof type === 'string' && type.startsWith('fs.')) {
+          response = await fileReply(database, registration, payload as Record<string,unknown>, type, seen, () => assertActive(token));
+          return;
+        }
         if (type === 'outbox.close') {
           if (registration.domains.includes('outbox')) closeOutbox?.(payload);
           return;
@@ -151,13 +174,7 @@ export function createCapabilityBroker(database: ShellDatabase, native: NativeCa
           return;
         }
         if (type === LIST_PREPARE && registration.domains.includes('lists') && registration.domains.includes('relay') && recommendations) {
-          const row = payload as Record<string,unknown>;
-          if (Object.keys(row).length !== 4 || typeof row.id !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(row.id) ||
-              typeof row.coordinate !== 'string' || row.coordinate.length > 512 || typeof row.create !== 'boolean' || seen.claim(row.id, type)) return;
-          const {coordinate,create} = row;
-          const result = await pending.schedule(() => assertActive(token),signal =>
-            recommendations.prepareAddition(coordinate, create, signal, () => assertActive(token)));
-          response = JSON.stringify({type:LIST_PREPARE + '.result',id:row.id,result});
+          response = await prepareList(payload as Record<string,unknown>, seen, pending, recommendations, () => assertActive(token));
           return;
         }
         let request: CapabilityRequest;

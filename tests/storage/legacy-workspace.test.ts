@@ -27,7 +27,7 @@ test('real workspace controller saves and cold-loads exact account-bound legacy 
   const reopened = await openShellDatabase(sqlite, 'ios');
   const restored = await openWorkspaceController(reopened.bindWorkspace(owner), () => {throw Error('must not reseed');}, () => {});
   assert.deepEqual(restored.getSnapshot().workspace.sessions, [selected]);
-  assert.equal(sqlite.raw().prepare('PRAGMA user_version').get()!['user_version'], 4);
+  assert.equal(sqlite.raw().prepare('PRAGMA user_version').get()!['user_version'], 5);
   restored.change(openNapplet(emptyWorkspace(), ordinary)); await restored.flush();
   assert.equal(restored.getSnapshot().error, null);
   assert.deepEqual((await reopened.bindWorkspace(owner).port.load())?.snapshot, saved(ordinary));

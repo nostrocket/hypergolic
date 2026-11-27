@@ -132,7 +132,7 @@ test('a verified Outbox manifest carries its exact approved publisher/version/re
   const aggregate = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${hash} /index.html\n`))), x => x.toString(16).padStart(2, '0')).join('');
   const event = JSON.parse(JSON.stringify(finalizeEvent({kind: 35129, created_at: 1_800_000_000, content: '', tags: [
     ['d', 'outbox-admission'], ['path', '/index.html', hash], ['x', aggregate, 'aggregate'],
-    ['requires', 'outbox'], ['requires', 'relay'], ['requires', 'theme'], ['requires', 'fs'],
+    ['requires', 'outbox'], ['requires', 'relay'], ['requires', 'theme'], ['requires', 'fs'], ['requires','gamepad'],
   ]}, secret)));
   const coordinate = {kind: 35129, pubkey: pub, identifier: 'outbox-admission', relayHints: []} as const;
   const artifact = await verifyArtifact(await verifyManifest(coordinate, event), bytes);
@@ -140,11 +140,11 @@ test('a verified Outbox manifest carries its exact approved publisher/version/re
   const live = {value: true}, owner = registration({user: USER, publisher: pub, appId: descriptor.appId,
     assertActive: () => {if (!live.value) throw Error('revoked');}});
   const admission = await requestFirstOpenConsent(artifact, owner, database.bindApp(owner).port, new AbortController().signal, owner.assertActive,
-    async request => {assert.deepEqual(request.unsupportedDomains, ['fs']); return true;});
+    async request => {assert.deepEqual(request.unsupportedDomains, ['gamepad']); return true;});
   const authority = {user: USER, epoch: 9, assertActive: owner.assertActive};
   const prepared = JSON.parse(publishedHostInput(artifact, admission, descriptor, authority, 'a'.repeat(64)));
   const config = JSON.parse(prepared.configuration);
-  assert.deepEqual(config.domains, ['outbox', 'relay', 'theme']); assert.equal(config.publisher, pub);
+  assert.deepEqual(config.domains, ['fs','outbox', 'relay', 'theme']); assert.equal(config.publisher, pub);
   assert.equal(config.version, aggregate); assert.equal(config.fixture, 'published'); assert.equal(config.epoch, 9);
   assert.throws(() => publishedHostInput(artifact, {...admission}, descriptor, authority, 'a'.repeat(64)));
   assert.throws(() => publishedHostInput(artifact, admission, {...descriptor, version: 'f'.repeat(64)}, authority, 'a'.repeat(64)));
