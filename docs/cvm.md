@@ -47,6 +47,8 @@ On 26 November 2026, a desktop probe exercised the shell’s MCP client with fre
 | Shiftfield · `soy_board_read` | The `depth-v1` board returned five rows with both iOS filters. |
 | Compose · `search_profiles` | Its fixed provider did not answer initialization within 30 seconds on its first relay. Separate diagnostic runs timed out on its two other listed relays. The search itself was never dispatched. |
 
+On 27 November 2026, the standalone arm64 Release build from `3c58f5fb` ran under an isolated package and account on a Redmi Note 15 Pro 5G with Android 16. The installed APK matched the local SHA-256. Each launch verified the signed publication and HTML digest. Funclet rendered 20 results for “Miles Davis” and Shiftfield rendered five ranked rows. Compose’s newer publication (`7f0f687e…40cb6d21`) retained the same provider. After approval of `search_profiles` for “f” with limit 12, it displayed “No profiles for @f”. The empty state alone does not establish where its request ended. A successful Compose profile match and a physical iPhone run of the corrected filter remain open. Removing the tester restored the original installed-package inventory.
+
 ### Running ordinary acceptance
 
 Use the standalone Release app, a disposable account and a verified publication that calls a free read-only tool. Funclet's **Artists** search exercises `search_artists`. Record the artifact digest, publication event, provider, relay, arguments and observed result on each platform.
