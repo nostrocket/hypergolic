@@ -268,6 +268,20 @@ function nativeGuestServices(artifact: RuntimeMetadata, live: () => boolean, sen
   });
 }
 
+function runtimeDispatch(artifact: RuntimeMetadata, bridge: ReturnType<typeof createGuestEndpoint>['bridge'],
+  source: Window, startup: ReturnType<typeof guestStartup>, mesh: ReturnType<typeof createMeshGuestReceiver> | null, markReady: () => void) {
+  return (event: MessageEvent) => {
+    if (mesh?.receive(event)) return;
+    if (!validEnvelope(event.data)) {
+      if (startup.isReady() && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId)) rejectEnvelope(event, source, artifact.domains);
+      return;
+    }
+    // Kehto enforces the session and its frozen capabilities before dispatch.
+    bridge.handleMessage(event);
+    markReady();
+  };
+}
+
 function mount(artifact: RuntimeMetadata) {
   let legacyGuard: ReturnType<typeof createLegacyDocumentGuard> | undefined;
   const live = () => !stopped && frame.contentWindow === source && (artifact.legacyReadOnly !== undefined ? legacyGuard?.isActive() === true : startup.isReady() && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) !== undefined);
@@ -305,12 +319,11 @@ function mount(artifact: RuntimeMetadata) {
     (id, state) => hostWindow.HypergolicHost?.postMessage(JSON.stringify({type: 'close-check.result', sessionId, id, state})),
     artifact.journalCheckpoint ? {idle: () => frame.inert && native.idleForCheckpoint(), send:sendGuest} : undefined);
   const markReady = () => {
-    if (bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) && startup.complete()) {
-      if ((keys || artifact.journalCheckpoint) && privatePort) media.refresh();
-      keys?.refresh();
-      if (artifact.domains.includes('notify')) void native.notify({type: 'notify.__register'}).catch(() => {});
-      routing.ready();
-    }
+    if (!bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId) || !startup.complete()) return;
+    if ((keys || artifact.journalCheckpoint) && privatePort) media.refresh();
+    keys?.refresh();
+    if (artifact.domains.includes('notify')) void native.notify({type: 'notify.__register'}).catch(() => {});
+    routing.ready();
   };
   const cvm = artifact.domains.includes('cvm') ? createCvmGuestReceiver(sendGuest,native.cvm,live) : null;
   const files = artifact.domains.includes('fs') ? fileReceiver(native.request,sendGuest,live,() => isRuntimeInputActive() && document.hasFocus()) : undefined;
@@ -321,16 +334,7 @@ function mount(artifact: RuntimeMetadata) {
     domains: artifact.domains, routing, keys, account: account.current, sendMedia: hasMedia ? native.sendMedia : null,
     cvm, files,
     closed: () => stopped, live,
-    dispatch(event) {
-      if (mesh?.receive(event)) return;
-      if (!validEnvelope(event.data)) {
-        if (startup.isReady() && bridge.runtime.sessionRegistry.getEntryByWindowId(sessionId)) rejectEnvelope(event, source, artifact.domains);
-        return;
-      }
-      // Kehto performs session gating, frozen capability enforcement and theme dispatch.
-      bridge.handleMessage(event);
-      markReady();
-    },
+    dispatch: runtimeDispatch(artifact, bridge, source, startup, mesh, markReady),
   });
   const failed = () => fail('frame-navigation');
   const loaded = createLoadHandler(frame, source, media, legacyGuard, failed);
