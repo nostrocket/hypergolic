@@ -151,6 +151,32 @@ import Foundation
   check(queuedSign.core.signCalls==0,"already-cancelled queued signing cannot enter core")
   queuedSign.cancelSign(operation:queuedSignID);_=try? await queuedSignReply.value
   TransportPort.refreshResult=["wss://changed.example.org"];await drain()
+  NativeDevicePrivacy.shared.required = true
+  for approved in [false, true, true] {
+    NativeDevicePrivacy.shared.accepted = approved
+    let group = Session(), id = UUID()
+    let reply = Task { try await group.signReplyOnly(operation: id) }
+    while group.signReply == nil { await Task.yield() }
+    let source = group.signSource!
+    group.decideYes(operation: id, source: source)
+    _ = try? await reply.value
+    check(group.core.signCalls == (approved ? 1 : 0), "system confirmation gates dispatch")
+    check(source.consumes == (approved ? 1 : 0), "failed authentication cannot consume review")
+  }
+  check(NativeDevicePrivacy.shared.confirms == 3, "each reviewed signature receives a fresh prompt")
+  NativeDevicePrivacy.shared.hold = true
+  let cancelled = Session(), cancelledID = UUID()
+  let deniedReply = Task { try await cancelled.signReplyOnly(operation: cancelledID) }
+  while cancelled.signReply == nil { await Task.yield() }
+  let firstSource = cancelled.signSource!
+  cancelled.decideYes(operation: cancelledID, source: firstSource)
+  while NativeDevicePrivacy.shared.prompt == nil { await Task.yield() }
+  cancelled.cancelSign(operation: cancelledID)
+  _ = try? await deniedReply.value
+  NativeDevicePrivacy.shared.prompt?.resume(returning: true)
+  NativeDevicePrivacy.shared.prompt = nil
+  await drain()
+  check(firstSource.consumes == 0 && cancelled.core.signCalls == 0, "late device success after cancellation cannot sign")
   let result:[String:Any]=["passed":failures.isEmpty,"assertions":count,"failures":failures,"scope":"Actual owning methods with real Tasks/continuations and explicit UI/core/network/key/authority ports. No relay/device/crypto or authority-bypass proof."]
   print(String(decoding:try! JSONSerialization.data(withJSONObject:result,options:[.sortedKeys]),as:UTF8.self));if !failures.isEmpty{exit(1)}
  }

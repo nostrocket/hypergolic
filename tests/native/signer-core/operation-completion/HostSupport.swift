@@ -3,11 +3,30 @@ import Synchronization
 @MainActor final class UIApplication { enum State{case active,background};static let shared=UIApplication();var applicationState:State = .active }
 enum NativeVaultFailure:Error {case denied,signerExpired,signerAlreadyConnected,notFound,signerUncertain,oldFailure}
 final class NativeVaultKey:@unchecked Sendable {init()throws{};var destroyed=false;func destroy(){destroyed=true}}
-final class NativeSigningSourceCapture:@unchecked Sendable {var cancels=0,consumes=0;func cancel(){cancels+=1};func isLive()->Bool{cancels==0};func consumeForNativeSigning()->Bool{consumes+=1;return true}}
+final class NativeSigningSourceCapture:@unchecked Sendable {let identity="reviewed-account";var cancels=0,consumes=0;func cancel(){cancels+=1};func isLive()->Bool{cancels==0};func consumeForNativeSigning()->Bool{consumes+=1;return true}}
 final class NativeNip46DispatchState:@unchecked Sendable {var possible=false}
 struct ExactSignerEvent:Sendable {let digest:[UInt8]=[1]}
 func nativeSigningDeadlineValid(_ event:ExactSignerEvent)->Bool{true}
-@MainActor enum NativeSigningSourceFacade {static var cancels=0;static func cancel(kind:String,token:String){cancels+=1}}
+@MainActor final class NativeDevicePrivacy {
+ static let shared = NativeDevicePrivacy()
+ var required = false
+ var accepted = false
+ var accessible = true
+ var confirms = 0
+ var hold = false
+ var prompt: CheckedContinuation<Bool, Never>?
+ func requiresSigning(_ pubkey: String, external: Bool) -> Bool { required }
+ func cancelSigning(_ operation: UUID) {}
+ func confirm(_ reason: String, operation: UUID) async -> Bool {
+   confirms += 1
+   if hold { return await withCheckedContinuation { prompt = $0 } }
+   return accepted
+ }
+}
+@MainActor enum NativeSigningSourceFacade {
+ static func beginDevicePrompt(kind: String, token: String, operation: UUID) {}
+ static func finishDevicePrompt(_ operation: UUID, success: Bool) {}
+static var cancels=0;static func cancel(kind:String,token:String){cancels+=1}}
 struct NativeBunkerConnection {let peer="public-peer",relays=["wss://example.org"];var token=Data([1]);mutating func clear(){token.resetBytes(in:0..<token.count);token.removeAll()}}
 @MainActor class Panel {
  var presentingViewController:Bool?=true;var clears=0,dismissals=0;var viewIfLoaded:Panel?{self};var window:Int?{1}
@@ -51,6 +70,7 @@ struct NativeNip46Handoff {enum Binding{case preparation(vaultID:String,revision
  var remoteReply:CheckedContinuation<String?,any Error>?,remotePanel:NativeVaultRemotePanel?
  var onRemoteInstall:((Task<Void,Never>)->Void)?,onSignInstall:((Task<Void,Never>)->Void)?
  var remoteTask:Task<Void,Never>?{didSet{if let value=remoteTask,let hook=onRemoteInstall{onRemoteInstall=nil;hook(value)}}}
+ var confirmingSignature: UUID?; var signIsExternal = false
  var signTask:Task<Void,Never>?{didSet{if let value=signTask,let hook=onSignInstall{onSignInstall=nil;hook(value)}}}
  var signReply:CheckedContinuation<String,any Error>?,signPanel:Panel?,signSource:NativeSigningSourceCapture?,signKind:String?,signToken:String?,signDispatchState:NativeNip46DispatchState?
  var timer:Task<Void,Never>?,signTaskValue:Task<Void,Never>?

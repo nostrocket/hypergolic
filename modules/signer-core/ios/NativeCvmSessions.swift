@@ -91,7 +91,8 @@ final class NativeCvmSessions: @unchecked Sendable {
       guard let self, let context else { throw Failure.denied }; try self.current(context)
     }, outgoing: { _, _ in /* prepare validates the exact native permit/purpose before invoking this private owner. */ })
     let client = try context.envelope!.clientPublicKey()
-    let subscription = "[\"REQ\",\"\(context.subscription)\",{\"kinds\":[1059,21059],\"#p\":[\"\(client)\"],\"limit\":0}]"
+    let subscription = try NativeCvmReplySubscription.request(id: context.subscription, recipient: client,
+      now: UInt64(Date().timeIntervalSince1970))
     let remaining = context.originalDeadline - Int64(ProcessInfo.processInfo.systemUptime * 1000)
     guard remaining > 0 else { throw Failure.denied }
     let control = NativeCvmSessionCallbacks(current: { [weak self, weak context] in

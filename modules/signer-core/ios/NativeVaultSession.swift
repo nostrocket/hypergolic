@@ -20,9 +20,11 @@ import HypergolicNappletHost
   private var remoteOperation: UUID?
   private var remoteReply: CheckedContinuation<String?, any Error>?
   private var remoteTask: Task<Void, Never>?
+  private var confirmingSignature: UUID?
   private var signTask: Task<Void, Never>?
   private var signDispatchState: NativeNip46DispatchState?
   private var signPanel: NativeSignerReviewPanel?
+  private var signIsExternal = false
   private var signOperation: UUID?
   private var signReply: CheckedContinuation<String, any Error>?
   private var signSource: NativeSigningSourceCapture?
@@ -62,6 +64,7 @@ import HypergolicNappletHost
   private func resignActive() {
     authority.suspendLocalLeases()
     NativeSignerIdentityActions.clearBackup()
+    if confirmingSignature == signOperation, confirmingSignature != nil { return }
     if authentication == nil { background() } else { cancelImport(); cancelSigning() }
   }
   private func background() {
@@ -432,6 +435,7 @@ import HypergolicNappletHost
     let operation = UUID()
     return try await withCheckedThrowingContinuation { reply in
       signDispatchState = NativeNip46DispatchState()
+      signIsExternal = remote
       signOperation = operation; signReply = reply; signSource = source; signKind = kind; signToken = token
       let panel = NativeSignerReviewPanel(event: event, requester: source.requester, destinations: source.destinations, method: remote ? "Remote signer (NIP-46)" : "Local key", signerRelays: remote ? ((info.remote?["relays"] as? [String]) ?? []) : [], signerPeer: remote ? info.remote?["peerPubkey"] as? String : nil) { [weak self] approved in
         self?.decideSigning(approved, event: event, source: source, vaultID: vaultID, revision: revision, epoch: epoch, deadline: deadline, operation: operation)
@@ -440,6 +444,7 @@ import HypergolicNappletHost
       timer = Task { [weak self] in
         for _ in 0..<(remote ? 120 : 600) {
           do { try await Task.sleep(for: .seconds(1)) } catch { return }
+          if self?.confirmingSignature == operation && UIApplication.shared.applicationState == .inactive { continue }
           if !source.isLive() || !nativeSigningDeadlineValid(event) { self?.cancelSigning(operation: operation); return }
         }
         self?.cancelSigning(operation: operation)
@@ -449,7 +454,27 @@ import HypergolicNappletHost
   private func decideSigning(_ approved: Bool, event: ExactSignerEvent, source: NativeSigningSourceCapture,
     vaultID: String, revision: UInt64, epoch: UInt64, deadline: ContinuousClock.Instant, operation: UUID) {
     guard signOperation == operation, signReply != nil else { return }
-    guard approved, ContinuousClock.now < deadline, authority.current(epoch), source.isLive(), nativeSigningDeadlineValid(event), signPanel?.viewIfLoaded?.window != nil,
+    if approved && NativeDevicePrivacy.shared.requiresSigning(source.identity, external: signIsExternal) {
+      guard NativeDevicePrivacy.shared.accessible, authority.current(epoch), source.isLive(),
+        ContinuousClock.now < deadline, nativeSigningDeadlineValid(event),
+        let kind = signKind, let token = signToken else { cancelSigning(operation: operation); return }
+      NativeSigningSourceFacade.beginDevicePrompt(kind: kind, token: token, operation: operation)
+      confirmingSignature = operation
+      signTask = Task { [weak self] in
+        let confirmed = await NativeDevicePrivacy.shared.confirm("Confirm signing this reviewed event.", operation: operation)
+        guard let self, signOperation == operation else { return }
+        confirmingSignature = nil
+        NativeSigningSourceFacade.finishDevicePrompt(operation, success: confirmed)
+        dispatchSigning(confirmed, event: event, source: source, vaultID: vaultID, revision: revision, epoch: epoch, deadline: deadline, operation: operation)
+      }
+    } else {
+      dispatchSigning(approved, event: event, source: source, vaultID: vaultID, revision: revision, epoch: epoch, deadline: deadline, operation: operation)
+    }
+  }
+  private func dispatchSigning(_ approved: Bool, event: ExactSignerEvent, source: NativeSigningSourceCapture,
+    vaultID: String, revision: UInt64, epoch: UInt64, deadline: ContinuousClock.Instant, operation: UUID) {
+    guard signOperation == operation, signReply != nil else { return }
+    guard NativeDevicePrivacy.shared.accessible, approved, ContinuousClock.now < deadline, authority.current(epoch), source.isLive(), nativeSigningDeadlineValid(event), signPanel?.viewIfLoaded?.window != nil,
       source.consumeForNativeSigning() else { cancelSigning(operation: operation); return }
     let checker: @Sendable () -> Bool = { [authority] in authority.current(epoch) && source.isLive() && nativeSigningDeadlineValid(event) }
     let state = signDispatchState ?? NativeNip46DispatchState(), permit = authority.permit(epoch, deadline: deadline)
@@ -469,6 +494,11 @@ import HypergolicNappletHost
   }
   private func finishSigning(_ result: Result<String, any Error>, operation: UUID, checker: @escaping @Sendable () -> Bool) {
     guard signOperation == operation, let reply = signReply else { return }
+    if case .failure = result {
+      NativeDevicePrivacy.shared.cancelSigning(operation)
+      NativeSigningSourceFacade.finishDevicePrompt(operation, success: false)
+    }
+    confirmingSignature = nil
     signOperation = nil; signReply = nil; signTask = nil; let uncertain = signDispatchState?.possible == true; signDispatchState = nil; timer?.cancel(); timer = nil
     if case .failure = result { cancelAll() }
     let panel = signPanel; signPanel = nil; signSource = nil; signKind = nil; signToken = nil

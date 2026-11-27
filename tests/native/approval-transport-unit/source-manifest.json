@@ -2,22 +2,23 @@
   "schema": 1,
   "productionSources": {
     "modules/napplet-host/ios/NativeCanonicalJSON.swift": "782f7815be69c649958417bcd76c8a32c4780cbc0a930d41c00ef77af0d5ad7d",
-    "modules/napplet-host/ios/NativeAppDataPolicy.swift": "ba0ff6aa255ecc0135e76a3aa011cda3f2c73eb363a18f70177ddfd3224ec5fb",
-    "modules/napplet-host/ios/NativeApprovalAuthority.swift": "25d1029dd7856be15e17cdd28db9314be8e7b85faba94c7d55a4eef711941ee6",
-    "modules/napplet-host/ios/NativeOutboxPlan.swift": "ab218c96a04c61795714df526f425e4a7f323502bc16ef04ee9dadd454c0663e",
+    "modules/napplet-host/ios/NativeAppDataPolicy.swift": "95e323bf2b2d145663614fa65bf6722f1a85490243130722d279852ebd35f36f",
+    "modules/napplet-host/ios/NativeApprovalAuthority.swift": "461b90c3c1ccb94fc763fefbce067d3c41c53d0d77de112a43fd12b286f6b419",
+    "modules/napplet-host/ios/NativeOutboxPlan.swift": "474b5c70ddcbd40b83d9fd96a0cdb14ebd977c53f523428479099053f6ee6392",
     "modules/napplet-host/ios/NativeCommonPlan.swift": "25be204953dfeedd5575e5022e005148ce572e3ea4156863ad54cabe4c9eb672",
     "modules/napplet-host/ios/NativeCommonNpub.swift": "d74c599eb1129b560e7ba23e9ab6eadb5c93efa6dc5cfb36660f5ccc608affad",
     "modules/napplet-host/ios/PublishedRelayWebSocketClientFrames.swift": "8bc1af1653d83f2756f582f059d782fae16e1b2f69d4de36fbdebb755bedbed7",
-    "modules/napplet-host/ios/CapabilityLeaseRegistry.swift": "2aa8d9dac424df19f19081ca85ed8a1c2592f92c2c59b4a1464d42891caeaa64",
-    "modules/napplet-host/ios/CapabilityTransport.swift": "389c0f661f9db3aabf5d6ebb1a02373b744c8e269461e200dc69a4709a141df0",
-    "modules/napplet-host/ios/ApprovalTransport.swift": "d834ba1fcfb2f9fc3b898d60916e2b2afcd973f673fe7e81989d6b7262469f97"
+    "modules/napplet-host/ios/CapabilityLeaseRegistry.swift": "6003897789665ccb38f2b74f3822434f880afec4d76e5bef6344c4e6ae2b15eb",
+    "modules/napplet-host/ios/CapabilityTransport.swift": "8f4d8135098dc0816db97f3a0853c036484c67fae01f7f0253e7da931ea2416a",
+    "modules/napplet-host/ios/ApprovalTransport.swift": "76ef786e0d312e5c237910108ebf4bdfe27cd807abb8136658a40d50b2a86482",
+    "modules/napplet-host/ios/LegacyReadOnlyContext.swift": "d22e3d6b1133e3fd946ff4d17d78298a08ae16114056df13e814b2b8f6b07300"
   },
   "testSources": {
-    "Tests/ApprovalTransportTests.swift": "6a64d1a467a545727410001bfafad0633901d9c04d3d9aa431a2974b1e43df47"
+    "Tests/ApprovalTransportTests.swift": "efe43c6b27b1b031486cf1d2901a46992e845c33774cd2581a95be598e9baf01"
   },
   "harnessFiles": {
     "README.md": "79476da0c20abd3abdf511c1b50f94276a39ccafbbdabc770c7412b7848dad5a",
     "Package.swift.template": "42d7afbda818f2ffce5022f535b068fb1a54772d2e1f380211f77e0f22a6d1f0",
-    "runner.py": "dc7cfe6cdaa7f22e2100102edaf687ab6e0f4aca6de4758c5a861147b1a8ac9a"
+    "runner.py": "27dcca6cb19ad01185c67c4d5b8d8cba48c7d6719c5a4c86b52f151d81b52c98"
   }
 }

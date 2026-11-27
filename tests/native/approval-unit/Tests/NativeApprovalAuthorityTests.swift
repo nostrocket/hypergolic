@@ -187,3 +187,21 @@ private func ready(_ owner: NativeApprovalAuthority, generation: String = "gener
   owner.setForeground(true)
   #expect(!owner.resumeReview())
 }
+
+@Test func devicePromptPreservesOnlyReviewedApprovalThroughInactivity() {
+  let (owner, _) = authority(), session = ready(owner)
+  let request = owner.admit(session, snapshot: "reviewed")!
+  #expect(owner.currentReview()?.request == request)
+  let approved = owner.approve(request)!
+  owner.setForeground(false, retaining: request)
+  #expect(!owner.isApproved(approved))
+  #expect(owner.take(approved) == nil)
+  owner.setForeground(true)
+  #expect(owner.resumeReview())
+  #expect(owner.isApproved(approved))
+  owner.setForeground(false, retaining: request)
+  owner.setForeground(false)
+  owner.setForeground(true)
+  #expect(owner.resumeReview())
+  #expect(!owner.isApproved(approved))
+}

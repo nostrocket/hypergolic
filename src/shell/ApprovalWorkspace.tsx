@@ -37,7 +37,7 @@ export function ApprovalWorkspace({ service, uploads, cvm, reviewSlot, epoch, wo
   const title = workspace?.sessions.find(session => session.id === shown?.origin.sessionId)?.title ?? 'Napplet';
   return <ApprovalProvider value={service}><UploadProvider value={uploads ?? null}>
     <Shell {...shell} blocked={Boolean(shell.blocked||cvmShown)} hostActivityBlocked={Boolean(shell.blocked)} workspace={workspace} pendingApprovals={new Set([...snapshot.pendingSessionIds, ...uploadSnapshot.pendingSessionIds,...cvmSnapshot.pendingSessionIds])}
-      footer={<>{!shown && !uploadSnapshot.current && !shell.blocked && <>{footer}<ApprovalResume snapshot={snapshot} service={service} /></>}<UploadWorkspace service={uploads} snapshot={uploadSnapshot} workspace={workspace} blocked={Boolean(shown || shell.blocked)} mayReview={id => !reviewSlot || reviewSlot.owns('upload', id)} /></>}
+      footer={<>{!shown && !uploadSnapshot.current && !shell.blocked && <>{footer}{!held && <ApprovalResume snapshot={snapshot} service={service} />}</>}<UploadWorkspace service={uploads} snapshot={uploadSnapshot} workspace={workspace} blocked={Boolean(shown || shell.blocked)} mayReview={id => !reviewSlot || reviewSlot.owns('upload', id)} /></>}
       canCloseWithoutWarning={workspaceCloseGuard({service,presentation,showReceipt,uploads,cvmPending:cvmSnapshot.pendingSessionIds,workspace})}
       onBeforeClose={session => {service.close(session.id); uploads?.close(session.id); cvm?.close(session.id); reviewSlot?.close(session.id);}} />
     {cvm&&<CvmReview service={cvm} slot={reviewSlot} workspace={workspace}/> }
@@ -63,7 +63,8 @@ function useReviewVisibility(reviewSlot: ReviewSlot | undefined, snapshot: Appro
   presentation: ReturnType<typeof useApprovalPresentation>) {
   const slot = useSyncExternalStore(reviewSlot?.subscribe ?? emptySubscribe, reviewSlot?.getSnapshot ?? emptySlot);
   const held = presentation.busy && (!reviewSlot || slot?.lane === 'approval' && slot.item.id === presentation.id);
-  const candidate = held ? presentation.held : snapshot.current;
+  // Returning from a signer must leave the native resume dialog above the workspace.
+  const candidate = held && !snapshot.reviewPaused ? presentation.held : snapshot.current;
   const shown = candidate && (!reviewSlot || slot?.lane === 'approval' && slot.item.id === candidate.id) ? candidate : null;
   const showReceipt = !shown && (!reviewSlot || slot?.lane === 'approval' && slot.item.id === presentation.id);
   return {shown, held, showReceipt};

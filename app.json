@@ -28,7 +28,7 @@
       "bundleIdentifier": "org.nostrocket.hypergolic.dev",
       "icon": "./assets/brand/app-icon.png",
       "infoPlist": {
-        "NSFaceIDUsageDescription": "Use Face ID to approve identity backup and deletion."
+        "NSFaceIDUsageDescription": "Use Face ID to unlock Hypergolic, confirm signing, and protect identity settings, key backup and deletion."
       }
     },
     "updates": {
