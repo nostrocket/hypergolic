@@ -155,6 +155,8 @@ class ChangedAccessDriver(base.Driver):
 
     def open_updates(self):
         self.open_settings()
+        self.scroll_until(lambda node: resource_id_is(node, 'settings-section-access'), 'Napplet access room')
+        self.tap_id('settings-section-access', 'open Napplet access')
         identifier = 'settings-section-published-updates'
         nodes = self.scroll_until(lambda n: resource_id_is(n, identifier), 'published updates section')
         self.tap(exactly_one(nodes, lambda n: resource_id_is(n, identifier), 'published updates section'))
@@ -168,6 +170,7 @@ class ChangedAccessDriver(base.Driver):
                          'native Settings screen')[1]
 
     def close_settings(self):
+        self.tap_id('settings-room-back', 'return from Napplet access')
         self.tap_id('settings-done', 'close Settings control')
 
     def source_snapshot(self):
@@ -208,6 +211,7 @@ class ChangedAccessDriver(base.Driver):
         _, nodes = self.nodes()
         if not any(resource_id_is(n, 'settings-full-npub') and label(n) == FIXTURE['identityNpub'] for n in nodes):
             raise CheckFailed('Fixture selected identity is not the disposable public-only key')
+        self.tap_id('settings-section-open-napplet', 'open address entry room')
         self.scroll_until(lambda n: resource_id_is(n, 'settings-napplet-address'), 'first-open naddr field')
         self.tap_id('settings-napplet-address', 'public naddr field')
         # A single long IME injection can outrun the controlled React Native input.

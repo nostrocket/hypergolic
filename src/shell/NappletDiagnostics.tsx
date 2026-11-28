@@ -4,6 +4,7 @@ import {FlatList, ScrollView, StyleSheet, Text, useWindowDimensions, View, type 
 import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
 import {redactedSummary, type DiagnosticEntry} from '../runtime/napplet-diagnostics';
 import {RelaySettings} from './RelaySettings';
+import {SettingsKeyboardViewport} from './SettingsKeyboardViewport';
 import type {RelaySettingsService} from '../network/relay-settings';
 import type {NappletDescriptor} from './workspace';
 import {ShellModal} from './ShellModal';
@@ -30,13 +31,13 @@ export function NappletDiagnostics({session, rows, relays, close}: Props) {
     <DiagnosticRow row={item} selected={item.id === selected?.id} select={select} />, [selected?.id]);
   const dismiss = () => network ? showNetwork(false) : close();
   return <ShellModal visible onRequestClose={dismiss}>
-    <SafeAreaProvider><SafeAreaView style={styles.screen} onAccessibilityEscape={dismiss}>
+    <SafeAreaProvider><SafeAreaView style={[styles.screen, network && styles.networkScreen]} onAccessibilityEscape={dismiss}>
+      {network ? <SettingsKeyboardViewport><RelaySettings service={relays ?? null} onBack={dismiss} /></SettingsKeyboardViewport> : <>
       <View style={styles.header}>
         <View style={styles.heading}><Text style={styles.label} numberOfLines={1}>{session.title}</Text>
-          <Text accessibilityRole="header" style={styles.title}>{network ? 'Network settings' : 'Diagnostics'}</Text></View>
-        <ShellPressable accessibilityRole="button" onPress={dismiss} style={styles.action}><Text style={styles.link}>{network ? 'Back' : 'Done'}</Text></ShellPressable>
+          <Text accessibilityRole="header" style={styles.title}>Diagnostics</Text></View>
+        <ShellPressable accessibilityRole="button" onPress={dismiss} style={styles.action}><Text style={styles.link}>Done</Text></ShellPressable>
       </View>
-      {network ? <ScrollView><RelaySettings service={relays ?? null} /></ScrollView> : <>
         <View style={[styles.panes, width > height && styles.wide]}>
           <View style={styles.timeline}><Text style={styles.label}>Host timeline</Text>
             <FlatList data={rows} keyExtractor={row => String(row.id)} renderItem={renderRow} /></View>
@@ -65,6 +66,7 @@ const DiagnosticRow = memo(function DiagnosticRow({row, selected, select}: {row:
 });
 const createStyles = (c: ShellPalette, f: ShellFonts) => StyleSheet.create({
   screen: {flex: 1, paddingHorizontal: 16, backgroundColor: c.background},
+  networkScreen: {paddingHorizontal: 0},
   header: {flexDirection: 'row', alignItems: 'center', paddingVertical: 6},
   heading: {flex: 1},
   title: {fontFamily: f.display, fontSize: 25, color: c.text},

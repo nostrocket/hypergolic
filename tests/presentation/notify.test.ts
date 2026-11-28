@@ -13,6 +13,19 @@ test('results and pushes require exact correlation, shape and implemented contro
  for(const row of [{type:'notify.send.result',id:'b',notificationId:'n'},{type:'notify.send.result',id:'a',notificationId:'n',error:'failure'},{type:'notify.send.result',id:'a'}])assert.throws(()=>captureNotifyReply(row,request));
  assert.throws(()=>captureNotifyPush({type:'notify.controls',controls:['system']}));assert.throws(()=>captureNotifyPush({type:'notify.action',notificationId:'n',actionId:'a',sender:'forged'}));
 });
+test('polling the notification centre preserves the visible permission sheet through its arming delay', async t => {
+  const h = await setup(t);
+  const pending = h.dispatch(h.source, {type: 'notify.permission.request', id: 'permission'});
+  const review = await h.review();
+  for (let poll = 0; poll < 4; poll++) {
+    h.advance(250);
+    assert.equal(h.broker.getSnapshot().review, review);
+  }
+  h.broker.decide(review.id, false);
+  await pending.promise;
+  assert.equal(h.broker.getSnapshot().review, null);
+  assert.equal(pending.reply().granted, false);
+});
 test('notification needs focused trusted permission and original correlated result', async t=>{
  const h=await setup(t);const denied=h.dispatch(h.source,{type:'notify.send',id:'denied',title:'Title'});await denied.promise;assert.equal(denied.reply().error,'permission denied');assert.equal(h.broker.getSnapshot().cards.length,0);
  await h.allow();const sent=h.dispatch(h.source,{type:'notify.send',id:'sent',title:'Title',body:'Body',actions:[{id:'reply',label:'Reply'}]});await sent.promise;

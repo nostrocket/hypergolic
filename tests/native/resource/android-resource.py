@@ -178,7 +178,7 @@ class Journey:
         else:
             self.tap(self.find('Restore download defaults'))
         self.find('Download servers saved.');self.capture('resource-settings-disabled' if disabled else 'resource-settings-defaults')
-        self.tap(self.find('Return to Resource Lab'))
+        self.tap(self.find('Back'))
 
     def schemes(self):
         samples = json.loads(self.args.schemes.read_text());self.result['schemeSamples']=samples

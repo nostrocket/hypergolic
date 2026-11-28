@@ -372,6 +372,10 @@ class NappletHostModule : Module() {
       Prop("inputBlocked") { view: NappletHostView, blocked: Boolean -> view.setInputBlocked(blocked) }
       OnViewDestroys { view: NappletHostView -> view.destroySession() }
     }
+    View(KeyboardBoundaryView::class) {
+      Name("KeyboardBoundary")
+      Events("onOverlapChange")
+    }
     View(ShellGestureRegionView::class) {
       Name("ShellGestureRegion")
       Prop("active") { view: ShellGestureRegionView, active: Boolean -> view.setHandleActive(active) }

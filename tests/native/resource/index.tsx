@@ -9,6 +9,9 @@ import { loadNativeResourceHost } from '../../../src/resources/native-resource-p
 import { openNativeResourceSettings, type NativeResourceSettings } from '../../../src/resources/resource-settings-native';
 import { ResourceMatrix } from './matrix';
 import { ResourceSettings } from '../../../src/shell/ResourceSettings';
+import { SettingsKeyboardViewport } from '../../../src/shell/SettingsKeyboardViewport';
+import { ShellModal } from '../../../src/shell/ShellModal';
+import { useShellStyles, type ShellPalette } from '../../../src/shell/theme';
 import { loadNativeRelayQuery } from '../../../src/network/native-relay-query-port';
 import { BUNDLED_FIXTURES } from '../../../src/runtime/bundled-catalog';
 import { openShellDatabase } from '../../../src/storage/database';
@@ -23,6 +26,7 @@ const configuration = Object.freeze({ sessionId:'resource-native',epoch:0,
   appId:'resource-lab',version:BUNDLED_FIXTURES['resource-lab'].aggregateHash,instanceId:'resource-native',fixture:'resource-lab',domains:['resource','link','theme'] });
 function Fixture() {
   const [settingsVisible,setSettingsVisible]=useState(false),[settings,setSettings]=useState<NativeResourceSettings|null>(null);
+  const {styles: roomStyles} = useShellStyles(roomStyleSheet);
   const [focused,setFocused]=useState(true);
   const [visible,setVisible]=useState(true),[generation,setGeneration]=useState(0),[prepared,setPrepared]=useState(false),[status,setStatus]=useState('Opening resource fixture…');
   const receiver=useRef<((event:Event)=>void)|null>(null);
@@ -63,13 +67,18 @@ function Fixture() {
     <Text style={styles.notice}>Read-only resource fixture · public identity · no signing</Text>
     <Text testID="resource-native-status" style={styles.notice}>{status}</Text>
     <Pressable accessibilityRole="button" onPress={toggle} style={styles.button}><Text style={styles.label}>{visible?'Close Resource Lab':'Open Resource Lab'}</Text></Pressable>
-    <Pressable accessibilityRole="button" onPress={()=>setSettingsVisible(value=>!value)} style={styles.button}><Text style={styles.label}>{settingsVisible?'Return to Resource Lab':'Download settings'}</Text></Pressable>
-    {settingsVisible?<View style={styles.settings}><ResourceSettings service={settings}/></View>:null}
+    <Pressable accessibilityRole="button" onPress={()=>setSettingsVisible(true)} style={styles.button}><Text style={styles.label}>Download settings</Text></Pressable>
+    {settingsVisible && <ShellModal visible onRequestClose={() => setSettingsVisible(false)}>
+      <SafeAreaProvider><SafeAreaView style={roomStyles.settings}><SettingsKeyboardViewport>
+        <ResourceSettings service={settings} onBack={() => setSettingsVisible(false)} />
+      </SettingsKeyboardViewport></SafeAreaView></SafeAreaProvider>
+    </ShellModal>}
     {visible?<Pressable accessibilityRole="button" onPress={()=>setFocused(value=>!value)} style={styles.button}><Text style={styles.label}>{focused?'Hide Resource Lab':'Show Resource Lab'}</Text></Pressable>:null}
     {visible&&prepared?<Host key={generation} configuration={JSON.stringify(configuration)} active={focused&&!settingsVisible} onHostEvent={event=>receiver.current?.(event.nativeEvent)} style={styles.host}/>:null}
   </View>;
 }
-const styles=StyleSheet.create({settings:{padding:16},root:{flex:1,backgroundColor:'#140f0b'},host:{flex:1},notice:{color:'#f3efeb',fontSize:12,padding:8,textAlign:'center'},button:{minHeight:48,justifyContent:'center',alignItems:'center',backgroundColor:'#34251d'},label:{color:'#e8805d',fontSize:16}});
+const roomStyleSheet = (colors: ShellPalette) => StyleSheet.create({settings: {flex: 1, backgroundColor: colors.background}});
+const styles=StyleSheet.create({root:{flex:1,backgroundColor:'#140f0b'},host:{flex:1},notice:{color:'#f3efeb',fontSize:12,padding:8,textAlign:'center'},button:{minHeight:48,justifyContent:'center',alignItems:'center',backgroundColor:'#34251d'},label:{color:'#e8805d',fontSize:16}});
 function Root() {
   const [diagnostics,setDiagnostics]=useState(false);
   return <SafeAreaProvider><SafeAreaView style={styles.root}>{diagnostics?<ResourceMatrix/>:<Fixture/>}<Pressable accessibilityRole="button" style={styles.button} onPress={()=>setDiagnostics(value=>!value)}><Text style={styles.label}>{diagnostics?'Return to resource journey':'Resource diagnostics'}</Text></Pressable></SafeAreaView></SafeAreaProvider>;

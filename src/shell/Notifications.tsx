@@ -27,15 +27,38 @@ function NotificationPermission({review, service}: {review: NotifyReview; servic
   const insets = useSafeAreaInsets();
   const control = useReviewControl(review.id);
   const decline = useRef<ViewInstance>(null);
-  return <Modal visible onShow={() => {control.onShow(); decline.current?.focus();}} transparent animationType="fade" onRequestClose={() => service.decide(review.id, false)}><View style={[styles.shade, {paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right}]}><View style={styles.permissionSheet} accessibilityViewIsModal><TrustedBand /><ScrollView contentContainerStyle={[styles.sheet, {paddingBottom: Math.max(insets.bottom, 24)}]}>
-    <Text accessibilityRole="header" style={styles.heading}>Allow notifications?</Text>
-    <Text selectable style={styles.title}>{review.origin.snapshot?.title ?? publishedAppLabel(review.origin.appId)}</Text><Text selectable style={styles.publisher}>{formatNpub(review.origin.publisher)}</Text>
-    {review.origin.snapshot && <Text selectable style={styles.publisher}>Snapshot (kind 5129) · {review.origin.snapshot.eventId}</Text>}
-    <Text style={styles.detail}>Selected identity</Text><Text selectable style={styles.publisher}>{formatNpub(review.origin.user)}</Text>
-    <Text style={styles.title}>{review.label}</Text><Text selectable testID="notify-review-channel" style={styles.text}>{review.channel || 'General notifications'}</Text>
-    <Text style={styles.text}>Remember this notification permission for this identity, napplet and channel. Revoke it in Settings. Alerts stay inside Hypergolic and clear when the app enters the background.</Text>
-    <Button disabled={!control.ready} id="notify-allow" label="Allow notifications" onPress={() => service.decide(review.id, true)}/><Pressable ref={decline} testID="notify-deny" accessibilityRole="button" onPress={() => service.decide(review.id, false)} style={styles.button}><Text style={styles.action}>Not now</Text></Pressable>
-  </ScrollView></View></View></Modal>;
+  const distinctChannel = review.channel !== '' && review.channel !== review.label;
+  return <Modal visible transparent animationType="fade" onShow={() => {control.onShow(); decline.current?.focus();}}
+    onRequestClose={() => service.decide(review.id, false)}>
+    <View style={[styles.shade, {paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right}]}>
+      <View style={styles.permissionSheet} accessibilityViewIsModal>
+        <TrustedBand />
+        <ScrollView contentContainerStyle={[styles.sheet, {paddingBottom: Math.max(insets.bottom, 24)}]}>
+          <Text accessibilityRole="header" style={styles.heading}>Allow notifications?</Text>
+          <View style={styles.attribution}>
+            <Text selectable style={styles.title}>{review.origin.snapshot?.title ?? publishedAppLabel(review.origin.appId)}</Text>
+            <Text selectable style={styles.publisher}>{formatNpub(review.origin.publisher)}</Text>
+            {review.origin.snapshot && <Text selectable style={styles.publisher}>Snapshot (kind 5129) · {review.origin.snapshot.eventId}</Text>}
+          </View>
+          <View style={styles.attribution}>
+            <Text style={styles.detail}>Selected identity</Text>
+            <Text selectable style={styles.publisher}>{formatNpub(review.origin.user)}</Text>
+          </View>
+          <View style={styles.attribution}>
+            <Text selectable testID={distinctChannel ? undefined : 'notify-review-channel'} style={styles.title}>{review.label}</Text>
+            {distinctChannel && <Text selectable testID="notify-review-channel" style={styles.text}>{review.channel}</Text>}
+            <Text style={styles.text}>Remember this notification permission for this identity, napplet and channel. Revoke it in Settings. Alerts stay inside Hypergolic and clear when the app enters the background.</Text>
+          </View>
+          <View>
+            <Pressable testID="notify-allow" disabled={!control.ready} accessibilityRole="button" style={styles.allow}
+              onPress={() => service.decide(review.id, true)}><Text style={styles.allowLabel}>Allow notifications</Text></Pressable>
+            <Pressable ref={decline} testID="notify-deny" accessibilityRole="button" style={styles.decline}
+              onPress={() => service.decide(review.id, false)}><Text style={styles.declineLabel}>Not now</Text></Pressable>
+          </View>
+        </ScrollView>
+      </View>
+    </View>
+  </Modal>;
 }
 export function NotificationReview({service, slot, blocked}: {service: NotifyBroker; slot?: ReviewSlot; blocked: boolean}) {
   const {review} = useSyncExternalStore(service.subscribe, service.getSnapshot);
@@ -75,6 +98,11 @@ export function Notifications({service, blocked}: {service: NotifyBroker; blocke
 }
 const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.create({
   permissionSheet: {maxHeight: '92%', backgroundColor: colors.surface}, group: {gap: 12}, shade: {flex: 1, justifyContent: 'flex-end', backgroundColor: colors.shade}, sheet: {backgroundColor: colors.background, padding: 24, gap: 12},
+  attribution: {gap: 4},
+  allow: {minHeight: 50, borderRadius: 4, padding: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary},
+  allowLabel: {fontFamily: fonts.strong, color: colors.onPrimary, fontSize: 14, letterSpacing: 1.1, textTransform: 'uppercase', textAlign: 'center'},
+  decline: {alignItems: 'center', justifyContent: 'center'},
+  declineLabel: {fontFamily: fonts.medium, color: colors.accent, fontSize: 16, letterSpacing: 0.5},
   heading: { fontFamily: fonts.display,color: colors.text, fontSize: 28, }, title: { fontFamily: fonts.strong,color: colors.text, fontSize: 18, }, text: { fontFamily: fonts.body,color: colors.text, fontSize: 16, lineHeight: 24},
   detail: { fontFamily: fonts.body,color: colors.muted, fontSize: 14}, publisher: { fontFamily: fonts.mono,color: colors.muted, fontSize: 12, },
   button: {padding: 12, minHeight: 44, backgroundColor: colors.surface, borderRadius: 0}, action: { textTransform: 'uppercase', letterSpacing: 1.8, fontFamily: fonts.strong,color: colors.accent, fontSize: 14},

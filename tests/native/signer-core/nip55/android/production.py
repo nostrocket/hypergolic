@@ -157,13 +157,16 @@ def main():
             time.sleep(.2)
         raise RuntimeError('Private input state unavailable; no text retained')
     def settings(name):
-        top()
-        if not any(matches(n, 'settings-full-npub') for n in snapshot(name).iter('node')):
+        tree = snapshot(name)
+        if any(matches(n, 'settings-room-back') for n in tree.iter('node')):
+            find('settings-room-back', name + '-index', tap=True)
+        elif not any(matches(n, 'settings-done') for n in tree.iter('node')):
             find('shell-settings', name + '-open', tap=True)
-        top(); return find('settings-full-npub', name + '-npub').get('text')
+        top()
+        return find('settings-full-npub', name + '-npub').get('text')
     def section(name):
-        top(); node = find('settings-section-identity', name + '-section', scroll=True)
-        if '+' in node.get('content-desc', ''): find('settings-section-identity', name + '-expand', tap=True)
+        settings(name + '-index')
+        find('settings-section-identity', name + '-identity-room', scroll=True, tap=True)
     def accounts(name, expected):
         section(name); find('Saved identities', name + '-saved', scroll=True)
         swipe()
@@ -194,7 +197,7 @@ def main():
             if time.monotonic() >= deadline: break
             tree = snapshot(name)
             views = [n for n in tree.iter('node') if n.get('class') == 'android.widget.ScrollView' and n.get('scrollable') == 'true' and n.get('package') == PACKAGE]
-            if len(views) != 1 or not any(matches(n, 'settings-done') for n in tree.iter('node')):
+            if len(views) != 1 or not any(matches(n, 'settings-room-back') for n in tree.iter('node')):
                 raise RuntimeError('Expected one observed Settings scroll view')
             area = state_bounds(views[0])
             if area[2] <= area[0] or area[3] <= area[1]: raise RuntimeError('Invalid observed Settings scroll bounds')
@@ -291,6 +294,7 @@ def main():
                 check(after == before + 1, name + '-one-new-sdk-request'); return
         raise RuntimeError('State Lab SDK operation did not settle')
     def state_read(name, expected_npub):
+        settings(name + '-index-before-read')
         find('settings-done', name + '-close-settings', tap=True)
         state_ready(name)
         state_action('read', 'Read complete.', name)
@@ -300,8 +304,7 @@ def main():
     def state_start(name, expected_npub):
         nonlocal state_title
         check(settings(name + '-account') == expected_npub, name + '-same-account')
-        top(); developer = find('settings-section-developer', name + '-developer-section', scroll=True)
-        if '+' in developer.get('content-desc', ''): find('settings-section-developer', name + '-expand-developer', tap=True)
+        find('settings-section-developer', name + '-developer-room', scroll=True, tap=True)
         find('settings-open-state-lab', name + '-open-state-lab', tap=True, scroll=True)
         state_title = state_ready(name)
         state_action('read', 'No value saved.', name + '-missing-before-write')

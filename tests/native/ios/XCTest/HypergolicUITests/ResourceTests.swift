@@ -98,7 +98,7 @@ final class ResourceTests: XCTestCase {
         app.buttons["Save download servers"].tap()
       } else {app.buttons["Restore download defaults"].tap()}
       XCTAssertTrue(app.staticTexts["Download servers saved."].waitForExistence(timeout:10),app.debugDescription);capture(disabled ? "resource-settings-disabled" : "resource-settings-defaults")
-      app.buttons["Return to Resource Lab"].tap()
+      app.buttons["settings-room-back"].tap()
     }
     settings(false);load(blossom,"3006f1743f2c3c725136d20d2da99820c80509b43e2687b7d5ddd33e098fe706",106828,"image/png");capture("resource-blossom-default-verified")
     settings(true);load(blossom,"3006f1743f2c3c725136d20d2da99820c80509b43e2687b7d5ddd33e098fe706",106828,"image/png")

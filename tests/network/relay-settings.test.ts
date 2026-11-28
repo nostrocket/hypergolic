@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
+  assertRelayCanBeAdded,
+  normalizeRelayUrl,
   openRelaySettings,
   RELAY_SETTINGS_STORAGE_KEY,
   MAX_RELAYS_PER_ROLE,
@@ -148,6 +150,17 @@ test('duplicate detection is canonical and scoped to one role', async () => {
   await service.addRelay('lookup', 'wss://relay.example.org');
   assert.equal(service.getSettings().networkRelays.at(-1), 'wss://relay.example.org');
   assert.equal(service.getSettings().lookupRelays.at(-1), 'wss://relay.example.org');
+});
+
+test('an addition accepted by the editor is checked against intervening writes', async () => {
+  const service = await openRelaySettings(new MemoryStorage());
+  const original = service.getSettings().networkRelays;
+  const relay = normalizeRelayUrl('wss://RELAY.EXAMPLE.ORG:443/');
+  assertRelayCanBeAdded(original, relay);
+  await service.addRelay('network', relay);
+  expectCode(() => assertRelayCanBeAdded(service.getSettings().networkRelays, relay), 'DUPLICATE_RELAY');
+  await assert.rejects(service.addRelay('network', relay), {code: 'DUPLICATE_RELAY'});
+  assert.deepEqual(service.getSettings().networkRelays, [...original, relay]);
 });
 
 test('invalid persisted data is rejected instead of being silently reseeded', async () => {

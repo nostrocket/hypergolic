@@ -155,6 +155,8 @@ class PublishedUpdateDriver(base.Driver):
 
     def open_updates(self):
         self.open_settings()
+        self.scroll_until(lambda node: resource_id_is(node, 'settings-section-access'), 'Napplet access room')
+        self.tap_id('settings-section-access', 'open Napplet access')
         identifier = 'settings-section-published-updates'
         nodes = self.scroll_until(lambda n: resource_id_is(n, identifier), 'published updates section')
         self.tap(exactly_one(nodes, lambda n: resource_id_is(n, identifier), 'published updates section'))
@@ -171,6 +173,7 @@ class PublishedUpdateDriver(base.Driver):
         _, nodes = self.nodes()
         if any(label(n) != 'Settings' for n in nodes) and any(resource_id_is(n, 'shell-settings') for n in nodes):
             return nodes
+        self.tap_id('settings-room-back', 'return from Napplet access')
         self.tap_id('settings-done', 'close Settings control')
         return self.wait(lambda observed: any(resource_id_is(n, 'update-fixture-label') for n in observed),
                          'published update fixture shell')[1]
@@ -216,6 +219,7 @@ class PublishedUpdateDriver(base.Driver):
         if not any(resource_id_is(n, 'settings-full-npub') and label(n) == FIXTURE['identityNpub']
                    for n in nodes):
             raise CheckFailed('Fixture selected identity is not the disposable public-only key')
+        self.tap_id('settings-section-open-napplet', 'open address entry room')
         self.scroll_until(lambda n: resource_id_is(n, 'settings-napplet-address'),
                           'first-open naddr field')
         self.tap_id('settings-napplet-address', 'public naddr field')
@@ -272,6 +276,7 @@ class PublishedUpdateDriver(base.Driver):
             'update review cancelled with session retained')
         self.check('cancel-keeps-old-session', 'Update was declined and the original published session remains')
         self.capture('05-cancelled-v1')
+        self.tap_id('settings-room-back', 'return from Napplet access')
         self.tap_id('settings-done', 'close Settings after declining update')
         _, nodes = self.wait(lambda observed: guest_marker(observed, 'update-v1'),
                              'accessible update-v1 guest after declining')
@@ -331,6 +336,7 @@ class PublishedUpdateDriver(base.Driver):
         if any(resource_id_suffix(n).startswith('published-update-review-') for n in nodes) or not any(
                 label(n) == 'Pinned event ' + FIXTURE['newEvent'] for n in nodes):
             raise CheckFailed('Older fixture revision changed the accepted pin or opened a review')
+        self.tap_id('settings-room-back', 'return from Napplet access')
         self.tap_id('settings-done', 'close Settings after older revision check')
         _, nodes = self.wait(lambda observed: guest_marker(observed, 'update-v2'),
                              'accepted guest after older revision check')
