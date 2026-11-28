@@ -100,6 +100,12 @@ export function normalizeRelayUrl(value: unknown): string {
   return normalized;
 }
 
+/** Recheck list-dependent rules inside the write queue, even after the editor validates its snapshot. */
+export function assertRelayCanBeAdded(relays: readonly string[], normalizedUrl: string): void {
+  if (relays.includes(normalizedUrl)) fail('DUPLICATE_RELAY');
+  if (relays.length >= MAX_RELAYS_PER_ROLE) fail('RELAY_LIMIT_EXCEEDED');
+}
+
 function freezeSnapshot(networkRelays: readonly string[], lookupRelays: readonly string[]): RelaySettingsSnapshot {
   return Object.freeze({
     networkRelays: Object.freeze([...networkRelays]),
@@ -178,8 +184,7 @@ export async function openRelaySettings(storage: RelaySettingsStoragePort): Prom
       const url = normalizeRelayUrl(value);
       return commit((current) => {
         const relays = select(current, role);
-        if (relays.includes(url)) return fail('DUPLICATE_RELAY');
-        if (relays.length >= MAX_RELAYS_PER_ROLE) return fail('RELAY_LIMIT_EXCEEDED');
+        assertRelayCanBeAdded(relays, url);
         return withRole(current, role, [...relays, url]);
       });
     },

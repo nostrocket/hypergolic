@@ -30,6 +30,7 @@ class Journey(ui.Journey):
   raise AssertionError('Settings control unavailable: '+label)
  def settings_tap(self,label):self.settings_find(label);self.tap(label)
  def enter_address(self,address):
+  self.settings_tap('settings-section-open-napplet')
   self.settings_tap('settings-napplet-address');time.sleep(.5)
   self.adb('shell','input','keycombination','113','29');self.adb('shell','input','keyevent','67')
   for offset in range(0,len(address),12):
@@ -69,7 +70,7 @@ class Journey(ui.Journey):
   (self.args.output/'signed-os-handler-activity.txt').write_text(top);(self.args.output/'signed-os-handler.png').write_bytes(self.adb('exec-out','screencap','-p',binary=True));self.adb('shell','am','start','-n',PACKAGE+'/org.nostrocket.hypergolic.dev.MainActivity');self.find('Link handed to your device.');self.receipt('opened');self.capture('signed-os-return');self.check('signed-actual-os-handoff-return')
   review();cancel();self.check('each-opening-needs-new-review')
   launch();admitted();self.capture('cold-signed-admission');review();cancel();self.check('cold-grant-retained-new-review-required')
-  self.tap('shell-settings');self.settings_tap('identity-select-'+publisher);self.settings_find('Switch identity?');self.settings_tap('identity-change-confirm');self.find('Open this napplet?');self.find('Access: link, resource');self.capture('new-identity-domain-consent');self.tap('Allow and open');admitted();review();cancel();self.check('normal-confirmed-identity-fresh-review')
+  self.tap('shell-settings');self.settings_tap('settings-section-identity');self.settings_tap('identity-select-'+publisher);self.settings_find('Switch identity?');self.settings_tap('identity-change-confirm');self.find('Open this napplet?');self.find('Access: link, resource');self.capture('new-identity-domain-consent');self.tap('Allow and open');admitted();review();cancel();self.check('normal-confirmed-identity-fresh-review')
   open_signed('no-link');self.guest('Open external link');self.find('Link request unavailable.');self.absent();self.capture('signed-no-link-domain');self.check('missing-link-domain-cannot-open')
   self.report['sourceAfter']=sources();assert self.report['sourceBefore']==self.report['sourceAfter'];self.report['status']='passed'
 p=argparse.ArgumentParser(description=__doc__);p.add_argument('--serial',required=True)

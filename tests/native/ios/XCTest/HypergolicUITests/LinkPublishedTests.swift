@@ -35,7 +35,7 @@ final class LinkPublishedTests: XCTestCase {
   func cancel(){app.alerts.buttons["Cancel"].tap();wait("Link opening denied.");receipt("denied");absent()}
   func openSigned(_ role:String,_ reject:Bool=false){
    let address=app.staticTexts["signed-"+role+"-address"];XCTAssertTrue(address.waitForExistence(timeout:30),app.debugDescription);let link=address.label;XCTAssertTrue(link.hasPrefix("naddr1"))
-   button("shell-settings");let input=app.textFields["settings-napplet-address"];settings(input);input.tap()
+   button("shell-settings");settingsButton("settings-section-open-napplet");let input=app.textFields["settings-napplet-address"];settings(input);input.tap()
    if let old=input.value as? String,!old.isEmpty {input.typeText(String(repeating:XCUIKeyboardKey.delete.rawValue,count:old.count))}
    input.typeText(link+"\n")
    let consent=app.staticTexts["Allow this napplet?"].firstMatch;XCTAssertTrue(consent.waitForExistence(timeout:30),app.debugDescription);settings(consent)
@@ -50,7 +50,7 @@ final class LinkPublishedTests: XCTestCase {
   app.activate();wait("Link handed to your device.");receipt("opened");passed("signed-actual-os-handoff-return")
   review();cancel();passed("each-opening-needs-new-review")
   app.terminate();app.launch();admitted();review();cancel();passed("cold-grant-retained-new-review-required")
-  button("shell-settings");settingsButton("identity-select-"+publisher);wait("Switch identity?");settingsButton("identity-change-confirm");wait("Open this napplet?");wait("Access: link, resource");capture("new-identity-domain-consent");button("Allow and open");admitted();review();cancel();passed("normal-confirmed-identity-fresh-review")
+  button("shell-settings");settingsButton("settings-section-identity");settingsButton("identity-select-"+publisher);wait("Switch identity?");settingsButton("identity-change-confirm");wait("Open this napplet?");wait("Access: link, resource");capture("new-identity-domain-consent");button("Allow and open");admitted();review();cancel();passed("normal-confirmed-identity-fresh-review")
   openSigned("no-link");guest("Open external link");wait("Link request unavailable.");absent();passed("missing-link-domain-cannot-open")
  }
 }

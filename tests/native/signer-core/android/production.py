@@ -149,14 +149,17 @@ def top():
     for _ in range(4): run(adb + ['shell', 'input', 'swipe', '500', '650', '500', '1850', '250'])
 def settings(name):
     tree = snapshot(name)
-    if not any(n.get('resource-id') == 'settings-full-npub' or n.get('resource-id', '').startswith('settings-section-') for n in tree.iter('node')):
-        if any(n.get('resource-id') == 'identity-import-cancel' for n in tree.iter('node')): find('identity-import-cancel', name+'-close-import', tap=True)
-        else: find('shell-settings', name+'-open', tap=True)
+    if any(n.get('resource-id') == 'identity-import-cancel' for n in tree.iter('node')):
+        find('identity-import-cancel', name + '-close-import', tap=True)
+        tree = snapshot(name + '-after-import')
+    if any(n.get('resource-id') == 'settings-room-back' for n in tree.iter('node')):
+        find('settings-room-back', name + '-index', tap=True)
+    elif not any(n.get('resource-id') == 'settings-done' for n in tree.iter('node')):
+        find('shell-settings', name + '-open', tap=True)
     top()
     return find('settings-full-npub', name+'-npub').get('text')
 def identity_section(name):
-    top(); node = find('settings-section-identity', name+'-section', scroll=True)
-    if '+' in node.get('content-desc', ''): find('settings-section-identity', name+'-expand', tap=True)
+    find('settings-section-identity', name+'-identity-room', tap=True, scroll=True)
     find('Saved identities', name+'-saved-heading', scroll=True)
     run(adb + ['shell', 'input', 'swipe', '500', '1950', '500', '850', '300'])
 def nsec_fixture(scalar):

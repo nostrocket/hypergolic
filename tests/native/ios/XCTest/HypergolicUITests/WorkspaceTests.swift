@@ -13,7 +13,7 @@ final class WorkspaceTests: XCTestCase {
   private var nonce = ""
   private let placeholder = "Something you will recognise…"
   private let expected: [String: Set<String>] = [
-    "ui-style": ["empty-shelf", "address-validation", "grouped-identity-settings", "workspace-navigation", "close-protection", "trusted-review"],
+    "ui-style": ["empty-shelf", "settings-index", "address-validation", "identity-import-review", "workspace-navigation", "close-protection", "trusted-review"],
     "identity-delete-unavailable": ["delete-exact-target", "unavailable-has-no-confirm", "cancel-keeps-workspace"],
     "state-close": ["state-close-warning", "state-reopen-shared", "state-reopen-instance"],
     "state-storage": ["state-identity", "state-storage-operations", "state-restart", "state-instance-scope", "state-owner-isolation", "state-identity-isolation"],
@@ -72,52 +72,61 @@ final class WorkspaceTests: XCTestCase {
       button.tap()
     }
     try tap("ui-fixture-empty")
-    let empty = app.buttons.matching(identifier: "empty-open-napplet").firstMatch
-    for _ in 0..<6 where !empty.isHittable { app.swipeUp() }
-    try until("Empty shelf has its opening action") { empty.exists && empty.isHittable }
+    let empty = app.buttons["home-overview"]
+    try until("Empty Home has its workspace action") { empty.isHittable }
     record("empty-shelf", true, ["actionFrame": NSCoder.string(for: empty.frame)])
     capture("glass-empty")
-    try tap("empty-open-napplet")
-    let address = app.textFields.matching(identifier: "settings-napplet-address").firstMatch
-    try until("Address input visible") { address.exists && address.isHittable }
-    capture("glass-settings")
+    try tap("shell-settings")
+    let address = app.textFields["settings-napplet-address"]
+    let openRoom = app.buttons["settings-section-open-napplet"]
+    try until("Settings index visible") { openRoom.isHittable }
+    record("settings-index", !address.exists && app.staticTexts["settings-full-npub"].exists, [:])
+    capture("settings-index")
+    try tap("settings-section-open-napplet")
+    try until("Address input visible") { address.isHittable }
     address.tap()
-    address.typeText("not-a-napplet\n")
-    let error = app.staticTexts.matching(identifier: "settings-napplet-error").firstMatch
-    try until("Invalid address reports correction") { error.exists && error.label.contains("naddr1") }
-    record("address-validation", !app.otherElements.matching(identifier: "settings-napplet-review").firstMatch.exists, ["error": error.label])
-    capture("glass-address-error")
+    address.typeText("not-a-napplet")
+    let error = app.staticTexts["settings-napplet-error"]
+    let verify = app.buttons["settings-open-napplet"]
+    let keyboard = app.keyboards.firstMatch
+    try until("Invalid address reports correction") {
+      error.exists && error.label == "Enter a valid named napplet address (naddr) or snapshot event link (nevent)."
+    }
+    let aboveKeyboard = [address, error, verify].allSatisfy { $0.frame.minY >= 0 && $0.frame.maxY <= keyboard.frame.minY }
+    record("address-validation", keyboard.exists && aboveKeyboard && !verify.isEnabled, ["error": error.label])
+    capture("settings-address-keyboard")
+    try tap("settings-room-back")
     try tap("settings-section-identity")
-    let importButton = app.buttons.matching(identifier: "settings-import-identity").firstMatch
-    for _ in 0..<4 where !importButton.isHittable { app.swipeUp() }
     try tap("settings-import-identity")
-    let secret = app.secureTextFields.matching(identifier: "identity-import-input").firstMatch
-    try until("Private key field remains masked") { secret.exists && secret.isHittable }
-    record("grouped-identity-settings", true, ["maskedInput": secret.exists])
-    capture("glass-import")
+    let review = app.buttons["identity-import-review"]
+    try until("Trusted import review visible") { review.isHittable }
+    record("identity-import-review", !app.secureTextFields["identity-import-input"].exists, ["review": review.label])
+    capture("settings-import-review")
     try tap("identity-import-cancel")
+    try tap("settings-room-back")
     try tap("settings-done")
     try tap("ui-fixture-workspace")
-    let overview = app.buttons.matching(identifier: "shell-overview").firstMatch
-    try until("Visible workspace navigation") { overview.exists && overview.isHittable }
+    let menu = app.buttons["shell-napplet-menu"]
+    try until("Visible workspace navigation") { menu.exists && menu.isHittable }
     let guestReady = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Ready ·")).firstMatch
     try until("Actual napplet rendered") { guestReady.exists }
     let increment = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Add one")).firstMatch
     try until("Guest counter accepts input") { increment.exists && increment.isHittable }
     increment.tap()
     capture("glass-active")
-    try tap("shell-overview")
+    try tap("shell-napplet-menu")
+    try tap("shell-menu-overview")
     let card = app.buttons.matching(identifier: "overview-card-ux-lab-1").firstMatch
     try until("Live overview has first card") { card.exists && card.isHittable }
     capture("glass-overview")
     card.tap()
-    try until("Overview returns to focused napplet") { overview.exists && overview.isHittable }
+    try until("Overview returns to focused napplet") { overview.exists && menu.isHittable }
     record("workspace-navigation", currentTitle() == "UX Lab 1", ["title": currentTitle()])
     try tap("shell-napplet-menu")
     try until("Focused napplet menu is reachable") { app.buttons.matching(identifier: "shell-close").firstMatch.isHittable }
     capture("slim-napplet-menu")
     try tap("shell-menu-done")
-    try until("Menu dismisses back to napplet") { overview.isHittable }
+    try until("Menu dismisses back to napplet") { menu.isHittable }
     try tap("shell-napplet-menu")
     try tap("shell-close")
     let keep = app.buttons.matching(identifier: "close-keep-open").firstMatch
@@ -473,6 +482,7 @@ final class WorkspaceTests: XCTestCase {
     capture("live-published-probe-verified")
 
     try identityPress("shell-settings")
+    try identityPress("settings-section-open-napplet")
     let input = try one(app.textFields.matching(identifier: "settings-napplet-address"), "published naddr input", visible: false)
     input.tap()
     for character in naddr { input.typeText(String(character)) }
@@ -529,6 +539,7 @@ final class WorkspaceTests: XCTestCase {
     capture("live-update-empty-shell")
 
     try identityPress("shell-settings")
+    try identityPress("settings-section-open-napplet")
     let input = try one(app.textFields.matching(identifier: "settings-napplet-address"), "live naddr input", visible: false)
     input.tap()
     for character in fixture.naddr { input.typeText(String(character)) }
@@ -588,6 +599,7 @@ final class WorkspaceTests: XCTestCase {
     let cancel = app.buttons.matching(identifier: "published-update-cancel-" + session).firstMatch
     try stateNativeReveal(cancel)
     try nativeTap(cancel, name: "decline-live-v2")
+    try identityPress("settings-room-back")
     try identityPress("settings-done")
     try until("Declining live v2 retains native v1 guest") {
       self.publishedMarker("update-v1") && !self.publishedMarker("update-v2")
@@ -648,6 +660,7 @@ final class WorkspaceTests: XCTestCase {
     capture("published-update-fixture-empty-shell")
 
     try identityPress("shell-settings")
+    try identityPress("settings-section-open-napplet")
     let input = try one(app.textFields.matching(identifier: "settings-napplet-address"), "published naddr input", visible: false)
     input.tap()
     // One long XCTest text action outruns React Native's controlled input on Simulator.
@@ -712,6 +725,7 @@ final class WorkspaceTests: XCTestCase {
         && self.app.staticTexts.matching(NSPredicate(format: "label == %@", "Pinned event " + oldEvent)).firstMatch.exists
         && self.app.buttons.matching(identifier: "published-update-check-" + sessionId).firstMatch.exists
     }
+    try identityPress("settings-room-back")
     try identityPress("settings-done")
     try until("Cancelled update leaves old host connected") {
       self.currentTitle() == appId && self.publishedMarker("update-v1")
@@ -746,6 +760,7 @@ final class WorkspaceTests: XCTestCase {
       updatedPinned.exists && self.app.staticTexts.matching(NSPredicate(format: "label == %@", "Pinned event " + oldEvent)).count == 0
     }
     let newPinWasVisible = updatedPinned.exists
+    try identityPress("settings-room-back")
     try identityPress("settings-done")
     try until("Accepted update replaces v1 runtime") {
       self.currentTitle() == appId && self.publishedMarker("update-v2")
@@ -770,6 +785,7 @@ final class WorkspaceTests: XCTestCase {
     try stateNativeReveal(restartedPin)
     let newPinAfterRestart = restartedPin.exists
       && app.staticTexts.matching(NSPredicate(format: "label == %@", "Pinned event " + oldEvent)).count == 0
+    try identityPress("settings-room-back")
     try identityPress("settings-done")
     record("cold-restart-retains-v2", newPinAfterRestart,
       ["pinnedEvent": newEvent, "host": "update-v2", "oldHostVisible": false, "runtimeConnected": true])
@@ -788,6 +804,7 @@ final class WorkspaceTests: XCTestCase {
     try until("Older signed revision rejected without review") { olderStatus.exists || latestStatus.exists }
     let olderWasRejected = !app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "published-update-review-")).firstMatch.exists
       && app.staticTexts.matching(NSPredicate(format: "label == %@", "Pinned event " + newEvent)).firstMatch.exists
+    try identityPress("settings-room-back")
     try identityPress("settings-done")
     try until("Accepted guest remains after older revision check") {
       self.publishedMarker("update-v2") && !self.publishedMarker("update-v1")
@@ -841,6 +858,7 @@ final class WorkspaceTests: XCTestCase {
     let v2Domains = "relay, theme"
 
     try identityPress("shell-settings")
+    try identityPress("settings-section-open-napplet")
     let input = try one(app.textFields.matching(identifier: "settings-napplet-address"), "changed-access naddr input", visible: false)
     input.tap()
     for character in addressText { input.typeText(String(character)) }
@@ -918,6 +936,7 @@ final class WorkspaceTests: XCTestCase {
         && self.app.staticTexts.matching(NSPredicate(format: "label == %@", "Pinned event " + v1Event)).firstMatch.exists
         && self.app.buttons.matching(identifier: "published-update-check-" + sessionId).firstMatch.exists
     }
+    try identityPress("settings-room-back")
     try identityPress("settings-done")
     try until("Declined changed access retains connected v1 guest") {
       self.currentTitle() == appId && self.publishedMarker("changed-access-v1")
@@ -956,6 +975,7 @@ final class WorkspaceTests: XCTestCase {
     try until("v2 event is the only pinned revision") {
       pinnedV2.exists && self.app.staticTexts.matching(NSPredicate(format: "label == %@", "Pinned event " + v1Event)).count == 0
     }
+    try identityPress("settings-room-back")
     try identityPress("settings-done")
     try until("Accepted changed-access v2 host connected") {
       self.currentTitle() == appId && self.publishedMarker("changed-access-v2")
@@ -1060,6 +1080,9 @@ final class WorkspaceTests: XCTestCase {
   }
   private func openPublishedUpdates() throws {
     try identityPress("shell-settings")
+    let access = app.buttons["settings-section-access"]
+    try stateNativeReveal(access)
+    try identityPress(access.identifier)
     let section = app.buttons.matching(identifier: "settings-section-published-updates").firstMatch
     try stateNativeReveal(section)
     try identityPress(section.identifier)

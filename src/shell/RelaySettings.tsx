@@ -1,11 +1,14 @@
-import { useState } from 'react';
-import { Alert, Keyboard, StyleSheet, Text, View } from 'react-native';
-import { ShellPressable as Pressable } from './ShellPressable';
-import { ShellTextInput as TextInput } from './ShellTextInput';
-import { RelaySettingsError, type NetworkRelayMove, type RelayRole, type RelaySettingsService, type RelaySettingsSnapshot } from '../network/relay-settings.ts';
+import { useCallback, useState } from 'react';
+import { Alert, FlatList, Keyboard, StyleSheet, Text, useWindowDimensions, View, type ListRenderItemInfo } from 'react-native';
+import {
+  assertRelayCanBeAdded, normalizeRelayUrl, RelaySettingsError, type NetworkRelayMove,
+  type RelayRole, type RelaySettingsService, type RelaySettingsSnapshot,
+} from '../network/relay-settings';
+import { SettingsComposer, SettingsField, SettingsPrimary, SettingsRoomHeader } from './SettingsRoom';
+import { ShellPressable } from './ShellPressable';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
 
-function message(error: unknown): string {
+function relayError(error: unknown): string {
   if (error instanceof RelaySettingsError) {
     if (error.code === 'INVALID_RELAY_URL') return 'Enter a valid secure WebSocket URL using wss:// and a public DNS host.';
     if (error.code === 'DUPLICATE_RELAY') return 'That relay is already in this list.';
@@ -13,103 +16,159 @@ function message(error: unknown): string {
   }
   return 'The app could not confirm this change. Reopen settings to check the saved relay list.';
 }
-export function RelaySettings({ service }: { service: RelaySettingsService | null }) {
-  const { styles, colors } = useShellStyles(createStyles);
-  const [snapshot, setSnapshot] = useState<RelaySettingsSnapshot>(() => service?.getSettings() ?? { networkRelays: [], lookupRelays: [] });
+
+function inputError(input: string, relays: readonly string[]): string {
+  if (!input) return '';
+  try { assertRelayCanBeAdded(relays, normalizeRelayUrl(input)); return ''; }
+  catch (error) { return relayError(error); }
+}
+
+export function RelaySettings({ service, onBack }: { service: RelaySettingsService | null; onBack(): void }) {
+  const { styles } = useShellStyles(createStyles);
+  if (service) return <EditableRelays service={service} onBack={onBack} />;
+  return <>
+    <SettingsRoomHeader title="Relays" onBack={onBack} />
+    <View style={styles.header}>
+      <Text style={styles.detail}>Relay choices are saved on this device.</Text>
+      <Text accessibilityLiveRegion="polite" testID="relay-settings-unavailable" style={styles.error}>Saved relay settings are unavailable. Identity and napplets remain usable; signing requests cannot proceed until relay storage is available.</Text>
+    </View>
+  </>;
+}
+
+function EditableRelays({ service, onBack }: { service: RelaySettingsService; onBack(): void }) {
+  const { styles } = useShellStyles(createStyles);
+  const { fontScale } = useWindowDimensions();
+  const [height, setHeight] = useState(0);
+  const [editing, setEditing] = useState(false);
+  const [snapshot, setSnapshot] = useState<RelaySettingsSnapshot>(() => service.getSettings());
   const [role, setRole] = useState<RelayRole>('network');
-  const [input, setInput] = useState('');
-  const [error, setError] = useState('');
+  const [inputs, setInputs] = useState({ network: '', lookup: '' });
+  const [saveError, setSaveError] = useState('');
   const [busy, setBusy] = useState(false);
-  const update = async (action: () => Promise<RelaySettingsSnapshot>): Promise<boolean> => {
-    if (busy) return false;
-    setBusy(true); setError('');
-    try { setSnapshot(await action()); return true; }
-    catch (reason) {
-      if (service) setSnapshot(service.getSettings());
-      setError(message(reason)); return false;
-    }
-    finally { setBusy(false); }
-  };
-  const add = () => {
-    Keyboard.dismiss();
-    const value = input;
-    void update(() => service!.addRelay(role, value)).then(saved => { if (saved) setInput(''); });
-  };
   const network = role === 'network';
   const relays = network ? snapshot.networkRelays : snapshot.lookupRelays;
-  const defaultsState = service?.getCvmDefaultsState?.();
-  return <View style={styles.section}>
-    <Text accessibilityRole="header" style={styles.heading}>Relays</Text>
-    <Text style={styles.detail}>Relay choices are saved on this device.</Text>
-    {service === null && <Text accessibilityLiveRegion="polite" testID="relay-settings-unavailable" style={styles.error}>Saved relay settings are unavailable. Identity and napplets remain usable; signing requests cannot proceed until relay storage is available.</Text>}
-    {service !== null && <>
-    <View style={styles.switches}>
-      {(['network', 'lookup'] as const).map(item => <Pressable key={item} accessibilityRole="button" accessibilityState={{ selected: role === item }}
-        testID={`relay-role-${item}`} onPress={() => { setRole(item); setError(''); }} style={[styles.role, role === item && styles.activeRole]}>
-        <Text style={[styles.roleText, role === item && styles.selectedRoleText]}>{item === 'network' ? 'Network' : 'Lookup'}</Text>
-      </Pressable>)}
+  const input = inputs[role];
+  const validation = inputError(input, relays);
+  const error = saveError || validation;
+  const compact = height > 0 && height < 320 * fontScale;
+  const defaultsState = service.getCvmDefaultsState?.();
+
+  const update = useCallback(async (action: () => Promise<RelaySettingsSnapshot>) => {
+    if (busy) return false;
+    setBusy(true);
+    setSaveError('');
+    try { setSnapshot(await action()); return true; }
+    catch (reason) {
+      setSnapshot(service.getSettings());
+      setSaveError(relayError(reason));
+      return false;
+    } finally { setBusy(false); }
+  }, [busy, service]);
+  const edit = (value: string) => {
+    setInputs(current => ({ ...current, [role]: value }));
+    setSaveError('');
+  };
+  const add = async () => {
+    if (!input || validation || busy) return;
+    if (await update(() => service.addRelay(role, input))) {
+      edit('');
+      Keyboard.dismiss();
+    }
+  };
+  const restore = () => {
+    if (busy) return;
+    Alert.alert(`Restore ${role} defaults?`, `This replaces every relay in your ${role} list on this device.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Restore defaults', style: 'destructive', onPress: () => { void update(() => service.restoreDefaults(role)); } },
+    ]);
+  };
+  const action = { label: 'Restore defaults', testID: `relay-restore-${role}`, onPress: restore, disabled: busy };
+  const renderRelay = useCallback(({item, index}: ListRenderItemInfo<string>) => <RelayRow relay={item} role={role} busy={busy}
+    remove={() => { void update(() => service.removeRelay(role, item)); }}
+    order={network ? {index, count: relays.length, move: direction => { void update(() => service.moveNetworkRelay(item, direction)); }} : undefined} />, [busy, network, relays.length, role, service, update]);
+  const controls = <RelayControls role={role} busy={busy} shortHelp={editing && height > 0 && height < 600 * fontScale} onSelect={item => { setRole(item); setSaveError(''); }} />;
+  return <View style={styles.room} onLayout={event => setHeight(event.nativeEvent.layout.height)}>
+    <SettingsRoomHeader title="Relays" onBack={onBack} action={action} />
+    <View style={styles.room}>
+      {!compact && controls}
+      <FlatList key={role} data={relays} keyExtractor={relay => relay} style={styles.list}
+        keyboardShouldPersistTaps="handled" ListHeaderComponent={<>
+          {compact && controls}
+          {defaultsState === 'cleared' && <Text accessibilityLiveRegion="polite" style={[styles.error, styles.items]}>Automatic relays for remote services were cleared. Check the first four Network relays.</Text>}
+          {defaultsState === 'unknown' && <Text accessibilityLiveRegion="polite" style={[styles.error, styles.items]}>The app could not confirm the automatic relays for remote services.</Text>}
+        </>}
+        ListEmptyComponent={<Text style={[styles.detail, styles.items]}>{network ? 'No network relays. Approved signing requests cannot proceed until a network relay is added.' : 'No lookup relays. Manifest discovery will have no lookup destinations.'}</Text>}
+        renderItem={renderRelay} />
+      <View style={compact && styles.compactDock}>
+      <SettingsComposer>
+        <SettingsField accessibilityLabel={`Add ${role} relay`} testID={`relay-input-${role}`} autoCapitalize="none"
+          autoCorrect={false} keyboardType="url" autoComplete="off" returnKeyType="done" submitBehavior="submit"
+          onFocus={() => setEditing(true)} onBlur={() => setEditing(false)} editable={!busy} value={input} onChangeText={edit} onSubmitEditing={() => { void add(); }} placeholder="wss://" />
+        {error !== '' && <Text accessibilityLiveRegion="polite" testID="relay-settings-error" style={styles.error}>{error}</Text>}
+        <SettingsPrimary label={`Add ${role} relay`} testID={`relay-add-${role}`} disabled={busy || !input || !!validation}
+          onPress={() => { void add(); }} />
+      </SettingsComposer>
+      </View>
     </View>
-    <Text style={styles.detail}>{network
-      ? 'New basic live reads use the first two Network relays. Use Move up and Move down to change them. Approved publishing can use the whole list.'
-      : 'Lookup relays help find napplet manifests.'}</Text>
-    {defaultsState === 'cleared' && <Text accessibilityLiveRegion="polite" style={styles.error}>Automatic relays for remote services were cleared. Check the first four Network relays.</Text>}
-    {defaultsState === 'unknown' && <Text accessibilityLiveRegion="polite" style={styles.error}>The app could not confirm the automatic relays for remote services.</Text>}
-    {relays.map((relay, index) => <RelayRow key={relay} relay={relay} role={role} busy={busy}
-      remove={() => {void update(() => service.removeRelay(role, relay));}}
-      order={network ? {index, count:relays.length, move:direction => {void update(() => service.moveNetworkRelay(relay, direction));}} : undefined} />)}
-    {relays.length === 0 && <Text style={styles.detail}>{role === 'network' ? 'No network relays. Approved signing requests cannot proceed until a network relay is added.' : 'No lookup relays. Manifest discovery will have no lookup destinations.'}</Text>}
-    <TextInput accessibilityLabel={`Add ${role} relay`} testID={`relay-input-${role}`} autoCapitalize="none" autoCorrect={false} keyboardType="url"
-      autoComplete="off" value={input} onChangeText={value => { setInput(value); setError(''); }} onSubmitEditing={add}
-      placeholder="wss://relay.example.org" placeholderTextColor={colors.muted} style={styles.input} returnKeyType="done" />
-    <Pressable accessibilityRole="button" testID={`relay-add-${role}`} disabled={busy || input.trim() === ''} onPress={add} style={[styles.button, styles.subdued]}>
-      <Text style={styles.buttonText}>Add {role} relay</Text>
-    </Pressable>
-    <Pressable accessibilityRole="button" testID={`relay-restore-${role}`} disabled={busy} onPress={() => Alert.alert(
-      `Restore ${role} defaults?`, `This replaces every relay in your ${role} list on this device.`,
-      [{text: 'Cancel', style: 'cancel'}, {text: 'Restore defaults', style: 'destructive', onPress: () => { void update(() => service.restoreDefaults(role)); }}],
-    )} style={[styles.button, styles.subdued]}>
-      <Text style={styles.buttonText}>Restore {role} defaults</Text>
-    </Pressable>
-    {error !== '' && <Text accessibilityLiveRegion="polite" testID="relay-settings-error" style={styles.error}>{error}</Text>}
-    </>}
   </View>;
 }
-type RelayRowProps = Readonly<{
+
+function RelayControls({role, busy, shortHelp, onSelect}: {role: RelayRole; busy: boolean; shortHelp: boolean; onSelect(role: RelayRole): void}) {
+  const { styles } = useShellStyles(createStyles);
+  const explanation = role === 'network'
+    ? 'New basic live reads use the first two Network relays.' + (shortHelp ? '' : ' Approved publishing can use the whole list.')
+    : 'Lookup relays help find napplet manifests.';
+  return <View style={styles.header}>
+    <Text style={styles.detail}>Relay choices are saved on this device. {explanation}</Text>
+    <View style={styles.segments}>
+      {(['network', 'lookup'] as const).map(item => <ShellPressable key={item} accessibilityRole="tab"
+        accessibilityState={{ selected: role === item }} disabled={busy} testID={`relay-role-${item}`}
+        onPress={() => onSelect(item)} style={[styles.segment, role === item && styles.selectedSegment]}>
+        <Text style={[styles.segmentText, role === item && styles.selectedText]}>{item === 'network' ? 'Network' : 'Lookup'}</Text>
+      </ShellPressable>)}
+    </View>
+  </View>;
+}
+
+type RelayRowProps = {
   relay: string; role: RelayRole; busy: boolean; remove(): void;
-  order?: Readonly<{index: number; count: number; move(direction: NetworkRelayMove): void}> | undefined;
-}>;
-function RelayRow({relay, role, busy, remove, order}: RelayRowProps) {
-  const {styles} = useShellStyles(createStyles);
-  return <View style={[styles.relayRow, order && styles.networkRow]}>
-    <Text selectable style={[styles.url, order && styles.networkUrl]}>{relay}</Text>
-    {order && order.index < 2 && <Text style={styles.detail}>Live reads</Text>}
+  order: { index: number; count: number; move(direction: NetworkRelayMove): void } | undefined;
+};
+function RelayRow({ relay, role, busy, remove, order }: RelayRowProps) {
+  const { styles } = useShellStyles(createStyles);
+  return <View style={[styles.items, styles.relay]}>
+    <Text selectable style={styles.url}>{relay}</Text>
+    {order && order.index < 2 && <Text style={styles.caption}>Live reads</Text>}
     <View style={styles.rowActions}>
-      {order && (['up', 'down'] as const).map(direction => <Pressable key={direction} accessibilityRole="button"
+      {order && (['up', 'down'] as const).map(direction => <ShellPressable key={direction} accessibilityRole="button"
         accessibilityLabel={`Move ${relay} ${direction}`} testID={`relay-move-${direction}-${order.index}`}
         disabled={busy || (direction === 'up' ? order.index === 0 : order.index === order.count - 1)}
         onPress={() => order.move(direction)} style={styles.rowAction}>
         <Text style={styles.rowActionText}>{direction === 'up' ? 'Move up' : 'Move down'}</Text>
-      </Pressable>)}
-      <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${relay}`} testID={`relay-remove-${role}`}
-        disabled={busy} onPress={remove} style={styles.rowAction}>
-        <Text style={styles.rowActionText}>Remove</Text>
-      </Pressable>
+      </ShellPressable>)}
+      <ShellPressable accessibilityRole="button" accessibilityLabel={`Remove ${relay}`} testID={`relay-remove-${role}`}
+        disabled={busy} onPress={remove} style={styles.rowAction}><Text style={styles.rowActionText}>Remove</Text></ShellPressable>
     </View>
   </View>;
 }
-const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.create({
-  section: { gap: 14 }, heading: { fontFamily: fonts.display, color: colors.text, fontSize: 28, },
-  detail: { fontFamily: fonts.body, color: colors.muted, fontSize: 15, lineHeight: 22 },
-  switches: { flexDirection: 'row', gap: 10 }, role: { flex: 1, alignItems: 'center', padding: 13, borderRadius: 0, borderWidth: 1, borderColor: colors.border },
-  activeRole: { backgroundColor: colors.primary, borderColor: colors.primary }, roleText: { fontFamily: fonts.strong, color: colors.text, fontSize: 15, },
-  selectedRoleText: { color: colors.onPrimary },
-  relayRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13, borderRadius: 0, backgroundColor: colors.surface },
-  url: { fontFamily: fonts.mono, flex: 1, color: colors.text, fontSize: 13, },
-  networkRow: { flexDirection: 'column', alignItems: 'stretch', gap: 4 }, networkUrl: { flex: 0 },
-  rowActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
-  rowAction: { paddingHorizontal: 8, justifyContent: 'center' },
-  rowActionText: { fontFamily: fonts.strong, color: colors.accent, fontSize: 14 },
-  input: { fontFamily: fonts.body, color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: 0, minHeight: 54, padding: 14, fontSize: 15 },
-  button: { padding: 15, minHeight: 52, borderRadius: 0, alignItems: 'center' }, subdued: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-  buttonText: { textTransform: 'uppercase', letterSpacing: 1.8, fontFamily: fonts.strong, color: colors.text, fontSize: 14, }, error: { fontFamily: fonts.body, color: colors.accent, fontSize: 14, lineHeight: 21 },
+
+const createStyles = (c: ShellPalette, f: ShellFonts) => StyleSheet.create({
+  room: { flex: 1 },
+  compactDock: { maxHeight: '65%' },
+  header: { paddingHorizontal: 24, paddingBottom: 8, gap: 9 },
+  detail: { fontFamily: f.body, color: c.muted, fontSize: 15, lineHeight: 20 },
+  segments: { flexDirection: 'row', backgroundColor: c.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: c.subtle, borderRadius: 5 },
+  segment: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 4 },
+  selectedSegment: { backgroundColor: c.primary },
+  segmentText: { fontFamily: f.medium, color: c.text, fontSize: 15 },
+  selectedText: { color: c.onPrimary },
+  list: { flex: 1 },
+  items: { paddingHorizontal: 24 },
+  relay: { paddingTop: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: c.subtle },
+  url: { fontFamily: f.mono, color: c.text, fontSize: 14, lineHeight: 20 },
+  caption: { fontFamily: f.body, color: c.muted, fontSize: 13, lineHeight: 17 },
+  rowActions: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 12 },
+  rowAction: { justifyContent: 'center' },
+  rowActionText: { fontFamily: f.medium, color: c.accent, fontSize: 15 },
+  error: { fontFamily: f.body, color: c.accent, fontSize: 14, lineHeight: 19 },
 });

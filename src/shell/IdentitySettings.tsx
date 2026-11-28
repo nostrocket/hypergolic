@@ -1,18 +1,21 @@
 import { developerToolsEnabled } from '../config/build-info';
 import { AboutSettings } from './AboutSettings';
 import { backgroundIdentitySettings } from './identity-settings-lifecycle';
-import { DevicePrivacySettings } from './DevicePrivacySettings';
+import { DevicePrivacySettings, useDevicePrivacyPreferences } from './DevicePrivacySettings';
 import { SignerSettings } from './SignerSettings';
 import { identityChangeCopy } from './identity-change-copy';
 import { NativeSignerCheck } from './NativeSignerCheck';
 import { SettingsSection } from './SettingsSection';
+import { SettingsIndex, ConnectionsIndex } from './SettingsIndex';
+import { SettingsRoomHeader } from './SettingsRoom';
+import { parentRoom, roomTitles, type SettingsRoom } from './settings-directory';
 import {FixturePublisherLab} from './FixturePublisherLab';
 import {NotificationSettings} from './NotificationSettings';
 import { RoutingSettings } from './RoutingSettings';
 import {IdentityListSettings} from './IdentityListSettings';
 import { UploadSettings } from './UploadSettings';
 import { ResourceSettings } from './ResourceSettings';
-import { useCallback, useEffect, useEffectEvent, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useEffectEvent, useImperativeHandle, useState, useSyncExternalStore, type ComponentProps, type ReactNode } from 'react';
 import { ActivityIndicator, AppState, ScrollView, StyleSheet, Text, TextInput, View, type AppStateStatus } from 'react-native';
 import { ShellPressable as Pressable } from './ShellPressable';
 import type { SettingsActions } from './Shell';
@@ -26,7 +29,6 @@ import { IdentityBackup } from './IdentityBackup';
 import { RelaySettings } from './RelaySettings';
 import { PublishedHostLab } from './PublishedHostLab';
 import { SettingsForm } from './SettingsForm';
-import { LaunchHorizon } from './ShellBackdrop';
 import { OpenPublishedNapplet } from './OpenPublishedNapplet';
 import { UpdatePublishedNapplet } from './UpdatePublishedNapplet';
 import { useShellStyles, type ShellPalette, type ShellFonts } from './theme';
@@ -171,7 +173,7 @@ function DeveloperSettings({ onSignedLab, openBundledTest, openStateLab }: Pick<
   const { styles } = useShellStyles(createStyles);
   const { runtime, fixturePublisher, formatNpub } = useIdentityOwner();
   if (!developerToolsEnabled) return null;
-  return <SettingsSection title="Developer tools" detail="Test napplets and compatibility" id="developer">
+  return <>
       <NativeSignerCheck />
       {runtime && <Action title="Open NAP Support" testID="settings-open-nap-support" onPress={() => openStateLab('nap-support')} />}
       {runtime && <>
@@ -192,56 +194,67 @@ function DeveloperSettings({ onSignedLab, openBundledTest, openStateLab }: Pick<
         <Action title="Open State Lab" testID="settings-open-state-lab" onPress={() => openStateLab('state-lab')} />
         <Action title="Open State Lab Peer" testID="settings-open-state-lab-peer" onPress={() => openStateLab('state-lab-peer')} />
         <Action title="Open State Lab · other publisher" testID="settings-open-state-lab-other-publisher" onPress={() => openStateLab('state-lab-other-publisher')} />
-      </>}      </SettingsSection>;
+      </>}
+    </>;
 }
-function SettingsHome({session, onBackup, onCloseBackup, onDelete, onImport, onPublic, onSignedLab, openBundledTest, openStateLab, publishedSessions, checkPublishedUpdate}: Omit<SettingsActions, 'closeSettings' | 'openPublished' | 'openDiscovery'> & {
-  session: IdentitySession; onBackup(): void; onCloseBackup(): void; onDelete(pubkey: string): void; onImport(): void; onPublic(): void; onSignedLab(): void;
+function IdentityRoom({session, onBackup, onCloseBackup, onDelete, onPublic, onImport}: {
+  session: IdentitySession; onBackup(): void; onCloseBackup(): void; onDelete(pubkey: string): void; onPublic(): void; onImport(): void;
 }) {
-  const { styles } = useShellStyles(createStyles);
-  const {transition, formatNpub, runtime, actions, relaySettings, resourceSettings, uploadSettings, listAccess, routing, notificationSettings} = useIdentityOwner();
-  const publishedCount = publishedSessions.length;
-  const accountCount = session.vault.identities.length;
+  const {transition, formatNpub, actions} = useIdentityOwner();
   return <>
-      <View style={styles.currentIdentity}><LaunchHorizon /><View style={styles.identityCopy}><Text style={styles.identityLabel}>Active identity</Text>
-        <Text selectable testID="settings-full-npub" style={styles.npub}>{formatNpub(session.vault.selectedPubkey)}</Text></View>
-      </View>
-      <View style={styles.sections}>
-      <SettingsSection title="Identity" detail={`${accountCount} saved ${accountCount === 1 ? 'identity' : 'identities'} · Signing and backup`} id="identity">
-      <SignerSettings transition={transition} session={session} actions={actions} format={formatNpub}
-        onBackup={onBackup} onCloseBackup={onCloseBackup} />
-      <SavedIdentities session={session} transition={transition} format={formatNpub} canDelete={Boolean(actions)}
-        onDelete={onDelete} />
-      <Action title="Read-only public profile" testID="settings-public-identity" onPress={onPublic} />
-      <Action title="Import identity" testID="settings-import-identity" onPress={onImport} />
-      </SettingsSection>
-      <SettingsSection title="Device privacy" detail="Workspace lock and signing confirmation" id="device-privacy">
-        <DevicePrivacySettings key={session.vault.selectedPubkey} pubkey={session.vault.selectedPubkey} />
-      </SettingsSection>
-      <SettingsSection title="Connections" detail="Relays, downloads and file uploads" id="connections">
-      <RelaySettings service={relaySettings} />
-      <ResourceSettings service={resourceSettings} />
-      <UploadSettings service={uploadSettings ?? null} />
-      </SettingsSection>
-      <SettingsSection title="Napplet access" detail="Notifications, public lists and handlers" id="access">
-      {routing && <RoutingSettings key={`routing-${session.epoch}`} service={routing.settings} />}
-      {notificationSettings && <NotificationSettings key={`notifications-${session.epoch}`} service={notificationSettings} />}
-      <IdentityListSettings service={listAccess ?? null} user={session.vault.selectedPubkey} />
-      </SettingsSection>
-      </View>
-      <View style={styles.sections}>
-      {runtime && publishedCount > 0 && <SettingsSection title="Published napplet updates"
-        detail={`${publishedCount} ${publishedCount === 1 ? 'napplet' : 'napplets'} in this workspace`} id="published-updates">
-        {publishedSessions.map(session => <UpdatePublishedNapplet key={session.id} session={session} check={checkPublishedUpdate} />)}
-      </SettingsSection>}
-      <DeveloperSettings onSignedLab={onSignedLab} openBundledTest={openBundledTest} openStateLab={openStateLab} />
-      <AboutSettings />
-      </View>
+    <SignerSettings transition={transition} session={session} actions={actions} format={formatNpub}
+      onBackup={onBackup} onCloseBackup={onCloseBackup} />
+    <SavedIdentities session={session} transition={transition} format={formatNpub} canDelete={Boolean(actions)} onDelete={onDelete} />
+    <Action title="Read-only public profile" testID="settings-public-identity" onPress={onPublic} />
+    <Action title="Import identity" testID="settings-import-identity" onPress={onImport} />
   </>;
 }
-export function IdentitySettings({ openDiscovery, openBundledTest, openStateLab, openPublished, publishedSessions, checkPublishedUpdate }: SettingsActions) {
-  const { styles, colors } = useShellStyles(createStyles);
-  const { transition, formatNpub, actions, runtime } = useIdentityOwner();
+
+function NappletAccessRoom({session, publishedSessions, checkPublishedUpdate}: Pick<SettingsActions, 'publishedSessions' | 'checkPublishedUpdate'> & {session: IdentitySession}) {
+  const {routing, notificationSettings, listAccess, runtime} = useIdentityOwner();
+  const publishedCount = publishedSessions.length;
+  return <>
+    {routing && <RoutingSettings key={`routing-${session.epoch}`} service={routing.settings} />}
+    {notificationSettings && <NotificationSettings key={`notifications-${session.epoch}`} service={notificationSettings} />}
+    <IdentityListSettings service={listAccess ?? null} user={session.vault.selectedPubkey} />
+    {runtime && publishedCount > 0 && <SettingsSection title="Published napplet updates"
+      detail={`${publishedCount} ${publishedCount === 1 ? 'napplet' : 'napplets'} in this workspace`} id="published-updates">
+      {publishedSessions.map(napplet => <UpdatePublishedNapplet key={napplet.id} session={napplet} check={checkPublishedUpdate} />)}
+    </SettingsSection>}
+  </>;
+}
+
+function SettingsRooms({settings, room, open, onBack, identity, onSignedLab, failure}: {
+  settings: SettingsActions; room: SettingsRoom | 'index'; open(room: SettingsRoom): void; onBack(): void;
+  identity: ComponentProps<typeof IdentityRoom>; onSignedLab(): void; failure: ReactNode;
+}) {
+  const {styles} = useShellStyles(createStyles);
+  const {formatNpub, runtime, relaySettings, resourceSettings, uploadSettings} = useIdentityOwner();
+  const privacy = useDevicePrivacyPreferences(identity.session.vault.selectedPubkey);
+  if (room === 'open-napplet') return <OpenPublishedNapplet open={settings.openPublished} onBack={onBack} />;
+  if (room === 'relays') return <RelaySettings service={relaySettings} onBack={onBack} />;
+  if (room === 'downloads') return <ResourceSettings service={resourceSettings} onBack={onBack} />;
+  if (room === 'uploads') return <UploadSettings service={uploadSettings ?? null} onBack={onBack} />;
+  return <>
+    {room === 'index' ? settings.indexHeader : <SettingsRoomHeader title={roomTitles[room]} onBack={onBack} />}
+    <ScrollView key={room} contentContainerStyle={room === 'index' ? styles.index : styles.body} keyboardShouldPersistTaps="handled">
+      {failure}
+      {room === 'index' && <SettingsIndex npub={formatNpub(identity.session.vault.selectedPubkey)} identities={identity.session.vault.identities.length}
+        published={Boolean(runtime)} lock={privacy.preferences?.workspace} open={open} />}
+      {room === 'identity' && <IdentityRoom {...identity} />}
+      {room === 'device-privacy' && <DevicePrivacySettings privacy={privacy} />}
+      {room === 'connections' && <ConnectionsIndex open={open} />}
+      {room === 'access' && <NappletAccessRoom session={identity.session} publishedSessions={settings.publishedSessions} checkPublishedUpdate={settings.checkPublishedUpdate} />}
+      {room === 'developer' && <DeveloperSettings onSignedLab={onSignedLab} openBundledTest={settings.openBundledTest} openStateLab={settings.openStateLab} />}
+      {room === 'about' && <AboutSettings />}
+    </ScrollView>
+  </>;
+}
+export function IdentitySettings(settings: SettingsActions) {
+  const {styles, colors} = useShellStyles(createStyles);
+  const {transition, formatNpub, actions} = useIdentityOwner();
   const state = useSyncExternalStore(transition.subscribe, transition.getSnapshot);
+  const [room, setRoom] = useState<SettingsRoom | 'index'>('index');
   const [importing, setImporting] = useState(false);
   const [publicEntry, setPublicEntry] = useState(false);
   const [deletion, setDeletion] = useState<DeletionReview | null>(null);
@@ -269,39 +282,42 @@ export function IdentitySettings({ openDiscovery, openBundledTest, openStateLab,
     const pending = transition.getSnapshot().pending;
     if (pending) transition.cancel(pending);
   }, [transition]);
+  const goBack = () => {
+    if (state.phase === 'deleting' || state.phase === 'switching') return;
+    if (deletion) closeDeletion();
+    else if (backupReview) {
+      try { actions?.endSettings(); } catch { /* Unmount also revokes the native backup request. */ }
+      setBackupReview(false);
+    } else if (signedLab) setSignedLab(false);
+    else if (state.pending) transition.cancel(state.pending);
+    else if (publicEntry) setPublicEntry(false);
+    else if (importing) closeImport();
+    else if (room !== 'index') setRoom(parentRoom(room));
+    else settings.closeSettings();
+  };
+  useImperativeHandle(settings.backHandler, () => goBack);
   if (deletion && actions) return <DeleteIdentity review={deletion} transition={transition} actions={actions} npub={formatNpub(deletion.pubkey)}
       busy={state.phase === 'deleting'} onClose={closeDeletion} />;
   if (backupReview && actions) return <IdentityBackup actions={actions} session={state.session} npub={formatNpub(state.session.vault.selectedPubkey)} reviewing
       onReview={() => setBackupReview(true)} onClose={() => setBackupReview(false)} Action={Action} />;
-  if (developerToolsEnabled && signedLab) return <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+  if (developerToolsEnabled && signedLab) return <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
     <PublishedHostLab onClose={() => setSignedLab(false)} sessionAuthority={() => transition.sessionAuthority()} />
   </ScrollView>;
-  if (state.phase === 'deleting') return <View style={styles.body}>
-    <ActivityIndicator color={colors.accent} /><Text style={styles.title}>Finishing identity action…</Text>
-  </View>;
-  if (state.phase === 'switching') return <View style={styles.body}>
-    <ActivityIndicator color={colors.accent} /><Text accessibilityRole="header" style={styles.title}>Updating account…</Text>
+  if (state.phase === 'deleting' || state.phase === 'switching') return <View style={styles.body}>
+    <ActivityIndicator color={colors.accent} /><Text accessibilityRole="header" style={styles.title}>{state.phase === 'deleting' ? 'Finishing identity action…' : 'Updating account…'}</Text>
   </View>;
   if (state.pending) return <ConfirmIdentity pending={state.pending} transition={transition} npub={formatNpub(state.pending.pubkey)} />;
   const failure = state.failure && <Text testID="identity-change-error" accessibilityLiveRegion="polite" style={styles.detail}>{failureMessage(state.failure)}</Text>;
   if (publicEntry) return <>{failure}<PublicIdentity transition={transition} onClose={() => setPublicEntry(false)} /></>;
   if (importing) return <>{failure}<ImportIdentity transition={transition} onClose={closeImport} /></>;
-  const content = <>
-    {failure}
-    <SettingsHome session={state.session} onBackup={() => setBackupReview(true)} onCloseBackup={() => setBackupReview(false)}
-        onDelete={pubkey => setDeletion(Object.freeze({pubkey, session: state.session}))} onImport={() => setImporting(true)} onPublic={() => setPublicEntry(true)} onSignedLab={() => setSignedLab(true)}
-        openBundledTest={openBundledTest} openStateLab={openStateLab} publishedSessions={publishedSessions} checkPublishedUpdate={checkPublishedUpdate} />
-  </>;
-  if (runtime) return <OpenPublishedNapplet open={openPublished} discover={openDiscovery}>{content}</OpenPublishedNapplet>;
-  return <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">{content}</ScrollView>;
+  return <SettingsRooms settings={settings} room={room} open={setRoom} onBack={goBack} failure={failure}
+    onSignedLab={() => setSignedLab(true)} identity={{session: state.session, onBackup: () => setBackupReview(true),
+      onCloseBackup: () => setBackupReview(false), onDelete: pubkey => setDeletion({pubkey, session: state.session}),
+      onImport: () => setImporting(true), onPublic: () => setPublicEntry(true)}} />;
 }
 const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.create({
   body: { padding: 24, paddingTop: 12, paddingBottom: 40, gap: 16 },
-  currentIdentity: { overflow: 'hidden', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
-  identityCopy: { padding: 12, backgroundColor: colors.surface, gap: 4 },
-  identityLabel: { fontFamily: fonts.mono, fontSize: 11, letterSpacing: 1.5, color: colors.muted, textTransform: 'uppercase' },
-  sections: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.glass },
-  group: { gap: 20 },
+  index: {paddingHorizontal: 24, paddingBottom: 24, gap: 10},
   title: { fontFamily: fonts.display, fontSize: 28, color: colors.text },
   detail: { fontFamily: fonts.body, color: colors.muted, fontSize: 16, lineHeight: 24 },
   npub: { fontFamily: fonts.mono, color: colors.text, fontSize: 12, lineHeight: 20, },

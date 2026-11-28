@@ -21,7 +21,7 @@ EXPECTED_CHECKS = {
     "native-text-input", "typed-rendered-mirror",
 }
 SCENARIOS = {
-    "ui-style": {"checks": {"empty-shelf", "address-validation", "grouped-identity-settings", "workspace-navigation", "close-protection", "trusted-review"}, "kind": "hypergolic-ios-workspace-v1", "test": "WorkspaceTests/testUIStyle"},
+    "ui-style": {"checks": {"empty-shelf", "settings-index", "address-validation", "identity-import-review", "workspace-navigation", "close-protection", "trusted-review"}, "kind": "hypergolic-ios-workspace-v1", "test": "WorkspaceTests/testUIStyle"},
     "identity-delete-unavailable": {"checks": {"delete-exact-target", "unavailable-has-no-confirm", "cancel-keeps-workspace"}, "kind": "hypergolic-ios-workspace-v1", "test": "WorkspaceTests/testIdentityDeleteUnavailable"},
     "state-close": {"checks": {"state-close-warning", "state-reopen-shared", "state-reopen-instance"}, "kind": "hypergolic-ios-workspace-v1", "test": "WorkspaceTests/testStateClose"},
     "state-storage": {"checks": {"state-identity", "state-storage-operations", "state-restart", "state-instance-scope", "state-owner-isolation", "state-identity-isolation"}, "kind": "hypergolic-ios-workspace-v1", "test": "WorkspaceTests/testStateStorage"},

@@ -26,7 +26,7 @@ final class RoutingTests: XCTestCase {
   }
   func openSigned(_ role:String){
    let address=app.staticTexts["signed-"+role+"-address"];XCTAssertTrue(address.waitForExistence(timeout:30),app.debugDescription);let link=address.label;XCTAssertTrue(link.hasPrefix("naddr1"))
-   button("shell-settings");let input=app.textFields["settings-napplet-address"];settings(input);input.tap()
+   button("shell-settings");settingsButton("settings-section-open-napplet");let input=app.textFields["settings-napplet-address"];settings(input);input.tap()
    if let old=input.value as? String,!old.isEmpty {input.typeText(String(repeating:XCUIKeyboardKey.delete.rawValue,count:old.count))}
    for offset in stride(from:0,to:link.count,by:12) {
     let end=min(offset+12,link.count);let startIndex=link.index(link.startIndex,offsetBy:offset),endIndex=link.index(link.startIndex,offsetBy:end)
@@ -133,7 +133,7 @@ final class RoutingTests: XCTestCase {
   }
   func openSigned(_ role:String){
    let address=app.staticTexts["signed-"+role+"-address"];XCTAssertTrue(address.waitForExistence(timeout:30),app.debugDescription);let link=address.label;XCTAssertTrue(link.hasPrefix("naddr1"))
-   button("shell-settings");let input=app.textFields["settings-napplet-address"];settings(input);input.tap()
+   button("shell-settings");settingsButton("settings-section-open-napplet");let input=app.textFields["settings-napplet-address"];settings(input);input.tap()
    if let old=input.value as? String,!old.isEmpty {input.typeText(String(repeating:XCUIKeyboardKey.delete.rawValue,count:old.count))}
    for offset in stride(from:0,to:link.count,by:12) {
     let end=min(offset+12,link.count);let startIndex=link.index(link.startIndex,offsetBy:offset),endIndex=link.index(link.startIndex,offsetBy:end)
@@ -202,7 +202,7 @@ final class RoutingTests: XCTestCase {
   }
   func openSigned(_ role:String,_ domains:String){
    let address=app.staticTexts["signed-"+role+"-address"];XCTAssertTrue(address.waitForExistence(timeout:30),app.debugDescription);let link=address.label;XCTAssertTrue(link.hasPrefix("naddr1"))
-   button("shell-settings");let input=app.textFields["settings-napplet-address"];settings(input);input.tap()
+   button("shell-settings");settingsButton("settings-section-open-napplet");let input=app.textFields["settings-napplet-address"];settings(input);input.tap()
    if let old=input.value as? String,!old.isEmpty {input.typeText(String(repeating:XCUIKeyboardKey.delete.rawValue,count:old.count))}
    for offset in stride(from:0,to:link.count,by:12) {
     let end=min(offset+12,link.count);let startIndex=link.index(link.startIndex,offsetBy:offset),endIndex=link.index(link.startIndex,offsetBy:end)
@@ -224,7 +224,7 @@ final class RoutingTests: XCTestCase {
   func closePeer(){button("handle-right");button("Close signed-routing-auto-peer-lab");button("close-confirm");button("Open signed-routing-caller-lab")}
   let publisher="c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",key=publisher+"-signed-routing-auto-peer-lab"
   app.terminate();app.launch();openSigned("auto-peer","inc, intent, storage");topic();passed("signed-cold-handler-domain-topic-consent")
-  openSigned("caller","inc, intent");button("shell-settings");settingsButton("routing-default-note-"+key);wait("Default handler saved.");capture("trusted-default-settings");button("settings-done");passed("trusted-settings-explicit-default")
+  openSigned("caller","inc, intent");button("shell-settings");settingsButton("settings-section-access");settingsButton("routing-default-note-"+key);wait("Default handler saved.");capture("trusted-default-settings");button("settings-room-back");button("settings-done");passed("trusted-settings-explicit-default")
   let changed=readJSON("\"hasDefault\":true","ROUTING_SETTINGS:") as! [String:Any];XCTAssertEqual(changed["archetype"] as? String,"note");passed("original-sdk-default-changed")
   closePeer();guest("Check availability");let closed=readJSON("\"hasDefault\":true","ROUTING_SETTINGS:") as! [String:Any];XCTAssertEqual(closed["available"] as? Bool,true);passed("closed-handler-remains-discoverable")
   app.terminate();app.launch();wait("SDK ready for routing.");guest("Check availability");let cold=readJSON("\"hasDefault\":true","ROUTING_SETTINGS:") as! [String:Any];XCTAssertEqual(cold["available"] as? Bool,true);passed("cold-process-default-persistence")
@@ -232,13 +232,13 @@ final class RoutingTests: XCTestCase {
   let events=readJSON("\"sender\":\"peer-","ROUTING_SETTINGS:") as! [[String:Any]];XCTAssertEqual(events.count,1);XCTAssertEqual(events[0]["payload"] as? NSDictionary,["text":"routing tracer + ⚡","nested":[NSNull(),false,3]] as NSDictionary);passed("cold-handler-fresh-topic-before-exact-delivery")
   focus("caller");wait("Dispatch accepted.");let result=readJSON("\"handled\":true","ROUTING_SETTINGS:") as! [String:Any];XCTAssertEqual(result["ok"] as? Bool,true);passed("cold-original-caller-sdk-result")
   focus("auto-peer");guest("Save routing data");wait("Routing data saved.");passed("original-sdk-data-written")
-  focus("caller");button("shell-settings");settingsButton("routing-remove-"+key);wait("Registration removed. Saved data remains.");capture("trusted-remove-registration");button("settings-done");passed("trusted-registration-removal")
+  focus("caller");button("shell-settings");settingsButton("settings-section-access");settingsButton("routing-remove-"+key);wait("Registration removed. Saved data remains.");capture("trusted-remove-registration");button("settings-room-back");button("settings-done");passed("trusted-registration-removal")
   guest("Check availability");let removed=readJSON("\"available\":false","ROUTING_SETTINGS:") as! [String:Any];XCTAssertEqual(removed["hasDefault"] as? Bool,false);XCTAssertEqual((removed["candidates"] as! [Any]).count,0);XCTAssertGreaterThanOrEqual(app.staticTexts.matching(NSPredicate(format:"label CONTAINS %@","\"available\":false")).count,2);passed("removal-clears-default-and-original-sdk-availability")
   focus("auto-peer");guest("Read routing data");wait("saved before registration removal");passed("removal-preserves-original-sdk-data")
-  closePeer();let address=app.staticTexts["signed-auto-peer-address"].label;button("shell-settings");let input=app.textFields["settings-napplet-address"];settings(input);input.tap();if let old=input.value as? String {input.typeText(String(repeating:XCUIKeyboardKey.delete.rawValue,count:old.count))}
+  closePeer();let address=app.staticTexts["signed-auto-peer-address"].label;button("shell-settings");settingsButton("settings-section-open-napplet");let input=app.textFields["settings-napplet-address"];settings(input);input.tap();if let old=input.value as? String {input.typeText(String(repeating:XCUIKeyboardKey.delete.rawValue,count:old.count))}
   for offset in stride(from:0,to:address.count,by:12) {let end=min(offset+12,address.count),start=address.index(address.startIndex,offsetBy:offset),last=address.index(address.startIndex,offsetBy:end);input.typeText(String(address[start..<last]));XCTAssertEqual(input.value as? String,String(address.prefix(end)))}
   input.typeText("\n");wait("SDK ready for routing.");topic();guest("Read routing data");wait("saved before registration removal");focus("caller");guest("Check availability");let restored=readJSON("\"available\":true","ROUTING_SETTINGS:") as! [String:Any];XCTAssertEqual(restored["hasDefault"] as? Bool,false);passed("ordinary-reopen-restores-registration-and-data")
   openSigned("no-routing","theme");guest("Invoke handler");let denied=app.staticTexts.matching(NSPredicate(format:"label BEGINSWITH %@","Request failed:")).firstMatch;XCTAssertTrue(denied.waitForExistence(timeout:15),app.debugDescription);guest("Open channel");XCTAssertGreaterThanOrEqual(app.staticTexts.matching(NSPredicate(format:"label BEGINSWITH %@","Request failed:")).count,2);passed("missing-domain-original-sdk-denial")
-  button("shell-settings");settingsButton("identity-select-"+publisher);wait("Switch identity?");settingsButton("identity-change-confirm");button("shell-settings");settings(app.staticTexts["routing-empty"]);XCTAssertTrue(app.staticTexts["routing-empty"].exists,app.debugDescription);passed("native-identity-catalog-isolation")
+  button("shell-settings");settingsButton("settings-section-identity");settingsButton("identity-select-"+publisher);wait("Switch identity?");settingsButton("identity-change-confirm");button("shell-settings");settingsButton("settings-section-access");settings(app.staticTexts["routing-empty"]);XCTAssertTrue(app.staticTexts["routing-empty"].exists,app.debugDescription);passed("native-identity-catalog-isolation")
  }
 }

@@ -103,6 +103,7 @@ class LivePublishedDriver(base.Driver):
             _, nodes = self.wait(lambda ns: any(label(n) == 'Settings' for n in ns), 'trusted Settings')
         if not any(has_id(n, 'settings-full-npub') for n in nodes):
             _, nodes = self.nodes()
+        self.tap_id('settings-section-open-napplet', 'open address entry room')
         self.scroll_until(lambda n: has_id(n, 'settings-napplet-address'), 'published naddr field')
         self.tap_id('settings-napplet-address', 'trusted Settings naddr field')
         self.adb_run('shell', 'input', 'text', NADDR)

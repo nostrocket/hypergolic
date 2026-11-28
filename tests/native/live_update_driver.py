@@ -135,6 +135,7 @@ class LiveUpdateDriver(embedded.PublishedUpdateDriver):
         if len(identity_nodes) != 1 or not label(identity_nodes[0]).startswith('npub1'):
             raise CheckFailed('Public fixture selected npub missing')
         self.result['identityNpub'] = label(identity_nodes[0])
+        self.tap_id('settings-section-open-napplet', 'open address entry room')
         self.scroll_until(lambda node: embedded.resource_id_is(node, 'settings-napplet-address'),
                           'trusted naddr field')
         self.tap_id('settings-napplet-address', 'trusted naddr field')
@@ -174,6 +175,7 @@ class LiveUpdateDriver(embedded.PublishedUpdateDriver):
                                   'decline live update')
         self.tap(exactly_one(nodes, lambda node: embedded.resource_id_suffix(node) ==
                              'published-update-cancel-' + session, 'decline live update'))
+        self.tap_id('settings-room-back', 'return from Napplet access')
         self.tap_id('settings-done', 'close Settings after declining')
         _, nodes = self.wait(lambda observed: embedded.guest_marker(observed, 'update-v1') and any(
             label(node) == 'Runtime connected' for node in observed),

@@ -93,34 +93,26 @@ try:
         except RuntimeError:
             continue
     tap('ui-fixture-empty')
+    record('empty-shelf', find('home-overview') is not None)
     capture('glass-empty')
-    tap('empty-open-napplet')
-    capture('glass-settings')
-    record('empty-shelf')
+    tap('shell-settings')
+    record('settings-index', find('settings-full-npub') is not None and find('settings-napplet-address', False) is None)
+    capture('settings-index')
+    tap('settings-section-open-napplet')
     tap('settings-napplet-address')
     adb('shell', 'input', 'text', 'not-a-napplet')
-    adb('shell', 'input', 'keyevent', '66')
-    # The visible action also works on IMEs that do not send onSubmitEditing.
-    if find('settings-napplet-error', False) is None:
-        adb('shell', 'input', 'keyevent', '4')
-        tap('settings-open-napplet')
     error = find('settings-napplet-error')
-    record('address-validation', 'naddr1' in error.get('text', ''))
-    capture('glass-address-error')
-    # Clear focus through the app's own scroll surface before the disclosure.
-    for _ in range(5):
-        if find('settings-section-identity', False) is not None:
-            break
-        scroll_up()
+    verify = find('settings-open-napplet')
+    record('address-validation', error.get('text') == 'Enter a valid named napplet address (naddr) or snapshot event link (nevent).'
+           and verify.get('enabled') == 'false' and find('settings-napplet-address').get('text') == 'not-a-napplet')
+    capture('settings-address-keyboard')
+    tap('settings-room-back')
     tap('settings-section-identity')
-    for _ in range(5):
-        if find('settings-import-identity', False) is not None:
-            break
-        scroll_up()
     tap('settings-import-identity')
-    record('grouped-identity-settings', find('identity-import-input').get('password') == 'true')
-    capture('glass-import')
+    record('identity-import-review', find('identity-import-review') is not None and find('identity-import-input', False) is None)
+    capture('settings-import-review')
     tap('identity-import-cancel')
+    tap('settings-room-back')
     tap('settings-done')
     tap('ui-fixture-workspace')
     for _ in range(15):
@@ -130,10 +122,11 @@ try:
     tap('increment')
     record('native-guest-input')
     capture('glass-active')
-    tap('shell-overview')
+    tap('shell-napplet-menu')
+    tap('shell-menu-overview')
     capture('glass-overview')
     tap('overview-card-ux-lab-1')
-    record('workspace-navigation', find('shell-overview') is not None)
+    record('workspace-navigation', find('shell-napplet-menu') is not None)
     tap('shell-napplet-menu')
     capture('slim-napplet-menu')
     record('napplet-menu', find('shell-menu-overview') is not None and find('shell-menu-settings') is not None)

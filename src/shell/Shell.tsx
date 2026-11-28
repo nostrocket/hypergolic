@@ -24,9 +24,10 @@ import { publishedSettingsActions } from './published-settings-actions';
 import { WorkspaceBackdrop } from './ShellBackdrop';
 import {snapshotEventId} from '../napplets/published-identity';
 import {useCloseChecks} from './useCloseChecks';
-import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode } from 'react';
+import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode, type RefObject } from 'react';
 import { AccessibilityInfo, AppState, Keyboard, Platform, useWindowDimensions, StyleSheet, Text, View, type ViewInstance } from 'react-native';
 import { ShellModal as Modal } from './ShellModal';
+import { SettingsKeyboardViewport } from './SettingsKeyboardViewport';
 import { ShellPressable as Pressable } from './ShellPressable';
 import { cancelAnimation, Easing, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
@@ -50,7 +51,8 @@ import { type BundledVariant } from './fixtures';
 const noPending = new Set<string>();
 export interface SettingsActions {
   closeSettings: () => void;
-  openDiscovery?: () => void;
+  indexHeader: ReactNode;
+  backHandler: RefObject<(() => void) | null>;
   openBundledTest: () => void;
   openStateLab: (variant: Exclude<BundledVariant, 'ux-lab'>) => void;
   openPublished: (link: string, signal: AbortSignal, review: (request: NappletConsentReview) => Promise<boolean>) => Promise<void>;
@@ -262,7 +264,7 @@ export function Shell({ views: managedViews, blocked = false, hostActivityBlocke
       <ShellSettings settings={settings} blocked={blocked} identity={identity} SettingsContent={SettingsContent}
         publishedSessions={workspace.sessions.filter(session => session.source === 'published' && !snapshotEventId(session.appId))}
         openSettings={() => setSettings(false)} openBundledTest={openBundledTest} openFixture={openFixture}
-        openPublished={openPublished} checkPublishedUpdate={checkPublishedUpdate} openDiscovery={openDiscovery} />
+        openPublished={openPublished} checkPublishedUpdate={checkPublishedUpdate} />
     </SafeAreaView>
   );
 }
@@ -278,7 +280,6 @@ interface ShellSettingsProps {
   openFixture: (variant: BundledVariant) => void;
   openPublished: SettingsActions['openPublished'];
   checkPublishedUpdate: SettingsActions['checkPublishedUpdate'];
-  openDiscovery: () => void;
 }
 
 function handleWorkspaceGestureEnd({ side, result, blocked, fullscreen, busyRef, focusedIndex, current, position, openOverview, runAnimation, change, setHandleDragging }: {
@@ -327,23 +328,33 @@ function confirmWorkspaceNappletClose({ closingId, current, onBeforeClose, runti
   requestAnimationFrame(() => overview.current?.focusCard(null));
 }
 
-function ShellSettings({ settings, blocked, identity, SettingsContent, publishedSessions, openSettings, openBundledTest, openFixture, openPublished, checkPublishedUpdate, openDiscovery }: ShellSettingsProps) {
+function ShellSettings({ settings, blocked, identity, SettingsContent, publishedSessions, openSettings, openBundledTest, openFixture, openPublished, checkPublishedUpdate }: ShellSettingsProps) {
   const { styles } = useShellStyles(createStyles);
   const {fontScale} = useWindowDimensions();
   const settingsClose = useRef<ViewInstance>(null);
+  const backHandler = useRef<(() => void) | null>(null);
+  const back = () => {
+    if (!blocked) (backHandler.current ?? openSettings)();
+  };
+  const indexHeader = <View style={styles.settingsHeader}>
+    <Text accessibilityRole="header" style={[styles.settingsTitle, {fontSize: displayFontSize(28, fontScale)}]}>Settings</Text>
+    <Pressable ref={settingsClose} disabled={blocked} accessibilityRole="button" testID="settings-done"
+      onPress={openSettings} style={styles.done}><Text style={styles.doneText}>Done</Text></Pressable>
+  </View>;
   return (
-    <Modal visible={settings} animationType="none" onRequestClose={() => { if (!blocked) openSettings(); }} onShow={() => {
-      settingsClose.current?.focus();
+    <Modal visible={settings} animationType="none" onRequestClose={back} onShow={() => {
       if (settingsClose.current) AccessibilityInfo.sendAccessibilityEvent(settingsClose.current, 'focus');
     }}>
-      <SafeAreaProvider><SafeAreaView style={styles.settingsScreen}>
-        <View style={styles.settingsHeader}><Text accessibilityRole="header" style={[styles.settingsTitle, {fontSize: displayFontSize(28, fontScale)}]}>Settings</Text><Pressable ref={settingsClose} disabled={blocked} accessibilityState={{ disabled: blocked }} accessibilityRole="button" testID="settings-done" onPress={openSettings} style={styles.done}><Text style={styles.doneText}>Done</Text></Pressable></View>
-        {settings && (SettingsContent ? <SettingsContent closeSettings={openSettings} openBundledTest={openBundledTest} openStateLab={openFixture} openPublished={openPublished}
-          publishedSessions={publishedSessions} checkPublishedUpdate={checkPublishedUpdate} openDiscovery={openDiscovery} /> : <View style={styles.settingsBody}>
+      <SafeAreaProvider><SafeAreaView style={styles.settingsScreen} onAccessibilityEscape={back}>
+        <SettingsKeyboardViewport>
+        {settings && (SettingsContent ? <SettingsContent closeSettings={openSettings} indexHeader={indexHeader} backHandler={backHandler}
+          openBundledTest={openBundledTest} openStateLab={openFixture} openPublished={openPublished}
+          publishedSessions={publishedSessions} checkPublishedUpdate={checkPublishedUpdate} /> : <>{indexHeader}<View style={styles.settingsBody}>
           <Text selectable testID="settings-full-npub" style={styles.settingsText}>{identity ? identity.npub : 'Identity is not configured in this build.'}</Text>
           {developerToolsEnabled && <><Text accessibilityRole="header" style={styles.settingsSection}>Bundled test napplets</Text>
           <Pressable testID="settings-open-ux-lab" accessibilityRole="button" onPress={openBundledTest} style={styles.openTest}><Text style={styles.openTestText}>Open UX Lab</Text><Text style={styles.addMark} accessible={false}>+</Text></Pressable></>}
-        </View>)}
+        </View></>)}
+        </SettingsKeyboardViewport>
       </SafeAreaView></SafeAreaProvider>
     </Modal>
   );
@@ -353,7 +364,7 @@ const createStyles = (colors: ShellPalette, fonts: ShellFonts) => StyleSheet.cre
   screen: { flex: 1, backgroundColor: colors.background },
   content: { flex: 1 },
   settingsScreen: { flex: 1, backgroundColor: colors.background },
-  settingsHeader: { minHeight: 72, flexWrap: 'wrap', paddingHorizontal: 24, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  settingsHeader: { minHeight: 60, flexWrap: 'wrap', paddingHorizontal: 24, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   settingsTitle: { fontFamily: fonts.display, fontSize: 28, color: colors.text },
   done: { minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
   doneText: { textTransform: 'uppercase', letterSpacing: 1.8, fontFamily: fonts.strong, fontSize: 14, color: colors.accent },

@@ -37,6 +37,7 @@ class Journey(ui.Journey):
   raise AssertionError('Settings control unavailable: '+label)
  def settings_tap(self,label):self.settings_find(label);self.tap(label)
  def enter_address(self,address):
+  self.settings_tap('settings-section-open-napplet')
   self.settings_tap('settings-napplet-address');time.sleep(.5)
   self.adb('shell','input','keycombination','113','29');self.adb('shell','input','keyevent','67')
   for offset in range(0,len(address),12):

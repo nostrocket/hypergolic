@@ -9,7 +9,7 @@ import type { NotifyPermissions } from './notify-permissions.ts';
 type Endpoint = {registration: NativeRegistration; assertActive(): void; seen: RequestHistory; channels: Map<string, Extract<NotifyMessage, {type: 'notify.channel.register'}>>; window: number; sends: number; asks: number};
 export type NotificationCard = Readonly<{id: string; origin: NativeRegistration; title: string; body: string; channel: string; priority: NotifyPriority; actions: readonly NotifyAction[]; created: number; toastUntil: number}>;
 export type NotifyReview = Readonly<{id: string; origin: NativeRegistration; channel: string; label: string}>;
-type Pending = NotifyReview & {active(): void; resolve(allow: boolean): void};
+type Pending = {review: NotifyReview; active(): void; resolve(allow: boolean): void};
 export type NotificationBadge = Readonly<{origin: NativeRegistration; count: number}>;
 export type NotifySnapshot = Readonly<{cards: readonly NotificationCard[]; badges: Readonly<Record<string, number>>; attributedBadges: readonly NotificationBadge[]; toast: NotificationCard | null; review: NotifyReview | null}>;
 const revoked = (): never => {throw new ShellStorageError('REVOKED');};
@@ -39,10 +39,10 @@ export class NotifyBroker {
   subscribe = (listener: () => void) => {this.listeners.add(listener); return () => {this.listeners.delete(listener);};};
   getSnapshot = () => this.snapshot;
   private publish() {
-    const visible = this.pending.find(item => {try {item.active(); return this.native.mayReview(item.origin.generation, this.revision);} catch {return false;}});
+    const visible = this.pending.find(item => {try {item.active(); return this.native.mayReview(item.review.origin.generation, this.revision);} catch {return false;}});
     const attributedBadges: NotificationBadge[] = [], now = this.now();
     for (const [generation, count] of Object.entries(this.badges)) {const origin = this.endpoints.get(generation)?.registration; if (origin && count > 0) attributedBadges.push(Object.freeze({origin, count}));}
-    this.snapshot = Object.freeze({cards: Object.freeze([...this.cards]), badges: Object.freeze({...this.badges}), attributedBadges: Object.freeze(attributedBadges), toast: this.cards.find(card => card.toastUntil > now) ?? null, review: visible ? Object.freeze({id: visible.id, origin: visible.origin, channel: visible.channel, label: visible.label}) : null});
+    this.snapshot = Object.freeze({cards: Object.freeze([...this.cards]), badges: Object.freeze({...this.badges}), attributedBadges: Object.freeze(attributedBadges), toast: this.cards.find(card => card.toastUntil > now) ?? null, review: visible?.review ?? null});
     for (const listener of this.listeners) try {listener();} catch { /* Presentation cannot grant authority. */ }
   }
   refresh() {
@@ -68,13 +68,19 @@ export class NotifyBroker {
   private owner(endpoint: Endpoint, active: () => void): TrustedApp {return Object.freeze({user: endpoint.registration.user, publisher: endpoint.registration.publisher, appId: endpoint.registration.appId, assertActive: active});}
   private end(entry: Pending, allow: boolean) {this.pending = this.pending.filter(value => value !== entry); entry.resolve(allow);}
   decide(id: string, allow: boolean) {
-    this.refresh(); const entry = this.pending.find(value => value.id === id);
+    this.refresh(); const entry = this.pending.find(value => value.review.id === id);
     if (!entry || this.snapshot.review?.id !== id) return;
-    try {entry.active(); if (!this.native.mayReview(entry.origin.generation, this.revision)) revoked(); this.end(entry, allow === true);} catch {this.end(entry, false);} this.publish();
+    try {entry.active(); if (!this.native.mayReview(entry.review.origin.generation, this.revision)) revoked(); this.end(entry, allow === true);} catch {this.end(entry, false);} this.publish();
   }
   private ask(endpoint: Endpoint, channel: string, active: () => void): Promise<boolean> {
-    if (this.pending.length >= 8 || this.pending.some(value => value.origin.generation === endpoint.registration.generation) || this.counter >= Number.MAX_SAFE_INTEGER) return Promise.resolve(false);
-    return new Promise(resolve => {this.pending.push({id: 'notify-review-' + ++this.counter, origin: endpoint.registration, channel, label: endpoint.channels.get(channel)?.label ?? 'General notifications', active, resolve}); this.publish();});
+    if (this.pending.length >= 8 || this.pending.some(value => value.review.origin.generation === endpoint.registration.generation) || this.counter >= Number.MAX_SAFE_INTEGER) return Promise.resolve(false);
+    // The visible request keeps its identity while the notification centre refreshes.
+    const review = Object.freeze({id: 'notify-review-' + ++this.counter, origin: endpoint.registration, channel,
+      label: endpoint.channels.get(channel)?.label ?? 'General notifications'});
+    return new Promise(resolve => {
+      this.pending.push({review, active, resolve});
+      this.publish();
+    });
   }
   private push(endpoint: Endpoint, message: Readonly<Record<string, unknown>>): boolean {
     try {this.active(endpoint, this.revision); return this.native.send(endpoint.registration.generation, this.revision, message);} catch {return false;}
@@ -92,7 +98,7 @@ export class NotifyBroker {
   }
   close(generation: string) {
     this.endpoints.delete(generation); this.cards = this.cards.filter(card => card.origin.generation !== generation); delete this.badges[generation];
-    for (const entry of this.pending) if (entry.origin.generation === generation) this.end(entry, false); this.publish();
+    for (const entry of this.pending) if (entry.review.origin.generation === generation) this.end(entry, false); this.publish();
   }
   stop() {this.stopped = true; this.release(); for (const entry of this.pending) entry.resolve(false); this.pending = []; this.endpoints.clear(); this.cards = []; this.badges = {}; this.publish();}
   async revoke(owner: TrustedApp, channel: string): Promise<void> {
